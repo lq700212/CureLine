@@ -1,0 +1,104 @@
+<Window x:Class="CureStation.WorkOrderWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:CureStation.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:WorkOrderViewModel, IsDesignTimeCreatable=False}"
+        Title="工单信息（R/L 双工位）" Height="640" Width="900"
+        WindowStartupLocation="CenterOwner"
+        Icon="Assets/app.ico" FontSize="12">
+    <!--★★ 工单信息窗（对照参考 HMI"工单信息"页）：左列 R/L 双工位 + 基础信息
+         + 批次物料；右列制程代码 + 保存。门禁：途程/数量/清零 L2+（禁用态），
+         制程代码 L3+，员工工号/条码 L1+。物料上传使能先落存储位（动作接线
+         在单线过账轮）。-->
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="300"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- 顶：门禁说明 -->
+        <Border Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                Style="{StaticResource FreshHintBorder}" Margin="0,0,0,8" Padding="8,4">
+            <TextBlock Text="{Binding GateText, FallbackValue=未登录——只读查看}"
+                       Foreground="#1F4E79"/>
+        </Border>
+
+        <!-- 左列：R/L 工位 + 基础信息 + 批次物料 -->
+        <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionTitle}" Text="工单信息（R）"/>
+                    <UniformGrid Columns="2" Margin="0,4,0,0">
+                        <TextBlock Text="途程单号(RC_NO)：" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding EditRtRcNo}" IsEnabled="{Binding CanEditRoute}"/>
+                        <TextBlock Text="预设数量：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                        <TextBox Text="{Binding EditRtPreset, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"/>
+                        <TextBlock Text="已生产数量：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                        <TextBox Text="{Binding EditRtProduced, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"
+                                 Background="#F5F5F5"/>
+                    </UniformGrid>
+                    <Button Style="{StaticResource FreshButton}" Content="R 计数清零"
+                            Command="{Binding ClearCountRtCommand}" IsEnabled="{Binding CanEditRoute}"
+                            HorizontalAlignment="Right" Margin="0,6,0,0" Width="120" Height="28"/>
+
+                    <TextBlock Style="{StaticResource SectionTitle}" Text="工单信息（L）" Margin="0,12,0,0"/>
+                    <UniformGrid Columns="2" Margin="0,4,0,0">
+                        <TextBlock Text="途程单号(RC_NO)：" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding EditLfRcNo}" IsEnabled="{Binding CanEditRoute}"/>
+                        <TextBlock Text="预设数量：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                        <TextBox Text="{Binding EditLfPreset, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"/>
+                        <TextBlock Text="已生产数量：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                        <TextBox Text="{Binding EditLfProduced, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"
+                                 Background="#F5F5F5"/>
+                    </UniformGrid>
+                    <Button Style="{StaticResource FreshButton}" Content="L 计数清零"
+                            Command="{Binding ClearCountLfCommand}" IsEnabled="{Binding CanEditRoute}"
+                            HorizontalAlignment="Right" Margin="0,6,0,0" Width="120" Height="28"/>
+
+                    <TextBlock Style="{StaticResource SectionTitle}" Text="基础信息" Margin="0,12,0,0"/>
+                    <UniformGrid Columns="2" Margin="0,4,0,0">
+                        <TextBlock Text="员工工号(EMP_NO)：" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding EditEmpNo}"/>
+                    </UniformGrid>
+
+                    <TextBlock Style="{StaticResource SectionTitle}" Text="批次物料上报" Margin="0,12,0,0"/>
+                    <UniformGrid Columns="2" Margin="0,4,0,0">
+                        <TextBlock Text="物料条码(BC_NO)：" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding EditBcNo}"/>
+                    </UniformGrid>
+                    <CheckBox IsChecked="{Binding EditUploadEnabled, FallbackValue=False}"
+                              IsEnabled="{Binding CanEditProcess}"
+                              Content="物料上传使能（上传动作在单线过账轮接线）" Margin="0,8,0,0"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- 右列：制程代码 -->
+        <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource FreshCardBorder}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource SectionTitle}" Text="制程代码输入"/>
+                <TextBlock Text="制程代码-1(PT_NO)：" Margin="0,8,0,2"/>
+                <TextBox Text="{Binding EditPtNo1}" IsEnabled="{Binding CanEditProcess}"/>
+                <TextBlock Text="制程代码-2(PT_NO)：" Margin="0,12,0,2"/>
+                <TextBox Text="{Binding EditPtNo2}" IsEnabled="{Binding CanEditProcess}"/>
+                <TextBlock Text="制程代码需 LEVEL.3（工程师）及以上可改。"
+                           Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 底：保存 -->
+        <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                    Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Style="{StaticResource FreshButton}" Content="保存工单"
+                    Command="{Binding SaveCommand}" Width="160" Height="34"/>
+        </StackPanel>
+    </Grid>
+</Window>

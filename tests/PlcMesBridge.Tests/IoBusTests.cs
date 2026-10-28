@@ -40,20 +40,21 @@ public class IoBusTests
     {
         using var bus = new MockPointTableBus();
         var key = new IoPointKey(false, IoPointRole.LampRed, 1, 1);
-        PointChangedEventArgs? evt = null;
-        bus.PointChanged += (_, e) => evt = e;
+        // Mock 总线 Start 后自动演示线程会并发发托盘/光栅边沿（模拟仓位流转）——
+        // 断言"事件序列里存在写入回显"而非"最后一个事件是它"（竞态安全）
+        var events = new List<PointChangedEventArgs>();
+        bus.PointChanged += (_, e) => events.Add(e);
 
         bus.Start(DefaultConfig());
         Assert.True(bus.IsConnected);
 
         Assert.True(bus.WritePoint(key, true));
         Assert.True(bus.LatestSnapshot.Get(key));
-        Assert.NotNull(evt);
-        Assert.Equal(key, evt!.Key);
-        Assert.True(evt.State);
+        Assert.Contains(events, e => e.Key == key && e.State);
 
         Assert.True(bus.WritePoint(key, false));
         Assert.False(bus.LatestSnapshot.Get(key));
+        Assert.Contains(events, e => e.Key == key && !e.State);
     }
 
     [Fact]

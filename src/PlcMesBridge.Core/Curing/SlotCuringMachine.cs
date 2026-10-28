@@ -156,6 +156,7 @@ public sealed class SlotCuringMachine : IDisposable
                             EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampYellow, false);
                             EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampGreen, true);
                             _log($"架{slot.Rack}层{slot.Level} 固化到点放行（绿灯，共 {rt.TotalMinutes} 分钟）");
+                            PersistState(); // 状态变化落盘（开关开时）
                         }
                         else
                         {
@@ -180,26 +181,73 @@ public sealed class SlotCuringMachine : IDisposable
     }
 
     /// <summary>
-    /// 快照对齐（启动/断连恢复后宿主调）：托盘在架且空闲的仓位按"重新计时"处理
-    /// （内部幂等：已在 Curing/Done 的仓位不动）。门控开且光栅亮 → 进 WaitingGate。
+    /// 快照对齐（启动/断连恢复后宿主调）：托盘在架且空闲的仓位——
+    /// 激活策略开了 PersistMinutes 且有持久化记录 → 按记录续算（断电期间时间
+    /// 自然计入；已放行的直接恢复绿灯）；没记录/开关关 → 按"重新计时"处理
+    /// （宁可重计也不放行没固化够的货）。内部幂等：已在 Curing/Done 的仓位不动。
+    /// 门控开且光栅亮 → 进 WaitingGate（WaitingGate 不持久化——没开计时，重启重走门控）。
     /// </summary>
     public void AlignFromSnapshot()
     {
         lock (_sync)
         {
             var snap = _bus.LatestSnapshot;
+
+            // 持久化恢复准备：开关开才读记录（开关关=零文件 IO，行为与不持久化完全一致）。
+            // 记录合法性过滤：时长 ≤0 或 Curing 缺起点 → 视为脏数据丢弃走重计。
+            Dictionary<(int Rack, int Level), CuringSlotRecord>? saved = null;
+            if (_policyProvider() is { PersistMinutes: true })
+            {
+                var reasons = new List<string>();
+                saved = CuringStateStore.Load(reasons)?.Slots
+                    .Where(r => r.Minutes > 0 && (
+                        r.Phase == nameof(SlotPhase.Done) ||
+                        (r.Phase == nameof(SlotPhase.Curing) && r.StartedAt != default)))
+                    .GroupBy(r => (r.Rack, r.Level))
+                    .ToDictionary(g => g.Key, g => g.First());
+                foreach (var r in reasons)
+                    _log(r);
+            }
+
             foreach (var (key, state) in snap.States)
             {
                 if (!key.IsInput || key.Role != IoPointRole.TrayDetect || !state)
                     continue;
                 var rt = GetOrAdd(key.Rack, key.Level);
-                if (rt.Phase == SlotPhase.Idle)
+                if (rt.Phase != SlotPhase.Idle)
+                    continue; // 已在流程中（幂等）
+                if (saved != null && saved.TryGetValue((key.Rack, key.Level), out var rec))
                 {
-                    _log($"架{key.Rack}层{key.Level} 重启对齐：托盘在架，重新开始计时");
-                    OnTrayArrived(rt, key.Rack, key.Level);
+                    RestoreFromRecord(rt, key.Rack, key.Level, rec);
+                    continue;
                 }
+                _log($"架{key.Rack}层{key.Level} 重启对齐：托盘在架，重新开始计时");
+                OnTrayArrived(rt, key.Rack, key.Level);
             }
         }
+    }
+
+    /// <summary>按持久化记录恢复仓位（Curing 续算 / Done 恢复放行态），灯随状态重写。</summary>
+    private void RestoreFromRecord(SlotRuntime rt, int rack, int level, CuringSlotRecord rec)
+    {
+        if (rec.Phase == nameof(SlotPhase.Done))
+        {
+            rt.Phase = SlotPhase.Done;
+            rt.StartedAt = rec.StartedAt;
+            rt.TotalMinutes = rec.Minutes;
+            EnsureLamp(rack, level, IoPointRole.LampYellow, false);
+            EnsureLamp(rack, level, IoPointRole.LampGreen, true);
+            _log($"架{rack}层{level} 重启恢复：断电前已固化到点，保持放行（绿灯，共 {rec.Minutes} 分钟）");
+            return;
+        }
+        // Curing：按记录起点续算——断电期间流逝的时间自然计入固化时长
+        rt.Phase = SlotPhase.Curing;
+        rt.StartedAt = rec.StartedAt;
+        rt.TotalMinutes = rec.Minutes;
+        EnsureLamp(rack, level, IoPointRole.LampYellow, true);
+        EnsureLamp(rack, level, IoPointRole.LampGreen, false);
+        int remain = Math.Max(0, rec.Minutes - (int)Math.Ceiling((_clock() - rec.StartedAt).TotalMinutes));
+        _log($"架{rack}层{level} 重启恢复：续算断电前计时，剩 {remain} 分钟（共 {rec.Minutes} 分钟）");
     }
 
     /// <summary>查仓位状态（UI 500ms 刷用）。空闲/没动过回 null（UI 走灯色反推口径）。</summary>
@@ -247,6 +295,7 @@ public sealed class SlotCuringMachine : IDisposable
         EnsureLamp(rack, level, IoPointRole.LampYellow, true);
         EnsureLamp(rack, level, IoPointRole.LampGreen, false); // 防残留绿灯
         _log($"架{rack}层{level} 开始固化计时 {rt.TotalMinutes} 分钟（黄灯）");
+        PersistState(); // 状态变化落盘（开关开时）
     }
 
     private void OnTrayLeft(SlotRuntime rt, int rack, int level)
@@ -266,6 +315,43 @@ public sealed class SlotCuringMachine : IDisposable
         EnsureLamp(rack, level, IoPointRole.LampYellow, false);
         EnsureLamp(rack, level, IoPointRole.LampGreen, false);
         _log($"架{rack}层{level} {note}，回空闲");
+        PersistState(); // 状态变化落盘（开关开时）：取件仓位从记录中移除
+    }
+
+    // ---------- 计时状态持久化（PersistMinutes 开关，断电续算） ----------
+
+    /// <summary>
+    /// 持久化进行中仓位（每个状态变化点调用；全量重写 curingstate.json）。
+    /// 开关关 = 零文件 IO，行为与"不持久化"完全一致（缺省口径：宁可重计）。
+    /// WaitingGate 不落盘——没开计时，重启后对齐自然重走门控。
+    /// 落盘失败只记日志：持久化是加分项不是命脉，下次状态变化再写，绝不影响程控流程。
+    /// </summary>
+    private void PersistState()
+    {
+        if (_policyProvider() is not { PersistMinutes: true })
+            return;
+        try
+        {
+            var book = new CuringStateBook();
+            foreach (var (slot, rt) in _slots)
+            {
+                if (rt.Phase is not (SlotPhase.Curing or SlotPhase.Done))
+                    continue;
+                book.Slots.Add(new CuringSlotRecord
+                {
+                    Rack = slot.Rack,
+                    Level = slot.Level,
+                    Phase = rt.Phase.ToString(),
+                    StartedAt = rt.StartedAt ?? _clock(),
+                    Minutes = rt.TotalMinutes,
+                });
+            }
+            CuringStateStore.Save(book);
+        }
+        catch (Exception ex)
+        {
+            _log($"计时状态落盘失败（下次状态变化自动重试）：{ex.Message}");
+        }
     }
 
     // ---------- 灯写与辅助 ----------

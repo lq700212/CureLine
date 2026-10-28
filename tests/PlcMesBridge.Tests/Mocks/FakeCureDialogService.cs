@@ -3,6 +3,8 @@
 // 用法与主程序 FakeDialogService 同：调后查 Calls 断 VM 调了谁。
 // =========================================================================
 
+using PlcMesBridge.Core.Security;
+
 namespace PlcMesBridge.Tests.Mocks;
 
 public class FakeCureDialogService : CureStation.ViewModels.IDialogService
@@ -34,6 +36,25 @@ public class FakeCureDialogService : CureStation.ViewModels.IDialogService
     {
         Calls.Add("ShowCuringPolicy");
         return CuringPolicyResult;
+    }
+
+    /// <summary>ShowLogin 的桩返回值（null=取消；有值=登录成功带出级别）。</summary>
+    public (string User, OperatorLevel Level)? LoginResult { get; set; }
+    /// <summary>ShowWorkOrder 的桩返回值（true=保存成功）。</summary>
+    public bool WorkOrderResult { get; set; }
+
+    public (string User, OperatorLevel Level)? ShowLogin()
+    {
+        Calls.Add("ShowLogin");
+        return LoginResult;
+    }
+
+    public void ShowOperators() => Calls.Add("ShowOperators");
+
+    public bool ShowWorkOrder(OperatorLevel? currentLevel)
+    {
+        Calls.Add($"ShowWorkOrder:{currentLevel?.ToString() ?? "null"}");
+        return WorkOrderResult;
     }
 
     public void Shutdown() => Calls.Add("Shutdown");

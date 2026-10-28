@@ -63,13 +63,14 @@
   （`ModbusStationClient`，地址/打包/分帧集中一处）+ 配置模型收敛
   （删 `RunMode`/`[SinglePLC]`/`PLCAscii`）。**P2.2 待做**：6 接口迁移与
   整线联调（待 D/R 终版地址 + CIM W68 终版）。
-- **P3 固化程控（进行中，P3.1 已完成）**：**P3.1=仓位状态机 + 工艺策略**
-  （`Core/Curing/` 三件套：`CuringPolicy` 三级覆盖时长 + 光栅门控、
-  `CuringPolicyStore` JSON 自愈、`SlotCuringMachine` 边沿驱动状态机；
-  工艺策略窗 + 主窗接线，测试 178）。**P3.2 待做**：单线过账（复用 MES 层
-  与 16 字段参数记忆）；工单页 + 权限页（对照 `docs/参考界面/` 两张 HMI
-  截图：R/L 双工位途程单号/预设数量/已生产数量/员工工号/BC_NO/PT_NO；
-  四级权限 LEVEL.1~4）。
+- **P3 固化程控（进行中，P3.1 完成 + P3.2 前半完成）**：**P3.1=仓位状态机 +
+  工艺策略**（`Core/Curing/` 三件套 + `CuringStateStore` 断电续算开关；工艺
+  策略窗 + 主窗接线）。**P3.2 前半=四级权限 + 登录 + 工单信息页（已完成）**：
+  `Security/OperatorStore`（operators 表四级 L1~4 + 防锁死）+ 登录窗 +
+  工单窗（R/L 双工位，编辑区按级别禁用）+ 权限管理窗 + 主窗 Gate 统一门禁
+  （工单 L1/策略 L3/点表·权限 L4）。**P3.2 后半待做**：单线过账（复用 MES 层
+  与 16 字段参数记忆，工单字段名已对齐 RC_NO/PT_NO/EMP_NO/BC_NO；物料上传
+  使能动作在此接线；等 CIM W68 终版）。
 
 ## 铁律（违反即返工）
 
@@ -86,7 +87,7 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 178/178（P3.1 增状态机/策略 30 例；基线此后只增不减）；
+   `dotnet test` 201/201（P3.1 增 36 例 + P3.2 前半增 17 例；基线此后只增不减）；
    禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
@@ -126,7 +127,7 @@
 | 文件 | 作用 |
 | --- | --- |
 | **两程序骨架** | |
-| `src/CureStation/` | **程序①固化程控**（新 exe）：30 仓位主窗 + IO 点表配置窗 + 工艺策略窗（`ViewModels/MainViewModel.cs`/`PointTableViewModel.cs`/`CuringPolicyViewModel.cs`）+ 自建 `DialogService.cs` |
+| `src/CureStation/` | **程序①固化程控**（新 exe）：30 仓位主窗 + IO 点表配置窗 + 工艺策略窗 + 工单信息窗 + 权限管理窗 + 登录窗（`ViewModels/` 六个 VM）+ 自建 `DialogService.cs` |
 | `src/PlcMesBridge/MainWindow.*` | 主窗：多机网关视图、视图筛选（替代 Form2/Form6；单机视图与"运行模式"菜单已随单机链路删除；Phase 2 演化 CimGateway） |
 | `src/PlcMesBridge/Controls/StationPanel.*` | 机台面板复用件（MVVM View，VM 由主窗注入，8 实例） |
 | `src/PlcMesBridge/ViewModels/` | 主程序各窗 VM（`IDialogService` 基建 + 各窗 VM，主窗 VM 含视图筛选/门禁） |
@@ -137,6 +138,9 @@
 | **Core 共享（固化工艺家族，P3.1 新增）** | |
 | `src/PlcMesBridge.Core/Curing/CuringPolicy.cs` | 工艺策略模型：时长三级覆盖（仓位>层>全局，`ResolveMinutes` 唯一出口）+ 光栅门控 + `CuringPolicyValidator`（时长/层号/仓位键/重名） |
 | `src/PlcMesBridge.Core/Curing/CuringPolicyStore.cs` | `config/curingpolicy.json` 存取（策略库+激活名）+ `BuildDefaultBook` 缺省库自愈 |
+| `src/PlcMesBridge.Core/Curing/CuringStateStore.cs` | `config/curingstate.json` 计时状态持久化（`PersistMinutes` 开关的落盘件；运行时数据非配置，删了即回退重计） |
+| `src/PlcMesBridge.Core/Curing/WorkOrderStore.cs` | 工单信息 `config/workorder.json`（R/L 双工位+EMP/BC/PT×2，字段名对齐 MES 16 字段）+ 自愈空工单 |
+| `src/PlcMesBridge.Core/Security/OperatorStore.cs` | 程序①四级操作员账号（operators 表 L1~4 + PBKDF2 复用）；**防锁死红线**：最后一个 L4 删/降拒绝 |
 | `src/PlcMesBridge.Core/Curing/SlotCuringMachine.cs` | **仓位状态机**：托盘到位→（门控）→黄灯计时→绿灯放行→离开灭灯；边沿后台直转+1s 心跳 Pump；灯写去重补写/断连恢复对齐/策略热切换三自愈 |
 | **Core 共享（IO 家族，P1 新增）** | |
 | `src/PlcMesBridge.Core/ViewModels/` | 下沉的 VM 基建（`ViewModelBase`/`RelayCommand`，namespace 不变） |
@@ -152,7 +156,7 @@
 | `src/PlcMesBridge.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段） |
 | `src/PlcMesBridge.Core/Data/CureRecordStore.cs` | `PLCtable` CRUD + `ComputeStats` 纯统计 |
 | `src/PlcMesBridge.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/PLC 配置模型与校验 |
-| `tests/PlcMesBridge.Tests/` | 178 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
+| `tests/PlcMesBridge.Tests/` | 201 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
 | `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
 
 ## 构建与验证命令
@@ -160,7 +164,7 @@
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build PlcMesBridge.slnx --nologo
-# 全量测试（178/178 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
+# 全量测试（201/201 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
 dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 # 子模块改动后（VS MSBuild，net472，原样沿用上游命令）
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
@@ -200,12 +204,24 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
   轮询线程一拍——骨架期可接受，P2 提速再改异步。
 - 主窗仓位网格有 10×3 最小下限（`MainViewModel.BuildSlots` 的 `Math.Max`
   垫底）——点表只配 1 架也铺 30 张卡，属骨架期展示口径勿当 bug 报。
-- **状态机语义三键（P3.1 起生效，全在 `SlotCuringMachine` 一处）**：
+- **状态机语义四键（P3.1 起，P3.1 补丁加第④条，全在 `SlotCuringMachine` 一处）**：
   ① 流程"到位即计时"——托盘 OFF 即回空闲灭灯（中途取件计时作废记日志），
-  红灯状态机不写（留异常语义）；② 计时状态不持久化——断电/重启后托盘在架
-  的仓位重新计时（宁可重计也不放行没固化够的货，持久化属报价加价点）；
-  ③ 策略热切换只影响新到位的仓位，进行中的按开计时那一刻锁定的时长走完。
-  改流程先改 `SlotCuringMachine` 头注释与 `SlotCuringMachineTests` 断言。
+  红灯状态机不写（留异常语义）；② 计时状态**缺省不持久化**——断电/重启后托盘在架
+  的仓位重新计时（宁可重计也不放行没固化够的货）；**策略勾 `PersistMinutes`
+  才持久化**（`config/curingstate.json`，状态变化即全量重写，重启按记录续算，
+  断电时间计入固化时长；CuringStateStore，删文件即回退重计）；③ 策略热切换只
+  影响新到位的仓位，进行中的按开计时那一刻锁定的时长走完（持久化恢复也用
+  记录里的锁定时长，不用当前策略）；④ WaitingGate 不落盘——没开计时，重启
+  重走门控。改流程先改 `SlotCuringMachine` 头注释与 `SlotCuringMachineTests` 断言。
+- **权限门禁语义（P3.2 前半起生效）**：① 账号体系两程序各自独立——程序①
+  `operators` 表四级 L1~4，主程序 `users` 表 admin/dev，互不相干（分机部署）；
+  ② **防锁死红线**：最后一个 LEVEL.4 删/降一律拒绝（`OperatorStore` 层拦，
+  权限窗只负责弹框展示）；③ 未知级别文本按 L1 兜底（安全侧：错降无害错升
+  危险）；④ 门禁级别缺省：工单 L1（途程/数量/清零 L2、制程代码 L3）、
+  工艺策略 L3、点表/权限管理 L4——改门禁只动 `MainViewModel.Gate` 调用处；
+  ⑤ 工单窗 Flush 有门禁兜底：级别不够的字段回读盘上原值（防绕过 IsEnabled
+  直改 VM 属性越权落盘）；⑥ 初始密码 admin/123456 只在 App.OnStartup 一处，
+  上线必改，文档不得记录现场真实密码。
 
 ## 文档同步（每次任务收尾自查）
 

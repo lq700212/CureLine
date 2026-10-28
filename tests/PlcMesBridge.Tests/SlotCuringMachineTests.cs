@@ -5,6 +5,7 @@
 
 using PlcMesBridge.Core.Comms;
 using PlcMesBridge.Core.Curing;
+using PlcMesBridge.Core.Infrastructure;
 using PlcMesBridge.Tests.Mocks;
 
 namespace PlcMesBridge.Tests;
@@ -269,6 +270,157 @@ public class SlotCuringMachineTests
             _now += TimeSpan.FromMinutes(59);
             machine.Pump(_now);
             Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);   // 仍按 A 的 60 分走完
+        }
+    }
+
+    // ---------- 计时状态持久化（PersistMinutes 开关，断电续算） ----------
+
+    /// <summary>持久化用例的公共装配：TestScope 隔离落盘目录 + 开关策略 + 宿主转发。</summary>
+    private (ScriptedPointBus Bus, SlotCuringMachine Machine, List<string> Logs) MakePersisted(
+        bool persist, CuringPolicy? policy = null)
+    {
+        var bus = new ScriptedPointBus();
+        var logs = new List<string>();
+        var p = policy ?? new CuringPolicy { Name = "T", GlobalMinutes = 60, PersistMinutes = persist };
+        var machine = new SlotCuringMachine(bus, () => p, clock: () => _now, log: logs.Add);
+        bus.PointChanged += (_, e) => machine.OnPointChanged(e); // 宿主转发
+        return (bus, machine, logs);
+    }
+
+    [Fact]
+    public void Persist_StartAndDone_WritesStateFile()
+    {
+        using var scope = new TestScope();
+        Directory.CreateDirectory(AppPaths.ConfigDir);
+        var (bus, machine, _) = MakePersisted(persist: true,
+            new CuringPolicy { Name = "T", GlobalMinutes = 10, PersistMinutes = true });
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true); // 开计时 → 落盘 Curing
+            var book1 = CuringStateStore.Load()!;
+            Assert.Single(book1.Slots, r => r.Rack == 1 && r.Level == 1 &&
+                r.Phase == "Curing" && r.Minutes == 10 && r.StartedAt == _now);
+
+            _now += TimeSpan.FromMinutes(10);
+            machine.Pump(_now);             // 到点放行 → 落盘 Done
+            var book2 = CuringStateStore.Load()!;
+            Assert.Single(book2.Slots, r => r.Phase == "Done" && r.Minutes == 10);
+        }
+    }
+
+    [Fact]
+    public void Persist_Restart_RestoresRemainingMinutes()
+    {
+        using var scope = new TestScope();
+        Directory.CreateDirectory(AppPaths.ConfigDir);
+        var (bus, machine1, _) = MakePersisted(persist: true);
+        var policy = new CuringPolicy { Name = "T", GlobalMinutes = 60, PersistMinutes = true };
+        using (machine1)
+        {
+            bus.SetInput(Tray(1, 1), true);   // 8:00 开计时（落盘 StartedAt=8:00, 60 分）
+        }
+        _now += TimeSpan.FromMinutes(30);     // 8:30：模拟断电 30 分钟（时间流逝）
+
+        // "重启"：全新状态机（内存全丢），对齐时从文件续算
+        var machine2 = new SlotCuringMachine(bus, () => policy, clock: () => _now);
+        using (machine2)
+        {
+            machine2.AlignFromSnapshot();
+            var status = machine2.GetStatus(1, 1)!;
+            Assert.Equal(SlotPhase.Curing, status.Phase);
+            Assert.Equal(30, status.RemainMinutes); // 断电 30 分钟已计入，剩 30
+        }
+    }
+
+    [Fact]
+    public void Persist_DoneRestart_RestoresGreen()
+    {
+        using var scope = new TestScope();
+        Directory.CreateDirectory(AppPaths.ConfigDir);
+        var (bus, machine1, _) = MakePersisted(persist: true,
+            new CuringPolicy { Name = "T", GlobalMinutes = 10, PersistMinutes = true });
+        using (machine1)
+        {
+            bus.SetInput(Tray(2, 1), true);
+            _now += TimeSpan.FromMinutes(10);
+            machine1.Pump(_now);              // 到点放行（落盘 Done）
+        }
+        bus.Writes.Clear();
+
+        var policy = new CuringPolicy { Name = "T", GlobalMinutes = 10, PersistMinutes = true };
+        var machine2 = new SlotCuringMachine(bus, () => policy, clock: () => _now);
+        using (machine2)
+        {
+            machine2.AlignFromSnapshot();     // 重启恢复：托盘还在架 → 保持放行
+            Assert.Equal(SlotPhase.Done, machine2.GetStatus(2, 1)!.Phase);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampGreen, 2, 1), true)); // 绿灯重写
+        }
+    }
+
+    [Fact]
+    public void Persist_TrayLeft_RemovesRecord()
+    {
+        using var scope = new TestScope();
+        Directory.CreateDirectory(AppPaths.ConfigDir);
+        var (bus, machine, _) = MakePersisted(persist: true);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);   // 开计时（落盘）
+            bus.SetInput(Tray(1, 1), false);  // 取件（清记录）
+            var book = CuringStateStore.Load()!;
+            Assert.DoesNotContain(book.Slots, r => r.Rack == 1 && r.Level == 1);
+        }
+    }
+
+    [Fact]
+    public void PersistOff_NoWriteAndIgnoresOldRecords()
+    {
+        using var scope = new TestScope();
+        Directory.CreateDirectory(AppPaths.ConfigDir);
+        // 预置旧记录（模拟上次开过开关留下的），本次策略关 → 不得恢复（宁可重计）
+        CuringStateStore.Save(new CuringStateBook
+        {
+            Slots = { new CuringSlotRecord
+                { Rack = 1, Level = 1, Phase = "Curing", StartedAt = _now.AddMinutes(-50), Minutes = 60 } },
+        });
+        var (bus, machine, logs) = MakePersisted(persist: false,
+            new CuringPolicy { Name = "T", GlobalMinutes = 60 }); // PersistMinutes=false
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            // 开关关：不重写文件——内容仍是预置的旧记录（StartedAt 未变）
+            var book = CuringStateStore.Load()!;
+            Assert.Single(book.Slots);
+            Assert.Equal(_now.AddMinutes(-50), book.Slots[0].StartedAt);
+        }
+
+        var machine2 = new SlotCuringMachine(bus,
+            () => new CuringPolicy { Name = "T", GlobalMinutes = 60 }, clock: () => _now, log: logs.Add);
+        using (machine2)
+        {
+            machine2.AlignFromSnapshot();
+            Assert.Contains(logs, m => m.Contains("重新开始计时")); // 旧记录被无视，走重计
+        }
+    }
+
+    [Fact]
+    public void Persist_CorruptFile_FallsBackToRecount()
+    {
+        using var scope = new TestScope();
+        Directory.CreateDirectory(AppPaths.ConfigDir);
+        File.WriteAllText(CuringStateStore.DefaultPath, "{ 不是 JSON");
+        var (bus, machine, logs) = MakePersisted(persist: true);
+        bus.SetSnapshotSilently(Tray(1, 1), true); // 预置托盘在架（不发边沿，不触发落盘覆盖坏文件）
+
+        var machine2 = new SlotCuringMachine(bus,
+            () => new CuringPolicy { Name = "T", GlobalMinutes = 60, PersistMinutes = true },
+            clock: () => _now, log: logs.Add);
+        using (machine)
+        using (machine2)
+        {
+            machine2.AlignFromSnapshot();
+            Assert.Contains(logs, m => m.Contains("损坏"));         // 坏文件原因进日志
+            Assert.Contains(logs, m => m.Contains("重新开始计时")); // 兜底重计，不卡流程
         }
     }
 

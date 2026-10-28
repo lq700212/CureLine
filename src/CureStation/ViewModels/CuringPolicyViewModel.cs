@@ -61,6 +61,9 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     private bool _editGrillGate;
     public bool EditGrillGate { get => _editGrillGate; set => Set(ref _editGrillGate, value); }
 
+    private bool _editPersistMinutes;
+    public bool EditPersistMinutes { get => _editPersistMinutes; set => Set(ref _editPersistMinutes, value); }
+
     private string _editLevel1Min = "";
     public string EditLevel1Min { get => _editLevel1Min; set => Set(ref _editLevel1Min, value); }
     private string _editLevel2Min = "";
@@ -117,6 +120,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         EditName = p.Name;
         EditGlobalMinutes = p.GlobalMinutes.ToString();
         EditGrillGate = p.GrillGate;
+        EditPersistMinutes = p.PersistMinutes;
         EditLevel1Min = LevelText(p, 1);
         EditLevel2Min = LevelText(p, 2);
         EditLevel3Min = LevelText(p, 3);
@@ -142,6 +146,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         EditName = "";
         EditGlobalMinutes = "";
         EditGrillGate = false;
+        EditPersistMinutes = false;
         EditLevel1Min = EditLevel2Min = EditLevel3Min = EditLevel4Min = "";
         SlotRows.Clear();
         SelectedSlotRow = null;
@@ -157,6 +162,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         p.Name = EditName.Trim();
         p.GlobalMinutes = ParseOrError(EditGlobalMinutes, p.GlobalMinutes, "全局时长", p.Name);
         p.GrillGate = EditGrillGate;
+        p.PersistMinutes = EditPersistMinutes;
         p.LevelMinutes.Clear();
         SetLevel(1, EditLevel1Min);
         SetLevel(2, EditLevel2Min);

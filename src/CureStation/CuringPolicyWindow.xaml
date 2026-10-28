@@ -62,6 +62,11 @@
                               Margin="0,10,0,0"/>
                     <TextBlock Text="未勾选时托盘到位即开计时；没绑光栅的仓位门控自动放行。"
                                Foreground="#888" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                    <CheckBox IsChecked="{Binding EditPersistMinutes, FallbackValue=False}"
+                              Content="断电续算（计时状态落盘，重启后接着算而不是重计）"
+                              Margin="0,10,0,0"/>
+                    <TextBlock Text="勾选后进行中仓位随状态变化写入 config/curingstate.json，断电期间的时间计入固化时长；未勾选（缺省）断电重启后重新计时，宁可重计也不放行没固化够的货。"
+                               Foreground="#888" Margin="0,2,0,0" TextWrapping="Wrap"/>
                     <Separator Margin="0,10"/>
                     <TextBlock Style="{StaticResource SectionTitle}"
                                Text="每层覆盖（分钟，空=用全局）"/>

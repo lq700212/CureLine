@@ -17,6 +17,7 @@ using System.Windows.Threading;
 using PlcMesBridge.Core.Comms;
 using PlcMesBridge.Core.Curing;
 using PlcMesBridge.Core.Infrastructure;
+using PlcMesBridge.Core.Security;
 using PlcMesBridge.Core.Services;
 using PlcMesBridge.ViewModels;
 
@@ -148,6 +149,20 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         private set => Set(ref _policyText, value);
     }
 
+    /// <summary>当前登录操作员（顶栏展示；登录窗带出，级别是各窗门禁依据）。</summary>
+    private string _currentUserName = "";
+    private OperatorLevel? _currentLevel;
+
+    private string _operatorText = "未登录";
+    public string OperatorText
+    {
+        get => _operatorText;
+        private set => Set(ref _operatorText, value);
+    }
+
+    /// <summary>是否有操作员在线（未登录时各功能入口一律拦下）。</summary>
+    public bool IsLoggedIn => _currentLevel.HasValue;
+
     private PointTableConfig? _config;
     private IPointTableBus? _bus;
     private SlotCuringMachine? _machine;   // 仓位状态机（与 VM 同生命周期，总线可换不丢流程）
@@ -156,6 +171,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public RelayCommand OpenPointTableCommand { get; }
     public RelayCommand OpenCuringPolicyCommand { get; }
     public RelayCommand ReconnectCommand { get; }
+    public RelayCommand LoginCommand { get; }
+    public RelayCommand OpenWorkOrderCommand { get; }
+    public RelayCommand OpenOperatorsCommand { get; }
 
     public MainViewModel(IDialogService dialogs)
     {
@@ -164,6 +182,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         OpenPointTableCommand = new RelayCommand(OpenPointTable);
         OpenCuringPolicyCommand = new RelayCommand(OpenCuringPolicy);
         ReconnectCommand = new RelayCommand(() => StartBus(_config));
+        LoginCommand = new RelayCommand(Login);
+        OpenWorkOrderCommand = new RelayCommand(OpenWorkOrder);
+        OpenOperatorsCommand = new RelayCommand(OpenOperators);
         _refreshTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = TimeSpan.FromMilliseconds(500),
@@ -302,6 +323,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private void OpenPointTable()
     {
+        if (!Gate(OperatorLevel.Level4, "点表配置"))
+            return;
         var saved = _dialogs.ShowPointTable();
         var config = IoPointTableStore.Load() ?? LoadOrDefault();
         _config = config;   // 点表可能已改，重连按钮要用新表
@@ -314,12 +337,67 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// <summary>工艺策略窗：保存/激活后重读策略库（激活名可能已换，热切换生效）。</summary>
     private void OpenCuringPolicy()
     {
+        if (!Gate(OperatorLevel.Level3, "工艺策略"))
+            return;
         var saved = _dialogs.ShowCuringPolicy();
         if (saved)
         {
             LoadPolicyBook();
             _dialogs.ShowMessage("工艺策略已保存并生效。", "保存成功");
         }
+    }
+
+    // ---------- 登录与权限门禁（P3.2） ----------
+
+    /// <summary>
+    /// 门禁统一出口：未登录先拦（提示登录），级别不够提示所需级别。
+    /// 返回 true=放行。各功能所需级别：工单 L1 / 工艺策略 L3 / 点表·权限管理 L4。
+    /// </summary>
+    private bool Gate(OperatorLevel required, string what)
+    {
+        if (!_currentLevel.HasValue)
+        {
+            _dialogs.ShowMessage("请先登录（顶栏『登录』按钮）。", "未登录");
+            return false;
+        }
+        if (!OperatorLevelInfo.AtLeast(_currentLevel, required))
+        {
+            _dialogs.ShowMessage(
+                $"{what}需要 {OperatorLevelInfo.DisplayName(required)} 及以上，" +
+                $"当前 {OperatorLevelInfo.DisplayName(_currentLevel.Value)}。",
+                "权限不足");
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>登录窗：成功后记下操作员与级别（再点可换账号重登）。</summary>
+    private void Login()
+    {
+        var result = _dialogs.ShowLogin();
+        if (result == null)
+            return;
+        (_currentUserName, _currentLevel) = result.Value;
+        OperatorText = $"操作员：{_currentUserName}（{OperatorLevelInfo.DisplayName(_currentLevel.Value)}）";
+        LocalLogService.Write($"操作员登录：{_currentUserName}（{OperatorLevelInfo.ToText(_currentLevel.Value)}）");
+    }
+
+    /// <summary>工单信息窗：L1+ 可开（窗内编辑区按级别再细分禁用）。</summary>
+    private void OpenWorkOrder()
+    {
+        if (!Gate(OperatorLevel.Level1, "工单信息"))
+            return;
+        var saved = _dialogs.ShowWorkOrder(_currentLevel);
+        if (saved)
+            _dialogs.ShowMessage("工单信息已保存。", "保存成功");
+    }
+
+    /// <summary>权限管理窗：L4 专属。</summary>
+    private void OpenOperators()
+    {
+        if (!Gate(OperatorLevel.Level4, "权限管理"))
+            return;
+        _dialogs.ShowOperators();
     }
 
     public void Dispose()

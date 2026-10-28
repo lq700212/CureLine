@@ -38,6 +38,15 @@ public sealed class CuringPolicy
     /// </summary>
     public bool GrillGate { get; set; }
 
+    /// <summary>
+    /// 计时状态持久化开关（断电续算）。false=缺省，断电/重启后托盘在架的仓位
+    /// 重新计时（宁可重计也不放行没固化够的货）；true=进行中仓位（计时中/已放行）
+    /// 随状态变化落盘 config/curingstate.json，重启对齐时按记录续算——断电期间的
+    /// 时间也计入固化时长（适合"炉内保温、断电不停固"的工艺口径）。
+    /// 开关跟激活策略走：热切换策略即切换持久化行为，无需重启。
+    /// </summary>
+    public bool PersistMinutes { get; set; }
+
     /// <summary>解析某仓位的有效时长：仓位 > 层 > 全局（值 ≤0 视为没配）。</summary>
     public int ResolveMinutes(int rack, int level)
     {

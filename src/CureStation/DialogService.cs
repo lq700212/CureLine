@@ -10,6 +10,7 @@
 // =========================================================================
 
 using System.Windows;
+using PlcMesBridge.Core.Security;
 
 namespace CureStation.ViewModels;
 
@@ -26,6 +27,21 @@ public interface IDialogService
 
     /// <summary>打开工艺策略窗（模态）。返回 true 表示保存了策略（调用方可刷新激活策略）。</summary>
     bool ShowCuringPolicy();
+
+    /// <summary>
+    /// 登录窗（模态）。返回 null=取消；成功返回（用户名, 级别）——
+    /// 级别是工单页/策略窗/点表/权限管理门禁的依据。
+    /// </summary>
+    (string User, OperatorLevel Level)? ShowLogin();
+
+    /// <summary>打开权限管理窗（模态）。仅 LEVEL.4 可开（门禁在主窗，VM 不重复查）。</summary>
+    void ShowOperators();
+
+    /// <summary>
+    /// 打开工单信息窗（模态，传当前操作员级别做门禁——级别不够的编辑区禁用）。
+    /// 返回 true 表示保存了工单。
+    /// </summary>
+    bool ShowWorkOrder(OperatorLevel? currentLevel);
 
     /// <summary>程序化关闭主进程（退出）。</summary>
     void Shutdown();
@@ -59,6 +75,40 @@ public sealed class DialogService : IDialogService
         {
             Owner = Application.Current?.MainWindow,
             DataContext = new CuringPolicyViewModel(new DialogService()),
+        };
+        return win.ShowDialog() == true;
+    }
+
+    public (string User, OperatorLevel Level)? ShowLogin()
+    {
+        // 生产装配：VM 在服务里 new（测试用 Fake 桩带出预置结果）。
+        var vm = new LoginViewModel();
+        var win = new LoginWindow
+        {
+            Owner = Application.Current?.MainWindow,
+            DataContext = vm,
+        };
+        return win.ShowDialog() == true ? (vm.LoginName, vm.Level!.Value) : null;
+    }
+
+    public void ShowOperators()
+    {
+        // 生产装配：权限管理窗（LEVEL.4 门禁在主窗）。
+        var win = new OperatorWindow
+        {
+            Owner = Application.Current?.MainWindow,
+            DataContext = new OperatorViewModel(new DialogService()),
+        };
+        win.ShowDialog();
+    }
+
+    public bool ShowWorkOrder(OperatorLevel? currentLevel)
+    {
+        // 生产装配：工单窗（门禁在 VM——级别不够的编辑区禁用）。
+        var win = new WorkOrderWindow
+        {
+            Owner = Application.Current?.MainWindow,
+            DataContext = new WorkOrderViewModel(new DialogService(), currentLevel),
         };
         return win.ShowDialog() == true;
     }
