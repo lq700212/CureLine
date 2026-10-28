@@ -95,8 +95,9 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 280/280（P3.1 增 36 例 + P3.2 前半增 17 例 + P3.2 后半增
-   22 例 + V0.0.19 增 25 例；基线此后只增不减）；禁止交付编译不过/测试不过的代码。
+   `dotnet test` 287/287（P3.1 增 36 例 + P3.2 前半增 17 例 + P3.2 后半增
+   22 例 + V0.0.19 增 25 例 + V0.0.20 增 32 例 + 登录记忆/改密链增 7 例；
+   基线此后只增不减）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
 8. **配置样例同步**：新增配置键必须同步改 `config.sample.ini` + `AppConfig`
@@ -170,7 +171,7 @@
 | `src/PlcMesBridge.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段） |
 | `src/PlcMesBridge.Core/Data/CureRecordStore.cs` | `PLCtable` CRUD + `ComputeStats` 纯统计 |
 | `src/PlcMesBridge.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/PLC 配置模型与校验 |
-| `tests/PlcMesBridge.Tests/` | 280 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
+| `tests/PlcMesBridge.Tests/` | 287 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
 | `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
 
 ## 构建与验证命令
@@ -178,7 +179,7 @@
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build PlcMesBridge.slnx --nologo
-# 全量测试（280/280 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
+# 全量测试（287/287 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
 dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 # 子模块改动后（VS MSBuild，net472，原样沿用上游命令）
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
@@ -248,7 +249,16 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
   工艺策略 L3、点表/权限管理 L4——改门禁只动 `MainViewModel.Gate` 调用处；
   ⑤ 工单窗 Flush 有门禁兜底：级别不够的字段回读盘上原值（防绕过 IsEnabled
   直改 VM 属性越权落盘）；⑥ 初始密码 admin/123456 只在 App.OnStartup 一处，
-  上线必改，文档不得记录现场真实密码。
+  上线必改，文档不得记录现场真实密码；⑦ **登录窗记忆/改密语义（V0.0.20 对齐
+  mFormLogin）**——记住密码复用 `RunModeSettings`（DPAPI 密文存 config.ini
+  [setting]，SavedUser + RememberToken_<账号>，ini 永无明文），用户名一改
+  就跟出该账号记忆（命中回填+勾选，未命中清空+取消勾），**改密成功必须同步
+  记忆**（勾记住=存新密文，没勾=清本户，否则下次回填旧密码必败）；改密四道
+  闸顺序：在册（`OperatorStore.Exists`）→ 原密码验对 → `ValidateNewPassword`
+  （≥6 位+不与旧同）→ 两次一致；用户名下拉=在册账号实时表（ListUsers），
+  不是登录历史文件；改密三框/登录密码框共四个 PasswordBox 双向接线（VM→框
+  回写靠"值不同才走"防互踢），键盘链统一在 View 层 PreviewKeyDown（按钮
+  禁用 IsDefault/IsCancel——双面板下会吃错回车；下拉展开时回车/Esc 放行）。
 - **单线过账语义（P3.2 后半起生效，全在 `CuringMesPoster`/`CuringMesOptions`
   一处）**：① 触发映射=老项目命令字——托盘到位=进站（API0030 I）、托盘
   离开=出站链（先 API0027 外层数组后 API0030 O）、出站被接受（STATUS=1）

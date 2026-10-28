@@ -714,4 +714,191 @@ public class CureStationViewModelTests
         Assert.Contains(fake.Calls, c => c == "ShowMesPostConfig");
         Assert.Contains("已启用", vm.PostingText);
     }
+
+    // ---------- 登录窗 VM（V0.0.20 对齐 HJVision mFormLogin：记住/跟随/改密） ----------
+
+    /// <summary>登录 VM 测试装配：临时库播种 + 临时 ini，双隔离（不碰现场 config）。</summary>
+    private static (CureStation.ViewModels.LoginViewModel Vm, OperatorStore Store, string IniPath) NewLoginVm(
+        TestScope scope, string dbName = "login-vm.db3")
+    {
+        var store = new OperatorStore(new SqliteHelper(Path.Combine(scope.TempDir, dbName)));
+        store.EnsureSeeded("test-admin-pwd");
+        string ini = Path.Combine(scope.TempDir, "login.ini");
+        return (new CureStation.ViewModels.LoginViewModel(store, ini), store, ini);
+    }
+
+    [Fact]
+    public void LoginVm_Constructor_PrefillsSavedUserAndPasswordAndHistory()
+    {
+        using var scope = new TestScope();
+        var (vm, store, ini) = NewLoginVm(scope);
+        store.AddUser("op1", OperatorLevel.Level1, "abc123");
+        RunModeSettings.SaveLogin(ini, true, "op1", "abc123");
+
+        // 重新构造（模拟现场第二次打开登录窗）：回填最后账号 + 它记住的密码 + 勾选。
+        var vm2 = new CureStation.ViewModels.LoginViewModel(store, ini);
+        Assert.Equal("op1", vm2.UserName);
+        Assert.Equal("abc123", vm2.Password);
+        Assert.True(vm2.Remember);
+        // 下拉候选=在册账号实时表（含播种的 admin 与新增的 op1）。
+        Assert.Contains("admin", vm2.HistoryUsers);
+        Assert.Contains("op1", vm2.HistoryUsers);
+        Assert.False(vm2.IsChangePwd);
+        Assert.Equal("账号登录", vm2.BannerText);
+    }
+
+    [Fact]
+    public void LoginVm_UserNameChange_FollowsRememberedPasswordPerAccount()
+    {
+        using var scope = new TestScope();
+        var (vm, store, ini) = NewLoginVm(scope);
+        store.AddUser("op1", OperatorLevel.Level1, "abc123");
+        RunModeSettings.SaveLogin(ini, true, "op1", "abc123");
+
+        // 切到没记过密码的账号 → 密码清空 + 取消勾选（不残留别人的密码）。
+        vm.UserName = "admin";
+        Assert.Equal("", vm.Password);
+        Assert.False(vm.Remember);
+
+        // 切回 op1 → 跟出它记住的密码 + 勾选记住（各户独立）。
+        vm.UserName = "op1";
+        Assert.Equal("abc123", vm.Password);
+        Assert.True(vm.Remember);
+    }
+
+    [Fact]
+    public void LoginVm_Ok_Success_SavesLoginAndBringsOutLevel()
+    {
+        using var scope = new TestScope();
+        var (vm, store, ini) = NewLoginVm(scope);
+        bool? closed = null;
+        vm.RequestClose += ok => closed = ok;
+
+        vm.UserName = "admin";
+        vm.Password = "test-admin-pwd";
+        vm.Remember = true;
+        vm.OkCommand.Execute(null);
+
+        Assert.Equal(OperatorLevel.Level4, vm.Level);
+        Assert.Equal("admin", vm.LoginName);
+        Assert.True(closed);
+        // 记住落盘：SavedUser=admin 且该账号密文可解回密码（ini 里永无明文）。
+        var (remember, user, pwd) = RunModeSettings.ReadSavedLogin(ini);
+        Assert.True(remember);
+        Assert.Equal("admin", user);
+        Assert.Equal("test-admin-pwd", pwd);
+    }
+
+    [Fact]
+    public void LoginVm_Ok_WrongPassword_ShowsTipAndStaysOpen()
+    {
+        using var scope = new TestScope();
+        var (vm, store, ini) = NewLoginVm(scope);
+        bool? closed = null;
+        vm.RequestClose += ok => closed = ok;
+
+        vm.UserName = "admin";
+        vm.Password = "wrong-pwd";
+        vm.OkCommand.Execute(null);
+
+        Assert.Null(closed);                       // 不关窗（留在登录面板重试）
+        Assert.Null(vm.Level);
+        Assert.Contains("错误", vm.Tip);
+        Assert.True(vm.TipIsError);
+        Assert.Equal("", vm.Password);             // 密码清空重输
+    }
+
+    [Fact]
+    public void LoginVm_ChangePwd_FullChain_FourGatesThenSuccess()
+    {
+        using var scope = new TestScope();
+        var (vm, store, ini) = NewLoginVm(scope);
+
+        // ① 入口闸：账号不存在（未播种的 ghost）→ 不进面板。
+        vm.UserName = "ghost";
+        vm.ChangePwdCommand.Execute(null);
+        Assert.False(vm.IsChangePwd);
+        Assert.Contains("账号不存在", vm.Tip);
+
+        // 进面板（admin 在册）：横幅带账号名，三框清空。
+        vm.UserName = "admin";
+        vm.ChangePwdCommand.Execute(null);
+        Assert.True(vm.IsChangePwd);
+        Assert.Contains("admin", vm.BannerText);
+        vm.Remember = true;   // 用户勾了记住 → 改密成功后记忆同步新密码（见末尾断言）
+
+        // ② 原密码闸：验不对 → 拦，库未变。
+        vm.OldPassword = "not-the-old";
+        vm.NewPassword = "abc123";
+        vm.NewPassword2 = "abc123";
+        vm.SavePwdCommand.Execute(null);
+        Assert.True(vm.IsChangePwd);
+        Assert.Contains("原密码不正确", vm.Tip);
+        Assert.Equal(OperatorLevel.Level4, store.Verify("admin", "test-admin-pwd"));
+
+        // ③ 规则闸：新密码不足 6 位 → 拦。
+        vm.OldPassword = "test-admin-pwd";
+        vm.NewPassword = "abc";
+        vm.NewPassword2 = "abc";
+        vm.SavePwdCommand.Execute(null);
+        Assert.Contains("至少", vm.Tip);
+
+        // ④ 一致性闸：两次不一致 → 拦。
+        vm.NewPassword = "abc123";
+        vm.NewPassword2 = "abc123d";
+        vm.SavePwdCommand.Execute(null);
+        Assert.Contains("不一致", vm.Tip);
+        Assert.Equal(OperatorLevel.Level4, store.Verify("admin", "test-admin-pwd"));
+
+        // 全过 → 写盘即生效：新密码可登录、旧密码失效；回登录面板 + 绿色成功提示；
+        // 记住勾选开着 → 记忆同步新密码（否则下次回填旧密码直接失败的坑）。
+        vm.NewPassword = "abc123";
+        vm.NewPassword2 = "abc123";
+        vm.SavePwdCommand.Execute(null);
+        Assert.False(vm.IsChangePwd);
+        Assert.Equal("账号登录", vm.BannerText);
+        Assert.False(vm.TipIsError);
+        Assert.Contains("成功", vm.Tip);
+        Assert.Equal(OperatorLevel.Level4, store.Verify("admin", "abc123"));
+        Assert.Null(store.Verify("admin", "test-admin-pwd"));
+        var (remember, _, pwd) = RunModeSettings.ReadSavedLogin(ini, "admin");
+        Assert.True(remember);
+        Assert.Equal("abc123", pwd);
+    }
+
+    [Fact]
+    public void LoginVm_ChangePwd_NoRemember_ClearsSavedPassword()
+    {
+        using var scope = new TestScope();
+        var (vm, store, ini) = NewLoginVm(scope);
+        // 前置：admin 曾勾记住。
+        RunModeSettings.SaveLogin(ini, true, "admin", "test-admin-pwd");
+
+        vm.UserName = "admin";      // 跟随会把 admin 的旧记忆勾上（前置 SaveLogin 过）
+        vm.Remember = false;        // 用户显式取消勾选 → 改密成功应清本户记忆
+        vm.OldPassword = "test-admin-pwd";
+        vm.NewPassword = "abc123";
+        vm.NewPassword2 = "abc123";
+        vm.SavePwdCommand.Execute(null);
+        Assert.False(vm.TipIsError);
+
+        // 没勾记住改密 → 本户记忆清掉（下次全手输，不留旧密码影子）。
+        var (remember, _, _) = RunModeSettings.ReadSavedLogin(ini, "admin");
+        Assert.False(remember);
+    }
+
+    [Fact]
+    public void LoginVm_Back_ReturnsToLoginPanel()
+    {
+        using var scope = new TestScope();
+        var (vm, store, ini) = NewLoginVm(scope);
+        vm.UserName = "admin";
+        vm.ChangePwdCommand.Execute(null);
+        Assert.True(vm.IsChangePwd);
+
+        vm.BackCommand.Execute(null);
+        Assert.False(vm.IsChangePwd);
+        Assert.Equal("账号登录", vm.BannerText);
+        Assert.Equal("", vm.Tip);
+    }
 }

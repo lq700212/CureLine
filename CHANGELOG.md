@@ -50,12 +50,27 @@
   **补丁（2026-10-29）**：输入框模板裁字修复——PART_ContentHost ScrollViewer
   不得设 `VerticalAlignment=Center`（会收缩内容宿主、裁掉文字下半截），
   改 Stretch 填满 + 控件 `VerticalContentAlignment=Center` 居中，Height 加到 32。
+  **功能对齐 mFormLogin（2026-10-29 补丁，参考 HJVision mFormLogin 功能清单）**：
+  ① 登录窗内置**修改密码面板**（登录 ⇄ 改密双面板同窗切换，横幅随面板换文案）
+  ——四道闸：账号在册（`OperatorStore.Exists` 新增）→ 原密码验对 → 规则
+  （≥6 位 + 不得与旧相同，走 `PasswordHasher.ValidateNewPassword`）→ 两次一致，
+  过了 `SetPassword` 写盘即生效，成功回登录面板 + 绿色成功提示条（错误红条/
+  成功绿条随 `TipIsError` 切换）；② **记住密码 + 密码跟随账号**（复用主程序
+  同款 `RunModeSettings` 记忆件：DPAPI 密文存 config.ini，ini 里永无明文）
+  ——分账号各记各的，用户名改谁密码/勾选跟谁；登录成功落盘（勾记住存本户、
+  没勾清本户），改密成功同步新密码到记忆；③ **用户名下拉=在册账号实时表**
+  （`ListUsers`，比 mFormLogin 的登录历史文件干净：无已删账号残留零新存储）；
+  ④ 键盘链对齐 mFormLogin 矩阵（View 层 PreviewKeyDown 统一处理，按钮不用
+  IsDefault/IsCancel 防双面板吃错回车；下拉展开时回车/Esc 放行给 ComboBox）：
+  登录面板用户名回车→密码框、密码回车=登录、Esc=关窗；改密面板三框回车依序
+  跳框、确认回车=保存、Esc=回登录面板。冒烟走通全链：改密→新密码登录→
+  记住回填（重开窗勾选自动勾上）→改回初始密码。
 - **权限管理窗语义色**：按钮编排参考用户管理页——新增=实色蓝、改级别=次级、
   重置密码=绿（`FreshSuccessButton`）、删除=红（`FreshDangerButton`），补
   ToolTip；布局与逻辑不动（明文密码框维持现状，改 PasswordBox 属单独任务）。
-- 测试 248→280（+32：库位编码双架口径 13 + 双架分组/单架回归 3 + 跨设备
-  查重与 rackStart 模板 3 + RackSides 解析与端到端 12 + SwapPairs 3，含
-  各既有回归）；构建 0 警告 0 错误。
+- 测试 248→287（+39：库位编码双架口径 13 + 双架分组/单架回归 3 + 跨设备
+  查重与 rackStart 模板 3 + RackSides 解析与端到端 12 + SwapPairs 3 + 登录
+  记忆/跟随/改密链 5，含各既有回归）；构建 0 警告 0 错误。
 
 ## V0.0.19（2026-10-28，主窗仓位布局对齐机台实景 + 客户库位编码）
 

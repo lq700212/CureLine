@@ -128,6 +128,21 @@ public class OperatorStore
         return OperatorLevelInfo.FromText(row["level"]?.ToString());
     }
 
+    /// <summary>
+    /// 账号是否在册（登录窗改密面板入口先拦"账号不存在"，admin 已删也算不存在）。
+    /// 用户名去空格、忽略空串（空串一律不算在册）。
+    /// </summary>
+    public bool Exists(string? user)
+    {
+        string u = user?.Trim() ?? "";
+        if (string.IsNullOrEmpty(u))
+            return false;
+        object? n = _db.ExecuteScalar(
+            "select count(*) from operators where username=@u",
+            new Dictionary<string, object?> { ["u"] = u });
+        return n != null && Convert.ToInt64(n) > 0;
+    }
+
     /// <summary>全部账号（权限管理窗四级列表用；按级别降序 + 用户名排序）。</summary>
     public IReadOnlyList<OperatorAccount> ListUsers()
     {
