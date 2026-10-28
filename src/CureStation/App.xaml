@@ -154,10 +154,13 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        <!-- 统一输入框（登录窗/表单）：圆角 4、聚焦变主蓝边 -->
+        <!-- 统一输入框（登录窗/表单）：圆角 4、聚焦变主蓝边。
+             注意：PART_ContentHost 必须 Stretch 填满内容区，文字垂直居中交给
+             VerticalContentAlignment（TextBoxView 自己算）——模板里给 ScrollViewer
+             设 VerticalAlignment=Center 会收缩内容宿主、裁掉文字下半截（实测教训） -->
         <Style x:Key="FreshInput" TargetType="TextBox">
-            <Setter Property="Height" Value="30"/>
-            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="8,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Background" Value="White"/>
             <Setter Property="BorderBrush" Value="#B8D4EE"/>
@@ -169,8 +172,11 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="4">
-                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
-                                          VerticalAlignment="Center"/>
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          Focusable="False"
+                                          HorizontalScrollBarVisibility="Hidden"
+                                          VerticalScrollBarVisibility="Hidden"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocusWithin" Value="True">
@@ -186,8 +192,8 @@
         </Style>
         <!-- 密码输入框：与 FreshInput 同款（PasswordBox 是独立控件需独立模板） -->
         <Style x:Key="FreshPwdInput" TargetType="PasswordBox">
-            <Setter Property="Height" Value="30"/>
-            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="8,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Background" Value="White"/>
             <Setter Property="BorderBrush" Value="#B8D4EE"/>
@@ -199,8 +205,11 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="4">
-                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
-                                          VerticalAlignment="Center"/>
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          Focusable="False"
+                                          HorizontalScrollBarVisibility="Hidden"
+                                          VerticalScrollBarVisibility="Hidden"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocusWithin" Value="True">

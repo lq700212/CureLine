@@ -47,6 +47,9 @@
   用户名回车→密码框、密码回车→登录、Esc→取消。**VM 与门禁链零改动**
   （PasswordChanged 转交/RequestClose 挂 DataContextChanged/Level·LoginName
   输出原样）。`FreshButton` 升级带圆角+悬停反馈模板（全局观感统一）。
+  **补丁（2026-10-29）**：输入框模板裁字修复——PART_ContentHost ScrollViewer
+  不得设 `VerticalAlignment=Center`（会收缩内容宿主、裁掉文字下半截），
+  改 Stretch 填满 + 控件 `VerticalContentAlignment=Center` 居中，Height 加到 32。
 - **权限管理窗语义色**：按钮编排参考用户管理页——新增=实色蓝、改级别=次级、
   重置密码=绿（`FreshSuccessButton`）、删除=红（`FreshDangerButton`），补
   ToolTip；布局与逻辑不动（明文密码框维持现状，改 PasswordBox 属单独任务）。
