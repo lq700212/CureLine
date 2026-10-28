@@ -15,8 +15,10 @@
 
 ## 技术栈
 
-- **.NET 8 WPF**（`net8.0-windows`，SDK 风格三工程：`Core` 类库 + `PlcMesBridge`
-  主程序 + `Tests` xUnit，见 `PlcMesBridge.slnx`）
+- **.NET 8 WPF**（`net8.0-windows`，SDK 风格四工程：`Core` 共享类库 + `CureStation`
+  程序①固化程控（IO 耦合器程控 + 单线过账）+ `PlcMesBridge` 主程序（Phase 2
+  演化成程序② CimGateway：6 接口整线过账）+ `Tests` xUnit，见 `PlcMesBridge.slnx`；
+  两程序可分机部署，拆分设计见 `docs/重构设计_20261028.md`）
 - 通讯子模块 **`extern/kaleidoscope`**（git submodule，net472，零改动直接引用，
   详见"子模块"节）；PLC 协议用其 `libs/HslCommunication.dll`（12.6.0，公司已购，
   不从 NuGet 另引）；授权复用子模块 `HslAuthorization`（`hsl.dat`，见"机密红线"）
@@ -50,6 +52,20 @@
   若将来引用失效，备选才是按 kaleidoscope AGENTS 迁移方案给它加
   `net8.0-windows` 多目标——那是跨仓库大动作，需用户明确批准。
 
+## 阶段待办（两程序拆分路线，详见 docs/重构设计_20261028.md）
+
+- **P1 基建与骨架（已完成）**：子模块升 V1.8.2 + VM 基建下沉 Core + IO 点表
+  家族（`IoPointTable`/`IoPointTableStore`/`IoBus`/连通测试）+ `CureStation`
+  程序①骨架（30 仓位主窗 + 点表配置窗 + 自愈 + Mock）+ 测试 156 全绿。
+- **P2 程序②改造（待做）**：`MultiMachineGateway` 换 Modbus 底座；删三菱
+  （`MelsecPlcClient`/`SingleMachineCoordinator` 命令字 4 分支/PLC 配置窗
+  单机页——用户拍板"物理搬运即可"，git 历史可找回）；6 接口迁移与整线
+  联调（待 D/R 终版地址 + CIM W68 终版）；三菱相关测试用例清理。
+- **P3 固化程控（待做）**：仓位状态机（边沿驱动：托盘到位→计时→放行→
+  三色灯）；单线过账（复用 MES 层与 16 字段参数记忆）；工单页 + 权限页
+  （对照 `docs/参考界面/` 两张 HMI 截图：R/L 双工位途程单号/预设数量/
+  已生产数量/员工工号/BC_NO/PT_NO；四级权限 LEVEL.1~4）。
+
 ## 铁律（违反即返工）
 
 1. **文件编码 UTF-8**。写文件用 write 工具；终端 GBK 显示是假象，
@@ -58,12 +74,13 @@
    多机 `StationGateway` 自带线程）；TCP 连接必须带超时；事件在工作线程触发，
    UI 订阅方必须 `Dispatcher.Invoke` 回 UI 线程。
 3. **读写失败即断连标记 + 节流重连**：`MelsecPlcClient` 朴素策略
-   （失败→`IsConnected=false`，5s 节流），勿引入"按 PLC 轮询周期估时"逻辑。
+   （失败→`IsConnected=false`，5s 节流）；IO 总线 `ModbusPointTableBus`
+   同款（未连 5s 节流重连）。勿引入"按 PLC 轮询周期估时"逻辑。
 4. **日志只记边沿**：连上/断开/触发/成功/NG 记，连续失败中间静默，防刷屏。
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 111/111（基线只增不减）；禁止交付编译不过/测试不过的代码。
+   `dotnet test` 156/156（基线只增不减）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
 8. **配置样例同步**：新增配置键必须同步改 `config.sample.ini` + `AppConfig`
@@ -74,13 +91,16 @@
 - 类/方法/属性 PascalCase；私有字段 `_camelCase`；接口前缀 `I`；事件 PascalCase。
 - **注释要详细，让小白能看懂**：每个类头写清"干什么 + 为什么 + 怎么改"，
   边界/自愈/协议细节必须注，杜绝废话注释。中文 UTF-8。
-- **MVVM 分层（WPF 层）**：View（XAML 纯绑定 + xaml.cs 只设 DataContext/
-  转交密码/转发关窗）← ViewModel（`src/PlcMesBridge/ViewModels/`，状态 +
-  命令，INPC 经 `ViewModelBase`，后台线程更新经 `UiInvoke`）→ Model/Core
-  （业务，可测）+ `IDialogService`（VM 开窗/提示唯一出口，测试用
-  `tests/.../Mocks/FakeDialogService` 桩）。VM 禁止直接 new Window/
-  MessageBox/Dispatcher；PasswordBox 密码经事件转交（不可绑定，官方
-  workaround）；关窗确认/重启经服务。
+- **MVVM 分层（WPF 层，两程序同款）**：View（XAML 纯绑定 + xaml.cs 只设
+  DataContext/转交密码/转发关窗）← ViewModel（各程序私有 VM 在自己
+  `ViewModels/`；**基建已下沉共享**：`src/PlcMesBridge.Core/ViewModels/` 的
+  `ViewModelBase`/`RelayCommand`，namespace 仍为 `PlcMesBridge.ViewModels`，
+  两工程零感知；后台线程更新经 `UiInvoke`）→ Model/Core（业务，可测）
+  + `IDialogService`（VM 开窗/提示唯一出口，测试用 Fake 桩）。**对话框
+  接口不下沉**：窗集合是各程序私有资产，各程序自建接口与生产实现
+  （主程序 `tests/.../Mocks/FakeDialogService`、程序① `FakeCureDialogService`）。
+  VM 禁止直接 new Window/MessageBox/Dispatcher；PasswordBox 密码经事件
+  转交（不可绑定，官方 workaround）；关窗确认/重启经服务。
 - **XAML 设计时纪律（新建/改动任何 Window/UserControl 必守，否则预览与运行分叉）**：
   根节点加 `xmlns:d/mc/vm` + `mc:Ignorable="d"` +
   `d:DataContext="{d:DesignInstance Type=vm:对应ViewModel, IsDesignTimeCreatable=False}"`；
@@ -98,35 +118,47 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `src/PlcMesBridge/MainWindow.*` | 主窗：单机/多机双视图、后台节拍、视图筛选（替代 Form2/Form6） |
+| **两程序骨架** | |
+| `src/CureStation/` | **程序①固化程控**（新 exe）：30 仓位主窗 + IO 点表配置窗（`ViewModels/MainViewModel.cs`/`PointTableViewModel.cs`）+ 自建 `DialogService.cs` |
+| `src/PlcMesBridge/MainWindow.*` | 主窗：单机/多机双视图、后台节拍、视图筛选（替代 Form2/Form6；Phase 2 演化 CimGateway） |
 | `src/PlcMesBridge/Controls/StationPanel.*` | 机台面板复用件（MVVM View，VM 由主窗注入，8 实例） |
-| `src/PlcMesBridge/ViewModels/` | 全部 VM（`ViewModelBase`/`RelayCommand`/`IDialogService` 基建 + 各窗 VM，主窗 VM 含双视图/节拍/门禁） |
+| `src/PlcMesBridge/ViewModels/` | 主程序各窗 VM（`IDialogService` 基建 + 各窗 VM，主窗 VM 含双视图/节拍/门禁） |
 | `src/PlcMesBridge/MesDebugWindow.*` | 调试窗：5 接口表单 + API0033 扩展 + 预览上传 |
 | `src/PlcMesBridge/MesLogWindow.*` | 日志窗（-1 单机全量 / >=0 分机台，关窗退订） |
 | `src/PlcMesBridge/PlcConfigWindow.*` | PLC 配置窗（单机/多机/接口三页 + 测试连接 + 保存重启，逻辑在 Core） |
 | `src/PlcMesBridge/MesAlarmWindow.*` / `ImageWindow.*` | 报警窗 / 图片查看 |
+| **Core 共享（IO 家族，P1 新增）** | |
+| `src/PlcMesBridge.Core/ViewModels/` | 下沉的 VM 基建（`ViewModelBase`/`RelayCommand`，namespace 不变） |
+| `src/PlcMesBridge.Core/Comms/IoPointTable.cs` | IO 点表模型 + `PointTableValidator`（重复绑定两道闸）+ `PointTableSnapshot` |
+| `src/PlcMesBridge.Core/Comms/IoPointTableStore.cs` | `config/pointtable.json` 存取 + `BuildDefaultTemplate` 缺省模板（自愈） |
+| `src/PlcMesBridge.Core/Comms/IoBus.cs` | `IPointTableBus` + 真机 `ModbusPointTableBus`（逐块读写/RMW 写 DO/5s 重连）+ 演示 `MockPointTableBus` |
+| `src/PlcMesBridge.Core/Comms/IoCouplerConnectionTester.cs` | IO 耦合器连通测试（三态文案，先测再存） |
+| **Core 共享（业务既有）** | |
 | `src/PlcMesBridge.Core/Services/LocalLogService.cs` | 本机操作日志落盘（截 50 字写文件，全量上界面） |
-| `src/PlcMesBridge.Core/Modes/SingleMachineCoordinator.cs` | 单机业务：命令字边沿 + 4 分支 + MES 上传 + 统计 |
-| `src/PlcMesBridge.Core/Modes/MultiMachineGateway.cs` | 多机网关：触发→JSON→POST→回写 + Manager |
-| `src/PlcMesBridge.Core/Comms/` | `IPlcClient` + 真机 `MelsecPlcClient` + 模拟 `SimulatedPlcClient` + 连通测试 `PlcConnectionTester` |
+| `src/PlcMesBridge.Core/Modes/SingleMachineCoordinator.cs` | 单机业务：命令字边沿 + 4 分支 + MES 上传 + 统计（Phase 2 随三菱删除） |
+| `src/PlcMesBridge.Core/Modes/MultiMachineGateway.cs` | 多机网关：触发→JSON→POST→回写 + Manager（Phase 2 换 Modbus 底座） |
+| `src/PlcMesBridge.Core/Comms/`（PLC 侧） | `IPlcClient` + 真机 `MelsecPlcClient` + 模拟 `SimulatedPlcClient` + 连通测试 `PlcConnectionTester`（Phase 2 删三菱） |
 | `src/PlcMesBridge.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段） |
 | `src/PlcMesBridge.Core/Data/CureRecordStore.cs` | `PLCtable` CRUD + `ComputeStats` 纯统计 |
 | `src/PlcMesBridge.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/PLC 配置模型与校验 |
-| `tests/PlcMesBridge.Tests/` | 33 用例：冒烟4/基础6/统计4/单机7/MES层6/网关4/管理2 |
+| `tests/PlcMesBridge.Tests/` | 156 用例 xUnit（`Mocks/`：本地桩 MES / Fake 对话框两套 / 静态快照隔离，加用例直接复用） |
+| `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
 
 ## 构建与验证命令
 
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build PlcMesBridge.slnx --nologo
-# 全量测试（111/111 全绿，串行，约 9s；含本地 HttpListener 桩 MES 端到端）
+# 全量测试（156/156 全绿，串行，约 9s；含本地 HttpListener 桩 MES 端到端）
 dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 # 子模块改动后（VS MSBuild，net472，原样沿用上游命令）
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
   "extern/kaleidoscope/Kaleidoscope/Kaleidoscope.csproj" `
   /p:Configuration=Debug /p:Platform=AnyCPU /t:Build /nologo /v:m
 # GUI 冒烟：Start-Process 起 exe，确认进程存活 + config/DataBase/log 生成，再 Stop-Process
-# 模拟联调：config.ini [setting] Simulate=1 + Mode=Single/Multi，无真机跑全流程
+#   （程序①起 CureStation.exe，看 config/pointtable.json 自愈落盘 + 30 张仓位卡）
+# 模拟联调：config.ini [setting] Simulate=1（两程序同名键，无真机跑全流程）——
+#   PlcMesBridge 设 Mode=Single/Multi；CureStation 直起即 Mock 总线按仓位流转演示
 ```
 
 ## 已知坑（复刻 heritage，改前必读代码注释）
@@ -143,11 +175,23 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 - `config/` 目录 kernel32 不会自动建，`App.OnStartup` 已确保；删库不怕，
   `EnsureDatabase` 自建表。
 - 老项目第 1 台设备名英文译错（抄第 2 台的），本项目已修正。
+- **IO 总线两坑（P1 起生效）**：① DO 写必须"读-改-写"单寄存器位，
+  整寄存器覆盖会误伤同寄存器其它仓位的三色灯；② 逐块 FC04/FC03 各读
+  1 寄存器（子模块原始 `ReadInputRegisters`），块状布局地址不连续
+  （32 地址只用 16 位），**禁用** kaleidoscope 连续 `ReadAllInputs`。
+- 点表布局三键可改现场分叉：`DiStartAddress`/`DoStartAddress`/
+  `BlockStrideRegisters`（缺省 0x1000/0x1010/0x20，块 K 线性外推）；
+  改动必同步 `PointTableTests` 的地址断言。
+- `TryEnsureConnected` 建连是同步等待（最多 `TimeoutMs`=3s），会阻塞
+  轮询线程一拍——骨架期可接受，P2 提速再改异步。
+- 主窗仓位网格有 10×3 最小下限（`MainViewModel.BuildSlots` 的 `Math.Max`
+  垫底）——点表只配 1 架也铺 30 张卡，属骨架期展示口径勿当 bug 报。
 
 ## 文档同步（每次任务收尾自查）
 
 - **`CHANGELOG.md`**：关键改动记一笔（范围 + 为什么）。
 - **`README.md`**：新增功能/可见行为/配置键任一变化即同步。
+- **`docs/重构设计_20261028.md`**：两程序拆分架构演进（Phase 状态/点表布局）变化即同步。
 - **`config.sample.ini`**：新增配置键同步（见铁律 8）。
 - **代码注释**：中文 UTF-8，小白能看懂，写完自查编码。
 - **提交前自检**：`git status` + `git diff`；用户不要求 commit 时只留工作区改动。

@@ -1,6 +1,38 @@
 # CHANGELOG — PlcMesBridge
 
-> VB 老项目 1:1 复刻的 WPF 融合版。版本规则：关键行为变化即记一笔。
+> VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
+
+## V0.0.13（2026-10-28，两程序拆分 P1：子模块升级 + CureStation 固化程控骨架）
+
+背景：现场 IO 方案定为 IO 耦合器（Modbus TCP 从站，替代 PLC 直读触发），
+业务拆两个独立程序（①固化程控 ②CIM 整线过账）。设计文档
+`docs/重构设计_20261028.md` 承载全部点表布局规律与 Phase 路线。本轮为
+P1（基建与骨架）交付。
+
+- 子模块 extern/kaleidoscope 85811e9 → f53d14b（V1.8.2）；并在子模块内
+  新增 `ModbusTcpIoController.ReadInputRegisters(ushort, ushort)`（FC04
+  任意地址，与 `ReadHoldingRegisters` 对称）——IO 总线逐块读 DI 的原始
+  方法（子模块存量连续读不适用于块状布局；**该方法未 commit，随本轮请示**）。
+- VM 基建下沉共享：`ViewModelBase`/`RelayCommand` 移到
+  `src/PlcMesBridge.Core/ViewModels/`（namespace 不变，两工程零感知）；
+  对话框接口不下沉——窗集合是各程序私有资产，程序①自建 `IDialogService`。
+- Core 新增 IO 点表家族（`Comms/`）：`IoPointTable`（模型 + 校验器：
+  物理点/语义键重复绑定两道闸）+ `IoPointTableStore`（JSON 持久化 +
+  缺省模板生成）+ `IoBus`（真机 `ModbusPointTableBus`：逐块 FC04/FC03 各读
+  1 寄存器、DO 写走读-改-写防误伤同寄存器其它通道、5s 节流重连、状态差分
+  边沿；演示 `MockPointTableBus`：托盘/光栅仓位流转 + 演示掉线重连）+
+  `IoCouplerConnectionTester`（三态连通诊断）。布局落死电气 IO 表：块 K
+  线性外推 DI=0x1000+(K-1)×0x20、DO=DI+0x10；块内每 4 位一组=1 层
+  （输入 0=左光栅/1=右光栅/2=托盘，输出 0=红/1=黄/2=绿）；起始地址/
+  步进/取反三键可配，现场分叉代码零改。
+- 新程序①骨架 `src/CureStation`：主窗 30 仓位卡（10×3 起步，跟随点表
+  扩展）+ 连接状态卡；点表配置窗（设备增删/一键缺省模板/绑定行增删改/
+  测试连接/保存校验——点点鼠标，现场不改代码）；点表自愈（缺 → 模板
+  落盘，坏 → 错误列表 + 模拟兜底）；工程挂 `PlcMesBridge.slnx`。
+- 演示开关：`config.ini [setting] Simulate=1` 同名键沿用到程序①。
+- 测试 133 → 156（新增点表/IO 总线/程序① VM 用例；基线只增不减）；
+  GUI 冒烟通过（CureStation.exe 存活 + pointtable.json 自愈落盘）。
+- 验证：构建 0 警告 0 错误，测试 156/156。
 
 ## V0.0.12（2026-09-23，XAML 设计时纪律入 AGENTS）
 

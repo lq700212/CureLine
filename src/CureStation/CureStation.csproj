@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>CureStation</RootNamespace>
+    <AssemblyName>CureStation</AssemblyName>
+    <!--net472 子模块程序集引用产生 NU1701（框架兼容性警告），Windows 上运行已验证，压制-->
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
+    <!--程序图标：与主程序 PlcMesBridge 同款（拷贝自其 Assets；改图标整包替换此文件）-->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PlcMesBridge.Core\PlcMesBridge.Core.csproj" />
+  </ItemGroup>
+
+</Project>

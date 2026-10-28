@@ -1,0 +1,138 @@
+<Window x:Class="CureStation.PointTableWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:CureStation.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:PointTableViewModel, IsDesignTimeCreatable=False}"
+        Title="IO 点表配置（点点鼠标，无需改代码）"
+        Height="720" Width="1120"
+        WindowStartupLocation="CenterScreen"
+        Icon="Assets/app.ico"
+        FontSize="12">
+    <!--★★ 点表配置窗（现场人员的配置主场）：
+         左：设备列表 + 缺省模板一键生成；右上：绑定网格；
+         右下：选中行编辑面板（块/位/方向/角色/架/层/功能名）。
+         底部：测试连接（不存盘直测）+ 保存（校验不过不落盘）。-->
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="290"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="270"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- 左列：设备管理 + 缺省模板 -->
+        <Border Grid.RowSpan="2" Grid.Column="0" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}"
+                           Text="设备（IO 耦合器）"/>
+                <Button DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
+                        Content="＋ 添加设备" Command="{Binding AddDeviceCommand}" Margin="0,8"/>
+                <ListBox DockPanel.Dock="Top" Height="130"
+                         ItemsSource="{Binding Devices, FallbackValue={x:Null}}"
+                         SelectedItem="{Binding SelectedDevice}" Margin="0,0,0,8">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock>
+                                <Run Text="{Binding Name, FallbackValue=设备}" Foreground="#1F4E79"/>
+                                <Run Text="  "/>
+                                <Run Text="{Binding Ip, FallbackValue=192.168.1.20}" Foreground="#888"/>
+                            </TextBlock>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <Button DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
+                        Content="－ 删除选中设备" Command="{Binding RemoveDeviceCommand}" Margin="0,0,0,10"/>
+                <StackPanel DockPanel.Dock="Bottom">
+                    <TextBlock Style="{StaticResource SectionTitle}"
+                               Text="一键缺省模板"/>
+                    <TextBlock Text="按 IO 表布局生成全部绑定（IP/架数/层数）"
+                               Foreground="#888" Margin="0,2,0,6" TextWrapping="Wrap"/>
+                    <UniformGrid Columns="2">
+                        <TextBlock Text="IP：" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding TemplateIp, FallbackValue=192.168.1.20}"/>
+                        <TextBlock Text="架数：" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding TemplateRacks, FallbackValue=10}"/>
+                        <TextBlock Text="每架层数：" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding TemplateLevels, FallbackValue=3}"/>
+                    </UniformGrid>
+                    <Button Style="{StaticResource FreshButton}" Margin="0,8"
+                            Content="生成缺省模板（覆盖当前设备绑定）"
+                            Command="{Binding GenerateTemplateCommand}"/>
+                </StackPanel>
+                <!-- 设备级编辑（选中设备回显） -->
+                <UniformGrid Columns="2" Margin="0,0,0,8">
+                    <TextBlock Text="设备名：" VerticalAlignment="Center"/>
+                    <TextBox Text="{Binding DeviceName, FallbackValue=IO耦合器1}"/>
+                    <TextBlock Text="IP：" VerticalAlignment="Center"/>
+                    <TextBox Text="{Binding DeviceIp, FallbackValue=192.168.1.20}"/>
+                </UniformGrid>
+            </DockPanel>
+        </Border>
+
+        <!-- 中列：绑定网格 -->
+        <Border Grid.RowSpan="2" Grid.Column="1" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}"
+                           Text="点位绑定（选中行 → 右下编辑）"/>
+                <DataGrid DockPanel.Dock="Top" ItemsSource="{Binding Bindings, FallbackValue={x:Null}}"
+                          SelectedItem="{Binding SelectedBinding}" Height="420" Margin="0,8,0,0">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="方向" Binding="{Binding DirectionText, FallbackValue=输入}"
+                                            Width="56" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="块" Binding="{Binding BlockText, FallbackValue=1}"
+                                            Width="44" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="点号" Binding="{Binding BitText, FallbackValue=0(X0)}"
+                                            Width="96" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="角色" Binding="{Binding RoleText, FallbackValue=预留}"
+                                            Width="120" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="仓位" Binding="{Binding SlotText, FallbackValue=—}"
+                                            Width="72" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="功能名" Binding="{Binding Raw.FunctionName}"
+                                            Width="*" IsReadOnly="True"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </Border>
+
+        <!-- 右列：编辑面板 + 保存 -->
+        <DockPanel Grid.RowSpan="2" Grid.Column="2">
+            <Border DockPanel.Dock="Top" Style="{StaticResource FreshCardBorder}" Padding="10">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionTitle}" Text="绑定编辑（选中行）"/>
+                    <UniformGrid Columns="2" Margin="0,8,0,0">
+                        <TextBlock Text="块号：" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding EditBlock, FallbackValue=1}"/>
+                        <TextBlock Text="位号：" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding EditBit, FallbackValue=0}"/>
+                        <TextBlock Text="方向：" VerticalAlignment="Center"/>
+                        <CheckBox IsChecked="{Binding EditIsInput, FallbackValue=True}"
+                                  Content="输入点" VerticalAlignment="Center"/>
+                        <TextBlock Text="角色：" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding RoleOptions, FallbackValue={x:Null}}"
+                                  SelectedItem="{Binding EditRole}"/>
+                        <TextBlock Text="架号：" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding EditRack, FallbackValue=0}"/>
+                        <TextBlock Text="层号：" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding EditLevel, FallbackValue=0}"/>
+                    </UniformGrid>
+                    <TextBlock Text="功能名（中文，对照 IO 表）" Margin="0,8,0,2"/>
+                    <TextBox Text="{Binding EditFunction}"
+                             Height="44" AcceptsReturn="True" TextWrapping="Wrap"/>
+                    <Button Style="{StaticResource FreshButton}" Margin="0,8,0,0"
+                            Content="应用修改到选中行" Command="{Binding ApplyBindingCommand}"/>
+                    <Button Style="{StaticResource FreshButton}" Margin="0,8,0,0"
+                            Content="删除该绑定行" Command="{Binding DeleteBindingCommand}"/>
+                </StackPanel>
+            </Border>
+            <Button DockPanel.Dock="Bottom" Style="{StaticResource FreshButton}"
+                    Content="保存（校验后写配置文件）"
+                    Command="{Binding SaveCommand}" Margin="0,8" Height="40"/>
+        </DockPanel>
+    </Grid>
+</Window>

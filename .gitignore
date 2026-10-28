@@ -26,7 +26,17 @@ HslLicense.dat
 *.user
 *.suo
 .cache/
+.codegraph/
 
 # ===== 系统文件 =====
 Desktop.ini
 Thumbs.db
+
+# ===== 内部商业文件与客户原件（红线：绝不入库）=====
+docs/内部报价*.md
+docs/参考界面/
+docs/*.xlsx
+
+# ===== 内部解析产物（现场联调基准/体检报告，仅工作区）=====
+docs/io_parse_out2/
+docs/vb_audit_out2/
