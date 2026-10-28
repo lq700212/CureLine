@@ -11,6 +11,8 @@ public class FakeCureDialogService : CureStation.ViewModels.IDialogService
 
     /// <summary>ShowPointTable 的桩返回值（true=保存成功）。</summary>
     public bool PointTableResult { get; set; }
+    /// <summary>ShowCuringPolicy 的桩返回值（true=保存成功）。</summary>
+    public bool CuringPolicyResult { get; set; }
     public bool ConfirmResult { get; set; } = true;
 
     public void ShowMessage(string message, string title) =>
@@ -26,6 +28,12 @@ public class FakeCureDialogService : CureStation.ViewModels.IDialogService
     {
         Calls.Add("ShowPointTable");
         return PointTableResult;
+    }
+
+    public bool ShowCuringPolicy()
+    {
+        Calls.Add("ShowCuringPolicy");
+        return CuringPolicyResult;
     }
 
     public void Shutdown() => Calls.Add("Shutdown");

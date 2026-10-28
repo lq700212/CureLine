@@ -1,0 +1,116 @@
+﻿<Window x:Class="CureStation.CuringPolicyWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:CureStation.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:CuringPolicyViewModel, IsDesignTimeCreatable=False}"
+        Title="工艺策略（固化时长 / 光栅门控）"
+        Height="640" Width="1020"
+        WindowStartupLocation="CenterScreen"
+        Icon="Assets/app.ico"
+        FontSize="12">
+    <!--★★ 工艺策略窗（参考 AgingTestSystem 配方管理的"库+校验+激活"模式）：
+         左：策略列表（增删选）；中：编辑面板（名称/全局时长/光栅门控/每层覆盖）；
+         右：每仓位覆盖行表（可编辑）；底部：激活并生效 / 仅保存。
+         时长三级覆盖：仓位 > 层 > 全局，缺值自动回退，三种粒度可混用。-->
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="240"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="330"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- 左列：策略库 -->
+        <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}"
+                           Text="策略库（激活一个生效）"/>
+                <Button DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
+                        Content="＋ 添加策略" Command="{Binding AddPolicyCommand}" Margin="0,8"/>
+                <Button DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
+                        Content="－ 删除选中策略" Command="{Binding RemovePolicyCommand}" Margin="0,0,0,8"/>
+                <ListBox ItemsSource="{Binding Policies, FallbackValue={x:Null}}"
+                         SelectedItem="{Binding SelectedPolicy}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Name, FallbackValue=策略名}" Foreground="#1F4E79"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- 中列：编辑面板 -->
+        <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionTitle}" Text="策略编辑（选中项）"/>
+                    <UniformGrid Columns="2" Margin="0,8,0,0">
+                        <TextBlock Text="策略名：" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding EditName, FallbackValue=标准固化}"/>
+                        <TextBlock Text="全局时长（分钟）：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                        <TextBox Text="{Binding EditGlobalMinutes, FallbackValue=120}" Margin="0,6,0,0"/>
+                    </UniformGrid>
+                    <CheckBox IsChecked="{Binding EditGrillGate, FallbackValue=False}"
+                              Content="光栅门控（左右光栅都灭才开计时，防人手在架内就计时）"
+                              Margin="0,10,0,0"/>
+                    <TextBlock Text="未勾选时托盘到位即开计时；没绑光栅的仓位门控自动放行。"
+                               Foreground="#888" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                    <Separator Margin="0,10"/>
+                    <TextBlock Style="{StaticResource SectionTitle}"
+                               Text="每层覆盖（分钟，空=用全局）"/>
+                    <UniformGrid Columns="2" Margin="0,6,0,0">
+                        <TextBlock Text="上层（层1）：" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding EditLevel1Min}"/>
+                        <TextBlock Text="中层（层2）：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                        <TextBox Text="{Binding EditLevel2Min}" Margin="0,6,0,0"/>
+                        <TextBlock Text="下层（层3）：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                        <TextBox Text="{Binding EditLevel3Min}" Margin="0,6,0,0"/>
+                        <TextBlock Text="层4（预留）：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                        <TextBox Text="{Binding EditLevel4Min}" Margin="0,6,0,0"/>
+                    </UniformGrid>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- 右列：每仓位覆盖 -->
+        <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource FreshCardBorder}">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}"
+                           Text="每仓位覆盖（分钟，可空）"/>
+                <TextBlock DockPanel.Dock="Top" Foreground="#888" Margin="0,2,0,6" TextWrapping="Wrap"
+                           Text="只给特殊仓位单独设时长（如 3-2=45），其余仓位走层/全局。"/>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                    <Button Style="{StaticResource FreshButton}" Content="＋ 添加行"
+                            Command="{Binding AddSlotRowCommand}" Margin="0,0,8,0"/>
+                    <Button Style="{StaticResource FreshButton}" Content="－ 删除选中行"
+                            Command="{Binding RemoveSlotRowCommand}"/>
+                </StackPanel>
+                <DataGrid ItemsSource="{Binding SlotRows, FallbackValue={x:Null}}"
+                          SelectedItem="{Binding SelectedSlotRow}"
+                          AutoGenerateColumns="False" CanUserAddRows="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="架号" Binding="{Binding Rack}" Width="*"/>
+                        <DataGridTextColumn Header="层号" Binding="{Binding Level}" Width="*"/>
+                        <DataGridTextColumn Header="时长(分)" Binding="{Binding Minutes}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </Border>
+
+        <!-- 底部：激活 / 保存 -->
+        <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                    Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Style="{StaticResource FreshButton}" Content="激活并生效（保存 + 启用选中策略）"
+                    Command="{Binding ActivateCommand}" Width="280" Height="36" Margin="0,0,8,0"/>
+            <Button Style="{StaticResource FreshButton}" Content="仅保存"
+                    Command="{Binding SaveCommand}" Width="140" Height="36"/>
+        </StackPanel>
+    </Grid>
+</Window>

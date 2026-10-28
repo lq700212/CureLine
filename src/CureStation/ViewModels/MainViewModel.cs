@@ -1,19 +1,23 @@
 // =========================================================================
-// MainViewModel：固化程控主窗编排（程序①骨架）
+// MainViewModel：固化程控主窗编排（程序①）
 //
-// 干什么：① 启动时读点表（config/pointtable.json）→ 造总线（Mock/真机按
-//   config.ini [setting] Simulate 键）后半台跑；② 500ms 拉快照刷仓位网格；
-//   ③ 点表配置窗命令（编辑保存后重建总线即生效）。
-// 为什么 500ms 轮询 UI 而不走事件订阅：骨架期网格全量刷新最稳（事件边沿
-//   属于状态机 Phase 3 的活），500ms 挂 UI 帧，实测肉眼顺畅且负载低。
-// 怎么改：新增窗体命令经 IDialogService；仓位状态机接入时从"拉快照"
-//   升级为"边沿事件驱动+计时器"，本 VM 只增不改晾缓存。
+// 干什么：① 启动时读点表（config/pointtable.json）+ 工艺策略
+//   （config/curingpolicy.json，缺则自愈缺省库）→ 造总线（Mock/真机按
+//   config.ini [setting] Simulate 键）+ 仓位状态机后半台跑；
+//   ② 500ms 拉快照刷仓位网格（状态机状态一并注入卡片）；
+//   ③ 点表配置窗/工艺策略窗命令（保存后重建总线/刷新策略即生效）。
+// 为什么 500ms 轮询 UI：状态机的灯写与计时全在后台（铁律 2），UI 只读
+//   快照与状态机状态，500ms 全量刷最稳（事件驱动 UI 属后续优化）。
+// 怎么改：新增窗体命令经 IDialogService；总线边沿经 _machine 转发（后台
+//   线程直调，不碰 UI）；重连只换总线通道（Attach）不丢仓位流程。
 // =========================================================================
 
 using System.Collections.ObjectModel;
 using System.Windows.Threading;
 using PlcMesBridge.Core.Comms;
+using PlcMesBridge.Core.Curing;
 using PlcMesBridge.Core.Infrastructure;
+using PlcMesBridge.Core.Services;
 using PlcMesBridge.ViewModels;
 
 namespace CureStation.ViewModels;
@@ -65,8 +69,12 @@ public sealed class RackSlotViewModel : ViewModelBase
         private set => Set(ref _cardState, value);
     }
 
-    /// <summary>一拍快照刷新（调用方 500ms 定时；数据从语义键直查快照）。</summary>
-    public void Refresh(PointTableSnapshot snapshot, bool hasTable)
+    /// <summary>
+    /// 一拍快照刷新（调用方 500ms 定时；数据从语义键直查快照）。
+    /// machineStatus=状态机状态（非空闲时展示口径以状态机为准——剩余分钟数
+    /// 灯色反推不出来）；空闲/没动过的仓位走灯色反推口径（与骨架期一致）。
+    /// </summary>
+    public void Refresh(PointTableSnapshot snapshot, bool hasTable, SlotStatus? machineStatus = null)
     {
         if (!hasTable)
         {
@@ -86,9 +94,20 @@ public sealed class RackSlotViewModel : ViewModelBase
             : $"L:{BoolText(grillL)} R:{BoolText(grillR)}";
         LampText = red == true ? "红灯" : yellow == true ? "黄灯"
             : green == true ? "绿灯" : "灭";
-        SlotStateText = mapState(tray, red, yellow, green);
-        CardState = red == true ? "Red" : yellow == true ? "Yellow"
-            : green == true ? "Green" : "Idle";
+        SlotStateText = machineStatus switch
+        {
+            { Phase: SlotPhase.Curing } => machineStatus.StateText, // "计时中 剩X分"
+            { Phase: SlotPhase.Done } => "放行",
+            { Phase: SlotPhase.WaitingGate } => "待门控",
+            _ => mapState(tray, red, yellow, green),                 // 空闲走灯色反推
+        };
+        CardState = machineStatus switch
+        {
+            { Phase: SlotPhase.Curing } => "Yellow",
+            { Phase: SlotPhase.Done } => "Green",
+            _ => red == true ? "Red" : yellow == true ? "Yellow"
+                : green == true ? "Green" : "Idle",
+        };
     }
 
     private static string BoolText(bool? v) => v == true ? "ON" : v == false ? "OFF" : "—";
@@ -121,10 +140,21 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         private set => Set(ref _isConnected, value);
     }
 
+    /// <summary>当前生效策略（顶栏展示；策略窗激活后经 LoadPolicyBook 刷新）。</summary>
+    private string _policyText = "策略：未加载";
+    public string PolicyText
+    {
+        get => _policyText;
+        private set => Set(ref _policyText, value);
+    }
+
     private PointTableConfig? _config;
     private IPointTableBus? _bus;
+    private SlotCuringMachine? _machine;   // 仓位状态机（与 VM 同生命周期，总线可换不丢流程）
+    private CuringPolicyBook? _policyBook; // 工艺策略库（策略窗保存后经 LoadPolicyBook 重读）
 
     public RelayCommand OpenPointTableCommand { get; }
+    public RelayCommand OpenCuringPolicyCommand { get; }
     public RelayCommand ReconnectCommand { get; }
 
     public MainViewModel(IDialogService dialogs)
@@ -132,6 +162,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _dialogs = dialogs;
 
         OpenPointTableCommand = new RelayCommand(OpenPointTable);
+        OpenCuringPolicyCommand = new RelayCommand(OpenCuringPolicy);
         ReconnectCommand = new RelayCommand(() => StartBus(_config));
         _refreshTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
@@ -139,10 +170,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         };
         _refreshTimer.Tick += (_, _) => RefreshSlots();
 
-        // 启动装配：读点表 → 兜缺省模板（首次启动直接可演示）→ 总线 Start
+        // 启动装配：读点表 + 工艺策略（都自愈）→ 总线 Start + 状态机
         var config = LoadOrDefault();
         _config = config;   // 记住当前点表（重连按钮复用，勿传 null）
         BuildSlots(config);
+        LoadPolicyBook();
         StartBus(config);
         _refreshTimer.Start();
     }
@@ -163,6 +195,29 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         return config;
     }
 
+    /// <summary>
+    /// 工艺策略装载：缺/坏 → 缺省库落盘自愈（静默不弹框——策略有缺省值可直接跑，
+    /// 与点表"要用户改 IP"不同，不打扰操作员；自愈原因进操作日志）。
+    /// 激活名同步到顶栏 PolicyText。
+    /// </summary>
+    private void LoadPolicyBook()
+    {
+        var reasons = new List<string>();
+        var book = CuringPolicyStore.Load(reasons: reasons);
+        if (book == null)
+        {
+            book = CuringPolicyStore.BuildDefaultBook();
+            CuringPolicyStore.Save(book); // 自愈落盘（现场删了配置文件也能一键回来）
+            foreach (var r in reasons)
+                LocalLogService.Write(r);
+        }
+        _policyBook = book;
+        PolicyText = $"策略：{book.ResolveActive()?.Name ?? "无"}";
+    }
+
+    /// <summary>状态机取当前激活策略（每次托盘到位现取——策略窗激活后热切换生效）。</summary>
+    private CuringPolicy? GetActivePolicy() => _policyBook?.ResolveActive();
+
     /// <summary>仓位网格骨架：架×层全组合铺满（占位结构来自点表绑定，缺省 10 架 3 层=30 仓位）。</summary>
     private void BuildSlots(PointTableConfig config)
     {
@@ -182,8 +237,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         lock (_busLock)
         {
-            _bus?.Dispose();
-            _bus = null;
             if (config == null || config.Devices.Count == 0)
             {
                 ConnectionText = "未配置设备";
@@ -203,15 +256,35 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             bool simulate = IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Simulate", "0") == "1";
             IPointTableBus bus = simulate ? new MockPointTableBus() : new ModbusPointTableBus();
             bus.Start(config);
-            bus.ConnectionChanged += (_, connected) => UiInvoke(() =>
+
+            // 状态机接线（全部后台线程——铁律 2）：边沿直转（machine 内部有锁）；
+            // 断连恢复对齐快照（托盘在架的仓位重新计时）；连接态/错误照旧回 UI。
+            bus.PointChanged += (_, e) => _machine?.OnPointChanged(e);
+            bus.ConnectionChanged += (_, connected) =>
             {
-                IsConnected = connected;
-                ConnectionText = bus.ConnectionSummary;
-            });
+                if (connected)
+                    _machine?.AlignFromSnapshot();
+                UiInvoke(() =>
+                {
+                    IsConnected = connected;
+                    ConnectionText = bus.ConnectionSummary;
+                });
+            };
             bus.Error += (_, msg) => UiInvoke(() =>
                 ConnectionText = msg.Length > 40 ? msg[..40] + "…" : msg);
 
+            // 状态机：首次创建（带总线），重连只换通道（Attach，流程状态不丢）。
+            // 顺序刻意"先建/换妥新通道、再停旧总线"——状态机中途不会摸到已释放对象。
+            if (_machine == null)
+                _machine = new SlotCuringMachine(bus, GetActivePolicy,
+                    log: m => LocalLogService.Write(m));
+            else
+                _machine.Attach(bus);
+            _machine.AlignFromSnapshot(); // 首启/点表变更后按当前快照对齐
+
+            var oldBus = _bus;
             _bus = bus;
+            oldBus?.Dispose();
             IsConnected = _bus.IsConnected;
             ConnectionText = _bus.ConnectionSummary;
         }
@@ -221,7 +294,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         var snapshot = _bus?.LatestSnapshot;
         foreach (var slot in Slots)
-            slot.Refresh(snapshot ?? PointTableSnapshot.Empty, snapshot != null);
+        {
+            var status = _machine?.GetStatus(slot.Rack, slot.Level);
+            slot.Refresh(snapshot ?? PointTableSnapshot.Empty, snapshot != null, status);
+        }
     }
 
     private void OpenPointTable()
@@ -235,11 +311,24 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             _dialogs.ShowMessage("点表已保存并生效。", "保存成功");
     }
 
+    /// <summary>工艺策略窗：保存/激活后重读策略库（激活名可能已换，热切换生效）。</summary>
+    private void OpenCuringPolicy()
+    {
+        var saved = _dialogs.ShowCuringPolicy();
+        if (saved)
+        {
+            LoadPolicyBook();
+            _dialogs.ShowMessage("工艺策略已保存并生效。", "保存成功");
+        }
+    }
+
     public void Dispose()
     {
         _refreshTimer.Stop();
         lock (_busLock)
         {
+            _machine?.Dispose(); // 先停状态机心跳（不再写灯），再停总线
+            _machine = null;
             _bus?.Dispose();
             _bus = null;
         }

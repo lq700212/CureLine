@@ -63,10 +63,13 @@
   （`ModbusStationClient`，地址/打包/分帧集中一处）+ 配置模型收敛
   （删 `RunMode`/`[SinglePLC]`/`PLCAscii`）。**P2.2 待做**：6 接口迁移与
   整线联调（待 D/R 终版地址 + CIM W68 终版）。
-- **P3 固化程控（待做）**：仓位状态机（边沿驱动：托盘到位→计时→放行→
-  三色灯）；单线过账（复用 MES 层与 16 字段参数记忆）；工单页 + 权限页
-  （对照 `docs/参考界面/` 两张 HMI 截图：R/L 双工位途程单号/预设数量/
-  已生产数量/员工工号/BC_NO/PT_NO；四级权限 LEVEL.1~4）。
+- **P3 固化程控（进行中，P3.1 已完成）**：**P3.1=仓位状态机 + 工艺策略**
+  （`Core/Curing/` 三件套：`CuringPolicy` 三级覆盖时长 + 光栅门控、
+  `CuringPolicyStore` JSON 自愈、`SlotCuringMachine` 边沿驱动状态机；
+  工艺策略窗 + 主窗接线，测试 178）。**P3.2 待做**：单线过账（复用 MES 层
+  与 16 字段参数记忆）；工单页 + 权限页（对照 `docs/参考界面/` 两张 HMI
+  截图：R/L 双工位途程单号/预设数量/已生产数量/员工工号/BC_NO/PT_NO；
+  四级权限 LEVEL.1~4）。
 
 ## 铁律（违反即返工）
 
@@ -83,8 +86,8 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 148/148（P2.1 删单机链连带删 32 例 + 增 Modbus 24 例，
-   基线此后只增不减）；禁止交付编译不过/测试不过的代码。
+   `dotnet test` 178/178（P3.1 增状态机/策略 30 例；基线此后只增不减）；
+   禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
 8. **配置样例同步**：新增配置键必须同步改 `config.sample.ini` + `AppConfig`
@@ -123,7 +126,7 @@
 | 文件 | 作用 |
 | --- | --- |
 | **两程序骨架** | |
-| `src/CureStation/` | **程序①固化程控**（新 exe）：30 仓位主窗 + IO 点表配置窗（`ViewModels/MainViewModel.cs`/`PointTableViewModel.cs`）+ 自建 `DialogService.cs` |
+| `src/CureStation/` | **程序①固化程控**（新 exe）：30 仓位主窗 + IO 点表配置窗 + 工艺策略窗（`ViewModels/MainViewModel.cs`/`PointTableViewModel.cs`/`CuringPolicyViewModel.cs`）+ 自建 `DialogService.cs` |
 | `src/PlcMesBridge/MainWindow.*` | 主窗：多机网关视图、视图筛选（替代 Form2/Form6；单机视图与"运行模式"菜单已随单机链路删除；Phase 2 演化 CimGateway） |
 | `src/PlcMesBridge/Controls/StationPanel.*` | 机台面板复用件（MVVM View，VM 由主窗注入，8 实例） |
 | `src/PlcMesBridge/ViewModels/` | 主程序各窗 VM（`IDialogService` 基建 + 各窗 VM，主窗 VM 含视图筛选/门禁） |
@@ -131,6 +134,10 @@
 | `src/PlcMesBridge/MesLogWindow.*` | 日志窗（-1 全部机台 / >=0 分机台，关窗退订） |
 | `src/PlcMesBridge/PlcConfigWindow.*` | PLC 配置窗（多机/接口两页 + 测试连接 + 保存重启，逻辑在 Core；单机页已删） |
 | `src/PlcMesBridge/MesAlarmWindow.*` / `ImageWindow.*` | 报警窗 / 图片查看 |
+| **Core 共享（固化工艺家族，P3.1 新增）** | |
+| `src/PlcMesBridge.Core/Curing/CuringPolicy.cs` | 工艺策略模型：时长三级覆盖（仓位>层>全局，`ResolveMinutes` 唯一出口）+ 光栅门控 + `CuringPolicyValidator`（时长/层号/仓位键/重名） |
+| `src/PlcMesBridge.Core/Curing/CuringPolicyStore.cs` | `config/curingpolicy.json` 存取（策略库+激活名）+ `BuildDefaultBook` 缺省库自愈 |
+| `src/PlcMesBridge.Core/Curing/SlotCuringMachine.cs` | **仓位状态机**：托盘到位→（门控）→黄灯计时→绿灯放行→离开灭灯；边沿后台直转+1s 心跳 Pump；灯写去重补写/断连恢复对齐/策略热切换三自愈 |
 | **Core 共享（IO 家族，P1 新增）** | |
 | `src/PlcMesBridge.Core/ViewModels/` | 下沉的 VM 基建（`ViewModelBase`/`RelayCommand`，namespace 不变） |
 | `src/PlcMesBridge.Core/Comms/IoPointTable.cs` | IO 点表模型 + `PointTableValidator`（重复绑定两道闸）+ `PointTableSnapshot` |
@@ -145,7 +152,7 @@
 | `src/PlcMesBridge.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段） |
 | `src/PlcMesBridge.Core/Data/CureRecordStore.cs` | `PLCtable` CRUD + `ComputeStats` 纯统计 |
 | `src/PlcMesBridge.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/PLC 配置模型与校验 |
-| `tests/PlcMesBridge.Tests/` | 148 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离，加用例直接复用） |
+| `tests/PlcMesBridge.Tests/` | 178 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
 | `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
 
 ## 构建与验证命令
@@ -153,7 +160,7 @@
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build PlcMesBridge.slnx --nologo
-# 全量测试（148/148 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
+# 全量测试（178/178 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
 dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 # 子模块改动后（VS MSBuild，net472，原样沿用上游命令）
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
@@ -193,6 +200,12 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
   轮询线程一拍——骨架期可接受，P2 提速再改异步。
 - 主窗仓位网格有 10×3 最小下限（`MainViewModel.BuildSlots` 的 `Math.Max`
   垫底）——点表只配 1 架也铺 30 张卡，属骨架期展示口径勿当 bug 报。
+- **状态机语义三键（P3.1 起生效，全在 `SlotCuringMachine` 一处）**：
+  ① 流程"到位即计时"——托盘 OFF 即回空闲灭灯（中途取件计时作废记日志），
+  红灯状态机不写（留异常语义）；② 计时状态不持久化——断电/重启后托盘在架
+  的仓位重新计时（宁可重计也不放行没固化够的货，持久化属报价加价点）；
+  ③ 策略热切换只影响新到位的仓位，进行中的按开计时那一刻锁定的时长走完。
+  改流程先改 `SlotCuringMachine` 头注释与 `SlotCuringMachineTests` 断言。
 
 ## 文档同步（每次任务收尾自查）
 

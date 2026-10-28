@@ -5,9 +5,10 @@
 
 * `src/PlcMesBridge` — 主程序：MES 多机网关（八机 Modbus TCP 统一底座；
   Phase 2 演化为程序② CIM 整线过账，单机模式已删）
-* `src/CureStation` — **程序①固化程控**：IO 耦合器（Modbus TCP）30 仓位程控
-  骨架——点表"点点鼠标"配置 + 主窗仓位网格 + 配置自愈，Phase 3 接程控
-  状态机与单线过账
+* `src/CureStation` — **程序①固化程控**：IO 耦合器（Modbus TCP）30 仓位程控——
+  点表"点点鼠标"配置 + 主窗仓位网格 + 仓位状态机（到位计时→放行→三色灯）+
+  工艺策略窗（时长三级覆盖/光栅门控）+ 配置自愈，Phase 3 剩单线过账与
+  工单/权限页
 
 详见 `AGENTS.md`（开工必读）、`docs/重构设计_20261028.md`（两程序拆分设计）
 与 `CHANGELOG.md`。
@@ -48,17 +49,25 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
   `src/PlcMesBridge.Core/ViewModels/`（namespace 不变，两程序共用）；
   `IDialogService` 各程序自建（窗集合是私有资产，不下沉）。
 
-## 程序① CureStation（固化程控骨架）
+## 程序① CureStation（固化程控）
 
 - **主窗**：30 张仓位卡（10 架×3 层，跟随点表扩展），每卡实时显示
-  托盘/左右光栅/三色灯/仓位状态；连接状态卡 + 重连按钮 + 点表配置入口；
-  500ms 拉快照刷新（骨架期全量刷，Phase 3 升级边沿驱动）。
+  托盘/左右光栅/三色灯/仓位状态（状态机口径：空闲/待门控/计时中 剩X分/放行）；
+  顶栏连接状态 + 当前策略 + 重连 + 工艺策略/点表配置入口；500ms 拉快照刷新。
+- **仓位状态机（程控核心）**：托盘到位 →（门控开则等光栅让空）→ 黄灯计时 →
+  到点绿灯放行 → 托盘离开灭灯回空闲；任何时刻托盘离开都回空闲（计时中取件
+  记日志）。灯写/计时全在后台线程，断连恢复自动对齐重计，灯写失败下轮补写。
+- **工艺策略窗（参考配方管理模式）**：策略库增删选 + 编辑（策略名/全局时长/
+  光栅门控/每层覆盖/每仓位覆盖行表）+ **激活并生效**（保存+启用选中策略）+
+  **仅保存**（先校验后落盘，错弹框不写文件）。时长三级覆盖：仓位 > 层 > 全局，
+  缺值自动回退，三种粒度可混用；光栅门控可开关（开=左右光栅都灭才开计时）。
 - **点表配置窗（"点点鼠标"核心，现场不改代码）**：设备增删（IP/端口）+
   **一键缺省模板**（按架数×层数生成全套绑定）+ 绑定行增删改（块/位/方向/
   角色/架/层/功能名）+ **测试连接**（三态文字诊断：连不上/连上读不通/OK）+
   **保存**（先全量校验再落盘：物理点唯一 + 语义键唯一两道闸，错弹框不写文件）。
 - **自愈**：`config/pointtable.json` 缺失/损坏 → 自动按 Audi cover module
-  IO 表生成缺省模板（10 架 3 层）并落盘，开箱即看。
+  IO 表生成缺省模板（10 架 3 层）并落盘；`config/curingpolicy.json` 缺失/损坏
+  → 缺省策略库（"标准固化"120 分钟）落盘，开箱即看。
 - **点表布局（缺省，与电气 IO 表对应）**：块 K=架 K，块 K 的
   DI=0x1000+(K-1)×0x20、DO=DI+0x10；块内每 4 位一组=1 层——输入组
   bit0=左光栅/bit1=右光栅/bit2=托盘，输出组 bit0=红/bit1=黄/bit2=绿；
@@ -87,12 +96,15 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 - `src/PlcMesBridge.Core/` — 共享业务与基础（INI/SQLite/MES/通讯/网关逻辑 +
   **IO 点表家族** `Comms/IoPointTable*`/`IoBus`/连通测试 + 真机底座
   `Comms/ModbusStationClient`（Modbus TCP，地址/打包/分帧集中点）+
-  `ViewModels/` 下沉的 VM 基建）
-- `src/CureStation/` — **程序①固化程控**（30 仓位主窗 + IO 点表配置窗）
+  **固化工艺家族** `Curing/CuringPolicy*`/`SlotCuringMachine`（策略三级覆盖 +
+  仓位状态机）+ `ViewModels/` 下沉的 VM 基建）
+- `src/CureStation/` — **程序①固化程控**（30 仓位主窗 + IO 点表配置窗 +
+  工艺策略窗 + 仓位状态机）
 - `src/PlcMesBridge/` — 主程序 WPF 界面（主窗/调试/报警/日志/图片窗），
   图标在 `Assets/`（`app.ico` 程序图标 / `app.png` 高清源备用）
-- `tests/PlcMesBridge.Tests/` — 148 例 xUnit（`Mocks/`：本地桩 MES /
-  网关标准报文 / 静态全局快照恢复 / Fake 对话框两套，加用例直接复用）
+- `tests/PlcMesBridge.Tests/` — 178 例 xUnit（`Mocks/`：本地桩 MES /
+  网关标准报文 / 静态全局快照恢复 / Fake 对话框两套 / ScriptedPointBus 状态机桩，
+  加用例直接复用）
 - `extern/kaleidoscope/` — 通讯子模块（独立仓库，勿直接改，见 AGENTS.md）
 - `docs/重构设计_20261028.md` — 两程序拆分设计与 Phase 路线
 - `config.sample.ini` — 现场配置样例

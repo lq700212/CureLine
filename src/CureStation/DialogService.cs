@@ -24,6 +24,9 @@ public interface IDialogService
     /// <summary>打开点表配置窗（模态）。返回 true 表示保存了点表（调用方可重建总线）。</summary>
     bool ShowPointTable();
 
+    /// <summary>打开工艺策略窗（模态）。返回 true 表示保存了策略（调用方可刷新激活策略）。</summary>
+    bool ShowCuringPolicy();
+
     /// <summary>程序化关闭主进程（退出）。</summary>
     void Shutdown();
 }
@@ -45,6 +48,17 @@ public sealed class DialogService : IDialogService
         {
             Owner = Application.Current?.MainWindow,
             DataContext = new PointTableViewModel(new DialogService()),
+        };
+        return win.ShowDialog() == true;
+    }
+
+    public bool ShowCuringPolicy()
+    {
+        // 生产装配：同点表窗模式（VM 在服务里 new，测试用 Fake 桩）。
+        var win = new CuringPolicyWindow
+        {
+            Owner = Application.Current?.MainWindow,
+            DataContext = new CuringPolicyViewModel(new DialogService()),
         };
         return win.ShowDialog() == true;
     }
