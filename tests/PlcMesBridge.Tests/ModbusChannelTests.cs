@@ -114,6 +114,35 @@ public class ModbusChannelTests
         Assert.Equal(expected, regs);
     }
 
+    // ---- 字节序翻转（V0.0.20 配置化：StringByteOrder=SwapBytes） ----
+
+    [Fact(DisplayName = "SwapPairs 字节对两两交换（CIM 侧 little-endian 组包的翻转实现）")]
+    public void SwapPairs_SwapsAdjacentBytes()
+    {
+        // "NG"=4E 47 → 47 4E：PackAscii 后寄存器 0x4E47 变 0x474E（字节序反转口径）
+        byte[] swapped = ModbusStationClient.SwapPairs(new byte[] { 0x4E, 0x47 });
+        Assert.Equal(new byte[] { 0x47, 0x4E }, swapped);
+        // 串交换后经 PackAscii 得 little-endian 寄存器
+        ushort[] regs = ModbusStationClient.PackAscii(swapped);
+        Assert.Equal(new ushort[] { 0x474E }, regs);
+    }
+
+    [Fact(DisplayName = "SwapPairs 奇长度末尾孤字节不动（补 \\0 后长度恒偶，此处兜底）")]
+    public void SwapPairs_OddLength_KeepsLastByte()
+    {
+        byte[] swapped = ModbusStationClient.SwapPairs(new byte[] { 0x41, 0x42, 0x43 });
+        Assert.Equal(new byte[] { 0x42, 0x41, 0x43 }, swapped);
+    }
+
+    [Fact(DisplayName = "SwapPairs 自逆：交换两次还原原字节流")]
+    public void SwapPairs_Involution()
+    {
+        var payload = "NG-A01-JSON"u8.ToArray();
+        byte[] twice = ModbusStationClient.SwapPairs(
+            ModbusStationClient.SwapPairs(payload));
+        Assert.Equal(payload, twice);
+    }
+
     // ---- 节流常量与自愈铁律一致 ----
 
     [Fact(DisplayName = "重连节流与铁律 3 同节奏（5s）")]

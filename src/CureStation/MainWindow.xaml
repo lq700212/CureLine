@@ -14,8 +14,12 @@
         FontSize="13">
     <!--
       布局口径（与现场机台实景一致）：
-      - 30 个固化架 = 三排（上中下三层）× 一排 10 站，UniformGrid 列/行绑 VM 的
-        RackCount/LevelCount（行优先集合逐格填充，见 MainViewModel.BuildSlots）；
+      - 单台固化架 = 10 站一排（列 A~J）× 上中下 3 层；仓位卡按"行优先"集合
+        逐格填充（见 MainViewModel.BuildSlots），UniformGrid 列/行绑定组 VM 的
+        Columns/Rows（与 VM 的 RackCount/LevelCount 同源）；
+      - 双架（V0.0.20）：全局架号每 10 站切一组（1~10=1号架、11~20=2号架），
+        主内容按组上下堆叠（外层 UniformGrid Rows=GroupCount 纵向均分铺满），
+        每组带"N号固化架"标题条；单架只有 1 组且标题条隐藏，视觉与单架版完全一致；
       - 屏幕适配：默认最大化启动（WindowState=Maximized），网格随窗口拉伸均分
         （卡片不设固定宽高，大屏铺满、小屏压缩，MinWidth/MinHeight 兜极小屏），
         卡片内容垂直居中，行高/列宽变化时版式稳定。
@@ -146,16 +150,53 @@
                         Click="OnExitClick"/>
             </Grid>
         </Border>
-        <!-- 主内容：仓位网格（三排十站，随窗口拉伸均分——无固定卡宽，全屏铺满） -->
-        <ItemsControl ItemsSource="{Binding Slots, FallbackValue={x:Null}}"
-                      ItemTemplate="{StaticResource SlotCard}"
-                      Margin="8,4,8,8" VerticalAlignment="Stretch">
+        <!-- 主内容：固化架分组（单架 1 组=无标题条，双架 2 组各带标题条，
+             外层 UniformGrid Rows=GroupCount 纵向均分铺满；组内三排十站随窗口拉伸均分） -->
+        <ItemsControl ItemsSource="{Binding RackGroups, FallbackValue={x:Null}}"
+                      Margin="8,4,8,8">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
-                    <UniformGrid Columns="{Binding RackCount, FallbackValue=10}"
-                                 Rows="{Binding LevelCount, FallbackValue=3}"/>
+                    <!-- DataContext 是组 VM，GroupCount 在主 VM——经 Window 中转；
+                         Rows 落 1（单架）与旧版单组铺满一致 -->
+                    <UniformGrid Columns="1"
+                                 Rows="{Binding DataContext.GroupCount, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=1}"/>
                 </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <DockPanel>
+                        <!-- 组标题条：单架（IsHeaderVisible=False）整条隐藏，视觉与单架版一致 -->
+                        <Border DockPanel.Dock="Top" Background="#EFF6FD" BorderBrush="#B8D4EE"
+                                BorderThickness="1" CornerRadius="4" Padding="10,4" Margin="0,0,0,2">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsHeaderVisible, FallbackValue=False}" Value="False">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <StackPanel Orientation="Horizontal">
+                                <Rectangle Width="4" Height="14" Fill="#1E90FF"
+                                           VerticalAlignment="Center" Margin="0,0,6,0" RadiusX="1" RadiusY="1"/>
+                                <TextBlock Text="{Binding Title, FallbackValue=1号固化架}"
+                                           FontWeight="Bold" Foreground="#1F4E79" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <ItemsControl ItemsSource="{Binding Slots, FallbackValue={x:Null}}"
+                                      ItemTemplate="{StaticResource SlotCard}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Columns="{Binding Columns, FallbackValue=10}"
+                                                 Rows="{Binding Rows, FallbackValue=3}"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </DockPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
         </ItemsControl>
     </DockPanel>
 </Window>

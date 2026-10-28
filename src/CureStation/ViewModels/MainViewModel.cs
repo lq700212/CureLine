@@ -35,9 +35,11 @@ public sealed class RackSlotViewModel : ViewModelBase
     /// 客户库位编码（Date Matrix 格式，如 A01/J12）——与现场机台实景编排一致，
     /// 是卡片主标题；后续扫码绑定工序以它为库位主键（换算逻辑收在
     /// Core 的 SlotLocationCode，界面显示与扫码绑定同源，防口径分叉）。
+    /// 双架口径（V0.0.20）：按架内站号换算（全局架号 11~20 → 站 1~10 → A01~J12），
+    /// 每台架各自贴同一套标签；单架（架 1~10）与原 Encode 完全等价。
     /// Rack/Level 构造后不变，计算属性无需 INPC。
     /// </summary>
-    public string Code => SlotLocationCode.Encode(Rack, Level);
+    public string Code => SlotLocationCode.EncodeInRack(Rack, Level);
 
     private static string LevelName(int level) => level switch
     {
@@ -126,6 +128,39 @@ public sealed class RackSlotViewModel : ViewModelBase
             : tray == true ? "待判定" : "空闲";
 }
 
+/// <summary>
+/// 固化架分组（V0.0.20 双架支持）：一台固化架 = 一个分组 = 一块 10×3 网格，
+/// 主窗按组上下堆叠（组间带标题条），贴机台实景（两台架各 10 站 3 层）。
+/// 组内卡片是 <see cref="MainViewModel.Slots"/> 平铺集合的同批实例（引用共享，
+/// 500ms 刷一遍即两组同步），构建后全部只读、无需 INPC。
+/// </summary>
+public sealed class RackGroupViewModel
+{
+    /// <summary>分组标题（"1号固化架"/"2号固化架"——全局架号段归属）。</summary>
+    public string Title { get; }
+
+    /// <summary>组内仓位卡（行优先：先层后架，与平铺契约一致）。</summary>
+    public IReadOnlyList<RackSlotViewModel> Slots { get; }
+
+    /// <summary>组内列数（每架 10 站，与 SlotLocationCode.RacksPerRow 同源）。</summary>
+    public int Columns => SlotLocationCode.RacksPerRow;
+
+    /// <summary>组内行数（层数，跟随点表）。</summary>
+    public int Rows { get; }
+
+    /// <summary>是否显示分组标题条：单架（组数=1）不显示，主窗视觉与单架版完全一致。</summary>
+    public bool IsHeaderVisible { get; }
+
+    public RackGroupViewModel(string title, IReadOnlyList<RackSlotViewModel> slots,
+        int rows, bool isHeaderVisible)
+    {
+        Title = title;
+        Slots = slots;
+        Rows = rows;
+        IsHeaderVisible = isHeaderVisible;
+    }
+}
+
 /// <summary>主窗 VM。总线生命周期：Dispose 与重建；競争以 lock 保证。</summary>
 public sealed class MainViewModel : ViewModelBase, IDisposable
 {
@@ -134,6 +169,21 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private readonly object _busLock = new();
 
     public ObservableCollection<RackSlotViewModel> Slots { get; } = new();
+
+    /// <summary>
+    /// 固化架分组视图（V0.0.20 双架支持）：主窗主内容按组上下堆叠——
+    /// 单架 1 组（无标题条，视觉同单架版），双架 2 组（各带"N号固化架"标题条）。
+    /// 组内卡片与 Slots 同批实例。
+    /// </summary>
+    public ObservableCollection<RackGroupViewModel> RackGroups { get; } = new();
+
+    /// <summary>分组数——主窗外层 UniformGrid.Rows 绑定它（纵向每组均分一档）。</summary>
+    private int _groupCount = 1;
+    public int GroupCount
+    {
+        get => _groupCount;
+        private set => Set(ref _groupCount, value);
+    }
 
     /// <summary>
     /// 网格列数（每排站数/架数）——主窗 UniformGrid.Columns 绑定它：
@@ -293,6 +343,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// 排布口径（与现场机台实景一致）：三排=上中下三层，一排 10 站——集合按
     /// "行优先"生成（先层后架），UniformGrid（Columns=RackCount/Rows=LevelCount）
     /// 逐格填充即得三排十站布局；卡片主标题用客户库位编码（SlotLocationCode）。
+    /// 双架（V0.0.20）：全局架号每 10 站切一组（1~10=1号架、11~20=2号架），
+    /// 主窗按组上下堆叠各铺 10×3；平铺 Slots 顺序不变（回归锚点）。
     /// 注意：顺序是布局契约，改前先看 MainWindow.xaml 的 UniformGrid 与
     /// MainVm_Slots_RowMajorOrder 用例——乱序会导致"层"错行显示。
     /// </summary>
@@ -304,12 +356,33 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         int levels = Math.Max(SlotLocationCode.Levels, config.Devices.SelectMany(d => d.Bindings)
             .Where(b => b.Level > 0).Select(b => b.Level).DefaultIfEmpty(SlotLocationCode.Levels).Max());
 
-        Slots.Clear();
+        var all = new Dictionary<(int Rack, int Level), RackSlotViewModel>();
         for (int level = 1; level <= levels; level++)
         for (int rack = 1; rack <= racks; rack++)
-            Slots.Add(new RackSlotViewModel { Rack = rack, Level = level });
+        {
+            var slot = new RackSlotViewModel { Rack = rack, Level = level };
+            Slots.Add(slot);
+            all[(rack, level)] = slot;
+        }
         RackCount = racks;
         LevelCount = levels;
+
+        // 分组视图：全局架号每 RacksPerRow(10) 站一台架，组内行优先（同平铺契约）。
+        // 组数>1 才显示标题条——单架现场主窗与旧版视觉完全一致。
+        RackGroups.Clear();
+        int groupCount = (racks + SlotLocationCode.RacksPerRow - 1) / SlotLocationCode.RacksPerRow;
+        for (int g = 1; g <= groupCount; g++)
+        {
+            int start = (g - 1) * SlotLocationCode.RacksPerRow + 1;
+            int end = Math.Min(g * SlotLocationCode.RacksPerRow, racks);
+            var groupSlots = new List<RackSlotViewModel>();
+            for (int level = 1; level <= levels; level++)
+            for (int rack = start; rack <= end; rack++)
+                groupSlots.Add(all[(rack, level)]);
+            RackGroups.Add(new RackGroupViewModel(
+                $"{g}号固化架", groupSlots, levels, groupCount > 1));
+        }
+        GroupCount = groupCount;
     }
 
     private void StartBus(PointTableConfig? config)

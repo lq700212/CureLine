@@ -178,6 +178,11 @@ public static class PointTableValidator
         if (config.Devices.Count > 0 && !hasConcreteRole)
             errors.Add("没有任何点绑定业务角色（全是预留），无法开跑。");
 
+        // 语义键全场唯一闸（跨设备）：快照把多台设备按语义键合并进同一字典，
+        // 两台耦合器绑同架同层会同键互相覆盖（后扫的盖先扫的）——双架部署
+        // 第二台必须绑独立架号段（如 11~20），全场查重在保存前拦下撞号。
+        var allSemantic = new HashSet<IoPointKey>();
+
         for (int di = 0; di < config.Devices.Count; di++)
         {
             var device = config.Devices[di];
@@ -202,7 +207,7 @@ public static class PointTableValidator
             foreach (var b in device.Bindings)
                 ValidateBinding(device, b, where, errors);
 
-            CheckDuplicates(device, where, errors);
+            CheckDuplicates(device, where, allSemantic, errors);
         }
 
         return new PointTableValidation(errors.Count == 0, errors.AsReadOnly());
@@ -210,22 +215,24 @@ public static class PointTableValidator
 
     /// <summary>
     /// 重复绑定两道闸：
-    /// ① 同一物理点（方向+块+位）只能有一行——配置数据完整性；
-    /// ② 同一语义键（方向+角色+架+层）只能绑一个物理点——业务唯一性
-    ///   （快照按键建字典，两行同键会让状态机拿到二义值）。
+    /// ① 同一物理点（方向+块+位）只能有一行——按设备独立（不同耦合器的
+    ///   物理点本来就各自独立）；
+    /// ② 同一语义键（方向+角色+架+层）只能绑一个物理点——业务唯一性，
+    ///   <paramref name="allSemantic"/> 由 Validate 传入、跨设备共享
+    ///   （快照按键建字典合并多台设备，跨设备同键会让状态机拿到二义值）。
     /// </summary>
     private static void CheckDuplicates(IoCouplerDevice device, string where,
-        List<string> errors)
+        HashSet<IoPointKey> allSemantic, List<string> errors)
     {
         var physical = new HashSet<(bool, int, int)>();
-        var semantic = new HashSet<IoPointKey>();
         foreach (var b in device.Bindings)
         {
             if (!physical.Add((b.IsInput, b.Block, b.Bit)))
                 errors.Add($"{where} 块{b.Block}位{b.Bit}重复绑定（同一物理点只能一行）。");
-            if (b.Role != IoPointRole.Reserved && !semantic.Add(b.Key))
+            if (b.Role != IoPointRole.Reserved && !allSemantic.Add(b.Key))
                 errors.Add($"{where} 仓位（架{b.Rack}/层{b.Level}）的" +
-                    $"{IoPointRoleInfo.ToText(b.Role)} 重复绑定多个物理点。");
+                    $"{IoPointRoleInfo.ToText(b.Role)} 重复绑定多个物理点" +
+                    "（含其它设备已绑同架同层——架号必须全局唯一）。");
         }
     }
 

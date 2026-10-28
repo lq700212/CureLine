@@ -59,14 +59,20 @@
                 <TextBlock Text="密码（新增/改密用；改级别时忽略）：" Margin="0,8,0,2"/>
                 <TextBox Text="{Binding EditPassword}" FontFamily="Consolas"/>
 
-                <Button Style="{StaticResource FreshButton}" Content="＋ 新增账号"
-                        Command="{Binding AddUserCommand}" Margin="0,12,0,0" Height="32"/>
+                <!-- 语义色按钮（V0.0.20 参考用户管理页编排）：蓝=新增（主操作）、
+                     浅蓝=改级别、绿=重置密码、红=删除（危险操作） -->
+                <Button Style="{StaticResource FreshPrimaryButton}" Content="＋ 新增账号"
+                        Command="{Binding AddUserCommand}" Margin="0,12,0,0" Height="32"
+                        ToolTip="按编辑区的用户名/级别/密码新增账号"/>
                 <Button Style="{StaticResource FreshButton}" Content="改级别（按编辑区）"
-                        Command="{Binding SetLevelCommand}" Margin="0,8,0,0" Height="32"/>
-                <Button Style="{StaticResource FreshButton}" Content="重置密码（按编辑区）"
-                        Command="{Binding SetPasswordCommand}" Margin="0,8,0,0" Height="32"/>
-                <Button Style="{StaticResource FreshButton}" Content="－ 删除选中账号"
-                        Command="{Binding RemoveUserCommand}" Margin="0,8,0,0" Height="32"/>
+                        Command="{Binding SetLevelCommand}" Margin="0,8,0,0" Height="32"
+                        ToolTip="把编辑区的级别应用到选中账号"/>
+                <Button Style="{StaticResource FreshSuccessButton}" Content="重置密码（按编辑区）"
+                        Command="{Binding SetPasswordCommand}" Margin="0,8,0,0" Height="32"
+                        ToolTip="把选中账号密码重置为编辑区密码（≥6 位）"/>
+                <Button Style="{StaticResource FreshDangerButton}" Content="－ 删除选中账号"
+                        Command="{Binding RemoveUserCommand}" Margin="0,8,0,0" Height="32"
+                        ToolTip="删除选中账号（最后一个 LEVEL.4 会被拒绝——防锁死红线）"/>
 
                 <TextBlock Text="红线：最后一个 LEVEL.4 账号不可删除或降级（防锁死）。密码 ≥6 位，存 PBKDF2 哈希。"
                            Foreground="#888" TextWrapping="Wrap" Margin="0,12,0,0"/>

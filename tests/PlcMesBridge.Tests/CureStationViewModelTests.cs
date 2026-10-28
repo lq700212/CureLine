@@ -100,6 +100,81 @@ public class CureStationViewModelTests
         vm.Dispose();
     }
 
+    [Fact]
+    public void MainVm_SingleRack_SingleGroupNoHeader()
+    {
+        // 单架回归：分组数=1、标题条隐藏（主窗视觉与旧版完全一致）
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+        var fake = new FakeCureDialogService();
+        using var vm = new CureStation.ViewModels.MainViewModel(fake);
+
+        Assert.Equal(1, vm.GroupCount);
+        var group = Assert.Single(vm.RackGroups);
+        Assert.False(group.IsHeaderVisible);
+        Assert.Equal(30, group.Slots.Count);
+    }
+
+    [Fact]
+    public void MainVm_TwoRackDevices_Builds60Slots_TwoGroupsWithInRackCodes()
+    {
+        // 双架（V0.0.20）：两台耦合器（架 1~10 + 架 11~20）→ 60 卡、两组上下堆叠；
+        // 平铺 Slots 行优先契约不破坏（Slots[30]=架11层1）；第二架库位编码按
+        // 架内站号换算回 A01 起（库位标签贴每台架自己的仓位上）
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+        var d1 = IoPointTableStore.BuildDefaultTemplate("1号架", "127.0.0.1", 10, 3, 1);
+        var d2 = IoPointTableStore.BuildDefaultTemplate("2号架", "127.0.0.2", 10, 3, 11);
+        IoPointTableStore.Save(new PointTableConfig { Devices = { d1.Devices[0], d2.Devices[0] } });
+
+        var fake = new FakeCureDialogService();
+        using var vm = new CureStation.ViewModels.MainViewModel(fake);
+
+        Assert.Equal(60, vm.Slots.Count);
+        Assert.Equal(20, vm.RackCount);
+        Assert.Equal(2, vm.GroupCount);
+        Assert.Equal(2, vm.RackGroups.Count);
+        Assert.Equal("1号固化架", vm.RackGroups[0].Title);
+        Assert.Equal("2号固化架", vm.RackGroups[1].Title);
+        Assert.All(vm.RackGroups, g => Assert.True(g.IsHeaderVisible));
+        Assert.Equal(10, vm.RackGroups[0].Columns);
+        Assert.Equal(3, vm.RackGroups[0].Rows);
+
+        // 平铺顺序契约延续（先层后架——整层 20 站连续，与单架"行=层"口径一致）：
+        // Slots[0]=(架1,层1)、Slots[19]=(架20,层1)、Slots[30]=(架11,层2)、Slots[59]=(架20,层3)
+        Assert.Equal(1, vm.Slots[0].Level);
+        Assert.Equal(20, vm.Slots[19].Rack);
+        Assert.Equal(1, vm.Slots[19].Level);
+        Assert.Equal(11, vm.Slots[30].Rack);
+        Assert.Equal(2, vm.Slots[30].Level);
+        Assert.Equal(20, vm.Slots[59].Rack);
+        Assert.Equal(3, vm.Slots[59].Level);
+
+        // 分组切分：组 0=架 1~10、组 1=架 11~20，组内行优先（先层后架）
+        Assert.Equal(1, vm.RackGroups[0].Slots[0].Rack);
+        Assert.Equal(10, vm.RackGroups[0].Slots[9].Rack);
+        Assert.Equal(2, vm.RackGroups[0].Slots[10].Level);   // 组 0 第二排=中层（行优先同平铺契约）
+        Assert.Equal(11, vm.RackGroups[1].Slots[0].Rack);
+        Assert.Equal(12, vm.RackGroups[1].Slots[1].Rack);
+        Assert.Equal(11, vm.RackGroups[1].Slots[10].Rack);   // 组 1 第二排首格=架 11
+        Assert.Equal(2, vm.RackGroups[1].Slots[10].Level);
+        Assert.Equal(20, vm.RackGroups[1].Slots[29].Rack);
+        Assert.All(vm.RackGroups.SelectMany(g => g.Slots), s => Assert.Same(
+            vm.Slots.First(x => x.Rack == s.Rack && x.Level == s.Level), s)); // 同批实例
+
+        // 库位编码：第二架架内换算（架 11→A01、架 12→B02、架 20 层 3→J12）
+        Assert.Equal("A01", vm.RackGroups[1].Slots[0].Code);
+        Assert.Equal("B02", vm.RackGroups[1].Slots[1].Code);
+        Assert.Equal("J12", vm.RackGroups[1].Slots[29].Code);
+        // 平铺位置编码同源（Slots[31]=架12层2 → 对角编码 B03）
+        Assert.Equal("B03", vm.Slots[31].Code);
+        // 第一架编码不变——单架回归锚点见 MainVm_Slots_RowMajorOrder（平铺下标随总架数变化，此处按 (架,层) 断言）
+        Assert.Equal("A01", vm.Slots.First(s => s.Rack == 1 && s.Level == 1).Code);
+        Assert.Equal("J12", vm.Slots.First(s => s.Rack == 10 && s.Level == 3).Code);
+    }
+
     // ---------- 点表配置 VM ----------
 
     [Fact]

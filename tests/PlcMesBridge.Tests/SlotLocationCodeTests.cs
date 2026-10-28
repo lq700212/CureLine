@@ -91,4 +91,48 @@ public class SlotLocationCodeTests
     {
         Assert.False(SlotLocationCode.TryDecode(code, out _, out _));
     }
+
+    // ---------- 双架分组口径（V0.0.20）：全局架号 → 第几台架/架内站号/架内编码 ----------
+
+    [Theory]
+    [InlineData(1, 1)]      // 架 1 → 1号架
+    [InlineData(10, 1)]     // 架 10 → 1号架（末站）
+    [InlineData(11, 2)]     // 架 11 → 2号架（首站）
+    [InlineData(20, 2)]     // 架 20 → 2号架（末站）
+    [InlineData(21, 3)]     // 架 21 → 3号架（理论扩展位）
+    public void RackGroupOf_SplitsEveryTenStations(int globalRack, int expectedGroup)
+    {
+        Assert.Equal(expectedGroup, SlotLocationCode.RackGroupOf(globalRack));
+    }
+
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(10, 10)]
+    [InlineData(11, 1)]     // 第二台架回到站 1
+    [InlineData(20, 10)]    // 第二台架站 10
+    public void StationInRack_WrapsWithinRack(int globalRack, int expectedStation)
+    {
+        Assert.Equal(expectedStation, SlotLocationCode.StationInRack(globalRack));
+    }
+
+    [Fact]
+    public void EncodeInRack_SingleRack_MatchesEncode()
+    {
+        // 单架（架 1~10）与 Encode 完全等价——旧界面/扫码绑定零回归
+        for (int rack = 1; rack <= SlotLocationCode.RacksPerRow; rack++)
+        for (int level = 1; level <= SlotLocationCode.Levels; level++)
+            Assert.Equal(SlotLocationCode.Encode(rack, level),
+                SlotLocationCode.EncodeInRack(rack, level));
+    }
+
+    [Fact]
+    public void EncodeInRack_SecondRack_RestartsFromA01()
+    {
+        // 双架：每台架各自贴同一套 A01~J12 标签（库位标签贴架内仓位），
+        // 归属靠主窗分组标题"N号固化架"区分
+        Assert.Equal("A01", SlotLocationCode.EncodeInRack(11, 1));
+        Assert.Equal("B02", SlotLocationCode.EncodeInRack(12, 1));
+        Assert.Equal("J10", SlotLocationCode.EncodeInRack(20, 1));
+        Assert.Equal("J12", SlotLocationCode.EncodeInRack(20, 3));
+    }
 }

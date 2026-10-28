@@ -48,6 +48,22 @@ public sealed class CuringMesOptions
     /// <summary>自动过账取工单哪个工位："R" / "L"（其它值按 R 兜底）。</summary>
     public string Side { get; set; } = "R";
 
+    /// <summary>
+    /// 架号→工位映射（V0.0.20 双架）：空=全部用 <see cref="Side"/>（单架零感知）。
+    /// 格式：分号分隔多段，每段 "架号段:工位"，架号段支持 "11-20"（闭区间）或单号 "11"；
+    /// 例 "11-20:L"=第二台固化架（架 11~20）报 L 工位。解析容错：非法段忽略不抛。
+    /// 解析走 <see cref="SideOfRack"/> 使用时现算（不缓存）——配置窗保存是
+    /// "new 实例直接赋属性"的路径，缓存会漏更新，事件频率极低无性能顾虑。
+    /// </summary>
+    public string RackSides { get; set; } = "";
+
+    /// <summary>L 工位专用机台号（可选）：自动过账命中 L 工位且本值非空时用，
+    /// 否则回落 <see cref="MacNo"/>（两架共用机台号就不配，最小配置零负担）。</summary>
+    public string MacNo_L { get; set; } = "";
+
+    /// <summary>L 工位专用机台位置号（可选）：语义同 <see cref="MacNo_L"/>，回落 <see cref="MacLocNo"/>。</summary>
+    public string MacLocNo_L { get; set; } = "";
+
     /// <summary>固化时间上传单位（API0027 PRA_Value）：秒（老项目口径）/分钟。</summary>
     public CuringTimeUnit TimeUnit { get; set; } = CuringTimeUnit.Seconds;
 
@@ -72,6 +88,52 @@ public sealed class CuringMesOptions
     public static string NormSide(string? side) =>
         string.Equals(side?.Trim(), "L", StringComparison.OrdinalIgnoreCase) ? "L" : "R";
 
+    /// <summary>
+    /// 全局架号 → 过账工位：命中 <see cref="RackSides"/> 映射段返回映射工位
+    /// （解析时已规范化），否则回落 <see cref="Side"/>。双架自动过账唯一入口——
+    /// 进站/出站都按它取工位槽与机台参数；物料上传不走这里（按钮工位红线）。
+    /// </summary>
+    public string SideOfRack(int rack)
+    {
+        foreach (var (start, end, side) in ParseRackSides(RackSides))
+        {
+            if (rack >= start && rack <= end)
+                return side;
+        }
+        return Side;
+    }
+
+    /// <summary>机台号按工位取：L 工位且配了 <see cref="MacNo_L"/> 用之，否则 MacNo。</summary>
+    public string MacNoOf(string side) =>
+        NormSide(side) == "L" && MacNo_L.Trim().Length > 0 ? MacNo_L.Trim() : MacNo;
+
+    /// <summary>机台位置号按工位取：L 工位且配了 <see cref="MacLocNo_L"/> 用之，否则 MacLocNo。</summary>
+    public string MacLocNoOf(string side) =>
+        NormSide(side) == "L" && MacLocNo_L.Trim().Length > 0 ? MacLocNo_L.Trim() : MacLocNo;
+
+    /// <summary>
+    /// RackSides 文本解析为架号段列表（使用时现算，容忍任何非法内容——
+    /// 只把能读懂的段收进来，读不懂的忽略；空文本返回空列表=全用 Side）。
+    /// </summary>
+    internal static List<(int Start, int End, string Side)> ParseRackSides(string? text)
+    {
+        var ranges = new List<(int Start, int End, string Side)>();
+        foreach (var seg in (text ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var pair = seg.Split(':', 2);
+            if (pair.Length != 2)
+                continue;
+            string side = NormSide(pair[1]);
+            var span = pair[0].Split('-', 2);
+            if (!int.TryParse(span[0].Trim(), out int start) || start < 1)
+                continue;
+            int end = span.Length == 2 &&
+                      int.TryParse(span[1].Trim(), out int e) && e >= start ? e : start;
+            ranges.Add((start, end, side));
+        }
+        return ranges;
+    }
+
     // ---------------- ini 存取（缺键回填缺省，IniFile 自愈） ----------------
 
     private const string Section = "CuringMes";
@@ -91,8 +153,11 @@ public sealed class CuringMesOptions
                 .Equals("Start", StringComparison.OrdinalIgnoreCase)
                 ? PostInAt.Start : PostInAt.Arrive,
             PostAbortOut = IniFile.ReadStr(ini, Section, "PostAbortOut", "1") == "1",
+            RackSides = IniFile.ReadStr(ini, Section, "RackSides", "").Trim(),
             MacNo = IniFile.ReadStr(ini, Section, "MacNo", "").Trim(),
+            MacNo_L = IniFile.ReadStr(ini, Section, "MacNo_L", "").Trim(),
             MacLocNo = IniFile.ReadStr(ini, Section, "MacLocNo", "").Trim(),
+            MacLocNo_L = IniFile.ReadStr(ini, Section, "MacLocNo_L", "").Trim(),
             Plant = IniFile.ReadStr(ini, Section, "Plant", "").Trim(),
             PraCode = IniFile.ReadStr(ini, Section, "PraCode", "").Trim(),
             CheckResult = IniFile.ReadStr(ini, Section, "CheckResult", "").Trim(),
@@ -108,8 +173,11 @@ public sealed class CuringMesOptions
         IniFile.Write(ini, Section, "TimeUnit", TimeUnit == CuringTimeUnit.Minutes ? "Minutes" : "Seconds");
         IniFile.Write(ini, Section, "PostInAt", InAt == PostInAt.Start ? "Start" : "Arrive");
         IniFile.Write(ini, Section, "PostAbortOut", PostAbortOut ? "1" : "0");
+        IniFile.Write(ini, Section, "RackSides", RackSides.Trim());
         IniFile.Write(ini, Section, "MacNo", MacNo.Trim());
+        IniFile.Write(ini, Section, "MacNo_L", MacNo_L.Trim());
         IniFile.Write(ini, Section, "MacLocNo", MacLocNo.Trim());
+        IniFile.Write(ini, Section, "MacLocNo_L", MacLocNo_L.Trim());
         IniFile.Write(ini, Section, "Plant", Plant.Trim());
         IniFile.Write(ini, Section, "PraCode", PraCode.Trim());
         IniFile.Write(ini, Section, "CheckResult", CheckResult.Trim());

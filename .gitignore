@@ -40,3 +40,6 @@ docs/*.xlsx
 # ===== 内部解析产物（现场联调基准/体检报告，仅工作区）=====
 docs/io_parse_out2/
 docs/vb_audit_out2/
+
+# ===== AI 会话辅助目录（ZCode 本地工作数据，不入库）=====
+.zcode/

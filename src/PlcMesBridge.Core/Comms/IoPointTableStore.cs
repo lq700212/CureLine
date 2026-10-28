@@ -74,17 +74,21 @@ public static class IoPointTableStore
     }
 
     /// <summary>
-    /// 一键生成"IO 表缺省模板"：1 台耦合器，每块承载一架的 1~4 层（块 K = 架 K）。
+    /// 一键生成"IO 表缺省模板"：1 台耦合器，每块承载一架的 1~4 层（块 K = 架 rackStart+K-1）。
     /// 块内每 4 位一组 = 1 层，组内输入 0=左光栅OK 1=右光栅OK 2=托盘有无；输出 0=红 1=黄 2=绿。
     /// 层数 >4 时本方法抛异常（调用方应把多余层分到另一台设备）。
+    /// rackStart=起始全局架号（缺省 1）：双架部署第二台耦合器传 11，
+    /// 生成架 11~rackStart+rackCount-1（块号仍从 1 起算设备内地址，地址换算不受影响）。
     /// </summary>
     public static PointTableConfig BuildDefaultTemplate(
-        string deviceName, string ip, int rackCount, int levelsPerRack)
+        string deviceName, string ip, int rackCount, int levelsPerRack, int rackStart = 1)
     {
         const int bitsPerLevel = 4, pointsPerLevel = 3;
         int maxLevels = 16 / bitsPerLevel;
         if (rackCount < 1)
             throw new ArgumentOutOfRangeException(nameof(rackCount), "架数 ≥1");
+        if (rackStart < 1)
+            throw new ArgumentOutOfRangeException(nameof(rackStart), "起始架号 ≥1");
         if (levelsPerRack < 1 || levelsPerRack > maxLevels)
             throw new ArgumentOutOfRangeException(nameof(levelsPerRack),
                 $"每架层数只能在 [1, {maxLevels}]（每层占 4 位）；更多层请拆多台设备。");
@@ -98,18 +102,21 @@ public static class IoPointTableStore
 
         var bindings = new List<IoPointBinding>(rackCount * levelsPerRack * pointsPerLevel * 2);
         for (int block = 1; block <= rackCount; block++)
-        for (int level = 1; level <= levelsPerRack; level++)
         {
-            int bitBase = (level - 1) * bitsPerLevel;
-            var levelName = LevelName(level);
-            // 输入组内：0=左光栅OK 1=右光栅OK 2=托盘有无（bit3 预留不生成，配置窗可手工补）
-            bindings.Add(Make(block, bitBase + 0, true, IoPointRole.RackLightL, block, level, levelName));
-            bindings.Add(Make(block, bitBase + 1, true, IoPointRole.RackLightR, block, level, levelName));
-            bindings.Add(Make(block, bitBase + 2, true, IoPointRole.TrayDetect, block, level, levelName));
-            // 输出组内：0=红 1=黄 2=绿（bit3 预留同上）
-            bindings.Add(Make(block, bitBase + 0, false, IoPointRole.LampRed, block, level, levelName));
-            bindings.Add(Make(block, bitBase + 1, false, IoPointRole.LampYellow, block, level, levelName));
-            bindings.Add(Make(block, bitBase + 2, false, IoPointRole.LampGreen, block, level, levelName));
+            int rack = rackStart + block - 1;   // 块 K ↔ 全局架号（第二台 rackStart=11 → 块1=架11）
+            for (int level = 1; level <= levelsPerRack; level++)
+            {
+                int bitBase = (level - 1) * bitsPerLevel;
+                var levelName = LevelName(level);
+                // 输入组内：0=左光栅OK 1=右光栅OK 2=托盘有无（bit3 预留不生成，配置窗可手工补）
+                bindings.Add(Make(block, bitBase + 0, true, IoPointRole.RackLightL, rack, level, levelName));
+                bindings.Add(Make(block, bitBase + 1, true, IoPointRole.RackLightR, rack, level, levelName));
+                bindings.Add(Make(block, bitBase + 2, true, IoPointRole.TrayDetect, rack, level, levelName));
+                // 输出组内：0=红 1=黄 2=绿（bit3 预留同上）
+                bindings.Add(Make(block, bitBase + 0, false, IoPointRole.LampRed, rack, level, levelName));
+                bindings.Add(Make(block, bitBase + 1, false, IoPointRole.LampYellow, rack, level, levelName));
+                bindings.Add(Make(block, bitBase + 2, false, IoPointRole.LampGreen, rack, level, levelName));
+            }
         }
 
         var config = new PointTableConfig { Devices = { device } };

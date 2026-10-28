@@ -60,6 +60,13 @@ public static class AppConfig
 
         LanguageService.CurrentLanguage = IniFile.ReadStr(ini, "setting", "Language", "CH");
 
+        // 字符串字节序（V0.0.20 配置化，W68 联调预备）：缺省 BigEndian=老项目
+        // 口径；CIM 侧按 little-endian 组包时配 SwapBytes（ModbusStationClient
+        // 读写串按字节对交换），现场校准零改代码。非法值按缺省 BigEndian。
+        Comms.ModbusStationClient.SwapStringBytes =
+            IniFile.ReadStr(ini, "setting", "StringByteOrder", "BigEndian")
+                .Equals("SwapBytes", StringComparison.OrdinalIgnoreCase);
+
         // 多机 8 台走 PlcConfigStore（自愈缺省，见 PlcConfig.cs）：启用开关/IP/端口一并带出。
         StationPlcConfig[] stations = PlcConfigStore.LoadStations(ini);
         for (int i = 0; i < 8; i++)

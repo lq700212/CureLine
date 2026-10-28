@@ -6,49 +6,99 @@
         xmlns:vm="clr-namespace:CureStation.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:LoginViewModel, IsDesignTimeCreatable=False}"
-        Title="操作员登录" Height="250" Width="400"
+        Title="操作员登录" Width="420" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        WindowStyle="ToolWindow" FontSize="13">
-    <!--★★ 登录窗：四级操作员（LEVEL.1~4，见权限管理）。PasswordBox 密码经
-         PasswordChanged 事件转交 VM（不可绑定，官方 workaround）。-->
-    <Grid Margin="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+        WindowStyle="None" Background="White" FontSize="13">
+    <!--★★ 登录窗（V0.0.20 重做，布局参考 HJVision 登录页、配色按本项目 Fresh 风）：
+         蓝色品牌标题条 + 居中横幅 + 左标签右输入 + 错误提示条 + 底部按钮行。
+         PasswordBox 密码经 PasswordChanged 事件转交 VM（不可绑定，官方 workaround）；
+         VM 与门禁链零改动（LoginName/Level 输出、OkCommand/CancelCommand 原样）。-->
+    <Border BorderBrush="#B8D4EE" BorderThickness="1">
+        <DockPanel>
+            <!-- 品牌标题条：拖动移动窗体，右侧关闭钮（悬停变红） -->
+            <Border DockPanel.Dock="Top" Background="#1E90FF" Height="38"
+                    MouseLeftButtonDown="OnTitleBarMouseDown">
+                <Grid>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0">
+                        <Rectangle Width="4" Height="14" Fill="White" Opacity="0.9"
+                                   RadiusX="1" RadiusY="1" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="操作员登录" Foreground="White" FontWeight="Bold"/>
+                    </StackPanel>
+                    <Button HorizontalAlignment="Right" Width="40" Height="38" Content="✕"
+                            Foreground="White" FontSize="13" Cursor="Hand"
+                            Click="OnCloseClick" ToolTip="关闭（Esc）">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd" Background="Transparent">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#E81123"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </Grid>
+            </Border>
 
-        <TextBlock Grid.Row="0" Grid.Column="0" Text="用户名：" VerticalAlignment="Center" Margin="0,6"/>
-        <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding UserName}"
-                 VerticalAlignment="Center" Margin="0,6"/>
+            <!-- 内容区 -->
+            <StackPanel Margin="36,18,36,18">
+                <!-- 居中横幅：系统名 + 副标题 -->
+                <TextBlock Text="固化程控系统" FontSize="20" FontWeight="Bold"
+                           Foreground="#1F4E79" HorizontalAlignment="Center"/>
+                <TextBlock Text="四级操作员登录（LEVEL.1~4）" FontSize="11"
+                           Foreground="#888" HorizontalAlignment="Center" Margin="0,4,0,0"/>
 
-        <TextBlock Grid.Row="1" Grid.Column="0" Text="密码：" VerticalAlignment="Center" Margin="0,6"/>
-        <PasswordBox Grid.Row="1" Grid.Column="1" x:Name="PwdBox"
-                     VerticalAlignment="Center" Margin="0,6"/>
+                <!-- 表单：左标签右输入 -->
+                <Grid Margin="0,18,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Label"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="用户名" VerticalAlignment="Center" Margin="0,0,12,10"/>
+                    <TextBox x:Name="UserBox" Grid.Row="0" Grid.Column="1"
+                             Style="{StaticResource FreshInput}" Margin="0,0,0,10"
+                             Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="密码" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <PasswordBox x:Name="PwdBox" Grid.Row="1" Grid.Column="1"
+                                 Style="{StaticResource FreshPwdInput}"/>
+                </Grid>
 
-        <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
-                   Text="{Binding Tip}"
-                   Foreground="#C8102E" Margin="0,2"/>
+                <!-- 错误提示条：Tip 非空才显示（浅红底圆角，比裸红字醒目） -->
+                <Border Background="#FDECEA" BorderBrush="#F5C6CB" BorderThickness="1"
+                        CornerRadius="4" Padding="10,6" Margin="0,12,0,0">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Tip, FallbackValue=提示占位}" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <TextBlock Text="{Binding Tip}" Foreground="#C8102E" TextWrapping="Wrap"/>
+                </Border>
 
-        <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
-                   Text="级别说明：L1 操作员 / L2 班长 / L3 工程师 / L4 管理员（越大越高）"
-                   Foreground="#888" FontSize="11" TextWrapping="Wrap" Margin="0,4"/>
+                <TextBlock Text="级别说明：L1 操作员 / L2 班长 / L3 工程师 / L4 管理员（越大越高）"
+                           FontSize="11" Foreground="#999" TextWrapping="Wrap" Margin="0,12,0,0"/>
 
-        <StackPanel Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2"
-                    Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Style="{StaticResource FreshButton}" Content="登录"
-                    Command="{Binding OkCommand}" Width="90" Height="30" Margin="0,0,8,0"
-                    IsDefault="True"/>
-            <Button Style="{StaticResource FreshButton}" Content="取消"
-                    Command="{Binding CancelCommand}" Width="90" Height="30"
-                    IsCancel="True"/>
-        </StackPanel>
-    </Grid>
+                <!-- 底部按钮行：取消=次级灰、登录=实色蓝主按钮 -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+                    <Button Style="{StaticResource FreshButton}" Content="取消"
+                            Command="{Binding CancelCommand}" Width="96" Height="32" Margin="0,0,10,0"
+                            IsCancel="True"/>
+                    <Button Style="{StaticResource FreshPrimaryButton}" Content="登 录"
+                            Command="{Binding OkCommand}" Width="128" Height="32"
+                            IsDefault="True"/>
+                </StackPanel>
+            </StackPanel>
+        </DockPanel>
+    </Border>
 </Window>

@@ -47,6 +47,16 @@ public sealed class MesPostConfigViewModel : ViewModelBase
     private string _editSide = "R";
     public string EditSide { get => _editSide; set => Set(ref _editSide, value ?? "R"); }
 
+    // 双架（V0.0.20）：架号→工位映射 + L 工位专用机台参数（缺省回落主值）
+    private string _editRackSides = "";
+    public string EditRackSides { get => _editRackSides; set => Set(ref _editRackSides, value ?? ""); }
+
+    private string _editMacNoL = "";
+    public string EditMacNoL { get => _editMacNoL; set => Set(ref _editMacNoL, value ?? ""); }
+
+    private string _editMacLocNoL = "";
+    public string EditMacLocNoL { get => _editMacLocNoL; set => Set(ref _editMacLocNoL, value ?? ""); }
+
     private int _editTimeUnitIndex;
     public int EditTimeUnitIndex { get => _editTimeUnitIndex; set => Set(ref _editTimeUnitIndex, value); }
 
@@ -87,8 +97,11 @@ public sealed class MesPostConfigViewModel : ViewModelBase
         EditTimeUnitIndex = o.TimeUnit == CuringTimeUnit.Minutes ? 1 : 0;
         EditInAtIndex = o.InAt == PostInAt.Start ? 1 : 0;
         EditPostAbortOut = o.PostAbortOut;
+        EditRackSides = o.RackSides;
         EditMacNo = o.MacNo;
+        EditMacNoL = o.MacNo_L;
         EditMacLocNo = o.MacLocNo;
+        EditMacLocNoL = o.MacLocNo_L;
         EditPlant = o.Plant;
         EditPraCode = o.PraCode;
         EditCheckResult = o.CheckResult;
@@ -106,8 +119,11 @@ public sealed class MesPostConfigViewModel : ViewModelBase
             TimeUnit = EditTimeUnitIndex == 1 ? CuringTimeUnit.Minutes : CuringTimeUnit.Seconds,
             InAt = EditInAtIndex == 1 ? PostInAt.Start : PostInAt.Arrive,
             PostAbortOut = EditPostAbortOut,
+            RackSides = EditRackSides.Trim(),
             MacNo = EditMacNo.Trim(),
+            MacNo_L = EditMacNoL.Trim(),
             MacLocNo = EditMacLocNo.Trim(),
+            MacLocNo_L = EditMacLocNoL.Trim(),
             Plant = EditPlant.Trim(),
             PraCode = EditPraCode.Trim(),
             CheckResult = EditCheckResult.Trim(),

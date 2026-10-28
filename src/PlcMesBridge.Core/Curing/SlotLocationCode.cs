@@ -13,6 +13,12 @@
 //     第三排（下层）：A03 B04 C05 D06 E07 F08 G09 H10 I11 J12
 //   即：架 rack（1~10）对应列字母 A~J，层 level（1~3）参与数字偏移。
 //
+// 双固化架口径（V0.0.20 起）：一台工控机可接多台固化架（每台都是 10×3），
+// 点表用全局架号 1~N 连续编号（1~10=1号架、11~20=2号架……）。库位标签
+// 贴在每台架自己的仓位上，所以每台架各自独立一套 A01~J12——界面显示用
+// EncodeInRack（全局架号→架内站号再 Encode），归属靠分组标题"1号/2号固化架"
+// 区分；Encode/TryDecode 本体（客户约定锚点）不动，单架场景两者完全等价。
+//
 // 怎么改：现场若"第一排"与表的对应关系相反（如第一排实际是下层），
 // 只需调整调用方传入的 level 语义或在 Encode 里换算，规则本体不动；
 // 机台布局若不是 10×3，编码表作废，需客户重新给表——常量改这里即可。
@@ -68,4 +74,26 @@ public static class SlotLocationCode
         level = number - rack + 1;      // 反解自：number = rack + level - 1
         return level >= 1 && level <= Levels;
     }
+
+    // ---------------- 双固化架分组口径（V0.0.20 起） ----------------
+
+    /// <summary>
+    /// 全局架号 → 第几台固化架（1 起）。每台架 RacksPerRow=10 站：
+    /// 架 1~10=1号架、架 11~20=2号架，以此类推（主窗分组标题与分组布局同源）。
+    /// </summary>
+    public static int RackGroupOf(int globalRack) =>
+        Math.Max(0, (globalRack - 1) / RacksPerRow) + 1;
+
+    /// <summary>全局架号 → 架内站号（1~10）。架 11 → 站 1、架 20 → 站 10。</summary>
+    public static int StationInRack(int globalRack) =>
+        ((globalRack - 1) % RacksPerRow) + 1;
+
+    /// <summary>
+    /// 全局架号×层 → 库位编码（按架内站号换算）：架 11 层 1 → "A01"、架 20 层 3 → "J12"。
+    /// 双架（多架）界面显示唯一入口——每台架各自独立贴同一套 A01~J12 标签；
+    /// 全局架号 1~10 时与 Encode 完全等价（单架零回归）。架内站号越界
+    /// （理论不可达，站号恒 1~10）行为与 Encode 一致出占位码。
+    /// </summary>
+    public static string EncodeInRack(int globalRack, int level) =>
+        Encode(StationInRack(globalRack), level);
 }

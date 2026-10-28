@@ -6,6 +6,7 @@
 
 using System.Diagnostics;
 using PlcMesBridge.Core.Curing;
+using PlcMesBridge.Core.Infrastructure;
 using PlcMesBridge.Core.Mes;
 using PlcMesBridge.Tests.Mocks;
 
@@ -109,6 +110,108 @@ public class CuringMesPosterTests
         WaitUntil(() => logs.Any(m => m.Contains("工单途程单号为空")));
 
         Assert.Empty(mes.Bodies);
+    }
+
+    // ---------- 双架工位映射（V0.0.20 RackSides） ----------
+
+    [Theory]
+    [InlineData("", 1, "R")]            // 空=全部用 Side（单架零感知）
+    [InlineData("11-20:L", 11, "L")]    // 第二台架首站命中段
+    [InlineData("11-20:L", 20, "L")]    // 第二台架末站命中段
+    [InlineData("11-20:L", 10, "R")]    // 未命中段回落 Side
+    [InlineData("11-20:l", 12, "L")]    // 工位小写规范化
+    [InlineData("5:R;11-20:L", 5, "R")] // 单号段 + 多段
+    [InlineData("5:L", 5, "L")]         // 单号段
+    [InlineData("bad", 1, "R")]         // 非法段忽略 → 回落 Side
+    [InlineData("0-9:L", 1, "R")]       // 架号 0 非法忽略
+    [InlineData("abc-20:L", 1, "R")]    // 段起始非数字忽略
+    public void SideOfRack_MapsByConfiguredRanges_FallsBackToSide(
+        string rackSides, int rack, string expected)
+    {
+        var o = new CuringMesOptions { Side = "R", RackSides = rackSides };
+        Assert.Equal(expected, o.SideOfRack(rack));
+    }
+
+    [Fact]
+    public void BoardOut_Rack11MappedToL_PostsLeftSlotAndLStaticParams()
+    {
+        // 双架端到端：架 11（2号架）按 RackSides 映射到 L 工位——
+        // 工位槽取 book.Left（RC_NO=L-RC1），机台号用 L 工位专用值
+        using var scope = new TestScope();
+        using var mes = new MesStubServer();
+        mes.EnqueueOk(); // 0027
+        mes.EnqueueOk(); // 0030
+        MesConfig.UrlApi0027 = mes.Url;
+        MesConfig.UrlApi0030 = mes.Url;
+        var (poster, _, _) = Make(new CuringMesOptions
+        {
+            Enabled = true,
+            Side = "R",
+            RackSides = "11-20:L",
+            MacNo = "MAC-R",
+            MacNo_L = "MAC-L2",
+        });
+
+        poster.OnTrayLeft(11, 2, SlotPhase.Done, 600);
+        mes.WaitForRequests(2);
+
+        Assert.Contains("\"RC_NO\":\"L-RC1\"", mes.Bodies[0]);
+        Assert.Contains("\"RC_NO\":\"L-RC1\"", mes.Bodies[1]);
+        Assert.Contains("\"MAC_NO\":\"MAC-L2\"", mes.Bodies[0]);
+        Assert.Contains("\"MAC_NO\":\"MAC-L2\"", mes.Bodies[1]);
+    }
+
+    [Fact]
+    public void BoardOut_Rack1Unmapped_KeepsSideR()
+    {
+        // 对照：同配置下 1 号架未命中映射段 → 照旧 R 工位 + 主机台号
+        using var scope = new TestScope();
+        using var mes = new MesStubServer();
+        mes.EnqueueOk();
+        mes.EnqueueOk();
+        MesConfig.UrlApi0027 = mes.Url;
+        MesConfig.UrlApi0030 = mes.Url;
+        var (poster, _, _) = Make(new CuringMesOptions
+        {
+            Enabled = true,
+            Side = "R",
+            RackSides = "11-20:L",
+            MacNo = "MAC-R",
+            MacNo_L = "MAC-L2",
+        });
+
+        poster.OnTrayLeft(1, 1, SlotPhase.Done, 300);
+        mes.WaitForRequests(2);
+
+        Assert.Contains("\"RC_NO\":\"R-RC1\"", mes.Bodies[0]);
+        Assert.Contains("\"MAC_NO\":\"MAC-R\"", mes.Bodies[0]);
+    }
+
+    [Fact]
+    public void Options_RackSides_SaveLoadRoundTrip()
+    {
+        // 新键 ini 往返（铁律 8：新增配置键必须 Load/Save 同步 + 缺省值自愈）
+        using var scope = new TestScope();
+        Directory.CreateDirectory(AppPaths.ConfigDir);
+        var o = new CuringMesOptions
+        {
+            RackSides = "11-20:L",
+            MacNo = "MAC-R",
+            MacNo_L = "MAC-L2",
+            MacLocNo = "LOC-R",
+            MacLocNo_L = "LOC-L2",
+        };
+        o.Save();
+        var loaded = CuringMesOptions.Load();
+        Assert.Equal("11-20:L", loaded.RackSides);
+        Assert.Equal("MAC-R", loaded.MacNo);
+        Assert.Equal("MAC-L2", loaded.MacNo_L);
+        Assert.Equal("LOC-R", loaded.MacLocNo);
+        Assert.Equal("LOC-L2", loaded.MacLocNo_L);
+        // 缺省回落：L 工位未配专用值时用主值（MacNoOf/MacLocNoOf）
+        var plain = new CuringMesOptions { MacNo = "MAIN", MacNo_L = "" };
+        Assert.Equal("MAIN", plain.MacNoOf("L"));
+        Assert.Equal("MAIN", plain.MacNoOf("R"));
     }
 
     // ---------- 出站链 ----------

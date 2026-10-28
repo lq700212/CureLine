@@ -64,6 +64,23 @@ public class PointTableTests
         Assert.Equal(8, Find(dev, true, IoPointRole.RackLightL, 10, 3).Bit);
     }
 
+    [Fact]
+    public void DefaultTemplate_RackStart11_RacksShifted_AddressUnchanged()
+    {
+        // 双架第二台（V0.0.20）：rackStart=11 → 绑定架号 11~20；
+        // 设备内地址换算不受影响——块号仍从 1 起（块1=DiStartAddress）。
+        var config = IoPointTableStore.BuildDefaultTemplate("2号架", "192.168.1.21", 10, 3, 11);
+        var dev = Assert.Single(config.Devices);
+        Assert.Equal(11, dev.Bindings.Min(b => b.Rack));
+        Assert.Equal(20, dev.Bindings.Max(b => b.Rack));
+        Assert.Equal(180, dev.Bindings.Count);
+        // 地址锚点：块 1/2 的 DI 地址与单架模板完全一致（架号只是业务语义键）
+        Assert.Equal(0x1000, dev.DiAddressOf(1));
+        Assert.Equal(0x1020, dev.DiAddressOf(2));
+        Assert.Equal(0x1010, dev.DoAddressOf(1));
+        Assert.True(PointTableValidator.Validate(config).Ok);
+    }
+
     // ---------- 持久化（含自愈） ----------
 
     [Fact]
@@ -152,6 +169,35 @@ public class PointTableTests
         var v = PointTableValidator.Validate(config);
         Assert.False(v.Ok);
         Assert.Contains(v.Errors, e => e.Contains("多个物理点"));
+    }
+
+    [Fact]
+    public void Validation_Catches_SemanticDuplicate_AcrossDevices()
+    {
+        // 跨设备语义重复（V0.0.20 双架防线）：两台耦合器都绑架 1 层 1——
+        // 快照把多台设备按语义键合并进同一字典，撞号会同键互相覆盖；
+        // 双架第二台必须绑独立架号段（如 11~20），保存前在此拦下。
+        var d1 = IoPointTableStore.BuildDefaultTemplate("1号架", "127.0.0.1", 10, 3, 1);
+        var d2 = IoPointTableStore.BuildDefaultTemplate("2号架", "127.0.0.2", 10, 3, 1); // 撞架号
+        var v = PointTableValidator.Validate(new PointTableConfig
+        {
+            Devices = { d1.Devices[0], d2.Devices[0] },
+        });
+        Assert.False(v.Ok);
+        Assert.Contains(v.Errors, e => e.Contains("架号必须全局唯一"));
+    }
+
+    [Fact]
+    public void Validation_TwoDevicesWithDistinctRacks_Pass()
+    {
+        // 双架正例：第二台绑架 11~20，全场语义唯一 → 校验通过
+        var d1 = IoPointTableStore.BuildDefaultTemplate("1号架", "127.0.0.1", 10, 3, 1);
+        var d2 = IoPointTableStore.BuildDefaultTemplate("2号架", "127.0.0.2", 10, 3, 11);
+        var v = PointTableValidator.Validate(new PointTableConfig
+        {
+            Devices = { d1.Devices[0], d2.Devices[0] },
+        });
+        Assert.True(v.Ok, string.Join("\r\n", v.Errors));
     }
 
     [Fact]

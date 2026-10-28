@@ -15,14 +15,16 @@
 //   >65535 / 区间越界一律按"读写失败"处理——配错地址当场失败回写（网关
 //   WriteFail 链），绝不误写寄存器 0。
 //
-// 字符串打包策略（编码策略集中点，现场校准就改这里）：
-//   2 字节/寄存器、big-endian（网络序）：字符串字节流按地址递增两两装进
-//   保持寄存器，高字节在先。PackAscii/UnpackAscii 纯函数单测锁定
-//   （ModbusChannelTests）；写端按 length（字节数）截断 + 补 '\0' 到偶数
-//   边界，读端只取前 length 字节——与老项目 Write(addr, str, 80) 语义对齐。
+// 字符串打包策略（编码策略集中点，现场校准零改代码）：
+//   2 字节/寄存器、big-endian（网络序，缺省=老项目口径）：字符串字节流按
+//   地址递增两两装进保持寄存器，高字节在先。PackAscii/UnpackAscii 纯函数
+//   单测锁定（ModbusChannelTests）；写端按 length（字节数）截断 + 补 '\0' 到
+//   偶数边界，读端只取前 length 字节——与老项目 Write(addr, str, 80) 语义对齐。
 //   '\0' 原样上交不代清（网关 HandleApi 的 Replace("\0","") 原样沿用老项目）。
-//   MES 文本约定 ASCII（单字节），非 ASCII 字符截高位不抛（真机联调时按
-//   CIM 端约定再校准，编码策略只此一处——这正是 Pack/Unpack 收敛的意义）。
+//   MES 文本约定 ASCII（单字节），非 ASCII 字符截高位不抛（编码策略只此一处）。
+//   字节序（V0.0.20 配置化）：CIM 侧若按 little-endian（低字节在先）组包，
+//   config.ini [setting] StringByteOrder=SwapBytes 即翻转，代码零改动——
+//   翻转实现 = 字节流相邻两两对换（SwapPairs 纯函数，Pack/Unpack 前后各一次）。
 //
 // 自愈语义（铁律 3，直接复用子模块，不再手写）：
 //   读写抛 Socket/IO/超时异常 → master 置断连并关坏 socket + 关节流重连；
@@ -48,6 +50,14 @@ public sealed class ModbusStationClient : IPlcClient
 {
     /// <summary>断线重连节流间隔（铁律 3：5s，与原 Melsec 版同款节奏）。</summary>
     public const int ReconnectIntervalMs = 5000;
+
+    /// <summary>
+    /// 字符串字节序开关（V0.0.20 配置化）：false=big-endian 缺省（老项目口径，
+    /// "NG"→寄存器 0x4E47）；true=按字节对交换（CIM 侧 little-endian 组包时用）。
+    /// 由 AppConfig.Load 读 config.ini [setting] StringByteOrder=SwapBytes 设置。
+    /// 静态开关：进程级口径（同一 CIM 端全部机台一致），启动加载一次即可。
+    /// </summary>
+    public static bool SwapStringBytes { get; set; }
 
     /// <summary>FC03 读保持寄存器单帧上限（Modbus 协议规格，NModbus 按 125 校验）。</summary>
     private const int MaxReadRegs = 125;
@@ -157,6 +167,8 @@ public sealed class ModbusStationClient : IPlcClient
         if (regs == null)
             return (false, null);
         byte[] bytes = UnpackAscii(regs);
+        if (SwapStringBytes)
+            bytes = SwapPairs(bytes);
         return (true, Encoding.ASCII.GetString(bytes, 0, length));
     }
 
@@ -211,6 +223,8 @@ public sealed class ModbusStationClient : IPlcClient
         int n = Math.Min(s.Length, length);
         for (int i = 0; i < n; i++)
             bytes[i] = (byte)s[i];
+        if (SwapStringBytes)
+            bytes = SwapPairs(bytes);
         return WriteRegs(reg, PackAscii(bytes));
     }
 
@@ -264,6 +278,24 @@ public sealed class ModbusStationClient : IPlcClient
             bytes[i * 2 + 1] = (byte)(regs[i] & 0xFF);
         }
         return bytes;
+    }
+
+    /// <summary>
+    /// 字节对两两交换（StringByteOrder=SwapBytes 的翻转实现，纯函数单测锁定）：
+    /// "NG"=4E 47 → 47 4E——PackAscii 后寄存器变 0x474E，即 little-endian 组包口径；
+    /// 奇数字节数末尾孤字节不动（补 '\0' 已在 WriteString 前完成，此处长度恒偶）。
+    /// </summary>
+    internal static byte[] SwapPairs(byte[] bytes)
+    {
+        var swapped = new byte[bytes.Length];
+        for (int i = 0; i + 1 < bytes.Length; i += 2)
+        {
+            swapped[i] = bytes[i + 1];
+            swapped[i + 1] = bytes[i];
+        }
+        if (bytes.Length % 2 == 1)
+            swapped[^1] = bytes[^1];
+        return swapped;
     }
 
     // ==================== 分帧（Modbus 单帧上限硬约束） ====================
