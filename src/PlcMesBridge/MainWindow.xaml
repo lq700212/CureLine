@@ -10,25 +10,22 @@
         Icon="Assets/app.ico"
         Title="{Binding TitleText, FallbackValue='PLC通信'}" WindowState="Maximized" Width="1230" Height="640">
     <!--主窗（MVVM：状态走 MainWindowViewModel，本文件纯绑定）。
-        单机视图 = 单机版 Form1；多机视图 = 多机版 Form1。
+        多机视图 = 多机版 Form1（单机视图与"运行模式"已随单机链路删除，P2.1）。
         菜单门禁走 VM（admin/dev/未登录）；视图筛选下拉 = Form2/Form6"只看某几台"。
         设计时说明：设计器里 DataContext 为空，绑定全部失败取 FallbackValue
-        显示占位文案（运行时 VM 注入后显示真值）；单机视图设计时可见、
-        多机视图设计时折叠，避免两视图在同一格重叠（预览按钮叠在一起即因此）。-->
+        显示占位文案（运行时 VM 注入后显示真值）。-->
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        <!--顶菜单栏（单机/多机共用）-->
+        <!--顶菜单栏-->
         <DockPanel Grid.Row="0" Background="{StaticResource FreshTopBarBrush}">
             <Menu DockPanel.Dock="Left" VerticalAlignment="Center"
                   FontFamily="微软雅黑" FontSize="14" Background="Transparent">
                 <MenuItem Header="{Binding MiLogText, FallbackValue='MES 交互实时日志'}" Command="{Binding ShowLogCommand}"
                           Style="{StaticResource FreshMenuButton}"/>
                 <MenuItem Header="{Binding MiDebugText, FallbackValue='MES 接口调试界面'}" Command="{Binding ShowDebugCommand}"
-                          Style="{StaticResource FreshMenuButton}"/>
-                <MenuItem Header="{Binding MiModeText, FallbackValue='运行模式'}" Command="{Binding ShowModeCommand}"
                           Style="{StaticResource FreshMenuButton}"/>
                 <!--注意：子项在 Popup 独立视觉树里，RelativeSource 找不到 Window；
                     DataContext 走逻辑树继承（与父菜单同 VM），直接绑 VM 属性。-->
@@ -57,78 +54,8 @@
                    VerticalAlignment="Center" Margin="0,0,12,0"/>
         </DockPanel>
 
-        <!-- ================= 单机视图 ================= -->
-        <Grid Grid.Row="1" Visibility="{Binding IsSingleMode,
-                    Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Visible}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="300"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <!--左列：状态卡→统计卡→日志-->
-            <DockPanel Grid.Column="0" Margin="6">
-                <Border DockPanel.Dock="Top" Style="{StaticResource FreshHintBorder}">
-                    <StackPanel TextBlock.FontFamily="微软雅黑" TextBlock.FontSize="14"
-                                TextBlock.FontWeight="Bold">
-                        <Label Content="{Binding StatusTitleText, FallbackValue='运行状态'}" FontSize="15"
-                               Foreground="{StaticResource FreshPrimaryDeepBrush}"/>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Label Content="{Binding BeatLabel, FallbackValue='PLC心跳'}" VerticalAlignment="Center"/>
-                            <Label Content="⚫" Foreground="{Binding BeatLampColor, FallbackValue=Gray}"
-                                   VerticalAlignment="Center"/>
-                            <Button Content="{Binding ConnectText, FallbackValue='连接PLC'}"
-                                    IsEnabled="{Binding ConnectEnabled}"
-                                    Command="{Binding ConnectSingleCommand}"
-                                    Height="30" Padding="16,2" Margin="16,0,0,0"
-                                    VerticalAlignment="Center"/>
-                        </StackPanel>
-                        <Label Content="{Binding CuringLine, FallbackValue='固化时间: --'}" VerticalAlignment="Center"/>
-                        <Label Content="{Binding InTimeLine, FallbackValue='进入时间: --'}" VerticalAlignment="Center"/>
-                        <Label Content="{Binding BinLine, FallbackValue='库位ID: --'}" VerticalAlignment="Center"/>
-                        <Label Content="{Binding StatusLine, FallbackValue='物料状态'}" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Border>
-                <Border DockPanel.Dock="Top" Margin="0,8,0,0"
-                        Style="{StaticResource FreshCardBorder}">
-                    <StackPanel TextBlock.FontFamily="微软雅黑" TextBlock.FontSize="13"
-                                TextBlock.FontWeight="Bold">
-                        <Label Content="{Binding StatsTitleText, FallbackValue='统计信息'}" FontSize="14"
-                               Foreground="{StaticResource FreshPrimaryDeepBrush}"/>
-                        <Label Content="{Binding TotalLine, FallbackValue='库内总物料: 0'}" VerticalAlignment="Center"/>
-                        <Label Content="{Binding DoneLine, FallbackValue='静置已完成: L:0 R:0'}" VerticalAlignment="Center"/>
-                        <Label Content="{Binding RestingLine, FallbackValue='正在静置: L:0 R:0'}" VerticalAlignment="Center"/>
-                        <Label Content="{Binding TomorrowLine, FallbackValue='明日可完成: L:0 R:0'}" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Border>
-                <ListBox ItemsSource="{Binding LogLines}"
-                         SelectedItem="{Binding SelectedLogLine}"
-                         FontSize="12" Margin="0,8,0,0">
-                    <ListBox.InputBindings>
-                        <MouseBinding MouseAction="LeftDoubleClick"
-                                      Command="{Binding ShowLogDetailCommand}"/>
-                    </ListBox.InputBindings>
-                </ListBox>
-            </DockPanel>
-            <!--右产品表（只读，产品号/产品ID，宋体12加粗）-->
-            <DataGrid Grid.Column="1" ItemsSource="{Binding Products}" Margin="6"
-                      Background="{Binding GridBackground}"
-                      AutoGenerateColumns="False" IsReadOnly="True"
-                      HeadersVisibility="Column" RowHeaderWidth="0"
-                      RowHeight="25"
-                      FontFamily="宋体" FontSize="14" FontWeight="Bold">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="{Binding DataContext.ColNoText, FallbackValue='产品号',
-                                                  RelativeSource={RelativeSource AncestorType=Window}}"
-                                        Binding="{Binding No}" Width="120"/>
-                    <DataGridTextColumn Header="{Binding DataContext.ColIdText, FallbackValue='产品ID',
-                                                  RelativeSource={RelativeSource AncestorType=Window}}"
-                                        Binding="{Binding ProductId}" Width="*"/>
-                </DataGrid.Columns>
-            </DataGrid>
-        </Grid>
-
         <!-- ================= 多机视图 ================= -->
-        <Grid Grid.Row="1" Visibility="{Binding IsMultiMode,
-                    Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Collapsed}">
+        <Grid Grid.Row="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>

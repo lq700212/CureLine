@@ -1,10 +1,11 @@
 // =========================================================================
-// AppConfig 加载测试：Mode/PLCuse/IP/DataLength/URL 全字段 + 非法输入自愈
+// AppConfig 加载测试：PLCuse/IP/DataLength/URL 全字段 + 非法输入自愈
 //
 // 锁定的行为（现场 ini 手改错也不能让程序起不来）：
-// ① Mode 非法/缺键 → Single；② PLCuse 短了补 "1"、多了截断、空格忽略；
-// ③ IP 缺键 → "127.0.0.1"；④ DataLength 非法/非正数 → 799 并回填文件
-//   （走查 B1：原来 int.Parse 直接抛，启动崩）；⑤ URL 缺键回填缺省。
+// ① PLCuse 短了补 "1"、多了截断、空格忽略；② IP 缺键 → "127.0.0.1"；
+// ③ DataLength 非法/非正数 → 799 并回填文件（走查 B1：原来 int.Parse
+//   直接抛，启动崩）；④ URL 缺键回填缺省。
+// 历史：Mode 用例已随单机链路删除（P2.1）。
 // 全部用临时 ini（TestScope），不碰现场 config。
 // =========================================================================
 
@@ -16,24 +17,6 @@ namespace PlcMesBridge.Tests;
 
 public class AppConfigTests
 {
-    [Fact(DisplayName = "Mode非法回退单机")]
-    public void Load_BadMode_FallsBackSingle()
-    {
-        using var scope = new TestScope();
-        IniFile.Write(scope.IniPath(), "setting", "Mode", "xxx");
-        AppConfig.Load(scope.IniPath());
-        Assert.Equal(RunMode.Single, AppConfig.Mode);
-    }
-
-    [Fact(DisplayName = "Mode大小写空格不敏感")]
-    public void Load_Mode_Tolerant()
-    {
-        using var scope = new TestScope();
-        IniFile.Write(scope.IniPath(), "setting", "Mode", "  multi  ");
-        AppConfig.Load(scope.IniPath());
-        Assert.Equal(RunMode.Multi, AppConfig.Mode);
-    }
-
     [Fact(DisplayName = "PLCuse短了补1长了截断")]
     public void Load_PlcUse_ShortPads_LongTruncates()
     {

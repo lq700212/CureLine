@@ -57,10 +57,12 @@
 - **P1 基建与骨架（已完成）**：子模块升 V1.8.2 + VM 基建下沉 Core + IO 点表
   家族（`IoPointTable`/`IoPointTableStore`/`IoBus`/连通测试）+ `CureStation`
   程序①骨架（30 仓位主窗 + 点表配置窗 + 自愈 + Mock）+ 测试 156 全绿。
-- **P2 程序②改造（待做）**：`MultiMachineGateway` 换 Modbus 底座；删三菱
-  （`MelsecPlcClient`/`SingleMachineCoordinator` 命令字 4 分支/PLC 配置窗
-  单机页——用户拍板"物理搬运即可"，git 历史可找回）；6 接口迁移与整线
-  联调（待 D/R 终版地址 + CIM W68 终版）；三菱相关测试用例清理。
+- **P2 程序②改造（进行中，P2.1 已完成）**：P2.1=删三菱整链（`MelsecPlcClient`/
+  `SingleMachineCoordinator`/单机视图与"运行模式"菜单/PLC 配置窗单机页——
+  用户拍板"物理搬运即可"，git 历史可找回）+ 真机底座统一 Modbus TCP
+  （`ModbusStationClient`，地址/打包/分帧集中一处）+ 配置模型收敛
+  （删 `RunMode`/`[SinglePLC]`/`PLCAscii`）。**P2.2 待做**：6 接口迁移与
+  整线联调（待 D/R 终版地址 + CIM W68 终版）。
 - **P3 固化程控（待做）**：仓位状态机（边沿驱动：托盘到位→计时→放行→
   三色灯）；单线过账（复用 MES 层与 16 字段参数记忆）；工单页 + 权限页
   （对照 `docs/参考界面/` 两张 HMI 截图：R/L 双工位途程单号/预设数量/
@@ -70,17 +72,19 @@
 
 1. **文件编码 UTF-8**。写文件用 write 工具；终端 GBK 显示是假象，
    判定中文内容只用严格 UTF-8 解码读，禁止肉眼判码。
-2. **UI 线程禁做网络 IO**：PLC/DB/HTTP 全在后台线程（单机后台节拍 Task、
-   多机 `StationGateway` 自带线程）；TCP 连接必须带超时；事件在工作线程触发，
+2. **UI 线程禁做网络 IO**：PLC/DB/HTTP 全在后台线程（多机 `StationGateway`
+   自带线程、程序①总线后台轮询）；TCP 连接必须带超时；事件在工作线程触发，
    UI 订阅方必须 `Dispatcher.Invoke` 回 UI 线程。
-3. **读写失败即断连标记 + 节流重连**：`MelsecPlcClient` 朴素策略
-   （失败→`IsConnected=false`，5s 节流）；IO 总线 `ModbusPointTableBus`
-   同款（未连 5s 节流重连）。勿引入"按 PLC 轮询周期估时"逻辑。
+3. **读写失败即断连标记 + 节流重连**：真机底座 `ModbusStationClient` 包装
+   子模块 `ModbusTcpMasterClient`（断连标记/关坏 socket/5s 节流全在其内部）；
+   IO 总线 `ModbusPointTableBus` 同款（未连 5s 节流重连）。勿引入
+   "按 PLC 轮询周期估时"逻辑。
 4. **日志只记边沿**：连上/断开/触发/成功/NG 记，连续失败中间静默，防刷屏。
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 156/156（基线只增不减）；禁止交付编译不过/测试不过的代码。
+   `dotnet test` 148/148（P2.1 删单机链连带删 32 例 + 增 Modbus 24 例，
+   基线此后只增不减）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
 8. **配置样例同步**：新增配置键必须同步改 `config.sample.ini` + `AppConfig`
@@ -120,12 +124,12 @@
 | --- | --- |
 | **两程序骨架** | |
 | `src/CureStation/` | **程序①固化程控**（新 exe）：30 仓位主窗 + IO 点表配置窗（`ViewModels/MainViewModel.cs`/`PointTableViewModel.cs`）+ 自建 `DialogService.cs` |
-| `src/PlcMesBridge/MainWindow.*` | 主窗：单机/多机双视图、后台节拍、视图筛选（替代 Form2/Form6；Phase 2 演化 CimGateway） |
+| `src/PlcMesBridge/MainWindow.*` | 主窗：多机网关视图、视图筛选（替代 Form2/Form6；单机视图与"运行模式"菜单已随单机链路删除；Phase 2 演化 CimGateway） |
 | `src/PlcMesBridge/Controls/StationPanel.*` | 机台面板复用件（MVVM View，VM 由主窗注入，8 实例） |
-| `src/PlcMesBridge/ViewModels/` | 主程序各窗 VM（`IDialogService` 基建 + 各窗 VM，主窗 VM 含双视图/节拍/门禁） |
+| `src/PlcMesBridge/ViewModels/` | 主程序各窗 VM（`IDialogService` 基建 + 各窗 VM，主窗 VM 含视图筛选/门禁） |
 | `src/PlcMesBridge/MesDebugWindow.*` | 调试窗：5 接口表单 + API0033 扩展 + 预览上传 |
-| `src/PlcMesBridge/MesLogWindow.*` | 日志窗（-1 单机全量 / >=0 分机台，关窗退订） |
-| `src/PlcMesBridge/PlcConfigWindow.*` | PLC 配置窗（单机/多机/接口三页 + 测试连接 + 保存重启，逻辑在 Core） |
+| `src/PlcMesBridge/MesLogWindow.*` | 日志窗（-1 全部机台 / >=0 分机台，关窗退订） |
+| `src/PlcMesBridge/PlcConfigWindow.*` | PLC 配置窗（多机/接口两页 + 测试连接 + 保存重启，逻辑在 Core；单机页已删） |
 | `src/PlcMesBridge/MesAlarmWindow.*` / `ImageWindow.*` | 报警窗 / 图片查看 |
 | **Core 共享（IO 家族，P1 新增）** | |
 | `src/PlcMesBridge.Core/ViewModels/` | 下沉的 VM 基建（`ViewModelBase`/`RelayCommand`，namespace 不变） |
@@ -135,13 +139,13 @@
 | `src/PlcMesBridge.Core/Comms/IoCouplerConnectionTester.cs` | IO 耦合器连通测试（三态文案，先测再存） |
 | **Core 共享（业务既有）** | |
 | `src/PlcMesBridge.Core/Services/LocalLogService.cs` | 本机操作日志落盘（截 50 字写文件，全量上界面） |
-| `src/PlcMesBridge.Core/Modes/SingleMachineCoordinator.cs` | 单机业务：命令字边沿 + 4 分支 + MES 上传 + 统计（Phase 2 随三菱删除） |
-| `src/PlcMesBridge.Core/Modes/MultiMachineGateway.cs` | 多机网关：触发→JSON→POST→回写 + Manager（Phase 2 换 Modbus 底座） |
-| `src/PlcMesBridge.Core/Comms/`（PLC 侧） | `IPlcClient` + 真机 `MelsecPlcClient` + 模拟 `SimulatedPlcClient` + 连通测试 `PlcConnectionTester`（Phase 2 删三菱） |
+| `src/PlcMesBridge.Core/Modes/MultiMachineGateway.cs` | 多机网关：触发→JSON→POST→回写 + Manager（Modbus 底座已接，业务零改动） |
+| `src/PlcMesBridge.Core/Comms/ModbusStationClient.cs` | **真机底座（P2 新增）**：`IPlcClient` 的 Modbus TCP 实现——地址="剥 R/D 取数字"=协议地址、字符串 2 字节/寄存器 big-endian、分帧 125/123，三语义集中一处 |
+| `src/PlcMesBridge.Core/Comms/`（PLC 侧） | `IPlcClient` + 真机 `ModbusStationClient` + 模拟 `SimulatedPlcClient` + 连通测试 `PlcConnectionTester`（三菱 `MelsecPlcClient` 已删） |
 | `src/PlcMesBridge.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段） |
 | `src/PlcMesBridge.Core/Data/CureRecordStore.cs` | `PLCtable` CRUD + `ComputeStats` 纯统计 |
 | `src/PlcMesBridge.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/PLC 配置模型与校验 |
-| `tests/PlcMesBridge.Tests/` | 156 用例 xUnit（`Mocks/`：本地桩 MES / Fake 对话框两套 / 静态快照隔离，加用例直接复用） |
+| `tests/PlcMesBridge.Tests/` | 148 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离，加用例直接复用） |
 | `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
 
 ## 构建与验证命令
@@ -149,7 +153,7 @@
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build PlcMesBridge.slnx --nologo
-# 全量测试（156/156 全绿，串行，约 9s；含本地 HttpListener 桩 MES 端到端）
+# 全量测试（148/148 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
 dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 # 子模块改动后（VS MSBuild，net472，原样沿用上游命令）
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
@@ -158,20 +162,23 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 # GUI 冒烟：Start-Process 起 exe，确认进程存活 + config/DataBase/log 生成，再 Stop-Process
 #   （程序①起 CureStation.exe，看 config/pointtable.json 自愈落盘 + 30 张仓位卡）
 # 模拟联调：config.ini [setting] Simulate=1（两程序同名键，无真机跑全流程）——
-#   PlcMesBridge 设 Mode=Single/Multi；CureStation 直起即 Mock 总线按仓位流转演示
+#   PlcMesBridge 直起即模拟 8 机台网关；CureStation 直起即 Mock 总线按仓位流转演示
 ```
 
 ## 已知坑（复刻 heritage，改前必读代码注释）
 
-- 单机出站上传是**同步两次 POST**（固化+出站），在后台线程跑所以不冻界面；
-  进站上传是 `Task.Run` 后台。照搬，勿"优化"成全异步。
 - 网关 DATA 拆包地址算法**无补零**（`R17900+30=R17930`）；空值写 `" "` 占位；
   失败回写 STATUS=2/MSG=NG。MES 侧约定，勿改。
 - 统计"明日"只比 `Day` 数（跨月有误差）、L/R 只看第 4 字符——老项目口径，
   保持一致，修了就是行为分叉。
-- 单机 PLC `192.168.1.80:6060` 硬编码（老项目原样）；多机键名跳号
-  （`PLCIP2..7,9,10` 对应 0..7 号机）历史沿用，勿"整理"。
-- 多机 1/2/5 号机走 ASCII 协议（`AppConfig.AsciiStations`），换机房先对型号。
+- 多机键名跳号（`PLCIP2..7,9,10` 对应 0..7 号机）历史沿用，勿"整理"。
+- **Modbus 底座三语义（P2.1 起生效，全在 `ModbusStationClient` 一处）**：
+  ① 地址="剥 R/D 前缀取数字"=Modbus 协议地址（0x0000 起保持寄存器），
+  残缺/超 65535 拒收走失败链，绝不误写寄存器 0——**待真机联调确认
+  CIM 侧寄存器表与该假设一致**；② 字符串 2 字节/寄存器 big-endian
+  （首字节装高位，"NG"→0x4E47），现场字节序校准只改 `PackAscii/UnpackAscii`；
+  ③ 分帧 FC03≤125 / FC10≤123 寄存器，网关 DataLength=799 字节必须分块，
+  中间块失败整次失败（与老项目整串写同口径，勿加事务）。
 - `config/` 目录 kernel32 不会自动建，`App.OnStartup` 已确保；删库不怕，
   `EnsureDatabase` 自建表。
 - 老项目第 1 台设备名英文译错（抄第 2 台的），本项目已修正。

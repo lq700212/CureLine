@@ -19,8 +19,8 @@ namespace PlcMesBridge.Core.Comms;
 public static class PlcConnectionTester
 {
     /// <summary>
-    /// 测一次。factory：单机传真机/模拟按需构造；多机按 UseAscii 选构造。
-    /// readAddr：单机传命令字，网关传 0027 触发字——连通 + 可读一次验证。
+    /// 测一次。factory：按需构造（真机 ModbusStationClient / 模拟 SimulatedPlcClient）。
+    /// readAddr：网关传 0027 触发字——连通 + 可读一次验证。
     /// </summary>
     public static async Task<(bool Ok, string Message, long Ms)> TestAsync(
         Func<IPlcClient> factory, string ip, int port, string readAddr,

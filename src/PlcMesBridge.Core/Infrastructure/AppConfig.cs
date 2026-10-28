@@ -1,52 +1,31 @@
 // =========================================================================
-// AppConfig：全部启动配置加载（复刻自两版 Form1_Load 的 ini 读取，集中一处）
+// AppConfig：启动配置加载（多机网关口径，集中一处）
 //
-// 单机：[setting] Language + [MES] 5 个 URL（缺省 192.168.120.129:5012）。
-// 多机：PLCuse 开关串 / PLCIP2..10 / 存图目录 / 6 URL + 6 触发地址 +
-//   DataLength + 6 组地址束（xxxPLCDataAddr/MESMSGAddr/MESDataAddr/
-//   MESSTATUSAddr/MESCompleteAddr，缺省 R 系，见 MultiMachineGateway 注释）。
-// Mode（新增，融合版开关）：Single=单机固化收料 / Multi=多机网关，
-//   记 [setting] Mode，缺省 Single（老用户升级无感）。
+// 多机：PLCuse 开关串 / PLCIP2..10 跳号 IP / PLCPorts 端口串 / 存图目录 /
+//   6 URL + 6 触发地址 + DataLength + 6 组地址束（xxxPLCDataAddr/MESMSGAddr/
+//   MESDataAddr/MESSTATUSAddr/MESCompleteAddr，缺省 R 系，见 MultiMachineGateway
+//   注释）。
+// Phase 2 说明（P2.1）：单机模式已随三菱链路整链删除——RunMode 枚举 /
+//   [setting] Mode 键 / [SinglePLC] 段 / PLCAscii 协议键一并撤下（git 历史可
+//   找回）。现场 ini 里残留旧键无害：本类只读本文件列出的键，多余键不解析
+//   也不清理（kernel32 ini 自愈按缺省回填本类用到的键）。
 // =========================================================================
 
 using PlcMesBridge.Core.Mes;
 
 namespace PlcMesBridge.Core.Infrastructure;
 
-public enum RunMode
-{
-    Single,
-    Multi,
-}
-
 public static class AppConfig
 {
-    public static RunMode Mode { get; private set; } = RunMode.Single;
     public static string[] PlcUse { get; private set; } =
         new[] { "1", "1", "1", "1", "1", "1", "1", "1" };
 
     /// <summary>8 台 PLC IP（键 PLCIP2/3/4/5/6/7/9/10，老项目跳号命名原样）。</summary>
     public static string[] PlcIps { get; private set; } = new string[8];
 
-    /// <summary>8 台端口（新键 [setting] PLCPorts，缺省全 6060，老项目全写死 6060）。</summary>
+    /// <summary>8 台端口（新键 [setting] PLCPorts，缺省全 6060；现场按 Modbus 从站改）。</summary>
     public static int[] StationPorts { get; private set; } =
         new[] { 6060, 6060, 6060, 6060, 6060, 6060, 6060, 6060 };
-
-    /// <summary>
-    /// 8 台协议（新键 [setting] PLCAscii，缺省 1/2/5 号机 ASCII。
-    /// AsciiStations 是出厂缺省常量（供 PlcConfigStore 用），运行时以本数组为准。
-    /// </summary>
-    public static bool[] StationAscii { get; private set; } =
-        new[] { false, true, true, false, false, true, false, false };
-
-    /// <summary>
-    /// 单机全套 PLC 配置（新段 [SinglePLC]，缺省=老项目硬编码）。
-    /// internal 写：测试隔离（TestScope 快照恢复）用，生产只读。
-    /// </summary>
-    public static SinglePlcConfig Single { get; internal set; } = SinglePlcConfig.Default;
-
-    /// <summary>ASCII 协议机台（老项目 i=1,2,5 用 MelsecMcAsciiNet，其余二进制）。</summary>
-    public static readonly HashSet<int> AsciiStations = new() { 1, 2, 5 };
 
     private static readonly string[] IpKeys = PlcConfigStore.IpKeys;
 
@@ -80,27 +59,14 @@ public static class AppConfig
         string ini = iniPath ?? AppPaths.ConfigIni;
 
         LanguageService.CurrentLanguage = IniFile.ReadStr(ini, "setting", "Language", "CH");
-        string mode = IniFile.ReadStr(ini, "setting", "Mode", "Single");
-        Mode = mode.Equals("Multi", StringComparison.OrdinalIgnoreCase)
-            ? RunMode.Multi : RunMode.Single;
 
-        string use = IniFile.ReadStr(ini, "setting", "PLCuse", "1,1,1,1,1,1,1,1");
-        string[] parts = use.Split(',');
-        for (int i = 0; i < 8; i++)
-            PlcUse[i] = i < parts.Length ? parts[i].Trim() : "1";
-
-        for (int i = 0; i < 8; i++)
-            PlcIps[i] = IniFile.ReadStr(ini, "setting", IpKeys[i], "127.0.0.1");
-
-        // 单机 + 多机端口/协议走 PlcConfigStore（自愈缺省，见 PlcConfig.cs）。
-        Single = PlcConfigStore.LoadSingle(ini);
+        // 多机 8 台走 PlcConfigStore（自愈缺省，见 PlcConfig.cs）：启用开关/IP/端口一并带出。
         StationPlcConfig[] stations = PlcConfigStore.LoadStations(ini);
         for (int i = 0; i < 8; i++)
         {
             PlcUse[i] = stations[i].Enabled ? "1" : "0";
             PlcIps[i] = stations[i].Ip;
             StationPorts[i] = stations[i].Port;
-            StationAscii[i] = stations[i].UseAscii;
         }
 
         MesConfig.UrlApi0027 = IniFile.ReadStr(ini, "MES", "Url_API0027", DefaultUrls[0]);

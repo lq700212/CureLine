@@ -1,8 +1,9 @@
 // =========================================================================
 // ViewModel 测试：VM 编排逻辑（Fake 对话框 + TestScope 隔离落盘）。
 //
-// 覆盖：登录失败/跟随账号、模式窗保存、主窗登录门禁与 gating、
+// 覆盖：登录失败/跟随账号、主窗登录门禁与 gating、
 //   修改密码 VM（规则/代改显隐）。后台节拍/真窗不在此测（UIA 冒烟覆盖）。
+// 历史：模式窗 VM 用例已随单机链路删除（P2.1）。
 // =========================================================================
 
 using PlcMesBridge.Core.Infrastructure;
@@ -66,23 +67,6 @@ public class ViewModelTests : IDisposable
         Assert.Equal("", vm.Password);
     }
 
-    [Fact(DisplayName = "模式窗VM保存写盘变了置位")]
-    public void ModeSwitchVm_Save_WritesIni()
-    {
-        var fake = new FakeDialogService();
-        var vm = new ModeSwitchViewModel(fake);
-        // 当前默认 Single：选 Multi 保存 → 变了
-        vm.IsMulti = true;
-        bool? closed = null;
-        vm.RequestClose += r => closed = r;
-        vm.SaveCommand.Execute(null);
-        Assert.True(vm.ModeChanged);
-        Assert.Equal(true, closed);
-        Assert.Equal(RunMode.Multi, RunModeSettings.ReadMode(AppPaths.ConfigIni));
-        // 变了直接关窗，不弹提示（没变才弹"已保存"，经服务）
-        Assert.Empty(fake.Calls);
-    }
-
     [Fact(DisplayName = "主窗VM未登录拦登录后放行")]
     public void MainVm_Gating_BlocksThenPasses()
     {
@@ -90,19 +74,19 @@ public class ViewModelTests : IDisposable
         var fake = new FakeDialogService
         {
             LoginResult = (true, LoginRole.Dev, "dev"),
-            ModeSwitchResult = true,
+            PlcResult = true,
         };
         using var vm = new MainWindowViewModel(fake);
-        // 未登录点运行模式：提示登录，不开窗不重启
-        vm.ShowModeCommand.Execute(null);
+        // 未登录点 PLC 设置：提示登录，不开配置窗不重启
+        vm.ShowPlcCommand.Execute(null);
         Assert.Contains(fake.Calls, c => c.StartsWith("Msg:"));
-        Assert.DoesNotContain("ModeSwitch", fake.Calls);
-        // 登录后：开窗 + 重启
+        Assert.DoesNotContain("PlcConfig", fake.Calls);
+        // 登录后：开配置窗 + 重启
         vm.LoginCommand.Execute(null);
         Assert.Equal($"dev ({LanguageService.Tr("切换/退出")})", vm.LoginHeader);
         Assert.True(vm.PlcVisible);
-        vm.ShowModeCommand.Execute(null);
-        Assert.Contains("ModeSwitch", fake.Calls);
+        vm.ShowPlcCommand.Execute(null);
+        Assert.Contains("PlcConfig", fake.Calls);
         Assert.Contains("Restart", fake.Calls);
     }
 

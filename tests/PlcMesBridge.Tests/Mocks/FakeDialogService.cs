@@ -1,7 +1,7 @@
 // =========================================================================
 // FakeDialogService：IDialogService 测试桩（VM 可测性的另一半）
 //
-// 用法：new 后按需设返回值（LoginResult/ModeSwitchResult/PlcResult），
+// 用法：new 后按需设返回值（LoginResult/PlcResult），
 // 调后查 Calls 断 VM 调了谁。VM 构造注入它，不碰真窗。
 // =========================================================================
 
@@ -15,7 +15,6 @@ public class FakeDialogService : IDialogService
     public List<string> Calls { get; } = new();
     public (bool Ok, LoginRole Role, string User) LoginResult { get; set; } =
         (false, LoginRole.None, "");
-    public bool ModeSwitchResult { get; set; }
     public bool PlcResult { get; set; }
     public bool? ConfirmResult { get; set; } = true;
     public bool? ConfirmOrCancelResult { get; set; } = true;
@@ -40,12 +39,6 @@ public class FakeDialogService : IDialogService
     {
         Calls.Add("Login");
         return LoginResult;
-    }
-
-    public bool ShowModeSwitch()
-    {
-        Calls.Add("ModeSwitch");
-        return ModeSwitchResult;
     }
 
     public void ShowChangePassword(string currentUser, LoginRole role) =>

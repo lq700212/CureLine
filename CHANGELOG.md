@@ -2,6 +2,45 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.14（2026-10-28，两程序拆分 P2.1：删三菱 + Modbus 统一底座）
+
+背景：P2 第一步——程序②（现 PlcMesBridge，Phase 2 演化 CimGateway）删三菱
+链路，真机底座统一 Modbus TCP。用户拍板"物理搬运即可"= 彻底删，git 历史
+可找回。本轮为纯结构改造（6 接口业务逻辑零改动），真机联调待 D/R 终版
+地址与 CIM W68。
+
+- 新增 `src/PlcMesBridge.Core/Comms/ModbusStationClient.cs`：`IPlcClient`
+  的 Modbus TCP 实现，包装子模块 `ModbusTcpMasterClient`（手动超时建连/
+  锁串行化/断连标记/5s 节流重连全套现成，零自造轮子）。三个关键语义
+  集中在此一处（`ModbusChannelTests` 24 例锁定）：
+  ① 地址="剥 R/D 前缀取数字"=Modbus 协议地址（0x0000 起保持寄存器），
+     残缺/超 65535 拒收——配错地址当场走失败链，绝不误写寄存器 0；
+  ② 字符串打包 2 字节/寄存器 big-endian（首字节装高位，"NG"→0x4E47），
+     `PackAscii/UnpackAscii` 纯函数，现场校准只改这一处；
+  ③ 分帧：FC03 单帧 ≤125 / FC10 ≤123 寄存器（网关 DataLength=799 字节
+     ≈400 寄存器必须分块），区间越界整次失败。
+- 删除清单（单机链整链）：`MelsecPlcClient`、`SingleMachineCoordinator`、
+  `ProductRowViewModel`、`ModeSwitchViewModel`、`ModeSwitchWindow`(+.cs)、
+  `SingleMachineTests`/`SingleMachineEdgeTests`/`CoordinatorCustomAddrTests`；
+  配置模型删 `RunMode` 枚举/`[setting] Mode`/`[SinglePLC]` 段/`PLCAscii`
+  协议键（残留旧 ini 键无害，程序不再读取）；主窗删单机视图与"运行模式"
+  菜单（多机网关单视图）；PLC 配置窗三页→两页（多机 PLC/接口地址）。
+- 保留与沿用：`IPlcClient` 抽象与 `SimulatedPlcClient`（测试地基）不动；
+  `RunModeSettings` 类名不改（只剩登录记忆+门禁，注释说明历史）；多机
+  网关 6 接口 JSON 段与触发/回写地址全部原样（MES 侧约定零改动）。
+- 测试基线 156 → 148：删单机链连带用例 32 例（工程必然，随业务删除），
+  新增 `ModbusChannelTests` 24 例；`ConnectionTesterTests` 真机不可达
+  用例改走 `ModbusStationClient`（顺带覆盖新通道连接失败链）。
+- 顺手清 CureStation 两个既有警告：CS0105 重复 using；CS0649
+  `MainViewModel._config` 未赋值——实为真 bug（重连按钮永远传 null
+  点表→显示"未配置设备"），启动/点表保存两处补记当前点表。
+- `config.sample.ini` 同步：删 Mode/单机注释/PLCAscii/MESPLCALarm/
+  [SinglePLC] 段；PLCPorts 缺省改 502（Modbus TCP 标准端口）；头注释
+  说明真机统一 Modbus TCP 与地址语义。
+- 验证：构建 0 警告 0 错误，测试 148/148 全绿；双程序 GUI 冒烟通过
+  （PlcMesBridge.exe 存活 + config/DataBase/log 自愈落盘；CureStation.exe
+  存活 + pointtable.json 自愈落盘）。
+
 ## V0.0.13（2026-10-28，两程序拆分 P1：子模块升级 + CureStation 固化程控骨架）
 
 背景：现场 IO 方案定为 IO 耦合器（Modbus TCP 从站，替代 PLC 直读触发），

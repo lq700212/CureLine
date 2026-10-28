@@ -1,7 +1,8 @@
 // =========================================================================
-// 运行模式设置测试：模式解析/落盘 + 重启判断 + 登录记忆（DPAPI 密文）。
+// 登录设置测试：菜单门禁常量 + 登录记忆（DPAPI 密文）。
 // 全部用临时 ini，不碰现场 config；不调 AppConfig.Load（它会连带读参数文件）。
 // 登录验谁搬到 UserAccountStoreTests（SQLite 账号体系），本文件只测记忆落盘。
+// 历史：运行模式解析/落盘/重启判断用例已随单机链路删除（P2.1）。
 // =========================================================================
 
 using PlcMesBridge.Core.Infrastructure;
@@ -21,46 +22,6 @@ public class RunModeSettingsTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_tmp, true); } catch { }
-    }
-
-    [Fact(DisplayName = "模式解析大小写空格不敏感非法回退单机")]
-    public void ParseMode_Tolerant_InvalidFallsBackSingle()
-    {
-        Assert.Equal(RunMode.Multi, RunModeSettings.ParseMode("Multi"));
-        Assert.Equal(RunMode.Multi, RunModeSettings.ParseMode("multi"));
-        Assert.Equal(RunMode.Multi, RunModeSettings.ParseMode("  Multi  "));
-        Assert.Equal(RunMode.Single, RunModeSettings.ParseMode("Single"));
-        Assert.Equal(RunMode.Single, RunModeSettings.ParseMode("xxx"));
-        Assert.Equal(RunMode.Single, RunModeSettings.ParseMode(""));
-        Assert.Equal(RunMode.Single, RunModeSettings.ParseMode(null));
-    }
-
-    [Fact(DisplayName = "模式写入读出往返")]
-    public void SaveRead_RoundTrip()
-    {
-        string ini = Path.Combine(_tmp, "c.ini");
-        Assert.Equal("Multi", RunModeSettings.SaveMode(ini, RunMode.Multi));
-        Assert.Equal(RunMode.Multi, RunModeSettings.ReadMode(ini));
-        Assert.Equal("Single", RunModeSettings.SaveMode(ini, RunMode.Single));
-        Assert.Equal(RunMode.Single, RunModeSettings.ReadMode(ini));
-    }
-
-    [Fact(DisplayName = "缺键读模式回填单机")]
-    public void ReadMode_Missing_SelfHealsSingle()
-    {
-        string ini = Path.Combine(_tmp, "c.ini");
-        Assert.Equal(RunMode.Single, RunModeSettings.ReadMode(ini));
-        // 自愈：文件里已补上缺省
-        Assert.Equal("Single", IniFile.ReadStr(ini, "setting", "Mode", "Multi"));
-    }
-
-    [Fact(DisplayName = "模式变化才需重启")]
-    public void NeedsRestart_OnlyOnChange()
-    {
-        Assert.False(RunModeSettings.NeedsRestart(RunMode.Single, RunMode.Single));
-        Assert.False(RunModeSettings.NeedsRestart(RunMode.Multi, RunMode.Multi));
-        Assert.True(RunModeSettings.NeedsRestart(RunMode.Single, RunMode.Multi));
-        Assert.True(RunModeSettings.NeedsRestart(RunMode.Multi, RunMode.Single));
     }
 
     [Fact(DisplayName = "登录记忆缺键默认不记住")]

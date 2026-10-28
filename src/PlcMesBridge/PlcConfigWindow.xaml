@@ -9,7 +9,8 @@
         Icon="Assets/app.ico"
         Title="{Binding TitleText, FallbackValue='PLC配置'}" Width="640" Height="560"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
-    <!--PLC 配置窗（MVVM：三页走 PlcConfigViewModel，本文件纯绑定）。
+    <!--PLC 配置窗（MVVM：两页走 PlcConfigViewModel，本文件纯绑定）。
+        单机页与协议下拉已随三菱链路删除（P2.1：真机统一 Modbus TCP）。
         行内测试按钮经 RelativeSource 找父 VM 命令（DataTemplate 内 DataContext
         是行 VM，命令在父 VM，这是标准写法）。
         设计时 DataContext 为空，展示文本取 FallbackValue 占位（仅预览，运行时走真值）。-->
@@ -27,40 +28,6 @@
                     Style="{StaticResource FreshCancelButton}"/>
         </StackPanel>
         <TabControl>
-            <!--单机页-->
-            <TabItem Header="{Binding TabSingleText, FallbackValue='单机PLC'}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="8">
-                        <ItemsControl ItemsSource="{Binding SingleRows}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" Margin="0,3">
-                                        <Label Content="{Binding Caption}" Width="110"
-                                               VerticalContentAlignment="Center"/>
-                                        <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
-                                                 Width="{Binding BoxWidth}" Height="28"
-                                                 VerticalContentAlignment="Center"/>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <StackPanel Orientation="Horizontal" Margin="0,4">
-                            <Button Content="{Binding DataContext.TestText, FallbackValue='测试连接',
-                                        RelativeSource={RelativeSource AncestorType=Window}}"
-                                    Width="100" Height="30" Margin="114,0,8,0"
-                                    Command="{Binding TestSingleCommand}"/>
-                            <TextBox Text="{Binding SingleResultText, Mode=OneWay}"
-                                     Foreground="{Binding SingleResultForeground}"
-                                     Width="330" Height="30" IsReadOnly="True"
-                                     VerticalContentAlignment="Center"/>
-                        </StackPanel>
-                        <Button Content="{Binding RestoreText, FallbackValue='恢复缺省'}" Width="100" Height="30"
-                                Margin="114,8,0,0" HorizontalAlignment="Left"
-                                Command="{Binding RestoreSingleCommand}"
-                                Style="{StaticResource FreshCancelButton}"/>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
             <!--多机页-->
             <TabItem Header="{Binding TabMultiText, FallbackValue='多机PLC'}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -80,10 +47,6 @@
                                                  Width="60" Height="28"
                                                  VerticalContentAlignment="Center"
                                                  Margin="4,0,0,0"/>
-                                        <ComboBox ItemsSource="{Binding DataContext.ProtoOptions,
-                                                          RelativeSource={RelativeSource AncestorType=Window}}"
-                                                  SelectedIndex="{Binding ProtoIndex}"
-                                                  Width="80" Height="28" Margin="4,0,0,0"/>
                                         <Button Content="{Binding DataContext.TestText, FallbackValue='测试连接',
                                                     RelativeSource={RelativeSource AncestorType=Window}}"
                                                 Width="70" Height="28" Margin="4,0,0,0"

@@ -1,53 +1,19 @@
 // =========================================================================
-// PlcScenarios：可复用的 PLC/报文 mock 数据（一处改，全用例生效）
+// PlcScenarios：可复用的网关 mock 数据（一处改，全用例生效）
 //
-// 两类数据：
-// ① 单机固化收料：库位 D30040 + 160 产品地址 D3xxxx + 固化秒 D30005 +
-//    进入时间 D30032（含 SeedSingleLoad 一键预置，开箱即扫）。
-// ② 多机网关：6 个接口的标准 JSON（字段按 MesModels 对齐 W68 文档），
-//    拿来就能 PresetString 进 R 区触发全链路。
-//
-// 产品地址算法（老项目原样，勿改）：i=1..160 → "D3" + (i*40+10).ToString("D4")。
+// 6 个接口的标准 JSON（字段按 MesModels 对齐 W68 文档），拿来就能
+// PresetString 进 R 区触发全链路。
+// 历史：原含单机固化收料种子（SeedSingleLoad/ProductAddr 等），已随单机
+// 链路删除（P2.1，git 历史可找回）。
 // =========================================================================
 
 using Newtonsoft.Json;
-using PlcMesBridge.Core.Comms;
 using PlcMesBridge.Core.Mes;
 
 namespace PlcMesBridge.Tests.Mocks;
 
 public static class PlcScenarios
 {
-    /// <summary>第 i 个产品地址（1..160），老项目算法原样。</summary>
-    public static string ProductAddr(int i) => "D3" + (i * 40 + 10).ToString("D4");
-
-    /// <summary>
-    /// 单机装载一键预置：库位 + 产品串 + 固化秒 + 进入时间（当前时间）。
-    /// products 为空表示"空库位读数"场景（全空，由 HandleLoad 逐个读空串）。
-    /// </summary>
-    public static void SeedSingleLoad(
-        SimulatedPlcClient sim, string binId, int curingSeconds = 300,
-        params string[] products)
-    {
-        sim.PresetString("D30040", binId);
-        for (int i = 0; i < products.Length && i < 160; i++)
-            sim.PresetString(ProductAddr(i + 1), products[i]);
-        sim.PresetInt32("D30005", new[] { curingSeconds });
-        var t = DateTime.Now;
-        sim.PresetWords("D30032", new short[]
-        {
-            (short)t.Year, (short)t.Month, (short)t.Day,
-            (short)t.Hour, (short)t.Minute, (short)t.Second,
-        });
-    }
-
-    /// <summary>160 个产品全预置（扫全表性能/统计口径用），idFactory(i)→产品ID。</summary>
-    public static void SeedAllProducts(SimulatedPlcClient sim, Func<int, string> idFactory)
-    {
-        for (int i = 1; i <= 160; i++)
-            sim.PresetString(ProductAddr(i), idFactory(i));
-    }
-
     // ================= 网关 6 接口标准 JSON =================
 
     public static string Api0027Json(string rc = "RC1", string praValue = "300") =>

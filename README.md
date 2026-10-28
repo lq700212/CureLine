@@ -3,8 +3,8 @@
 从 VB 老项目（`PLC_ReadData` 单机固化收料 + `PLC_ReadDataA` 八机通用网关）
 融合重构的 .NET 8 解决方案，含两个可独立部署的 WPF 程序：
 
-* `src/PlcMesBridge` — 主程序：MES 单机/多机网关（可配置切换；Phase 2 演化为
-  程序② CIM 整线过账）
+* `src/PlcMesBridge` — 主程序：MES 多机网关（八机 Modbus TCP 统一底座；
+  Phase 2 演化为程序② CIM 整线过账，单机模式已删）
 * `src/CureStation` — **程序①固化程控**：IO 耦合器（Modbus TCP）30 仓位程控
   骨架——点表"点点鼠标"配置 + 主窗仓位网格 + 配置自愈，Phase 3 接程控
   状态机与单线过账
@@ -31,7 +31,7 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 
 # 4. 模拟联调（无真机；两程序共用同名键 config.ini [setting] Simulate=1）：
 #    - PlcMesBridge：复制 config.sample.ini 到其 bin 的 config/config.ini，
-#      设 Mode=Single/Multi + Simulate=1；也可界面点"运行模式"（先"登录"）切换
+#      设 Simulate=1（多机网关直起即模拟 8 机台跑全流程）
 #    - CureStation：程序①自己的 bin 下 config/config.ini 设 Simulate=1，
 #      启动即 Mock 总线按仓位流转演示（30 卡片 + 周期演示掉线重连）
 ```
@@ -68,16 +68,14 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 
 - 菜单栏"登录"按钮 → 登录窗（两档账号：admin 普通管理，
   dev 最高权限；"记住密码"按账号各记各的 DPAPI 密文，用户名框改谁就跟出谁的）。
-  已登录再点可退出或切换账号；运行模式/设置子项未登录会先提示登录。
+  已登录再点可退出或切换账号；设置子项未登录会先提示登录。
   账号存数据库 users 表（PBKDF2 哈希，无明文），上线前必须改掉初始密码。
-- 菜单栏"运行模式"按钮（登录后可点） → 模式切换窗单机/多机二选一 → 保存：
-  模式变了自动重启生效，没变只提示已保存。
 - 菜单栏"设置"下拉：admin 见"修改密码" + "创建桌面快捷方式"，
   dev 另见"PLC设置"。"修改密码"自己改自己（dev 可下拉代改他人），
   新密码≥6 位。
-  "PLC设置" → PLC 配置窗（三页：单机PLC / 多机PLC /
-  接口地址）：IP/端口/命令地址全界面改，"测试连接"拿表单值直测
-  （不用先保存），"保存并重启"先校验格式、错当场拦，通过后自动重启生效。
+  "PLC设置" → PLC 配置窗（两页：多机PLC / 接口地址）：IP/端口/接口地址
+  全界面改，"测试连接"拿表单值直测（不用先保存），"保存并重启"先校验
+  格式、错当场拦，通过后自动重启生效。
   去现场只点鼠标，不改代码不改 ini。
 - "创建桌面快捷方式"：一键在桌面建 `.lnk`（图标取 exe 内嵌图标，
   已存在不覆盖只提示路径）。exe/任务栏/全部 8 个窗体左上角图标统一为
@@ -87,13 +85,14 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 ## 目录
 
 - `src/PlcMesBridge.Core/` — 共享业务与基础（INI/SQLite/MES/通讯/网关逻辑 +
-  **IO 点表家族** `Comms/IoPointTable*`/`IoBus`/连通测试 + `ViewModels/` 下沉的
-  VM 基建）
+  **IO 点表家族** `Comms/IoPointTable*`/`IoBus`/连通测试 + 真机底座
+  `Comms/ModbusStationClient`（Modbus TCP，地址/打包/分帧集中点）+
+  `ViewModels/` 下沉的 VM 基建）
 - `src/CureStation/` — **程序①固化程控**（30 仓位主窗 + IO 点表配置窗）
 - `src/PlcMesBridge/` — 主程序 WPF 界面（主窗/调试/报警/日志/图片窗），
   图标在 `Assets/`（`app.ico` 程序图标 / `app.png` 高清源备用）
-- `tests/PlcMesBridge.Tests/` — 156 例 xUnit（`Mocks/`：本地桩 MES /
-  标准报文与单机预置 / 静态全局快照恢复 / Fake 对话框两套，加用例直接复用）
+- `tests/PlcMesBridge.Tests/` — 148 例 xUnit（`Mocks/`：本地桩 MES /
+  网关标准报文 / 静态全局快照恢复 / Fake 对话框两套，加用例直接复用）
 - `extern/kaleidoscope/` — 通讯子模块（独立仓库，勿直接改，见 AGENTS.md）
 - `docs/重构设计_20261028.md` — 两程序拆分设计与 Phase 路线
 - `config.sample.ini` — 现场配置样例

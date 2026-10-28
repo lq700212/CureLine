@@ -63,12 +63,6 @@ public sealed class DialogService : IDialogService
         return (true, w.ViewModel.Role, w.ViewModel.UserName);
     }
 
-    public bool ShowModeSwitch()
-    {
-        var w = Prep(new ModeSwitchWindow());
-        return w.ShowDialog() == true && w.ViewModel.ModeChanged;
-    }
-
     public void ShowChangePassword(string currentUser, LoginRole role)
     {
         Prep(new ChangePasswordWindow(currentUser, role)).ShowDialog();

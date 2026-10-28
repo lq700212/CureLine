@@ -2,7 +2,8 @@
 // 连接测试器测试：成功链（模拟工厂）+ 失败链（连不上/不可达）
 //
 // 无真机可测：成功走 SimulatedPlcClient 工厂；失败走 ip=fail 与
-// 真机工厂 +127.0.0.1:1（拒绝 fast，不会卡 3s 超时）。
+// 真机工厂 +127.0.0.1:1（拒绝 fast，不会卡 3s 超时；顺带覆盖
+// ModbusStationClient 连接失败链——connect 拒绝→master false→不抛）。
 // =========================================================================
 
 using PlcMesBridge.Core.Comms;
@@ -43,7 +44,7 @@ public class ConnectionTesterTests : IDisposable
     public async Task RealFactory_Unreachable_False()
     {
         var (ok, msg, _) = await PlcConnectionTester.TestAsync(
-            () => new MelsecPlcClient(false), "127.0.0.1", 1, "D30001", 2000);
+            () => new ModbusStationClient(), "127.0.0.1", 1, "R13001", 2000);
         Assert.False(ok);
         Assert.Contains("连接失败", msg);
     }

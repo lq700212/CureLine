@@ -141,6 +141,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         // 启动装配：读点表 → 兜缺省模板（首次启动直接可演示）→ 总线 Start
         var config = LoadOrDefault();
+        _config = config;   // 记住当前点表（重连按钮复用，勿传 null）
         BuildSlots(config);
         StartBus(config);
         _refreshTimer.Start();
@@ -227,6 +228,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         var saved = _dialogs.ShowPointTable();
         var config = IoPointTableStore.Load() ?? LoadOrDefault();
+        _config = config;   // 点表可能已改，重连按钮要用新表
         BuildSlots(config);
         StartBus(config);
         if (saved)

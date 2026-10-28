@@ -1,19 +1,18 @@
 // =========================================================================
-// RunModeSettings：运行模式切换 + 登录记忆的纯逻辑（供界面 + 测试共用）
+// RunModeSettings：菜单门禁判据 + 登录记忆的纯逻辑（供界面 + 测试共用）
 //
-// 干什么：模式字符串解析/落盘 + 是否需重启判断 + 记住密码的 ini 落盘。
+// 干什么：为"登录/记住密码"提供验证与落盘 + 提供菜单项 gating 的角色判据。
+//   历史：此类曾含 Single/Multi 运行模式切换（ParseMode/SaveMode 等），
+//   已随单机链路删除（P2.1，git 历史可找回），类名沿用免大搬家。
 // 为什么独立成类：WPF 层只做"事件→控件"搬运（项目约定），业务进 Core 可测；
 //   读写走 ini 文件，纯函数方便用临时 ini 做单元测试，不碰现场 config。
 // 怎么改：
 //   - 登录验谁走 UserAccountStore（SQLite users 表 + PBKDF2，本类只做
 //     菜单 gating 用的 IsDev/IsLoggedIn；各档能点什么由 WPF 菜单定）。
-//     预置两档：admin（普通管理：可切模式、可建快捷方式）、dev（最高权限：
-//     另含 PLC 配置入口）；用户名常量留这里，密码以任何形式都不进本类。
+//     预置两档：admin（普通管理：可建快捷方式）、dev（最高权限：另含
+//     PLC 配置入口）；用户名常量留这里，密码以任何形式都不进本类。
 //   - 记住密码跟随账号：每个账号各记各的 DPAPI 密文（RememberToken_<账号>），
 //     另存 SavedUser=最后一次登录名（供登录窗预填）；ini 里永无明文密码。
-//   - 模式缺省 Single（与 AppConfig.Load 一致）；大小写/前后空格不敏感，
-//     非法值一律回退 Single。
-//   - 模式切换重启生效（主窗启动时一次性 InitSingle/InitMulti，不支持热切）。
 // =========================================================================
 
 namespace PlcMesBridge.Core.Infrastructure;
@@ -37,41 +36,8 @@ public static class RunModeSettings
     /// <summary>是否最高权限（含 dev 的菜单项：PLC 配置等，凭此放行）。</summary>
     public static bool IsDev(LoginRole role) => role == LoginRole.Dev;
 
-    /// <summary>是否已登录（含快捷方式/模式切换等 admin 可用项，凭此放行）。</summary>
+    /// <summary>是否已登录（快捷方式等 admin 可用项，凭此放行）。</summary>
     public static bool IsLoggedIn(LoginRole role) => role != LoginRole.None;
-
-    /// <summary>
-    /// 解析配置文本为模式。"Multi"（忽略大小写与空格）→ Multi，其余/空 → Single。
-    /// </summary>
-    public static RunMode ParseMode(string? text)
-    {
-        return string.Equals(text?.Trim(), "Multi", StringComparison.OrdinalIgnoreCase)
-            ? RunMode.Multi : RunMode.Single;
-    }
-
-    /// <summary>模式转配置文本（Single→"Single"，Multi→"Multi"）。</summary>
-    public static string ModeToConfigText(RunMode mode) =>
-        mode == RunMode.Multi ? "Multi" : "Single";
-
-    /// <summary>
-    /// 从 ini 读当前模式（读不到按 IniFile 自愈语义回填 "Single"）。
-    /// </summary>
-    public static RunMode ReadMode(string iniPath) =>
-        ParseMode(IniFile.ReadStr(iniPath, "setting", "Mode", "Single"));
-
-    /// <summary>把模式写入 ini，返回写入的文本（Single/Multi）。</summary>
-    public static string SaveMode(string iniPath, RunMode mode)
-    {
-        string text = ModeToConfigText(mode);
-        IniFile.Write(iniPath, "setting", "Mode", text);
-        return text;
-    }
-
-    /// <summary>
-    /// 是否需要重启生效。纯函数（WPF 调用时传 current: AppConfig.Mode）。
-    /// </summary>
-    public static bool NeedsRestart(RunMode current, RunMode selected) =>
-        current != selected;
 
     // ================= 登录记忆（记住密码，跟随账号，密文） =================
     // 存 config.ini [setting]：每个账号各记各的 DPAPI 密文——

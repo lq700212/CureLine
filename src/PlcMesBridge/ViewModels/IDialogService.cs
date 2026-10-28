@@ -36,9 +36,6 @@ public interface IDialogService
     /// <summary>登录窗。成功返回 (true, 角色, 用户名），取消 (false, None, "")。</summary>
     (bool Ok, LoginRole Role, string User) ShowLogin();
 
-    /// <summary>运行模式切换窗。返回 true 表示切换了模式（调用方重启）。</summary>
-    bool ShowModeSwitch();
-
     /// <summary>修改密码窗（需当前登录人 + 角色，dev 可代改）。</summary>
     void ShowChangePassword(string currentUser, LoginRole role);
 
