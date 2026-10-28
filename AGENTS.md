@@ -91,8 +91,8 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 223/223（P3.1 增 36 例 + P3.2 前半增 17 例 + P3.2 后半增
-   22 例；基线此后只增不减）；禁止交付编译不过/测试不过的代码。
+   `dotnet test` 248/248（P3.1 增 36 例 + P3.2 前半增 17 例 + P3.2 后半增
+   22 例 + V0.0.19 增 25 例；基线此后只增不减）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
 8. **配置样例同步**：新增配置键必须同步改 `config.sample.ini` + `AppConfig`
@@ -146,6 +146,7 @@
 | `src/PlcMesBridge.Core/Curing/WorkOrderStore.cs` | 工单信息 `config/workorder.json`（R/L 双工位+EMP/BC/PT×2，字段名对齐 MES 16 字段）+ 自愈空工单 |
 | `src/PlcMesBridge.Core/Security/OperatorStore.cs` | 程序①四级操作员账号（operators 表 L1~4 + PBKDF2 复用）；**防锁死红线**：最后一个 L4 删/降拒绝 |
 | `src/PlcMesBridge.Core/Curing/SlotCuringMachine.cs` | **仓位状态机**：托盘到位→（门控）→黄灯计时→绿灯放行→离开灭灯；边沿后台直转+1s 心跳 Pump；灯写去重补写/断连恢复对齐/策略热切换三自愈；过账挂点三事件（TrayArrived/CuringStarted/TrayLeft，只发真实边沿） |
+| `src/PlcMesBridge.Core/Curing/SlotLocationCode.cs` | 客户库位编码换算（Date Matrix，10 站×3 层）：架×层↔编码互转（`Encode`/`TryDecode`），主窗卡片标题与后续扫码绑定的同源入口 |
 | **Core 共享（单线过账家族，P3.2 后半新增）** | |
 | `src/PlcMesBridge.Core/Curing/CuringMesOptions.cs` | 过账配置模型（ini `[CuringMes]` 节）：开关/工位/时间单位/进站时机/中途取件/静态参数五件；`NormSide` 规范化（非 L 按 R 兜底） |
 | `src/PlcMesBridge.Core/Curing/CuringMesPoster.cs` | **过账服务**：状态机边沿→MES 报文（进站/出站链/物料上传）；出站被接受→已生产+1；门槛双保险（开关+URL）；全 Task.Run 后台+异常兜底；`UpdateOptions` 热更新；`PostingChanged` 顶栏事件（后台线程触发，UI 须封送） |
@@ -165,7 +166,7 @@
 | `src/PlcMesBridge.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段） |
 | `src/PlcMesBridge.Core/Data/CureRecordStore.cs` | `PLCtable` CRUD + `ComputeStats` 纯统计 |
 | `src/PlcMesBridge.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/PLC 配置模型与校验 |
-| `tests/PlcMesBridge.Tests/` | 223 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
+| `tests/PlcMesBridge.Tests/` | 248 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
 | `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
 
 ## 构建与验证命令
@@ -173,7 +174,7 @@
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build PlcMesBridge.slnx --nologo
-# 全量测试（223/223 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
+# 全量测试（248/248 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
 dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 # 子模块改动后（VS MSBuild，net472，原样沿用上游命令）
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
@@ -211,8 +212,14 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
   改动必同步 `PointTableTests` 的地址断言。
 - `TryEnsureConnected` 建连是同步等待（最多 `TimeoutMs`=3s），会阻塞
   轮询线程一拍——骨架期可接受，P2 提速再改异步。
-- 主窗仓位网格有 10×3 最小下限（`MainViewModel.BuildSlots` 的 `Math.Max`
-  垫底）——点表只配 1 架也铺 30 张卡，属骨架期展示口径勿当 bug 报。
+- **主窗仓位网格（V0.0.19 起）**：① 10×3 最小下限（`BuildSlots` 的
+  `Math.Max` 垫底，常量与 `SlotLocationCode` 同源）——点表只配 1 架也铺
+  30 张卡，属展示口径勿当 bug 报；② 集合**行优先**（先层后架：上层 10 站
+  一排→中层→下层）+ UniformGrid `Columns=RackCount`/`Rows=LevelCount`
+  是布局契约——乱序会"层"错行，改前先看 `MainVm_Slots_RowMajorOrder`
+  用例；③ 卡片主标题=客户库位编码（Date Matrix，`SlotLocationCode`），
+  后续扫码绑定必须走同一换算，禁止另写一套；④ 默认最大化启动 + 卡片无
+  固定宽高（拉伸均分），改布局别把固定 Width/Height 加回去。
 - **状态机语义四键（P3.1 起，P3.1 补丁加第④条，全在 `SlotCuringMachine` 一处）**：
   ① 流程"到位即计时"——托盘 OFF 即回空闲灭灯（中途取件计时作废记日志），
   红灯状态机不写（留异常语义）；② 计时状态**缺省不持久化**——断电/重启后托盘在架

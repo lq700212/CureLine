@@ -31,6 +31,14 @@ public sealed class RackSlotViewModel : ViewModelBase
 
     public string Title => $"架{Rack}-{LevelName(Level)}";
 
+    /// <summary>
+    /// 客户库位编码（Date Matrix 格式，如 A01/J12）——与现场机台实景编排一致，
+    /// 是卡片主标题；后续扫码绑定工序以它为库位主键（换算逻辑收在
+    /// Core 的 SlotLocationCode，界面显示与扫码绑定同源，防口径分叉）。
+    /// Rack/Level 构造后不变，计算属性无需 INPC。
+    /// </summary>
+    public string Code => SlotLocationCode.Encode(Rack, Level);
+
     private static string LevelName(int level) => level switch
     {
         1 => "上层", 2 => "中层", _ => "下层",
@@ -126,6 +134,25 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private readonly object _busLock = new();
 
     public ObservableCollection<RackSlotViewModel> Slots { get; } = new();
+
+    /// <summary>
+    /// 网格列数（每排站数/架数）——主窗 UniformGrid.Columns 绑定它：
+    /// 窗口拉伸（全屏/不同分辨率）时 10 张卡均分一行宽度，与机台"一排 10 站"一致。
+    /// </summary>
+    private int _rackCount = 10;
+    public int RackCount
+    {
+        get => _rackCount;
+        private set => Set(ref _rackCount, value);
+    }
+
+    /// <summary>网格行数（层数）——UniformGrid.Rows 绑定，三排=上中下三层。</summary>
+    private int _levelCount = 3;
+    public int LevelCount
+    {
+        get => _levelCount;
+        private set => Set(ref _levelCount, value);
+    }
 
     private string _connectionText = "未启动";
     public string ConnectionText
@@ -261,19 +288,28 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// <summary>状态机取当前激活策略（每次托盘到位现取——策略窗激活后热切换生效）。</summary>
     private CuringPolicy? GetActivePolicy() => _policyBook?.ResolveActive();
 
-    /// <summary>仓位网格骨架：架×层全组合铺满（占位结构来自点表绑定，缺省 10 架 3 层=30 仓位）。</summary>
+    /// <summary>
+    /// 仓位网格骨架：架×层全组合铺满（占位结构来自点表绑定，缺省 10 架 3 层=30 仓位）。
+    /// 排布口径（与现场机台实景一致）：三排=上中下三层，一排 10 站——集合按
+    /// "行优先"生成（先层后架），UniformGrid（Columns=RackCount/Rows=LevelCount）
+    /// 逐格填充即得三排十站布局；卡片主标题用客户库位编码（SlotLocationCode）。
+    /// 注意：顺序是布局契约，改前先看 MainWindow.xaml 的 UniformGrid 与
+    /// MainVm_Slots_RowMajorOrder 用例——乱序会导致"层"错行显示。
+    /// </summary>
     private void BuildSlots(PointTableConfig config)
     {
-        // 架号/层数列取最大绑定值（点表多大网格多大；没绑定时 10×3 缺省）
-        int racks = Math.Max(10, config.Devices.SelectMany(d => d.Bindings)
-            .Where(b => b.Rack > 0).Select(b => b.Rack).DefaultIfEmpty(10).Max());
-        int levels = Math.Max(3, config.Devices.SelectMany(d => d.Bindings)
-            .Where(b => b.Level > 0).Select(b => b.Level).DefaultIfEmpty(3).Max());
+        // 架号/层数列取最大绑定值（点表多大网格多大；没绑定时按客户编码表 10×3 缺省）
+        int racks = Math.Max(SlotLocationCode.RacksPerRow, config.Devices.SelectMany(d => d.Bindings)
+            .Where(b => b.Rack > 0).Select(b => b.Rack).DefaultIfEmpty(SlotLocationCode.RacksPerRow).Max());
+        int levels = Math.Max(SlotLocationCode.Levels, config.Devices.SelectMany(d => d.Bindings)
+            .Where(b => b.Level > 0).Select(b => b.Level).DefaultIfEmpty(SlotLocationCode.Levels).Max());
 
         Slots.Clear();
-        for (int rack = 1; rack <= racks; rack++)
         for (int level = 1; level <= levels; level++)
+        for (int rack = 1; rack <= racks; rack++)
             Slots.Add(new RackSlotViewModel { Rack = rack, Level = level });
+        RackCount = racks;
+        LevelCount = levels;
     }
 
     private void StartBus(PointTableConfig? config)

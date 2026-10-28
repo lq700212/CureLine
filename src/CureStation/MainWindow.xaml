@@ -6,36 +6,85 @@
         xmlns:vm="clr-namespace:CureStation.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel, IsDesignTimeCreatable=False}"
-        Title="固化程控 - 固化线单机" Height="760" Width="1200"
+        Title="固化程控 - 固化线单机" Height="760" Width="1280"
+        MinWidth="1200" MinHeight="600"
+        WindowState="Maximized"
         WindowStartupLocation="CenterScreen"
         Icon="Assets/app.ico"
         FontSize="13">
+    <!--
+      布局口径（与现场机台实景一致）：
+      - 30 个固化架 = 三排（上中下三层）× 一排 10 站，UniformGrid 列/行绑 VM 的
+        RackCount/LevelCount（行优先集合逐格填充，见 MainViewModel.BuildSlots）；
+      - 屏幕适配：默认最大化启动（WindowState=Maximized），网格随窗口拉伸均分
+        （卡片不设固定宽高，大屏铺满、小屏压缩，MinWidth/MinHeight 兜极小屏），
+        卡片内容垂直居中，行高/列宽变化时版式稳定。
+    -->
     <Window.Resources>
-        <!--仓位卡片三色示警：空闲=灰白、红/黄/绿对应三色灯业务语义 -->
+        <!--仓位卡片：库位编码主标题 + 状态底色（空闲=灰白、红/黄/绿对应三色灯业务语义）。
+            卡片四行：编码+架层 / 状态 / 灯点+灯色+托盘 / 光栅（小字），均给 FallbackValue。-->
         <DataTemplate x:Key="SlotCard">
-            <Border Background="#FAFAFA" BorderBrush="#DDDDDD" BorderThickness="1"
-                    CornerRadius="4" Margin="3" Padding="6,4" Width="232">
-                <StackPanel>
+            <Border BorderBrush="#DDDDDD" BorderThickness="1" CornerRadius="4"
+                    Margin="3" Padding="8,6">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="#FAFAFA"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CardState, FallbackValue=Idle}" Value="Red">
+                                <Setter Property="Background" Value="#FDECEA"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding CardState, FallbackValue=Idle}" Value="Yellow">
+                                <Setter Property="Background" Value="#FFF8E1"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding CardState, FallbackValue=Idle}" Value="Green">
+                                <Setter Property="Background" Value="#E8F5E9"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <StackPanel VerticalAlignment="Center">
+                    <!-- 行1：库位编码（主标题）+ 架层（辅助定位） -->
                     <Grid>
+                        <TextBlock Text="{Binding Code, FallbackValue=A01}"
+                                   FontSize="18" FontWeight="Bold" Foreground="#1F4E79"/>
                         <TextBlock Text="{Binding Title, FallbackValue=架1-上层}"
-                                   FontWeight="Bold" Foreground="#1F4E79"/>
-                        <TextBlock Text="{Binding SlotStateText, FallbackValue=空闲}"
-                                   HorizontalAlignment="Right" Foreground="#555"/>
+                                   HorizontalAlignment="Right" FontSize="11" VerticalAlignment="Center"
+                                   Foreground="#888"/>
                     </Grid>
-                    <Separator Margin="0,4"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding LampText, FallbackValue=灭}"
-                                   FontSize="15" FontWeight="Bold" Foreground="#C8102E"/>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <TextBlock Text="{Binding TrayText, FallbackValue=—}" Margin="0,0,8,0" Foreground="#0A7A2F"/>
-                            <TextBlock Text="{Binding GrillText, FallbackValue=—}" Foreground="#1F4E79"/>
+                    <!-- 行2：仓位状态（状态机口径优先，见 RackSlotViewModel.Refresh） -->
+                    <TextBlock Text="{Binding SlotStateText, FallbackValue=空闲}"
+                               FontSize="14" FontWeight="Bold" Foreground="#333" Margin="0,7,0,0"/>
+                    <!-- 行3：三色灯状态点 + 灯色文本 + 托盘在位 -->
+                    <Grid Margin="0,7,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="12" Height="12" VerticalAlignment="Center" Margin="0,0,6,0">
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Setter Property="Fill" Value="#BDBDBD"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding LampText, FallbackValue=灭}" Value="红灯">
+                                                <Setter Property="Fill" Value="#D9534F"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding LampText, FallbackValue=灭}" Value="黄灯">
+                                                <Setter Property="Fill" Value="#F0AD4E"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding LampText, FallbackValue=灭}" Value="绿灯">
+                                                <Setter Property="Fill" Value="#5CB85C"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
+                            <TextBlock Text="{Binding LampText, FallbackValue=灭}"
+                                       FontSize="12" VerticalAlignment="Center" Foreground="#333"/>
                         </StackPanel>
+                        <TextBlock Text="{Binding TrayText, FallbackValue=—}"
+                                   HorizontalAlignment="Right" FontSize="12" VerticalAlignment="Center"
+                                   Foreground="#0A7A2F"/>
                     </Grid>
+                    <!-- 行4：光栅左右检测（辅助信息，小字弱化） -->
+                    <TextBlock Text="{Binding GrillText, FallbackValue=—}"
+                               FontSize="11" Foreground="#999" Margin="0,5,0,0"/>
                 </StackPanel>
             </Border>
         </DataTemplate>
@@ -97,16 +146,16 @@
                         Click="OnExitClick"/>
             </Grid>
         </Border>
-        <!-- 主内容：仓位网格（10×3，缺省模板布局） -->
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8,4,8,8">
-            <ItemsControl ItemsSource="{Binding Slots, FallbackValue={x:Null}}"
-                          ItemTemplate="{StaticResource SlotCard}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <UniformGrid Columns="4"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-            </ItemsControl>
-        </ScrollViewer>
+        <!-- 主内容：仓位网格（三排十站，随窗口拉伸均分——无固定卡宽，全屏铺满） -->
+        <ItemsControl ItemsSource="{Binding Slots, FallbackValue={x:Null}}"
+                      ItemTemplate="{StaticResource SlotCard}"
+                      Margin="8,4,8,8" VerticalAlignment="Stretch">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Columns="{Binding RackCount, FallbackValue=10}"
+                                 Rows="{Binding LevelCount, FallbackValue=3}"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+        </ItemsControl>
     </DockPanel>
 </Window>

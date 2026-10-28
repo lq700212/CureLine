@@ -37,6 +37,37 @@ public class CureStationViewModelTests
     }
 
     [Fact]
+    public void MainVm_Slots_RowMajorOrder_WithCustomerLocationCodes()
+    {
+        // 布局契约：三排=上中下三层、一排 10 站——集合行优先（先层后架），
+        // 主窗 UniformGrid（Columns=RackCount/Rows=LevelCount）逐格填充即得
+        // 机台实景；乱序会导致"层"错行显示。卡片主标题=客户库位编码（Date Matrix）。
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+        var fake = new FakeCureDialogService();
+        using var vm = new CureStation.ViewModels.MainViewModel(fake);
+
+        Assert.Equal(10, vm.RackCount);
+        Assert.Equal(3, vm.LevelCount);
+        // 行优先顺序：第一排=上层 10 站（架 1~10），第二排=中层……
+        Assert.Equal(1, vm.Slots[0].Rack);
+        Assert.Equal(1, vm.Slots[0].Level);
+        Assert.Equal(2, vm.Slots[1].Rack);
+        Assert.Equal(1, vm.Slots[1].Level);
+        Assert.Equal(10, vm.Slots[9].Rack);
+        Assert.Equal(1, vm.Slots[9].Level);
+        Assert.Equal(1, vm.Slots[10].Rack);
+        Assert.Equal(2, vm.Slots[10].Level);
+        Assert.Equal(10, vm.Slots[29].Rack);
+        Assert.Equal(3, vm.Slots[29].Level);
+        // 库位编码对照客户表首末卡（A01=架1上层，J12=架10下层）
+        Assert.Equal("A01", vm.Slots[0].Code);
+        Assert.Equal("B02", vm.Slots[1].Code);
+        Assert.Equal("J12", vm.Slots[29].Code);
+    }
+
+    [Fact]
     public void MainVm_EmptyPointTable_SelfHealsWithDefaultTemplate()
     {
         using var scope = new TestScope();
