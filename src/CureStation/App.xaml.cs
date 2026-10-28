@@ -31,6 +31,10 @@ public partial class App : Application
         new SqliteHelper(AppPaths.DatabaseFile).EnsureDatabase();
         OperatorStore.Default.EnsureSeeded("123456");
 
+        // 启动配置（P3.2 后半）：读 config.ini——语言 + [MES] 6 接口 URL（过账用）
+        // + MES 参数记忆（mes_params.json，静态参数的回退源）。ini 缺键自动回填。
+        AppConfig.Load();
+
         // 全局异常兜底：骨架期避免现场闪退无任何提示（后续接 LocalLogService）
         DispatcherUnhandledException += (_, args) =>
         {

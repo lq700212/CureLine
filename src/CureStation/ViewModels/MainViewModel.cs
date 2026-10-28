@@ -163,13 +163,23 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// <summary>是否有操作员在线（未登录时各功能入口一律拦下）。</summary>
     public bool IsLoggedIn => _currentLevel.HasValue;
 
+    /// <summary>单线过账状态（顶栏展示；过账服务后台线程回调，经 UiInvoke 封送）。</summary>
+    private string _postingText = "过账：—";
+    public string PostingText
+    {
+        get => _postingText;
+        private set => Set(ref _postingText, value);
+    }
+
     private PointTableConfig? _config;
     private IPointTableBus? _bus;
     private SlotCuringMachine? _machine;   // 仓位状态机（与 VM 同生命周期，总线可换不丢流程）
     private CuringPolicyBook? _policyBook; // 工艺策略库（策略窗保存后经 LoadPolicyBook 重读）
+    private CuringMesPoster? _poster;      // 单线过账服务（P3.2 后半；配置热更新不换实例）
 
     public RelayCommand OpenPointTableCommand { get; }
     public RelayCommand OpenCuringPolicyCommand { get; }
+    public RelayCommand OpenPostConfigCommand { get; }
     public RelayCommand ReconnectCommand { get; }
     public RelayCommand LoginCommand { get; }
     public RelayCommand OpenWorkOrderCommand { get; }
@@ -181,6 +191,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         OpenPointTableCommand = new RelayCommand(OpenPointTable);
         OpenCuringPolicyCommand = new RelayCommand(OpenCuringPolicy);
+        OpenPostConfigCommand = new RelayCommand(OpenPostConfig);
         ReconnectCommand = new RelayCommand(() => StartBus(_config));
         LoginCommand = new RelayCommand(Login);
         OpenWorkOrderCommand = new RelayCommand(OpenWorkOrder);
@@ -190,6 +201,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             Interval = TimeSpan.FromMilliseconds(500),
         };
         _refreshTimer.Tick += (_, _) => RefreshSlots();
+
+        // 单线过账装配（P3.2 后半）：读 [CuringMes] 配置 → 建过账服务 →
+        // 顶栏状态随 PostingChanged 刷新（后台线程回调，UiInvoke 封送）。
+        var postOptions = CuringMesOptions.Load();
+        _poster = new CuringMesPoster(postOptions,
+            () => WorkOrderStore.Load(), log: m => LocalLogService.Write(m));
+        _poster.PostingChanged += t => UiInvoke(() => PostingText = t);
+        CuringMesPosterHolder.Default = _poster; // 工单窗上传动作的全局访问点
+        PostingText = postOptions.Enabled
+            ? $"过账：已启用（{CuringMesOptions.NormSide(postOptions.Side)} 工位）"
+            : "过账：未启用";
 
         // 启动装配：读点表 + 工艺策略（都自愈）→ 总线 Start + 状态机
         var config = LoadOrDefault();
@@ -297,8 +319,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             // 状态机：首次创建（带总线），重连只换通道（Attach，流程状态不丢）。
             // 顺序刻意"先建/换妥新通道、再停旧总线"——状态机中途不会摸到已释放对象。
             if (_machine == null)
+            {
                 _machine = new SlotCuringMachine(bus, GetActivePolicy,
                     log: m => LocalLogService.Write(m));
+                // 过账挂点（P3.2 后半）：状态机三事件 → 过账服务（只在创建时订阅
+                // 一次——重连 Attach 换通道不重复订阅）。事件在状态机锁内触发，
+                // Poster 方法内部 Task.Run 立即返回，不重入不阻塞。
+                _machine.TrayArrived += (rack, level) => _poster?.OnTrayArrived(rack, level);
+                _machine.CuringStarted += (rack, level) => _poster?.OnCuringStarted(rack, level);
+                _machine.TrayLeft += (rack, level, phase, sec) =>
+                    _poster?.OnTrayLeft(rack, level, phase, sec);
+            }
             else
                 _machine.Attach(bus);
             _machine.AlignFromSnapshot(); // 首启/点表变更后按当前快照对齐
@@ -398,6 +429,26 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         if (!Gate(OperatorLevel.Level4, "权限管理"))
             return;
         _dialogs.ShowOperators();
+    }
+
+    /// <summary>
+    /// 过账配置窗：L4 专属。保存成功后热更新过账服务配置（不重启即生效）
+    /// 并刷新顶栏状态。
+    /// </summary>
+    private void OpenPostConfig()
+    {
+        if (!Gate(OperatorLevel.Level4, "过账配置"))
+            return;
+        var saved = _dialogs.ShowMesPostConfig();
+        if (saved)
+        {
+            var options = CuringMesOptions.Load();
+            _poster?.UpdateOptions(options);
+            PostingText = options.Enabled
+                ? $"过账：已启用（{CuringMesOptions.NormSide(options.Side)} 工位）"
+                : "过账：未启用";
+            _dialogs.ShowMessage("过账配置已保存并生效。", "保存成功");
+        }
     }
 
     public void Dispose()

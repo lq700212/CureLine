@@ -430,4 +430,72 @@ public class SlotCuringMachineTests
         public Boxed(T value) => Value = value;
         public T Value { get; set; }
     }
+
+    // ---------- 过账挂点事件（P3.2 后半：真实边沿发 / 重启对齐不发） ----------
+
+    [Fact]
+    public void TrayArrivedEvent_FiresOnRealEdge_NotOnRestartAlign()
+    {
+        var (bus, machine, _) = Make();
+        var arrived = new List<(int Rack, int Level)>();
+        machine.TrayArrived += (r, l) => arrived.Add((r, l));
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true); // 真实边沿
+            Assert.Single(arrived);
+            Assert.Equal((1, 1), arrived[0]);
+
+            // 重启对齐：托盘在架但状态机空闲（模拟断电重启）——不发进站
+            var bus2 = new ScriptedPointBus();
+            bus2.SetSnapshotSilently(Tray(2, 2), true);
+            var machine2 = new SlotCuringMachine(bus2, () => (CuringPolicy?)null,
+                clock: () => _now, log: _ => { });
+            machine2.TrayArrived += (r, l) => arrived.Add((r, l));
+            using (machine2)
+            {
+                machine2.AlignFromSnapshot();
+                Assert.Single(arrived); // 对齐不发——防 MES 重复过账
+            }
+        }
+    }
+
+    [Fact]
+    public void CuringStartedEvent_FiresOnGateRelease()
+    {
+        var (bus, machine, _) = Make(new CuringPolicy { Name = "T", GrillGate = true });
+        var started = new List<(int Rack, int Level)>();
+        machine.CuringStarted += (r, l) => started.Add((r, l));
+        using (machine)
+        {
+            bus.SetInput(GrillL(1, 1), true);  // 先占住光栅（人手在架内）
+            bus.SetInput(Tray(1, 1), true);    // 到位 → 等放行
+            Assert.Empty(started);             // 还没开计时
+            bus.SetInput(GrillL(1, 1), false); // 光栅让空 → 开计时
+            Assert.Single(started);
+        }
+    }
+
+    [Fact]
+    public void TrayLeftEvent_CarriesPhaseAndCuredSeconds()
+    {
+        var (bus, machine, _) = Make(new CuringPolicy { Name = "T", GlobalMinutes = 60 });
+        var lefts = new List<(int Rack, int Level, SlotPhase Phase, int Seconds)>();
+        machine.TrayLeft += (r, l, p, s) => lefts.Add((r, l, p, s));
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            _now += TimeSpan.FromMinutes(30);
+            bus.SetInput(Tray(1, 1), false); // 计时中取件：实际经过 30 分钟
+            Assert.Single(lefts);
+            Assert.Equal((1, 1, SlotPhase.Curing, 1800), lefts[0]);
+
+            // 到点放行后取件：带计划时长（60 分钟 = 3600 秒）
+            bus.SetInput(Tray(2, 1), true);
+            _now += TimeSpan.FromMinutes(60);
+            machine.Pump(_now);              // 到点放行
+            bus.SetInput(Tray(2, 1), false); // 取件
+            Assert.Equal(2, lefts.Count);
+            Assert.Equal((2, 1, SlotPhase.Done, 3600), lefts[1]);
+        }
+    }
 }

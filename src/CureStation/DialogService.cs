@@ -10,6 +10,7 @@
 // =========================================================================
 
 using System.Windows;
+using PlcMesBridge.Core.Curing;
 using PlcMesBridge.Core.Security;
 
 namespace CureStation.ViewModels;
@@ -42,6 +43,9 @@ public interface IDialogService
     /// 返回 true 表示保存了工单。
     /// </summary>
     bool ShowWorkOrder(OperatorLevel? currentLevel);
+
+    /// <summary>打开过账配置窗（模态）。返回 true 表示保存了配置（调用方热更新过账服务）。</summary>
+    bool ShowMesPostConfig();
 
     /// <summary>程序化关闭主进程（退出）。</summary>
     void Shutdown();
@@ -105,13 +109,36 @@ public sealed class DialogService : IDialogService
     public bool ShowWorkOrder(OperatorLevel? currentLevel)
     {
         // 生产装配：工单窗（门禁在 VM——级别不够的编辑区禁用）。
+        // 物料上传动作接单线过账服务（Poster 现读盘上工单发 API0032）。
         var win = new WorkOrderWindow
         {
             Owner = Application.Current?.MainWindow,
-            DataContext = new WorkOrderViewModel(new DialogService(), currentLevel),
+            DataContext = new WorkOrderViewModel(new DialogService(), currentLevel,
+                uploadMaterial: side => CuringMesPosterHolder.Default?.UploadMaterial(side)),
+        };
+        return win.ShowDialog() == true;
+    }
+
+    public bool ShowMesPostConfig()
+    {
+        // 生产装配：过账配置窗（L4 门禁在主窗；VM 在服务里 new，测试用 Fake 桩）。
+        var win = new MesPostConfigWindow
+        {
+            Owner = Application.Current?.MainWindow,
+            DataContext = new MesPostConfigViewModel(new DialogService()),
         };
         return win.ShowDialog() == true;
     }
 
     public void Shutdown() => Application.Current?.Shutdown();
+}
+
+/// <summary>
+/// 过账服务的全局访问点（工单窗上传动作用）：MainViewModel 装配时赋值。
+/// 静态桥接是无奈之举——工单窗 VM 在 DialogService 里 new，构造链拿不到
+/// 主窗的 Poster 实例；与"对话框接口不下沉"同理，桥接点收在程序①内。
+/// </summary>
+public static class CuringMesPosterHolder
+{
+    public static CuringMesPoster? Default { get; set; }
 }

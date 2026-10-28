@@ -2,6 +2,60 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.18（2026-10-28，P3.2 后半：单线过账全配置化）
+
+背景：程序①固化程控接 MES 上报（复刻老项目 `PLC_ReadData` 单机固化收料的
+"装载/卸载/资料获取"命令字链路）。**CIM W68 终版未定 → 全部不确定项做成
+可配置 + 界面化**（用户口径：现场"点点鼠标，配置下就结束"，代码零改动）。
+
+- Core 新增过账配置模型（`Curing/CuringMesOptions.cs`）：`config.ini [CuringMes]`
+  节——总开关 Enabled（缺省 0=关）/工位 Side（R/L）/固化时间单位 TimeUnit
+  （Seconds=老项目口径/Minutes）/进站时机 PostInAt（Arrive=托盘到位/Start=
+  开计时）/中途取件口径 PostAbortOut（缺省 1=老项目 Case3 照常传出站）+
+  静态参数五件（MAC_NO/MAC_LOC_NO/PLANT/PRA_CODE/CHECK_RESULT，留空回退
+  `mes_params.json` 记忆值）；缺键回填缺省（IniFile 自愈同款）。
+- Core 新增过账服务（`Curing/CuringMesPoster.cs`）：状态机边沿 → MES 报文。
+  * **触发映射**（老项目命令字 → IO 边沿）：托盘到位=进站（API0030 ACTION=I，
+    老项目"装载"）；托盘离开=出站链（先 API0027 固化时间——外层数组、
+    PRA_Value 按单位配置，后 API0030 ACTION=O，老项目顺序）；出站被 MES
+    接受（STATUS=1）→ 对应工位"已生产数量"+1 落盘（0027 失败只报警不挡
+    累计——出站才是过账完成标志）。
+  * **WaitingGate 离开补出站**：Arrive 口径下进站已发，固化 0 秒补出站
+    （有进必有出）；Start 口径没发进站则出站也不发（自洽）。
+  * **发送门槛双保险**：总开关开 且 接口 URL 非空 才发——现场没配 MES 不
+    产生网络请求；失败只记 MES 日志 + 主窗顶栏状态文本（**不弹窗不重传**
+    ——老项目写 PLC 报警位+弹窗，新项目点表只有三色灯，差异已登记）。
+  * **线程模型**：四入口全 Task.Run 后台 + 最外层 try-catch 兜底（状态机在
+    _sync 锁内调本类方法，方法体只投递不等待，绝不阻塞程控——铁律 2）。
+  * **热更新**：`UpdateOptions` Volatile.Write 换引用——配置窗保存即生效，
+    不重启不重建不重订阅。
+  * **BC_NO=工单批次物料条码**（批次级过账）：IO 耦合器方案无字符串寄存器
+    读产品 ID 通道，板级上报走程序②整线网关（架构差异已登记）。
+- `SlotCuringMachine` 挂三事件（TrayArrived/CuringStarted/TrayLeft，带相位
+  与已固化秒数）：**只发"真实边沿"**——重启对齐（AlignFromSnapshot）不发，
+  防 MES 重复过账；事件在 _sync 锁内触发，**红线=处理器禁止同步回调状态机**
+  （Poster 内部 Task.Run 立即返回）。
+- CureStation 装配：App 启动 `AppConfig.Load()`（[MES] URL + 参数记忆）；
+  主窗建 Poster + 订阅状态机事件（创建处一次，重连 Attach 不重复订阅）+
+  顶栏过账状态文本 + "过账配置"按钮（L4 门禁，保存后热更新 + 顶栏刷新）。
+- 新增过账配置窗（`MesPostConfigWindow`，L4）：开关/工位/单位/时机/中途取件/
+  静态参数五件/三接口 URL 一窗全改；URL 格式校验（http/https）→ 写 ini →
+  MesConfig 本进程立即生效；右列口径说明（现场人员看得懂）。
+- 工单窗上传接线（API0032 物料上传，对照 HMI"批次物料上报"）：R/L 各一
+  按钮，**先保存工单再后台提交**（把刚录条码落盘，过账现读盘上工单）；
+  按钮可用性=过账服务已装配，使能校验 Poster 里再查一道（双保险防绕过）；
+  **上传按按钮工位取槽**（不走全局配置 Side——自动进/出站才用配置工位）。
+- `config.sample.ini` 加 `[CuringMes]` 节注释样例（铁律 8）。
+- 测试基线 201 → 223（+22：`CuringMesPosterTests` 13 例——进站报文/Start
+  时机/空途程跳过/出站链+累计/分钟换算/MES 拒绝不累计/WaitingGate 补出站/
+  中途取件开关/Side=L/开关关/URL 空/物料上传+使能关/PostingChanged；
+  `SlotCuringMachineTests` +3——三事件真实边沿发/对齐不发/门控放行触发/
+  离开带相位与秒数；`CureStationViewModelTests` +6——工单上传先保存再触发/
+  无服务按钮禁用/过账配置往返与 URL 校验/主窗过账配置门禁与热更新）。
+- 验证：构建 0 警告 0 错误，测试 223/223；GUI 冒烟通过（Simulate=1 起
+  CureStation.exe：三 json 自愈落盘 + Mock 流转触发状态机计时/取件日志 +
+  出站链过账门槛日志"总开关未启用"——状态机→Poster→门槛全链路真进程打通）。
+
 ## V0.0.17（2026-10-28，P3.2 前半：四级权限 + 登录 + 工单信息页）
 
 背景：P3.2 拆两半——工单页/权限页不依赖真机先做；单线过账（复用 MES 层

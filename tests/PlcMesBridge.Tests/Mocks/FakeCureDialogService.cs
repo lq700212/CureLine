@@ -57,5 +57,14 @@ public class FakeCureDialogService : CureStation.ViewModels.IDialogService
         return WorkOrderResult;
     }
 
+    /// <summary>ShowMesPostConfig 的桩返回值（true=保存成功）。</summary>
+    public bool MesPostConfigResult { get; set; }
+
+    public bool ShowMesPostConfig()
+    {
+        Calls.Add("ShowMesPostConfig");
+        return MesPostConfigResult;
+    }
+
     public void Shutdown() => Calls.Add("Shutdown");
 }

@@ -6,6 +6,7 @@
 using PlcMesBridge.Core.Comms;
 using PlcMesBridge.Core.Curing;
 using PlcMesBridge.Core.Infrastructure;
+using PlcMesBridge.Core.Mes;
 using PlcMesBridge.Core.Security;
 using PlcMesBridge.Tests.Mocks;
 using Xunit;
@@ -485,5 +486,126 @@ public class CureStationViewModelTests
 
         Assert.Contains(fake.Calls, c => c.Contains("改密码成功"));
         Assert.Equal(OperatorLevel.Level4, store.Verify("admin", "new-pwd-9"));
+    }
+
+    // ---------- 单线过账（P3.2 后半） ----------
+
+    [Fact]
+    public void WorkOrderVm_UploadMaterial_SavesFirstThenTriggers()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        string? sideSeen = null;
+        WorkOrderBook? diskAtCallback = null; // 回调触发那一刻的盘上工单
+        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorLevel.Level4,
+            uploadMaterial: s =>
+            {
+                sideSeen = s;
+                diskAtCallback = WorkOrderStore.Load();
+            });
+
+        vm.EditBcNo = "BC-NEW-01";      // 刚录的条码（未保存）
+        vm.EditUploadEnabled = true;
+        vm.UploadRMaterialCommand.Execute(null);
+
+        Assert.Equal("R", sideSeen);
+        Assert.NotNull(diskAtCallback);                       // 回调触发时盘上已有工单
+        Assert.Equal("BC-NEW-01", diskAtCallback!.BcNo);      // 先保存（刚录条码已落盘）再上传
+        Assert.False(vm.CloseDialog);                          // 上传不关窗（与保存按钮区分）
+        Assert.Contains("已提交", vm.UploadStatusText);
+    }
+
+    [Fact]
+    public void WorkOrderVm_NoUploadService_ButtonDisabled()
+    {
+        var fake = new FakeCureDialogService();
+        // 不传 uploadMaterial（=过账服务未装配）→ 按钮禁用，点了也不炸
+        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorLevel.Level4);
+
+        Assert.False(vm.CanUpload);
+        vm.UploadRMaterialCommand.Execute(null); // 防御：直接执行也不抛
+        Assert.Equal("", vm.UploadStatusText);
+    }
+
+    [Fact]
+    public void MesPostConfigVm_Save_RoundTrip_WritesIniAndApplies()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.MesPostConfigViewModel(fake);
+
+        vm.EditEnabled = true;
+        vm.EditSide = "L";
+        vm.EditTimeUnitIndex = 1;    // Minutes
+        vm.EditInAtIndex = 1;        // Start
+        vm.EditPostAbortOut = false;
+        vm.EditMacNo = "MAC-01";
+        vm.EditPlant = "P1";
+        vm.EditUrl27 = "http://10.0.0.1/api0027/";
+        vm.EditUrl30 = "http://10.0.0.1/api0030/";
+        vm.EditUrl32 = "http://10.0.0.1/api0032/";
+        vm.SaveCommand.Execute(null);
+
+        Assert.True(vm.CloseDialog);
+        var o = CuringMesOptions.Load(); // ini 往返
+        Assert.True(o.Enabled);
+        Assert.Equal("L", o.Side);
+        Assert.Equal(CuringTimeUnit.Minutes, o.TimeUnit);
+        Assert.Equal(PostInAt.Start, o.InAt);
+        Assert.False(o.PostAbortOut);
+        Assert.Equal("MAC-01", o.MacNo);
+        Assert.Equal("P1", o.Plant);
+        // URL 落 [MES] 节（与主程序同键）+ 本进程 MesConfig 立即生效
+        Assert.Equal("http://10.0.0.1/api0027/",
+            IniFile.ReadStr(AppPaths.ConfigIni, "MES", "Url_API0027", ""));
+        Assert.Equal("http://10.0.0.1/api0032/", MesConfig.UrlApi0032);
+    }
+
+    [Fact]
+    public void MesPostConfigVm_BadUrl_BlocksSave()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.MesPostConfigViewModel(fake);
+        vm.EditUrl30 = "ftp://not-http"; // 非 http/https → 校验拦下
+
+        vm.SaveCommand.Execute(null);
+
+        Assert.False(vm.CloseDialog);
+        Assert.Contains(fake.Calls, c => c.Contains("URL 校验"));
+    }
+
+    [Fact]
+    public void MainVm_OpenPostConfig_GateAndHotUpdate()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+        var fake = new FakeCureDialogService();
+        using var vm = new CureStation.ViewModels.MainViewModel(fake);
+        Assert.Equal("过账：未启用", vm.PostingText); // 缺省关
+
+        // 未登录 → 拦
+        vm.OpenPostConfigCommand.Execute(null);
+        Assert.DoesNotContain(fake.Calls, c => c == "ShowMesPostConfig");
+
+        // L1 → 拦（过账配置 L4 专属）
+        fake.LoginResult = ("op1", OperatorLevel.Level1);
+        vm.LoginCommand.Execute(null);
+        vm.OpenPostConfigCommand.Execute(null);
+        Assert.DoesNotContain(fake.Calls, c => c == "ShowMesPostConfig");
+
+        // L4 → 放行；ini 预置 Enabled=1（模拟现场保存过）→ 保存成功后重读配置
+        // 热更新过账服务 + 顶栏状态刷新（不重启）
+        fake.LoginResult = ("admin", OperatorLevel.Level4);
+        vm.LoginCommand.Execute(null);
+        IniFile.Write(AppPaths.ConfigIni, "CuringMes", "Enabled", "1");
+        fake.MesPostConfigResult = true;
+        vm.OpenPostConfigCommand.Execute(null);
+        Assert.Contains(fake.Calls, c => c == "ShowMesPostConfig");
+        Assert.Contains("已启用", vm.PostingText);
     }
 }

@@ -63,14 +63,18 @@
   （`ModbusStationClient`，地址/打包/分帧集中一处）+ 配置模型收敛
   （删 `RunMode`/`[SinglePLC]`/`PLCAscii`）。**P2.2 待做**：6 接口迁移与
   整线联调（待 D/R 终版地址 + CIM W68 终版）。
-- **P3 固化程控（进行中，P3.1 完成 + P3.2 前半完成）**：**P3.1=仓位状态机 +
+- **P3 固化程控（进行中，P3.1 完成 + P3.2 完成）**：**P3.1=仓位状态机 +
   工艺策略**（`Core/Curing/` 三件套 + `CuringStateStore` 断电续算开关；工艺
   策略窗 + 主窗接线）。**P3.2 前半=四级权限 + 登录 + 工单信息页（已完成）**：
   `Security/OperatorStore`（operators 表四级 L1~4 + 防锁死）+ 登录窗 +
   工单窗（R/L 双工位，编辑区按级别禁用）+ 权限管理窗 + 主窗 Gate 统一门禁
-  （工单 L1/策略 L3/点表·权限 L4）。**P3.2 后半待做**：单线过账（复用 MES 层
-  与 16 字段参数记忆，工单字段名已对齐 RC_NO/PT_NO/EMP_NO/BC_NO；物料上传
-  使能动作在此接线；等 CIM W68 终版）。
+  （工单 L1/策略 L3/点表·权限 L4）。**P3.2 后半=单线过账（已完成 2026-10-28，
+  全配置化）**：`CuringMesOptions`（[CuringMes] 节）+ `CuringMesPoster`
+  （托盘到位=进站 API0030 I / 托盘离开=固化时间 API0027+出站 API0030 O /
+  工单窗 API0032 物料上传；出站被接受→已生产+1）+ 状态机三事件挂点 +
+  过账配置窗（L4，保存即热更新）+ 顶栏过账状态。**待现场校准（W68 终版
+  到位后配置窗改 URL/口径即可，代码零改动）**：三接口 URL、时间单位、
+  进站时机、静态参数实值。
 
 ## 铁律（违反即返工）
 
@@ -87,8 +91,8 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 201/201（P3.1 增 36 例 + P3.2 前半增 17 例；基线此后只增不减）；
-   禁止交付编译不过/测试不过的代码。
+   `dotnet test` 223/223（P3.1 增 36 例 + P3.2 前半增 17 例 + P3.2 后半增
+   22 例；基线此后只增不减）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
 8. **配置样例同步**：新增配置键必须同步改 `config.sample.ini` + `AppConfig`
@@ -141,7 +145,12 @@
 | `src/PlcMesBridge.Core/Curing/CuringStateStore.cs` | `config/curingstate.json` 计时状态持久化（`PersistMinutes` 开关的落盘件；运行时数据非配置，删了即回退重计） |
 | `src/PlcMesBridge.Core/Curing/WorkOrderStore.cs` | 工单信息 `config/workorder.json`（R/L 双工位+EMP/BC/PT×2，字段名对齐 MES 16 字段）+ 自愈空工单 |
 | `src/PlcMesBridge.Core/Security/OperatorStore.cs` | 程序①四级操作员账号（operators 表 L1~4 + PBKDF2 复用）；**防锁死红线**：最后一个 L4 删/降拒绝 |
-| `src/PlcMesBridge.Core/Curing/SlotCuringMachine.cs` | **仓位状态机**：托盘到位→（门控）→黄灯计时→绿灯放行→离开灭灯；边沿后台直转+1s 心跳 Pump；灯写去重补写/断连恢复对齐/策略热切换三自愈 |
+| `src/PlcMesBridge.Core/Curing/SlotCuringMachine.cs` | **仓位状态机**：托盘到位→（门控）→黄灯计时→绿灯放行→离开灭灯；边沿后台直转+1s 心跳 Pump；灯写去重补写/断连恢复对齐/策略热切换三自愈；过账挂点三事件（TrayArrived/CuringStarted/TrayLeft，只发真实边沿） |
+| **Core 共享（单线过账家族，P3.2 后半新增）** | |
+| `src/PlcMesBridge.Core/Curing/CuringMesOptions.cs` | 过账配置模型（ini `[CuringMes]` 节）：开关/工位/时间单位/进站时机/中途取件/静态参数五件；`NormSide` 规范化（非 L 按 R 兜底） |
+| `src/PlcMesBridge.Core/Curing/CuringMesPoster.cs` | **过账服务**：状态机边沿→MES 报文（进站/出站链/物料上传）；出站被接受→已生产+1；门槛双保险（开关+URL）；全 Task.Run 后台+异常兜底；`UpdateOptions` 热更新；`PostingChanged` 顶栏事件（后台线程触发，UI 须封送） |
+| `src/CureStation/MesPostConfigWindow.*` + `ViewModels/MesPostConfigViewModel.cs` | 过账配置窗（L4）：全参数一窗改，URL 校验→写 ini→`MesConfig` 本进程生效；主窗保存后热更新 |
+| `src/CureStation/DialogService.cs` | 生产 `IDialogService` + `CuringMesPosterHolder`（工单窗上传动作的静态桥接点，收在程序①内） |
 | **Core 共享（IO 家族，P1 新增）** | |
 | `src/PlcMesBridge.Core/ViewModels/` | 下沉的 VM 基建（`ViewModelBase`/`RelayCommand`，namespace 不变） |
 | `src/PlcMesBridge.Core/Comms/IoPointTable.cs` | IO 点表模型 + `PointTableValidator`（重复绑定两道闸）+ `PointTableSnapshot` |
@@ -156,7 +165,7 @@
 | `src/PlcMesBridge.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段） |
 | `src/PlcMesBridge.Core/Data/CureRecordStore.cs` | `PLCtable` CRUD + `ComputeStats` 纯统计 |
 | `src/PlcMesBridge.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/PLC 配置模型与校验 |
-| `tests/PlcMesBridge.Tests/` | 201 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
+| `tests/PlcMesBridge.Tests/` | 223 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
 | `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
 
 ## 构建与验证命令
@@ -164,7 +173,7 @@
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build PlcMesBridge.slnx --nologo
-# 全量测试（201/201 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
+# 全量测试（223/223 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
 dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 # 子模块改动后（VS MSBuild，net472，原样沿用上游命令）
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
@@ -222,6 +231,20 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
   ⑤ 工单窗 Flush 有门禁兜底：级别不够的字段回读盘上原值（防绕过 IsEnabled
   直改 VM 属性越权落盘）；⑥ 初始密码 admin/123456 只在 App.OnStartup 一处，
   上线必改，文档不得记录现场真实密码。
+- **单线过账语义（P3.2 后半起生效，全在 `CuringMesPoster`/`CuringMesOptions`
+  一处）**：① 触发映射=老项目命令字——托盘到位=进站（API0030 I）、托盘
+  离开=出站链（先 API0027 外层数组后 API0030 O）、出站被接受（STATUS=1）
+  →已生产+1（0027 失败只报警不挡累计）；② **只发真实边沿**——重启对齐
+  （AlignFromSnapshot）不发三事件，防 MES 重复过账；③ 失败只记日志+顶栏
+  状态，**不弹窗不重传**（老项目写 PLC 报警位+弹窗，差异已登记）；④ 门槛
+  双保险=开关开+URL 非空，关时不产生网络请求；⑤ **锁内事件红线**：状态机
+  三事件在 _sync 锁内触发，处理器禁止同步回调状态机公共方法（重入死锁），
+  只做轻量投递；⑥ 物料上传（API0032）按**按钮工位**取槽（不走全局配置
+  Side——自动进/出站才用配置工位）；⑦ WaitingGate 离开在 Arrive 口径下补
+  出站（固化 0 秒，有进必有出），Start 口径没发进站则出站也不发；⑧ BC_NO=
+  工单批次物料条码（批次级过账），板级产品 ID 上报走程序②整线网关（架构
+  差异已登记）。改口径先改 `CuringMesPoster` 头注释与 `CuringMesPosterTests`
+  断言；配置键名勿改（现场已按样例部署）。
 
 ## 文档同步（每次任务收尾自查）
 

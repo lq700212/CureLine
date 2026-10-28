@@ -56,6 +56,8 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <Ellipse Width="14" Height="14" VerticalAlignment="Center" Margin="6,0,10,0">
                     <Ellipse.Style>
@@ -73,21 +75,25 @@
                            VerticalAlignment="Center" Margin="0,0,12,0" Foreground="#1F4E79"/>
                 <TextBlock Grid.Column="2" Text="{Binding ConnectionText, FallbackValue=未启动}"
                            VerticalAlignment="Center" Foreground="#333"/>
-                <Button Grid.Column="3" Style="{StaticResource FreshButton}"
+                <TextBlock Grid.Column="3" Text="{Binding PostingText, FallbackValue=过账：—}"
+                           VerticalAlignment="Center" Margin="0,0,12,0" Foreground="#0A7A2F"/>
+                <Button Grid.Column="4" Style="{StaticResource FreshButton}"
                         Content="登录" Command="{Binding LoginCommand}" Margin="8,0"/>
-                <TextBlock Grid.Column="4" Text="{Binding OperatorText, FallbackValue=未登录}"
+                <TextBlock Grid.Column="5" Text="{Binding OperatorText, FallbackValue=未登录}"
                            VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#1F4E79"/>
-                <Button Grid.Column="5" Style="{StaticResource FreshButton}"
-                        Content="工单" Command="{Binding OpenWorkOrderCommand}" Margin="0,0,8,0"/>
                 <Button Grid.Column="6" Style="{StaticResource FreshButton}"
-                        Content="权限" Command="{Binding OpenOperatorsCommand}" Margin="0,0,8,0"/>
+                        Content="工单" Command="{Binding OpenWorkOrderCommand}" Margin="0,0,8,0"/>
                 <Button Grid.Column="7" Style="{StaticResource FreshButton}"
-                        Content="策略" Command="{Binding OpenCuringPolicyCommand}" Margin="0,0,8,0"/>
+                        Content="权限" Command="{Binding OpenOperatorsCommand}" Margin="0,0,8,0"/>
                 <Button Grid.Column="8" Style="{StaticResource FreshButton}"
-                        Content="点表" Command="{Binding OpenPointTableCommand}" Margin="0,0,8,0"/>
+                        Content="策略" Command="{Binding OpenCuringPolicyCommand}" Margin="0,0,8,0"/>
                 <Button Grid.Column="9" Style="{StaticResource FreshButton}"
+                        Content="过账配置" Command="{Binding OpenPostConfigCommand}" Margin="0,0,8,0"/>
+                <Button Grid.Column="10" Style="{StaticResource FreshButton}"
+                        Content="点表" Command="{Binding OpenPointTableCommand}" Margin="0,0,8,0"/>
+                <Button Grid.Column="11" Style="{StaticResource FreshButton}"
                         Content="重新连接" Command="{Binding ReconnectCommand}" Margin="0,0,8,0"/>
-                <Button Grid.Column="10" Style="{StaticResource FreshButton}" Content="退出"
+                <Button Grid.Column="12" Style="{StaticResource FreshButton}" Content="退出"
                         Click="OnExitClick"/>
             </Grid>
         </Border>

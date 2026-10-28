@@ -11,8 +11,8 @@
         Icon="Assets/app.ico" FontSize="12">
     <!--★★ 工单信息窗（对照参考 HMI"工单信息"页）：左列 R/L 双工位 + 基础信息
          + 批次物料；右列制程代码 + 保存。门禁：途程/数量/清零 L2+（禁用态），
-         制程代码 L3+，员工工号/条码 L1+。物料上传使能先落存储位（动作接线
-         在单线过账轮）。-->
+         制程代码 L3+，员工工号/条码 L1+。物料上传（API0032）：使能勾选 +
+         R/L 上传按钮（先保存工单再后台提交，结果看主窗顶栏过账状态）。-->
     <Grid Margin="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -76,7 +76,17 @@
                     </UniformGrid>
                     <CheckBox IsChecked="{Binding EditUploadEnabled, FallbackValue=False}"
                               IsEnabled="{Binding CanEditProcess}"
-                              Content="物料上传使能（上传动作在单线过账轮接线）" Margin="0,8,0,0"/>
+                              Content="物料上传使能（勾选后可点下方上传按钮）" Margin="0,8,0,0"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Style="{StaticResource FreshButton}" Content="上传 R 物料"
+                                Command="{Binding UploadRMaterialCommand}" Width="110" Height="28"
+                                IsEnabled="{Binding CanUpload}"/>
+                        <Button Style="{StaticResource FreshButton}" Content="上传 L 物料"
+                                Command="{Binding UploadLMaterialCommand}" Width="110" Height="28"
+                                IsEnabled="{Binding CanUpload}" Margin="8,0,0,0"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding UploadStatusText}"
+                               Foreground="#1F4E79" TextWrapping="Wrap" Margin="0,6,0,0"/>
                 </StackPanel>
             </ScrollViewer>
         </Border>

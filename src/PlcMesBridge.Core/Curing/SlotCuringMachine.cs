@@ -21,6 +21,9 @@
 //      登记项不脑补）——宁可重计也不放行没固化够的货。
 //   ③ 策略热切换：每次托盘到位现取激活策略；进行中的仓位按开计时那一刻
 //      锁定的时长走完（改参数不影响在制品，工艺上更安全）。
+//   ④ 过账挂点（P3.2 后半）：TrayArrived/CuringStarted/TrayLeft 三事件供宿主
+//      接单线过账（CuringMesPoster）——只发"真实边沿"，重启对齐不发（防 MES
+//      重复过账）；处理器禁止同步回调状态机（锁内触发红线，见事件注释）。
 //
 // 日志（铁律 4）：只记边沿——开计时/放行/取件/重启对齐，不刷屏。
 //
@@ -69,6 +72,25 @@ public sealed class SlotCuringMachine : IDisposable
     private readonly Dictionary<IoPointKey, bool> _writtenLamps = new();
     private IPointTableBus _bus;
     private Timer? _pumpTimer;
+
+    // ---------- 过账挂点（P3.2 后半，宿主接 CuringMesPoster） ----------
+    // 三个事件都在 _sync 锁内触发。【红线】处理器禁止同步回调状态机任何公共
+    // 方法（_sync 重入死锁）——只做轻量投递（过账服务内部 Task.Run 即返回）。
+    // "真实边沿"=现场传感器/光栅实际变化；重启对齐（AlignFromSnapshot）不发——
+    // 物料断电前已进站，重发会造成 MES 重复过账。
+
+    /// <summary>托盘真实到位（真实边沿）。单线过账进站挂点（Arrive 口径）。</summary>
+    public event Action<int, int>? TrayArrived;
+
+    /// <summary>开计时（真实边沿，含门控放行与兜底推进）。进站挂点（Start 口径）。</summary>
+    public event Action<int, int>? CuringStarted;
+
+    /// <summary>
+    /// 托盘离开（真实边沿）。参数：架、层、离开时相位、已固化秒数
+    /// （Done=计划时长；Curing 中途取件=实际经过；WaitingGate=0）。
+    /// 单线过账出站挂点（API0027 固化时间 + API0030 出站）。
+    /// </summary>
+    public event Action<int, int, SlotPhase, int>? TrayLeft;
 
     /// <summary>单仓位运行态（内部可变，只在 _sync 锁内动）。</summary>
     private sealed class SlotRuntime
@@ -120,7 +142,7 @@ public sealed class SlotCuringMachine : IDisposable
             {
                 var rt = GetOrAdd(key.Rack, key.Level);
                 if (e.State)
-                    OnTrayArrived(rt, key.Rack, key.Level);
+                    OnTrayArrived(rt, key.Rack, key.Level, realEdge: true);
                 else
                     OnTrayLeft(rt, key.Rack, key.Level);
             }
@@ -222,7 +244,7 @@ public sealed class SlotCuringMachine : IDisposable
                     continue;
                 }
                 _log($"架{key.Rack}层{key.Level} 重启对齐：托盘在架，重新开始计时");
-                OnTrayArrived(rt, key.Rack, key.Level);
+                OnTrayArrived(rt, key.Rack, key.Level, realEdge: false);
             }
         }
     }
@@ -269,10 +291,15 @@ public sealed class SlotCuringMachine : IDisposable
 
     // ---------- 流转（全部假定已在 _sync 锁内） ----------
 
-    private void OnTrayArrived(SlotRuntime rt, int rack, int level)
+    private void OnTrayArrived(SlotRuntime rt, int rack, int level, bool realEdge)
     {
         if (rt.Phase is SlotPhase.Curing or SlotPhase.Done)
             return; // 已在流程中（传感器抖动/重复边沿），不重置计时
+        // 真实到位恒发（进站挂点，Arrive 口径）——门控等放行与直接开计时两路
+        // 都要发，否则"门控关直接开计时"的仓位进站就漏了；重启对齐（realEdge
+        // =false）不发，防 MES 重复过账。
+        if (realEdge)
+            TrayArrived?.Invoke(rack, level);
         var policy = _policyProvider();
         int minutes = policy?.ResolveMinutes(rack, level) ?? FallbackMinutes;
         if (policy is { GrillGate: true } && !GrillClear(rack, level))
@@ -283,10 +310,10 @@ public sealed class SlotCuringMachine : IDisposable
             _log($"架{rack}层{level} 托盘到位，等光栅让空后开始计时（{minutes} 分钟）");
             return;
         }
-        StartCuring(rt, rack, level, minutes);
+        StartCuring(rt, rack, level, minutes, realEdge);
     }
 
-    private void StartCuring(SlotRuntime rt, int rack, int level, int? minutes = null)
+    private void StartCuring(SlotRuntime rt, int rack, int level, int? minutes = null, bool realEdge = true)
     {
         var policy = _policyProvider();
         rt.TotalMinutes = minutes ?? policy?.ResolveMinutes(rack, level) ?? FallbackMinutes;
@@ -295,6 +322,8 @@ public sealed class SlotCuringMachine : IDisposable
         EnsureLamp(rack, level, IoPointRole.LampYellow, true);
         EnsureLamp(rack, level, IoPointRole.LampGreen, false); // 防残留绿灯
         _log($"架{rack}层{level} 开始固化计时 {rt.TotalMinutes} 分钟（黄灯）");
+        if (realEdge)
+            CuringStarted?.Invoke(rack, level); // 过账进站挂点（Start 口径，Poster 内按配置取舍）
         PersistState(); // 状态变化落盘（开关开时）
     }
 
@@ -302,7 +331,16 @@ public sealed class SlotCuringMachine : IDisposable
     {
         if (rt.Phase == SlotPhase.Idle)
             return;
-        string note = rt.Phase switch
+        // 过账出站参数先快照（状态清零前）：离开相位 + 已固化秒数
+        SlotPhase leavePhase = rt.Phase;
+        int curedSeconds = leavePhase switch
+        {
+            SlotPhase.Done => rt.TotalMinutes * 60,
+            SlotPhase.Curing when rt.StartedAt is { } start =>
+                Math.Max(0, (int)(_clock() - start).TotalSeconds),
+            _ => 0, // WaitingGate：没开计时
+        };
+        string note = leavePhase switch
         {
             SlotPhase.Curing => "计时中取件，计时作废",
             SlotPhase.Done => "取件完成",
@@ -316,6 +354,8 @@ public sealed class SlotCuringMachine : IDisposable
         EnsureLamp(rack, level, IoPointRole.LampGreen, false);
         _log($"架{rack}层{level} {note}，回空闲");
         PersistState(); // 状态变化落盘（开关开时）：取件仓位从记录中移除
+        // 过账出站挂点（唯一调用方 OnPointChanged 恒为真实边沿，无对齐路径）
+        TrayLeft?.Invoke(rack, level, leavePhase, curedSeconds);
     }
 
     // ---------- 计时状态持久化（PersistMinutes 开关，断电续算） ----------

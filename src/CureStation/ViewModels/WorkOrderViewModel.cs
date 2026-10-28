@@ -21,15 +21,20 @@ public sealed class WorkOrderViewModel : ViewModelBase
     private readonly IDialogService _dialogs;
     private readonly OperatorLevel? _level;
     private readonly List<string> _flushErrors = new();
+    private readonly Action<string>? _uploadMaterial; // 物料上传动作（过账服务；null=不可用）
 
-    public WorkOrderViewModel(IDialogService dialogs, OperatorLevel? level, WorkOrderBook? book = null)
+    public WorkOrderViewModel(IDialogService dialogs, OperatorLevel? level,
+        WorkOrderBook? book = null, Action<string>? uploadMaterial = null)
     {
         _dialogs = dialogs;
         _level = level;
+        _uploadMaterial = uploadMaterial;
         SyncFromBook(book ?? WorkOrderStore.Load() ?? WorkOrderStore.BuildDefault());
         ClearCountRtCommand = new RelayCommand(() => EditRtProduced = "0", () => CanEditRoute);
         ClearCountLfCommand = new RelayCommand(() => EditLfProduced = "0", () => CanEditRoute);
         SaveCommand = new RelayCommand(Save);
+        UploadRMaterialCommand = new RelayCommand(() => UploadMaterial("R"), () => CanUpload);
+        UploadLMaterialCommand = new RelayCommand(() => UploadMaterial("L"), () => CanUpload);
     }
 
     // ---------- 门禁（级别不够的编辑区在 XAML 里禁用） ----------
@@ -76,6 +81,22 @@ public sealed class WorkOrderViewModel : ViewModelBase
     public RelayCommand ClearCountRtCommand { get; }
     public RelayCommand ClearCountLfCommand { get; }
     public RelayCommand SaveCommand { get; }
+    public RelayCommand UploadRMaterialCommand { get; }
+    public RelayCommand UploadLMaterialCommand { get; }
+
+    /// <summary>
+    /// 物料上传按钮可用：过账服务已装配（未装配=程序未启用过账，按钮置灰）。
+    /// 使能校验在过账服务里再查一道（读盘上工单 UploadEnabled，双保险）。
+    /// </summary>
+    public bool CanUpload => _uploadMaterial != null;
+
+    /// <summary>上传提交后的提示文本（结果看主窗顶栏过账状态与 MES 日志）。</summary>
+    private string _uploadStatusText = "";
+    public string UploadStatusText
+    {
+        get => _uploadStatusText;
+        private set => Set(ref _uploadStatusText, value);
+    }
 
     /// <summary>保存成功后置 true（DialogService 据此返回 true，主窗提示）。</summary>
     public bool CloseDialog { get; private set; }
@@ -97,11 +118,38 @@ public sealed class WorkOrderViewModel : ViewModelBase
 
     private void Save()
     {
+        if (!SaveCore())
+            return;
+        CloseDialog = true;
+        // 成功提示由主窗统一弹（与点表/策略窗同款）
+    }
+
+    /// <summary>
+    /// 物料上传（对照 HMI"批次物料上报"：R/L 选工位 + 上传动作）：
+    /// 先保存工单（把刚录的条码/工号落盘——过账服务现读盘上工单），
+    /// 再触发后台 API0032。保存失败（数字格式/落盘错）不上传。
+    /// </summary>
+    private void UploadMaterial(string side)
+    {
+        if (_uploadMaterial == null)
+            return;
+        if (!SaveCore())
+        {
+            UploadStatusText = "保存失败，未上传（见弹框提示）";
+            return;
+        }
+        _uploadMaterial(side);
+        UploadStatusText = $"{DateTime.Now:HH:mm:ss} 已提交 {side} 工位物料上传（结果见主窗顶栏过账状态）";
+    }
+
+    /// <summary>保存公共体（Save 与上传共用）：Flush+校验+落盘。成功 true。</summary>
+    private bool SaveCore()
+    {
         FlushToBook();
         if (_flushErrors.Count > 0)
         {
             _dialogs.ShowMessage(string.Join("\r\n", _flushErrors), "保存失败（数字格式）");
-            return;
+            return false;
         }
         var book = new WorkOrderBook();
         FlushToBook(book);
@@ -112,10 +160,9 @@ public sealed class WorkOrderViewModel : ViewModelBase
         catch (Exception ex)
         {
             _dialogs.ShowMessage($"工单落盘失败：{ex.Message}", "保存失败");
-            return;
+            return false;
         }
-        CloseDialog = true;
-        // 成功提示由主窗统一弹（与点表/策略窗同款）
+        return true;
     }
 
     /// <summary>编辑区 → 工单对象（保存前调；数字解析失败进 _flushErrors）。</summary>
