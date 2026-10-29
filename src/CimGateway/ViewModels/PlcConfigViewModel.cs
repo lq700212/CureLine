@@ -11,11 +11,11 @@
 // 异步测试跑后台（铁律），回来经 UiInvoke 更新；按钮灰态经 Testing 属性。
 // =========================================================================
 
-using PlcMesBridge.ViewModels;
+using CureLine.ViewModels;
 using System.Collections.ObjectModel;
-using PlcMesBridge.Core.Comms;
-using PlcMesBridge.Core.Infrastructure;
-using PlcMesBridge.Core.Mes;
+using CureLine.Core.Comms;
+using CureLine.Core.Infrastructure;
+using CureLine.Core.Mes;
 
 namespace CimGateway.ViewModels;
 

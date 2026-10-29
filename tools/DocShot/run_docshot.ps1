@@ -12,7 +12,7 @@ Set-Location (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $root = (Resolve-Path "$PSScriptRoot\..\..").Path
 
 Write-Host "=== [1/5] build solution ==="
-dotnet build "$root\PlcMesBridge.slnx" --nologo
+dotnet build "$root\CureLine.slnx" --nologo
 if ($LASTEXITCODE -ne 0) { throw "solution build failed" }
 
 Write-Host "=== [1.5] generate Cure resource dictionary (from source App.xaml) ==="

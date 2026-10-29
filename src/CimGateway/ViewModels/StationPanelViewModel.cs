@@ -7,9 +7,9 @@
 //   本 VM 不认 IDialogService，保持面板独立可复用。
 // =========================================================================
 
-using PlcMesBridge.ViewModels;
+using CureLine.ViewModels;
 using System.Collections.ObjectModel;
-using PlcMesBridge.Core.Mes;
+using CureLine.Core.Mes;
 
 namespace CimGateway.ViewModels;
 

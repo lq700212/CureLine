@@ -1,6 +1,36 @@
-# CHANGELOG — PlcMesBridge
+# CHANGELOG — CureLine（原 PlcMesBridge，V0.0.24 更名）
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
+
+## V0.0.24（2026-10-29，项目更名——PlcMesBridge → CureLine）
+
+背景：仓库/解决方案/共享库的历史名 PlcMesBridge 源自 VB 老项目 PLC_ReadData 的
+"PLC 桥接 MES"定位。项目重心早已是**固化产线设备端软件套件**（程序①固化程控 +
+程序②整线 CIM 网关），PLC/MES/Bridge 字样都不再准确概括。随远端仓库同名变更，
+全仓库统一更名为 **CureLine**（固化产线；与程序① CureStation 同词根，
+"站∈线"语义自洽，甩掉所有 PLC 残留）。
+
+- **改名范围**（git mv 全程保留历史）：`PlcMesBridge.slnx` → `CureLine.slnx`、
+  `src/PlcMesBridge.Core` → `src/CureLine.Core`（工程文件同步更名）、
+  `tests/PlcMesBridge.Tests` → `tests/CureLine.Tests`（工程文件同步更名）；
+  全部 namespace/引用/文档同步（`PlcMesBridge.Core.*` → `CureLine.Core.*`、
+  `PlcMesBridge.ViewModels` → `CureLine.ViewModels`、`PlcMesBridge.Tests` →
+  `CureLine.Tests`），共替换 119 个文件。
+- **补上 V0.0.21 刻意不动的两样**（当时唯一悬留)：共享库/测试工程名与解决方案
+  文件名本轮一并更名完毕，仓库内自助检索已无 PLC 字样的现役标识。
+- **远端仓库**：`lq700212/PLC_ReadData` → `lq700212/CureLine`（GitHub 仓库改名
+  后旧地址自动重定向；本地 remote url 已同步更新为新地址）。
+- **现场无感**：exe 名不变（`CureStation.exe`/`CimGateway.exe`）、运行时落盘
+  （config/DataBase/log）与仓库名无关，现场无需迁移任何数据或配置。
+- **刻意不动的两处字面量**（继承并固化 V0.0.21 的盐值纪律）：
+  `PasswordHasher.Pepper = "PlcMesBridge.v1::field-panel"`、
+  `RememberMeProtector` 熵 `"PlcMesBridge.RememberMe.v1"`——它们是内部盐值/
+  DPAPI 熵不是身份标识，改动=现网 users/operators 全部哈希复核失败（无人能登录）
+  + "记住密码"已存密文失效；两文件注释均已写明缘由，后续维护者勿手痒。
+- **历史严格不动**：CHANGELOG 历史条目、各处"原名 PlcMesBridge"括号注、
+  docs 施工文中的历史称谓保持原样（git 考古与现场旧文档对照不受影响）。
+- **验证**：`dotnet build` 0 警告 0 错误，`dotnet test` 315/315 全绿
+  （基线只增不减）。
 
 ## V0.0.23（2026-10-29，培训文档套装 6 份——两程序全量交付件）
 

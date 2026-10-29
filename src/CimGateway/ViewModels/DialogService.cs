@@ -10,7 +10,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
-using PlcMesBridge.Core.Infrastructure;
+using CureLine.Core.Infrastructure;
 
 namespace CimGateway.ViewModels;
 

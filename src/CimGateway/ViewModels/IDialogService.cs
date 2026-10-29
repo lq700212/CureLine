@@ -9,7 +9,7 @@
 //   默认用 DialogService.Instance（生产），测试传 Fake（见 Tests/Mocks）。
 // =========================================================================
 
-using PlcMesBridge.Core.Infrastructure;
+using CureLine.Core.Infrastructure;
 
 namespace CimGateway.ViewModels;
 

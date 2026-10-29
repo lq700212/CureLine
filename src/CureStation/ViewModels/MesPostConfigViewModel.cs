@@ -11,10 +11,10 @@
 //   （字段/Sync/Flush）+ XAML 加控件；键名勿改（现场已按样例部署）。
 // =========================================================================
 
-using PlcMesBridge.Core.Curing;
-using PlcMesBridge.Core.Infrastructure;
-using PlcMesBridge.Core.Mes;
-using PlcMesBridge.ViewModels;
+using CureLine.Core.Curing;
+using CureLine.Core.Infrastructure;
+using CureLine.Core.Mes;
+using CureLine.ViewModels;
 
 namespace CureStation.ViewModels;
 

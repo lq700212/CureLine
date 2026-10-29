@@ -10,9 +10,9 @@
 //   与 MesParamStore 字段名对齐的（RC_NO 等）勿改名（过账映射靠它）。
 // =========================================================================
 
-using PlcMesBridge.Core.Curing;
-using PlcMesBridge.Core.Security;
-using PlcMesBridge.ViewModels;
+using CureLine.Core.Curing;
+using CureLine.Core.Security;
+using CureLine.ViewModels;
 
 namespace CureStation.ViewModels;
 

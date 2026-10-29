@@ -12,8 +12,8 @@
 // =========================================================================
 
 using System.Collections.ObjectModel;
-using PlcMesBridge.Core.Comms;
-using PlcMesBridge.ViewModels;
+using CureLine.Core.Comms;
+using CureLine.ViewModels;
 
 namespace CureStation.ViewModels;
 

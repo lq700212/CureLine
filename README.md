@@ -1,4 +1,4 @@
-# PlcMesBridge（WPF 融合版）
+# CureLine（WPF 融合版）
 
 从 VB 老项目（`PLC_ReadData` 单机固化收料 + `PLC_ReadDataA` 八机通用网关）
 融合重构的 .NET 8 解决方案，含两个可独立部署的 WPF 程序：
@@ -17,8 +17,8 @@
 
 ```powershell
 # 1. 拉代码（含子模块）
-git clone https://github.com/lq700212/PLC_ReadData.git
-cd PLC_ReadData
+git clone https://github.com/lq700212/CureLine.git
+cd CureLine
 git submodule update --init
 
 # 2. 编译子模块（net472，需 VS MSBuild）
@@ -27,11 +27,11 @@ git submodule update --init
   /p:Configuration=Debug /p:Platform=AnyCPU /t:Build /nologo /v:m
 
 # 3. 全量构建 + 测试
-dotnet build PlcMesBridge.slnx --nologo
-dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
+dotnet build CureLine.slnx --nologo
+dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
 
 # 4. 模拟联调（无真机；两程序共用同名键 config.ini [setting] Simulate=1）：
-#    - PlcMesBridge：复制 config.sample.ini 到其 bin 的 config/config.ini，
+#    - CimGateway：复制 config.sample.ini 到其 bin 的 config/config.ini，
 #      设 Simulate=1（多机网关直起即模拟 8 机台跑全流程）
 #    - CureStation：程序①自己的 bin 下 config/config.ini 设 Simulate=1，
 #      启动即 Mock 总线按仓位流转演示（30 卡片 + 周期演示掉线重连）
@@ -46,7 +46,7 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
   转发关窗；VM 禁止碰 Window/MessageBox/Dispatcher；后台节拍经
   `UiInvoke` 回 UI 线程。
 - VM 基建（`ViewModelBase`/`RelayCommand`）已下沉
-  `src/PlcMesBridge.Core/ViewModels/`（namespace 不变，两程序共用）；
+  `src/CureLine.Core/ViewModels/`（namespace 不变，两程序共用）；
   `IDialogService` 各程序自建（窗集合是私有资产，不下沉）。
 
 ## 程序① CureStation（固化程控）
@@ -152,7 +152,7 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 
 ## 目录
 
-- `src/PlcMesBridge.Core/` — 共享业务与基础（INI/SQLite/MES/通讯/网关逻辑 +
+- `src/CureLine.Core/` — 共享业务与基础（INI/SQLite/MES/通讯/网关逻辑 +
   **IO 点表家族** `Comms/IoPointTable*`/`IoBus`/连通测试 + 真机底座
   `Comms/ModbusStationClient`（Modbus TCP，地址/打包/分帧集中点）+
   **固化工艺家族** `Curing/CuringPolicy*`/`SlotCuringMachine`（策略三级覆盖 +
@@ -162,7 +162,7 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
   + 单线过账服务）
 - `src/CimGateway/` — 主程序 WPF 界面（主窗/调试/报警/日志/图片窗），
   图标在 `Assets/`（`app.ico` 程序图标 / `app.png` 高清源备用）
-- `tests/PlcMesBridge.Tests/` — 315 例 xUnit（`Mocks/`：本地桩 MES /
+- `tests/CureLine.Tests/` — 315 例 xUnit（`Mocks/`：本地桩 MES /
   网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus`
   状态机桩，加用例直接复用）
 - `extern/kaleidoscope/` — 通讯子模块（独立仓库，勿直接改，见 AGENTS.md）

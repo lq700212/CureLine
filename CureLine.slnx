@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CureStation/CureStation.csproj" />
+    <Project Path="src/CureLine.Core/CureLine.Core.csproj" />
+    <Project Path="src/CimGateway/CimGateway.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CureLine.Tests/CureLine.Tests.csproj" />
+  </Folder>
+</Solution>

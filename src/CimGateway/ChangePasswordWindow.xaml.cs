@@ -1,7 +1,7 @@
 using CimGateway.ViewModels;
 using System.Windows;
 using System.Windows.Controls;
-using PlcMesBridge.ViewModels;
+using CureLine.ViewModels;
 
 namespace CimGateway;
 
@@ -13,7 +13,7 @@ public partial class ChangePasswordWindow : Window
     public ChangePasswordViewModel ViewModel { get; }
 
     public ChangePasswordWindow(string currentUser,
-        PlcMesBridge.Core.Infrastructure.LoginRole currentRole)
+        CureLine.Core.Infrastructure.LoginRole currentRole)
     {
         ViewModel = new ChangePasswordViewModel(currentUser, currentRole);
         DataContext = ViewModel;

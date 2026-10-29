@@ -8,8 +8,8 @@
 // =========================================================================
 
 using System.Collections.ObjectModel;
-using PlcMesBridge.Core.Security;
-using PlcMesBridge.ViewModels;
+using CureLine.Core.Security;
+using CureLine.ViewModels;
 
 namespace CureStation.ViewModels;
 

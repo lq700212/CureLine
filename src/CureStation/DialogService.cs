@@ -10,8 +10,8 @@
 // =========================================================================
 
 using System.Windows;
-using PlcMesBridge.Core.Curing;
-using PlcMesBridge.Core.Security;
+using CureLine.Core.Curing;
+using CureLine.Core.Security;
 
 namespace CureStation.ViewModels;
 
@@ -51,7 +51,7 @@ public interface IDialogService
     /// 打开 IO 通讯测试窗（模态）。bus=主窗已启动的共享总线（测试窗不建 TCP），
     /// config=点表配置（通道清单来源——通用化核心：点表怎么配测试窗就怎么显示）。
     /// </summary>
-    void ShowIoTest(PlcMesBridge.Core.Comms.IPointTableBus bus, PlcMesBridge.Core.Comms.PointTableConfig config);
+    void ShowIoTest(CureLine.Core.Comms.IPointTableBus bus, CureLine.Core.Comms.PointTableConfig config);
 
     /// <summary>程序化关闭主进程（退出）。</summary>
     void Shutdown();
@@ -83,11 +83,11 @@ public sealed class DialogService : IDialogService
         // 生产装配：同点表窗模式（VM 在服务里 new，测试用 Fake 桩）。
         // 架数/层数与主窗仓位网格同口径（点表最大架/层号，垫底 10×3）——
         // 可视化预览画布按它铺格子，双架点表时预览铺 20×3。
-        var config = PlcMesBridge.Core.Comms.IoPointTableStore.Load();
-        int racks = Math.Max(PlcMesBridge.Core.Curing.SlotLocationCode.RacksPerRow,
+        var config = CureLine.Core.Comms.IoPointTableStore.Load();
+        int racks = Math.Max(CureLine.Core.Curing.SlotLocationCode.RacksPerRow,
             config?.Devices.SelectMany(d => d.Bindings)
                 .Where(b => b.Rack > 0).Select(b => b.Rack).DefaultIfEmpty(1).Max() ?? 10);
-        int levels = Math.Max(PlcMesBridge.Core.Curing.SlotLocationCode.Levels,
+        int levels = Math.Max(CureLine.Core.Curing.SlotLocationCode.Levels,
             config?.Devices.SelectMany(d => d.Bindings)
                 .Where(b => b.Level > 0).Select(b => b.Level).DefaultIfEmpty(1).Max() ?? 3);
         var win = new CuringPolicyWindow
@@ -98,7 +98,7 @@ public sealed class DialogService : IDialogService
         return win.ShowDialog() == true;
     }
 
-    public void ShowIoTest(PlcMesBridge.Core.Comms.IPointTableBus bus, PlcMesBridge.Core.Comms.PointTableConfig config)
+    public void ShowIoTest(CureLine.Core.Comms.IPointTableBus bus, CureLine.Core.Comms.PointTableConfig config)
     {
         // 生产装配：测试窗共享主窗总线（不自建 TCP——对齐 AgingTestSystem V1.23）。
         var win = new IoTestWindow

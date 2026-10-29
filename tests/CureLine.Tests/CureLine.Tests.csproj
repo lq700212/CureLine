@@ -1,0 +1,47 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\CureLine.Core\CureLine.Core.csproj" />
+    <!--程序②（CIM 整线过账，原 PlcMesBridge 演化改名）：VM 测试直引主工程（只用 ViewModels，不建 Window；UseWPF 类型已就绪）-->
+    <ProjectReference Include="..\..\src\CimGateway\CimGateway.csproj" />
+    <!--程序①（固化程控）：点表/IoBus/主窗 VM 用例同原则（只用 ViewModels 与 Core，不建窗）-->
+    <ProjectReference Include="..\..\src\CureStation\CureStation.csproj" />
+  </ItemGroup>
+
+  <!--冒烟测试直引子模块（与 Core 同版本，保证测试的即交付的）-->
+  <ItemGroup>
+    <Reference Include="Kaleidoscope">
+      <HintPath>..\..\extern\kaleidoscope\Kaleidoscope\bin\Debug\Kaleidoscope.dll</HintPath>
+    </Reference>
+    <Reference Include="HslCommunication">
+      <HintPath>..\..\extern\kaleidoscope\Kaleidoscope\libs\HslCommunication.dll</HintPath>
+    </Reference>
+    <Reference Include="NModbus">
+      <HintPath>..\..\extern\kaleidoscope\Kaleidoscope\libs\NModbus.dll</HintPath>
+    </Reference>
+    <Reference Include="NModbus.Serial">
+      <HintPath>..\..\extern\kaleidoscope\Kaleidoscope\libs\NModbus.Serial.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

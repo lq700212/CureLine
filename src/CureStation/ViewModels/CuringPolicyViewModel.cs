@@ -25,8 +25,8 @@
 
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using PlcMesBridge.Core.Curing;
-using PlcMesBridge.ViewModels;
+using CureLine.Core.Curing;
+using CureLine.ViewModels;
 
 namespace CureStation.ViewModels;
 
@@ -173,8 +173,8 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         _dialogs = dialogs;
         // 预览画布尺寸与主窗仓位网格同源（下限=客户库位编码表口径 10×3）——
         // 点表配了更多架就铺更多，与主窗展示一致。
-        RackCount = Math.Max(PlcMesBridge.Core.Curing.SlotLocationCode.RacksPerRow, rackCount);
-        LevelCount = Math.Max(PlcMesBridge.Core.Curing.SlotLocationCode.Levels, levelCount);
+        RackCount = Math.Max(CureLine.Core.Curing.SlotLocationCode.RacksPerRow, rackCount);
+        LevelCount = Math.Max(CureLine.Core.Curing.SlotLocationCode.Levels, levelCount);
         AddPolicyCommand = new RelayCommand(AddPolicy);
         RemovePolicyCommand = new RelayCommand(RemovePolicy, () => SelectedPolicy != null);
         AddSlotRowCommand = new RelayCommand(AddSlotRow);

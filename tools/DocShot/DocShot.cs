@@ -1,5 +1,5 @@
 // =========================================================================
-// DocShot.cs —— PlcMesBridge 培训文档截图 harness（WPF・net8 版）
+// DocShot.cs —— CureLine 培训文档截图 harness（WPF・net8 版）
 //
 // 干什么：按"生产装配链"逐窗 new 两程序全部关键窗体，注入演示数据/演示
 //   配置（R1：数据走真实生产路径——MockPLC/缺省自愈/登录记忆回填，绝不
@@ -40,7 +40,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
-using PlcMesBridge.Core.Infrastructure;
+using CureLine.Core.Infrastructure;
 
 // ───────── 别名（两程序同类型名——全程带命名空间区分） ─────────
 using CwMain = CureStation.MainWindow;
@@ -72,10 +72,10 @@ using GwDialogs = CimGateway.ViewModels.IDialogService;
 using GwDialogImage = CimGateway.ViewModels.DialogImage;
 using GwMainVm = CimGateway.ViewModels.MainWindowViewModel;
 
-using PlcMesBridge.Core.Security;
-using PlcMesBridge.Core.Curing;
-using PlcMesBridge.Core.Comms;
-using PlcMesBridge.Core.Mes;
+using CureLine.Core.Security;
+using CureLine.Core.Curing;
+using CureLine.Core.Comms;
+using CureLine.Core.Mes;
 
 namespace DocShot;
 
@@ -157,7 +157,7 @@ public static class Program
         try
         {
             var store = new OperatorStore(
-                new PlcMesBridge.Core.Infrastructure.SqliteHelper(AppPaths.DatabaseFile));
+                new CureLine.Core.Infrastructure.SqliteHelper(AppPaths.DatabaseFile));
             store.EnsureSchema();
             store.EnsureSeeded("123456"); // 与产品初始一致，现场上线必改
         }

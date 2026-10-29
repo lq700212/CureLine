@@ -11,9 +11,9 @@
 //   （VM 不碰 Window，保持可测）；结果由 Role/UserName 属性带出。
 // =========================================================================
 
-using PlcMesBridge.ViewModels;
-using PlcMesBridge.Core.Infrastructure;
-using PlcMesBridge.Core.Security;
+using CureLine.ViewModels;
+using CureLine.Core.Infrastructure;
+using CureLine.Core.Security;
 
 namespace CimGateway.ViewModels;
 

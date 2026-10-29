@@ -33,8 +33,8 @@
       <HintPath>..\..\src\CimGateway\bin\Debug\net8.0-windows\CimGateway.dll</HintPath>
       <Private>true</Private>
     </Reference>
-    <Reference Include="PlcMesBridge.Core">
-      <HintPath>..\..\src\PlcMesBridge.Core\bin\Debug\net8.0-windows\PlcMesBridge.Core.dll</HintPath>
+    <Reference Include="CureLine.Core">
+      <HintPath>..\..\src\CureLine.Core\bin\Debug\net8.0-windows\CureLine.Core.dll</HintPath>
       <Private>true</Private>
     </Reference>
   </ItemGroup>

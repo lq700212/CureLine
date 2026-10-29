@@ -4,7 +4,7 @@
 
 using System.Globalization;
 using System.Windows.Data;
-using PlcMesBridge.Core.Security;
+using CureLine.Core.Security;
 
 namespace CureStation;
 

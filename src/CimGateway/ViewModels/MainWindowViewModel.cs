@@ -13,16 +13,16 @@
 //   否则确认框卡住旧进程造成双开）；Dispose 释放网关组。
 // =========================================================================
 
-using PlcMesBridge.ViewModels;
+using CureLine.ViewModels;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Timers;
-using PlcMesBridge.Core.Comms;
-using PlcMesBridge.Core.Infrastructure;
-using PlcMesBridge.Core.Mes;
-using PlcMesBridge.Core.Modes;
-using PlcMesBridge.Core.Services;
+using CureLine.Core.Comms;
+using CureLine.Core.Infrastructure;
+using CureLine.Core.Mes;
+using CureLine.Core.Modes;
+using CureLine.Core.Services;
 
 namespace CimGateway.ViewModels;
 

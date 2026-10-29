@@ -8,9 +8,9 @@
 // 成功提示经 IDialogService（VM 不碰 MessageBox）。
 // =========================================================================
 
-using PlcMesBridge.ViewModels;
-using PlcMesBridge.Core.Infrastructure;
-using PlcMesBridge.Core.Security;
+using CureLine.ViewModels;
+using CureLine.Core.Infrastructure;
+using CureLine.Core.Security;
 
 namespace CimGateway.ViewModels;
 

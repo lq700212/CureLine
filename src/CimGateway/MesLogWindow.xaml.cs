@@ -1,7 +1,7 @@
 using CimGateway.ViewModels;
 using System.Collections.Specialized;
 using System.Windows;
-using PlcMesBridge.ViewModels;
+using CureLine.ViewModels;
 
 namespace CimGateway;
 

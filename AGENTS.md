@@ -1,4 +1,4 @@
-﻿# AGENTS.md — PlcMesBridge 项目指南
+﻿# AGENTS.md — CureLine 项目指南
 
 > 本文件是 AI 助手在操作本项目前的**强制前置阅读**。开工前先读本文件，明确角色、约定与红线。
 > 优先级：本文档 > 项目已有代码风格 > 通用最佳实践。
@@ -17,7 +17,7 @@
 
 - **.NET 8 WPF**（`net8.0-windows`，SDK 风格四工程：`Core` 共享类库 + `CureStation`
   程序①固化程控（IO 耦合器程控 + 单线过账）+ `CimGateway` 主程序（程序② CIM 整线
-  过账，原名 PlcMesBridge，V0.0.21 改名定名）+ `Tests` xUnit，见 `PlcMesBridge.slnx`；
+  过账，原名 PlcMesBridge，V0.0.21 改名定名）+ `Tests` xUnit，见 `CureLine.slnx`；
   两程序可分机部署，拆分设计见 `docs/重构设计_20261028.md`）
 - 通讯子模块 **`extern/kaleidoscope`**（git submodule，net472，零改动直接引用，
   详见"子模块"节）；PLC 协议用其 `libs/HslCommunication.dll`（12.6.0，公司已购，
@@ -28,7 +28,7 @@
 
 ## 仓库与提交
 
-- 远程 `origin = https://github.com/lq700212/PLC_ReadData.git`，主分支 `main`。
+- 远程 `origin = https://github.com/lq700212/CureLine.git`（原 PLC_ReadData，V0.0.24 随项目更名，GitHub 旧名自动重定向），主分支 `main`。
 - 入库：源码（`src/`、`tests/`）、`config.sample.ini`、文档（README/CHANGELOG/AGENTS）。
   不入库：`bin/`、`obj/`、运行时落盘（`config/*.ini|*.json`、`DataBase/*.db3`、
   `log|logs|Logs/`、`*.log`）、机密（`hsl.dat`、`*.kcfg`），见 `.gitignore`。
@@ -114,8 +114,8 @@
   边界/自愈/协议细节必须注，杜绝废话注释。中文 UTF-8。
 - **MVVM 分层（WPF 层，两程序同款）**：View（XAML 纯绑定 + xaml.cs 只设
   DataContext/转交密码/转发关窗）← ViewModel（各程序私有 VM 在自己
-  `ViewModels/`；**基建已下沉共享**：`src/PlcMesBridge.Core/ViewModels/` 的
-  `ViewModelBase`/`RelayCommand`，namespace 仍为 `PlcMesBridge.ViewModels`，
+  `ViewModels/`；**基建已下沉共享**：`src/CureLine.Core/ViewModels/` 的
+  `ViewModelBase`/`RelayCommand`，namespace 仍为 `CureLine.ViewModels`，
   两工程零感知；后台线程更新经 `UiInvoke`）→ Model/Core（业务，可测）
   + `IDialogService`（VM 开窗/提示唯一出口，测试用 Fake 桩）。**对话框
   接口不下沉**：窗集合是各程序私有资产，各程序自建接口与生产实现
@@ -149,45 +149,45 @@
 | `src/CimGateway/PlcConfigWindow.*` | 网关配置窗（机台连接/接口地址两页 + 测试连接 + 保存热生效，逻辑在 Core；单机页已删；界面名已去 PLC 化——主窗"CIM通信网关"/菜单"网关设置"，V0.0.22 补丁） |
 | `src/CimGateway/MesAlarmWindow.*` / `ImageWindow.*` | 报警窗 / 图片查看 |
 | **Core 共享（固化工艺家族，P3.1 新增）** | |
-| `src/PlcMesBridge.Core/Curing/CuringPolicy.cs` | 工艺策略模型：时长三级覆盖（仓位>层>全局，`ResolveMinutes` 唯一出口）+ 光栅门控 + `CuringPolicyValidator`（时长/层号/仓位键/重名） |
-| `src/PlcMesBridge.Core/Curing/CuringPolicyStore.cs` | `config/curingpolicy.json` 存取（策略库+激活名）+ `BuildDefaultBook` 缺省库自愈 |
-| `src/PlcMesBridge.Core/Curing/CuringStateStore.cs` | `config/curingstate.json` 计时状态持久化（`PersistMinutes` 开关的落盘件；运行时数据非配置，删了即回退重计） |
-| `src/PlcMesBridge.Core/Curing/WorkOrderStore.cs` | 工单信息 `config/workorder.json`（R/L 双工位+EMP/BC/PT×2，字段名对齐 MES 16 字段）+ 自愈空工单 |
-| `src/PlcMesBridge.Core/Security/OperatorStore.cs` | 程序①四级操作员账号（operators 表 L1~4 + PBKDF2 复用）；**防锁死红线**：最后一个 L4 删/降拒绝 |
-| `src/PlcMesBridge.Core/Curing/SlotCuringMachine.cs` | **仓位状态机**：托盘到位→（门控）→黄灯计时→绿灯放行→离开灭灯；边沿后台直转+1s 心跳 Pump；灯写去重补写/断连恢复对齐/策略热切换三自愈；过账挂点三事件（TrayArrived/CuringStarted/TrayLeft，只发真实边沿） |
-| `src/PlcMesBridge.Core/Curing/SlotLocationCode.cs` | 客户库位编码换算（Date Matrix，10 站×3 层）：架×层↔编码互转（`Encode`/`TryDecode` 客户约定锚点）+ 双架口径（`RackGroupOf`/`StationInRack`/`EncodeInRack` 按架内站号换算，每台架独立一套 A01~J12），主窗卡片标题与后续扫码绑定的同源入口 |
+| `src/CureLine.Core/Curing/CuringPolicy.cs` | 工艺策略模型：时长三级覆盖（仓位>层>全局，`ResolveMinutes` 唯一出口）+ 光栅门控 + `CuringPolicyValidator`（时长/层号/仓位键/重名） |
+| `src/CureLine.Core/Curing/CuringPolicyStore.cs` | `config/curingpolicy.json` 存取（策略库+激活名）+ `BuildDefaultBook` 缺省库自愈 |
+| `src/CureLine.Core/Curing/CuringStateStore.cs` | `config/curingstate.json` 计时状态持久化（`PersistMinutes` 开关的落盘件；运行时数据非配置，删了即回退重计） |
+| `src/CureLine.Core/Curing/WorkOrderStore.cs` | 工单信息 `config/workorder.json`（R/L 双工位+EMP/BC/PT×2，字段名对齐 MES 16 字段）+ 自愈空工单 |
+| `src/CureLine.Core/Security/OperatorStore.cs` | 程序①四级操作员账号（operators 表 L1~4 + PBKDF2 复用）；**防锁死红线**：最后一个 L4 删/降拒绝 |
+| `src/CureLine.Core/Curing/SlotCuringMachine.cs` | **仓位状态机**：托盘到位→（门控）→黄灯计时→绿灯放行→离开灭灯；边沿后台直转+1s 心跳 Pump；灯写去重补写/断连恢复对齐/策略热切换三自愈；过账挂点三事件（TrayArrived/CuringStarted/TrayLeft，只发真实边沿） |
+| `src/CureLine.Core/Curing/SlotLocationCode.cs` | 客户库位编码换算（Date Matrix，10 站×3 层）：架×层↔编码互转（`Encode`/`TryDecode` 客户约定锚点）+ 双架口径（`RackGroupOf`/`StationInRack`/`EncodeInRack` 按架内站号换算，每台架独立一套 A01~J12），主窗卡片标题与后续扫码绑定的同源入口 |
 | **Core 共享（单线过账家族，P3.2 后半新增）** | |
-| `src/PlcMesBridge.Core/Curing/CuringMesOptions.cs` | 过账配置模型（ini `[CuringMes]` 节）：开关/工位/时间单位/进站时机/中途取件/静态参数五件；`NormSide` 规范化（非 L 按 R 兜底） |
-| `src/PlcMesBridge.Core/Curing/CuringMesPoster.cs` | **过账服务**：状态机边沿→MES 报文（进站/出站链/物料上传）；出站被接受→已生产+1；门槛双保险（开关+URL）；全 Task.Run 后台+异常兜底；`UpdateOptions` 热更新；`PostingChanged` 顶栏事件（后台线程触发，UI 须封送） |
+| `src/CureLine.Core/Curing/CuringMesOptions.cs` | 过账配置模型（ini `[CuringMes]` 节）：开关/工位/时间单位/进站时机/中途取件/静态参数五件；`NormSide` 规范化（非 L 按 R 兜底） |
+| `src/CureLine.Core/Curing/CuringMesPoster.cs` | **过账服务**：状态机边沿→MES 报文（进站/出站链/物料上传）；出站被接受→已生产+1；门槛双保险（开关+URL）；全 Task.Run 后台+异常兜底；`UpdateOptions` 热更新；`PostingChanged` 顶栏事件（后台线程触发，UI 须封送） |
 | `src/CureStation/MesPostConfigWindow.*` + `ViewModels/MesPostConfigViewModel.cs` | 过账配置窗（L4）：全参数一窗改，URL 校验→写 ini→`MesConfig` 本进程生效；主窗保存后热更新 |
 | `src/CureStation/DialogService.cs` | 生产 `IDialogService` + `CuringMesPosterHolder`（工单窗上传动作的静态桥接点，收在程序①内） |
 | **Core 共享（IO 家族，P1 新增）** | |
-| `src/PlcMesBridge.Core/ViewModels/` | 下沉的 VM 基建（`ViewModelBase`/`RelayCommand`，namespace 不变） |
-| `src/PlcMesBridge.Core/Comms/IoPointTable.cs` | IO 点表模型 + `PointTableValidator`（重复绑定两道闸）+ `PointTableSnapshot` |
-| `src/PlcMesBridge.Core/Comms/IoPointTableStore.cs` | `config/pointtable.json` 存取 + `BuildDefaultTemplate` 缺省模板（自愈） |
-| `src/PlcMesBridge.Core/Comms/IoBus.cs` | `IPointTableBus` + 真机 `ModbusPointTableBus`（逐块读写/RMW 写 DO/5s 重连）+ 演示 `MockPointTableBus` |
-| `src/PlcMesBridge.Core/Comms/IoCouplerConnectionTester.cs` | IO 耦合器连通测试（三态文案，先测再存） |
+| `src/CureLine.Core/ViewModels/` | 下沉的 VM 基建（`ViewModelBase`/`RelayCommand`，namespace 不变） |
+| `src/CureLine.Core/Comms/IoPointTable.cs` | IO 点表模型 + `PointTableValidator`（重复绑定两道闸）+ `PointTableSnapshot` |
+| `src/CureLine.Core/Comms/IoPointTableStore.cs` | `config/pointtable.json` 存取 + `BuildDefaultTemplate` 缺省模板（自愈） |
+| `src/CureLine.Core/Comms/IoBus.cs` | `IPointTableBus` + 真机 `ModbusPointTableBus`（逐块读写/RMW 写 DO/5s 重连）+ 演示 `MockPointTableBus` |
+| `src/CureLine.Core/Comms/IoCouplerConnectionTester.cs` | IO 耦合器连通测试（三态文案，先测再存） |
 | **程序①（策略预置 + IO 测试，V0.0.20 三轮新增）** | |
 | `src/CureStation/ViewModels/CuringPolicyViewModel.cs` | 策略窗编排：预置库（IsPreset）/套用为自定义/三拦截/先改副本/可视化预览数据（`SlotPreviewItem` 四档色键） |
 | `src/CureStation/ViewModels/IoTestViewModel.cs` + `IoTestWindow.*` | IO 通讯测试窗：点表驱动仓位卡网格（DI 只读灯/DO 点击钮）+ 一键遍历跑马灯 + 共享总线（关窗 Detach） |
 | **Core 共享（业务既有）** | |
-| `src/PlcMesBridge.Core/Services/LocalLogService.cs` | 本机操作日志落盘（截 50 字写文件，全量上界面） |
-| `src/PlcMesBridge.Core/Modes/MultiMachineGateway.cs` | 多机网关：触发→JSON→POST→回写 + Manager（Modbus 底座已接，业务零改动） |
-| `src/PlcMesBridge.Core/Comms/ModbusStationClient.cs` | **真机底座（P2 新增）**：`IPlcClient` 的 Modbus TCP 实现——地址="剥 R/D 取数字"=协议地址、字符串 2 字节/寄存器 big-endian、分帧 125/123，三语义集中一处 |
-| `src/PlcMesBridge.Core/Comms/`（PLC 侧） | `IPlcClient` + 真机 `ModbusStationClient` + 模拟 `SimulatedPlcClient` + 连通测试 `PlcConnectionTester`（三菱 `MelsecPlcClient` 已删） |
-| `src/PlcMesBridge.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段） |
-| `src/PlcMesBridge.Core/Data/CureRecordStore.cs` | `PLCtable` CRUD + `ComputeStats` 纯统计 |
-| `src/PlcMesBridge.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/PLC 配置模型与校验 |
-| `tests/PlcMesBridge.Tests/` | 315 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
+| `src/CureLine.Core/Services/LocalLogService.cs` | 本机操作日志落盘（截 50 字写文件，全量上界面） |
+| `src/CureLine.Core/Modes/MultiMachineGateway.cs` | 多机网关：触发→JSON→POST→回写 + Manager（Modbus 底座已接，业务零改动） |
+| `src/CureLine.Core/Comms/ModbusStationClient.cs` | **真机底座（P2 新增）**：`IPlcClient` 的 Modbus TCP 实现——地址="剥 R/D 取数字"=协议地址、字符串 2 字节/寄存器 big-endian、分帧 125/123，三语义集中一处 |
+| `src/CureLine.Core/Comms/`（PLC 侧） | `IPlcClient` + 真机 `ModbusStationClient` + 模拟 `SimulatedPlcClient` + 连通测试 `PlcConnectionTester`（三菱 `MelsecPlcClient` 已删） |
+| `src/CureLine.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段） |
+| `src/CureLine.Core/Data/CureRecordStore.cs` | `PLCtable` CRUD + `ComputeStats` 纯统计 |
+| `src/CureLine.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/PLC 配置模型与校验 |
+| `tests/CureLine.Tests/` | 315 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
 | `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
 
 ## 构建与验证命令
 
 ```powershell
 # 全量构建（0 警告 0 错误）
-dotnet build PlcMesBridge.slnx --nologo
+dotnet build CureLine.slnx --nologo
 # 全量测试（315/315 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
-dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
+dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
 # 子模块改动后（VS MSBuild，net472，原样沿用上游命令）
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
   "extern/kaleidoscope/Kaleidoscope/Kaleidoscope.csproj" `

@@ -4,9 +4,9 @@
 // 加载失败不抛（现场图片可能正被写入），路径后追加提示。
 // =========================================================================
 
-using PlcMesBridge.ViewModels;
+using CureLine.ViewModels;
 using System.Windows.Media.Imaging;
-using PlcMesBridge.Core.Infrastructure;
+using CureLine.Core.Infrastructure;
 
 namespace CimGateway.ViewModels;
 

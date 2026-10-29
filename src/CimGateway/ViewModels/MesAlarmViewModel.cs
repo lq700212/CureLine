@@ -2,8 +2,8 @@
 // MesAlarmViewModel：报警窗展示（MVVM，纯显示 + 关闭命令）。
 // =========================================================================
 
-using PlcMesBridge.ViewModels;
-using PlcMesBridge.Core.Infrastructure;
+using CureLine.ViewModels;
+using CureLine.Core.Infrastructure;
 
 namespace CimGateway.ViewModels;
 

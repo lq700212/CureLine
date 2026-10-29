@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <!--程序②身份名：exe/程序集/根命名空间 = CimGateway（CIM 整线过账网关）；
-        共享库 PlcMesBridge.Core 的 namespace 不随动（基建下沉既定约定）。-->
+        共享库 CureLine.Core（namespace 随 V0.0.24 仓库更名统一为 CureLine.*）。-->
     <RootNamespace>CimGateway</RootNamespace>
     <AssemblyName>CimGateway</AssemblyName>
     <Nullable>enable</Nullable>
@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PlcMesBridge.Core\PlcMesBridge.Core.csproj" />
+    <ProjectReference Include="..\CureLine.Core\CureLine.Core.csproj" />
   </ItemGroup>
 
 </Project>

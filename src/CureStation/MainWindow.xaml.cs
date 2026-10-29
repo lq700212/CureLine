@@ -5,7 +5,7 @@
 
 using System.Windows;
 using CureStation.ViewModels;
-using PlcMesBridge.Core.Infrastructure;
+using CureLine.Core.Infrastructure;
 
 namespace CureStation;
 

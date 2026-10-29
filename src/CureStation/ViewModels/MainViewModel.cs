@@ -14,12 +14,12 @@
 
 using System.Collections.ObjectModel;
 using System.Windows.Threading;
-using PlcMesBridge.Core.Comms;
-using PlcMesBridge.Core.Curing;
-using PlcMesBridge.Core.Infrastructure;
-using PlcMesBridge.Core.Security;
-using PlcMesBridge.Core.Services;
-using PlcMesBridge.ViewModels;
+using CureLine.Core.Comms;
+using CureLine.Core.Curing;
+using CureLine.Core.Infrastructure;
+using CureLine.Core.Security;
+using CureLine.Core.Services;
+using CureLine.ViewModels;
 
 namespace CureStation.ViewModels;
 
@@ -406,7 +406,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             }
 
             // 演示开关：config.ini [setting] Simulate=1 → Mock 总线（无硬件全流程），
-            // key 与主程序 PlcMesBridge 同名沿用（跨程序一致的运维习惯）。
+            // key 与主程序 CimGateway（原 PlcMesBridge）同名沿用（跨程序一致的运维习惯）。
             bool simulate = IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Simulate", "0") == "1";
             IPointTableBus bus = simulate ? new MockPointTableBus() : new ModbusPointTableBus();
             bus.Start(config);

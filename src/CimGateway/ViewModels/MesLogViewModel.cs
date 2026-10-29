@@ -8,10 +8,10 @@
 // 滚动到底部是纯视图行为，留给 View（订阅集合变化调 ScrollIntoView）。
 // =========================================================================
 
-using PlcMesBridge.ViewModels;
+using CureLine.ViewModels;
 using System.Collections.ObjectModel;
-using PlcMesBridge.Core.Infrastructure;
-using PlcMesBridge.Core.Mes;
+using CureLine.Core.Infrastructure;
+using CureLine.Core.Mes;
 
 namespace CimGateway.ViewModels;
 

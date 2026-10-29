@@ -10,8 +10,8 @@
 using System.IO;
 using System.Windows;
 using CureStation.ViewModels;
-using PlcMesBridge.Core.Infrastructure;
-using PlcMesBridge.Core.Security;
+using CureLine.Core.Infrastructure;
+using CureLine.Core.Security;
 
 namespace CureStation;
 

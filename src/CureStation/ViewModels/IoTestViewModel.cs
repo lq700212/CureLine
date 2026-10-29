@@ -20,8 +20,8 @@
 
 using System.Collections.ObjectModel;
 using System.Windows.Threading;
-using PlcMesBridge.Core.Comms;
-using PlcMesBridge.ViewModels;
+using CureLine.Core.Comms;
+using CureLine.ViewModels;
 
 namespace CureStation.ViewModels;
 
@@ -164,10 +164,10 @@ public sealed class IoTestViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(config);
 
         // 网格尺寸与主窗 BuildSlots 同口径（最大架/层号垫底 10×3）
-        RackCount = Math.Max(PlcMesBridge.Core.Curing.SlotLocationCode.RacksPerRow,
+        RackCount = Math.Max(CureLine.Core.Curing.SlotLocationCode.RacksPerRow,
             config.Devices.SelectMany(d => d.Bindings).Where(b => b.Rack > 0)
                 .Select(b => b.Rack).DefaultIfEmpty(1).Max());
-        LevelCount = Math.Max(PlcMesBridge.Core.Curing.SlotLocationCode.Levels,
+        LevelCount = Math.Max(CureLine.Core.Curing.SlotLocationCode.Levels,
             config.Devices.SelectMany(d => d.Bindings).Where(b => b.Level > 0)
                 .Select(b => b.Level).DefaultIfEmpty(1).Max());
 
