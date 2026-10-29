@@ -30,8 +30,17 @@
   网关自定义偏移拆写（旧偏移地址不写）、配置窗 VM 回显/保存热生效/非法拦；
   `TestScope` 静态快照纳入两个新静态（防用例间污染）。顺带清了上轮遗留的
   `IoTestViewModel.StopSweep` CS8602（全量重建才暴露的可空流分析告警）。
+- **界面名去 PLC 化（V0.0.22 补丁，用户拍板）**：程序②已定名 CimGateway，
+  界面框架名跟着定位走——主窗标题"PLC通信"→**"CIM通信网关"**、设置菜单
+  "PLC设置"→**"网关设置"**、配置窗"PLC配置"→**"网关配置"**、页签
+  "多机PLC"→**"机台连接"**、机台面板心跳 ToolTip→"通讯心跳"；英文词条
+  同步（CIM Gateway/Gateway Settings/Gateway Config/Stations）；桌面快捷
+  方式默认描述跟主窗标题。**刻意保留**：日志内文"连接PLC成功"等（描述的
+  就是 PLC 连接行为，属实）与代码标识符（PlcConfig* 类型名）；LanguageService
+  中的死词条（连接PLC/PLC心跳/单机PLC/运行模式等，单机链路遗留零调用）
+  留待后续大扫除。
 - **验证**：`dotnet build` 0 警告 0 错误；`dotnet test` 315/315 全绿；
-  Simulate=1 冒烟见配置窗两新输入。
+  Simulate=1 冒烟见配置窗两新输入；主窗标题"CIM通信网关"截图目检通过。
 
 ## V0.0.21（2026-10-29，程序②改名 CimGateway 定名）
 

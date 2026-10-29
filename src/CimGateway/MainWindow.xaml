@@ -8,7 +8,7 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainWindowViewModel, IsDesignTimeCreatable=False}"
         Icon="Assets/app.ico"
-        Title="{Binding TitleText, FallbackValue='PLC通信'}" WindowState="Maximized" Width="1230" Height="640">
+        Title="{Binding TitleText, FallbackValue='CIM通信网关'}" WindowState="Maximized" Width="1230" Height="640">
     <!--主窗（MVVM：状态走 MainWindowViewModel，本文件纯绑定）。
         多机视图 = 多机版 Form1（单机视图与"运行模式"已随单机链路删除，P2.1）。
         菜单门禁走 VM（admin/dev/未登录）；视图筛选下拉 = Form2/Form6"只看某几台"。
@@ -31,7 +31,7 @@
                     DataContext 走逻辑树继承（与父菜单同 VM），直接绑 VM 属性。-->
                 <MenuItem Header="{Binding MiSettingsText, FallbackValue='设置'}"
                           Style="{StaticResource FreshMenuDropButton}">
-                    <MenuItem Header="{Binding MiPlcText, FallbackValue='PLC设置'}"
+                    <MenuItem Header="{Binding MiPlcText, FallbackValue='网关设置'}"
                               Command="{Binding ShowPlcCommand}"
                               Visibility="{Binding PlcVisible,
                                         Converter={StaticResource BoolToVisibilityConverter}}"

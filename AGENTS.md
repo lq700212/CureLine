@@ -146,7 +146,7 @@
 | `src/CimGateway/ViewModels/` | 主程序各窗 VM（`IDialogService` 基建 + 各窗 VM，主窗 VM 含视图筛选/门禁） |
 | `src/CimGateway/MesDebugWindow.*` | 调试窗：5 接口表单 + API0033 扩展 + 预览上传 |
 | `src/CimGateway/MesLogWindow.*` | 日志窗（-1 全部机台 / >=0 分机台，关窗退订） |
-| `src/CimGateway/PlcConfigWindow.*` | PLC 配置窗（多机/接口两页 + 测试连接 + 保存重启，逻辑在 Core；单机页已删） |
+| `src/CimGateway/PlcConfigWindow.*` | 网关配置窗（机台连接/接口地址两页 + 测试连接 + 保存热生效，逻辑在 Core；单机页已删；界面名已去 PLC 化——主窗"CIM通信网关"/菜单"网关设置"，V0.0.22 补丁） |
 | `src/CimGateway/MesAlarmWindow.*` / `ImageWindow.*` | 报警窗 / 图片查看 |
 | **Core 共享（固化工艺家族，P3.1 新增）** | |
 | `src/PlcMesBridge.Core/Curing/CuringPolicy.cs` | 工艺策略模型：时长三级覆盖（仓位>层>全局，`ResolveMinutes` 唯一出口）+ 光栅门控 + `CuringPolicyValidator`（时长/层号/仓位键/重名） |

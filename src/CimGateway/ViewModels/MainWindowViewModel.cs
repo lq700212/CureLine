@@ -97,11 +97,11 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     public bool PlcEnabled => _role == LoginRole.Dev;
     public bool SettingsItemEnabled => RunModeSettings.IsLoggedIn(_role);
 
-    public string TitleText => Tr("PLC通信");
+    public string TitleText => Tr("CIM通信网关");
     public string MiLogText => Tr("MES 交互实时日志");
     public string MiDebugText => Tr("MES 接口调试界面");
     public string MiSettingsText => Tr("设置");
-    public string MiPlcText => Tr("PLC设置");
+    public string MiPlcText => Tr("网关设置");
     public string MiChangePwdText => Tr("修改密码");
     public string MiShortcutText => Tr("创建桌面快捷方式");
     public string MiLangText =>

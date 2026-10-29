@@ -22,7 +22,7 @@
                        VerticalAlignment="Center"
                        Foreground="{StaticResource FreshPrimaryDeepBrush}" />
                 <Label Content="⚫" FontSize="16" Foreground="{Binding LampColor, FallbackValue=Gray}"
-                       VerticalAlignment="Center" ToolTip="PLC心跳" />
+                       VerticalAlignment="Center" ToolTip="通讯心跳" />
             </StackPanel>
             <ListBox ItemsSource="{Binding LogLines}" SelectedItem="{Binding SelectedLine}"
                      HorizontalContentAlignment="Left" FontSize="12" />

@@ -217,8 +217,8 @@ public class PlcConfigViewModel : ViewModelBase
         set => Set(ref _scanIntervalText, value ?? "");
     }
 
-    public string TitleText => Tr("PLC配置");
-    public string TabMultiText => Tr("多机PLC");
+    public string TitleText => Tr("网关配置");
+    public string TabMultiText => Tr("机台连接");
     public string TabApiText => Tr("接口地址");
     public string SaveText => Tr("保存并重启");
     public string CancelText => Tr("取消");
@@ -383,7 +383,7 @@ public class PlcConfigViewModel : ViewModelBase
             string lines = string.Join("\r\n",
                 errs.Select(x => $"{Tr(x.Field)}：{Tr(x.Reason)}"));
             _dialogs.ShowMessage($"{Tr("以下配置有误")}：\r\n{lines}",
-                Tr("PLC配置"), DialogImage.Warning);
+                Tr("网关配置"), DialogImage.Warning);
             return;
         }
 

@@ -57,7 +57,7 @@ public static class DesktopShortcut
 
     /// <summary>
     /// 真正写 .lnk 文件（唯一碰磁盘/COM 的地方）。
-    /// description 为空则默认 "PLC通信"（与主窗标题一致）。
+    /// description 为空则默认 "CIM通信网关"（与主窗标题一致）。
     /// </summary>
     public static void Create(string exePath, string shortcutPath, string? description = null)
     {
@@ -74,7 +74,7 @@ public static class DesktopShortcut
                 shortcut.TargetPath = exePath;
                 shortcut.WorkingDirectory = Path.GetDirectoryName(exePath) ?? "";
                 shortcut.IconLocation = BuildIconLocation(exePath);
-                shortcut.Description = description ?? "PLC通信";
+                shortcut.Description = description ?? "CIM通信网关";
                 shortcut.Save();
             }
             finally
