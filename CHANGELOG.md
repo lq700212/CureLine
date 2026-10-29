@@ -2,6 +2,33 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.23（2026-10-29，培训文档套装 6 份——两程序全量交付件）
+
+背景：交付清单缺客户可读的三档文档（操作员/客户技术工艺/内部）。
+本次全流程跑通培训文档生成：盘点权限口径 → 截图 harness 实拍 →
+分段写作 → 核验全绿 → PDF 转换，沉淀成两程序各三份共 **6 份 md + 6 份 PDF**。
+
+- **6 份文档**（`docs/`，PDF 在 `docs/pdf/`）：
+  程序①固化程控（操作员 L1 视角 / 客户技术工艺 L3 视角 / 内部全量）+
+  程序②整线网关（操作员 / 客户工艺 / 内部全量）。
+  **权限可达铁律**：程序② dev 专属页（网关设置/网关配置窗）在其中
+  4 份客户向文档**零出现**（正文禁词双保险 + 截图 `gw-plcconfig.png`
+  仅内部手册引用——`tools/DocShot/check_docs.py` 断言锁死）。
+- **截图 20 张**（`docs/images/`，`cs_*`=程序① 12 张 + `gw_*`=程序② 8 张）：
+  离屏 WPF 拍摄 harness（`tools/DocShot/`，PrintWindow 含标题栏 +
+  RenderTargetBitmap 兜底 + 宽高/像素指标三道 R3 断言）——
+  Mock 种子配置自动注入（演示数据注明）、关窗确认弹窗链路全程绕开
+  （主窗 Hide+Environment.Exit 收尾）、演示掉线时段自动避开。
+- **核验脚本**（`tools/DocShot/check_config.py` + `check_docs.py`）：
+  6 份文档 H1/必含截图/白名单引用/客户向禁词/内部版全量图 5 道闸，
+  `--pdf` 追加 PDF 存在性 + >50KB 防空渲染；**check_docs: ALL PASS (md+pdf)**。
+- **PDF 转换脚本**（`tools/DocShot/md_to_pdf.py`）：markdown→HTML→
+  Edge headless 打印（A4/微软雅黑/print-color-adjust 保色、中文文件名
+  经 ASCII 临时名双保险、临时 HTML 转完即删）。
+- **README**：目录节补培训文档条目 + 测试总数口径修正（223→315）。
+- **测试零改动**：本轮只加 `tools/Docs*`（不进 slnx、不进 git 的
+  bin/obj/seed/runner 跑完即删）；src 零触碰，315/315 保持全绿。
+
 ## V0.0.22（2026-10-29，整线网关参数全配置化——P2.2 联调预备）
 
 背景：P2.2（6 接口迁移与整线联调）卡在等 D/R 终版地址 + CIM W68 终版寄存器

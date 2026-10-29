@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- =====================================================================
+       DocShot.csproj —— 培训文档截图 harness 工程（WPF net8）
+       干什么：引用两程序（CureStation/CimGateway）与 Core 的编译产物，
+         直接 new 生产窗体 + 生产装配链截 PNG（见 DocShot.cs）。
+       为什么引用 bin 产物而不是 ProjectReference：ProjectReference 会把
+         两程序的 App.xaml.StartupUri 幹进来（同 App 类冲突），bin 产物只取
+         窗体与业务类型，规避 Application 实例冲突。
+       怎么跑：run_docshot.ps1 统筹（build 两程序 → build 本工程 →
+         组装 runner 依赖目录 → 起 exe）。
+       ===================================================================== -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>DocShot</RootNamespace>
+    <AssemblyName>DocShot</AssemblyName>
+    <NoWarn>NU1701</NoWarn>
+    <!-- 截图 harness 不进 CI：产物当地球，不收敛版本号 -->
+    <Version>0.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="CureStation">
+      <HintPath>..\..\src\CureStation\bin\Debug\net8.0-windows\CureStation.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="CimGateway">
+      <HintPath>..\..\src\CimGateway\bin\Debug\net8.0-windows\CimGateway.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PlcMesBridge.Core">
+      <HintPath>..\..\src\PlcMesBridge.Core\bin\Debug\net8.0-windows\PlcMesBridge.Core.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- SQLite（与 Core 同版本 NuGet——harness deps.json 声明后强名加载才能解析） -->
+  <ItemGroup>
+    <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
+  </ItemGroup>
+
+  <!-- 程序①资源字典（run_docshot.ps1 在 build 前自动由源 App.xaml 生成，
+       编译进本程序集——pack URI 加载。.xaml 文件由 SDK 默认 glob 收编为
+       Page，无需显式 Page Include，显式加会 NETSDK1022 重复项） -->
+
+</Project>

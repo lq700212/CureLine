@@ -162,9 +162,13 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
   + 单线过账服务）
 - `src/CimGateway/` — 主程序 WPF 界面（主窗/调试/报警/日志/图片窗），
   图标在 `Assets/`（`app.ico` 程序图标 / `app.png` 高清源备用）
-- `tests/PlcMesBridge.Tests/` — 223 例 xUnit（`Mocks/`：本地桩 MES /
-  网关标准报文 / 静态全局快照恢复 / Fake 对话框两套 / ScriptedPointBus 状态机桩，
-  加用例直接复用）
+- `tests/PlcMesBridge.Tests/` — 315 例 xUnit（`Mocks/`：本地桩 MES /
+  网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus`
+  状态机桩，加用例直接复用）
 - `extern/kaleidoscope/` — 通讯子模块（独立仓库，勿直接改，见 AGENTS.md）
 - `docs/重构设计_20261028.md` — 两程序拆分设计与 Phase 路线
+- **培训文档（6 份）**：`固化程控_操作员手册.md` / `固化程控_客户技术工艺手册.md`
+  / `固化程控_内部手册.md` / `整线网关_操作员手册.md` / `整线网关_客户技术工艺手册.md`
+  / `整线网关_内部手册.md`（含配图 `docs/images/`，PDF 版在 `docs/pdf/`；
+  拍摄与核验 harness 在 `tools/DocShot/`）
 - `config.sample.ini` — 现场配置样例
