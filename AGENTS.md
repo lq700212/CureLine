@@ -277,7 +277,9 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   ② **防锁死红线**：最后一个 LEVEL.4 删/降一律拒绝（`OperatorStore` 层拦，
   权限窗只负责弹框展示）；③ 未知级别文本按 L1 兜底（安全侧：错降无害错升
   危险）；④ 门禁级别缺省：工单 L1（途程/数量/清零 L2、制程代码 L3）、
-  工艺策略 L3、IO 测试 L3、点表/权限管理 L4——改门禁只动 `MainViewModel.Gate` 调用处；
+  工艺策略 L3、IO 测试 L3、点表/权限管理/过账配置/演示模式切换 L4——
+  演示开关 L4 的理由：Mock 边沿会照常驱动状态机与过账链（影响生产数据
+  口径）——改门禁只动 `MainViewModel.Gate` 调用处；
   ⑤ 工单窗 Flush 有门禁兜底：级别不够的字段回读盘上原值（防绕过 IsEnabled
   直改 VM 属性越权落盘）；⑥ 初始密码 admin/123456 只在 App.OnStartup 一处，
   上线必改，文档不得记录现场真实密码；⑦ **登录窗记忆/改密语义（V0.0.20 对齐
@@ -293,7 +295,10 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   ⑧ 顶栏登录态格式="级别短名：账号"（`ShortName`，如"管理员：admin"，
   不带"操作员"前缀/LEVEL 字样——UI 口径 V0.0.20 二轮定）；登录窗下拉
   编辑框/下拉项（ItemContainerStyle Padding=19）/密码框三处文本左缘对齐
-  是 UI 契约，动输入框内边距须放大截图核对；顶栏连接文本不截断（* 弹性列
+  是 UI 契约，动输入框内边距须放大截图核对——`FreshPwdInput` Padding 左 3
+  是实机像素定标值（PasswordBox 内部渲染无 TextBoxView 内缩，同抄
+  FreshInput 的 6 会让密码首字符偏右约 3 逻辑 px，V0.0.30 校准）；
+  顶栏连接文本不截断（* 弹性列
   完整显示，TextTrimming+ToolTip 兜底），勿再引入按长度截断。
 - **策略预置/套用语义（V0.0.20 三轮起，全在 `CuringPolicy.IsPreset` +
   `CuringPolicyViewModel`）**：① 预置策略（IsPreset=true，出厂模板）可选中

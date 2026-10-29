@@ -399,6 +399,25 @@
                             Command="{Binding OpenPointTableCommand}" Margin="0,0,6,0"/>
                     <Button Tag="{StaticResource Geo.Reconnect}" Style="{StaticResource GhostButton}" Content="重新连接"
                             Command="{Binding ReconnectCommand}" Margin="0,0,6,0"/>
+                    <!-- 演示模式开关（Mock 数据热切换）：开=Mock 总线（高亮对齐日志钮），关=真机 Modbus；
+                         点击写回 [setting] Simulate 并重建总线立即生效，L4 门禁 -->
+                    <Button Tag="{StaticResource Geo.Eye}" Command="{Binding ToggleSimulateCommand}"
+                            Content="{Binding SimulateText, FallbackValue=演示：关}" Margin="0,0,6,0"
+                            ToolTip="演示模式开关：开启后仓位按演示脚本流转（无真实硬件），再次点击切回真机，立即生效。注意：演示边沿会照常驱动状态机与过账链，正式环境开启前请确认过账配置">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                                <!-- 开启态高亮（PrimaryGhost 三键，与日志钮同款）——一眼区分演示/真机 -->
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSimulate, FallbackValue=False}" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource Brush.PrimaryGhostBg}"/>
+                                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.PrimaryGhostBorder}"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource Brush.PrimaryGhostFg}"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                     <Button Style="{StaticResource GhostButton}"
                             Content="{Binding ToggleThemeText, FallbackValue=深色}" Margin="0,0,6,0"
                             Command="{Binding ToggleThemeCommand}"

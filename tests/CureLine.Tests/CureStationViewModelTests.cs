@@ -488,6 +488,81 @@ public class CureStationViewModelTests
         }
     }
 
+    // ---------- 演示模式开关（Mock 数据热切换，2026-10-30） ----------
+
+    [Fact(DisplayName = "演示开关门禁：未登录拦下、L1 拦下（需 L4）")]
+    public void MainVm_ToggleSimulate_GateBlocksBelowLevel4()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "0");   // 起手真机态
+        var fake = new FakeCureDialogService();
+        using var vm = new CureStation.ViewModels.MainViewModel(fake);
+        Assert.False(vm.IsSimulate);
+
+        vm.ToggleSimulateCommand.Execute(null);   // 未登录 → Gate 拦
+        Assert.Contains(fake.Calls, c => c.Contains("未登录"));
+        Assert.False(vm.IsSimulate);
+        Assert.Equal("0", IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Simulate", "0"));
+
+        fake.LoginResult = ("op1", OperatorLevel.Level1);   // L1 不够（需 L4）
+        vm.LoginCommand.Execute(null);
+        vm.ToggleSimulateCommand.Execute(null);
+        Assert.Contains(fake.Calls, c => c.Contains("权限不足"));
+        Assert.False(vm.IsSimulate);
+        Assert.Equal("0", IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Simulate", "0"));
+        Assert.Equal("演示：关", vm.SimulateText);
+    }
+
+    [Fact(DisplayName = "演示开关：L4 切换写回 ini + 文案跟随 + 总线热切换")]
+    public void MainVm_ToggleSimulate_WritesConfigAndSwitchesBus()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        // 起手真机态（Simulate=0）：IP 立即拒绝不等超时（同 BadIpRealMode 手法）
+        var config = IoPointTableStore.BuildDefaultTemplate("T", "127.0.0.1", 1, 1);
+        config.Devices[0].Port = 1;
+        config.Devices[0].TimeoutMs = 300;
+        IoPointTableStore.Save(config);
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "0");
+        var fake = new FakeCureDialogService();
+        using var vm = new CureStation.ViewModels.MainViewModel(fake);
+        fake.LoginResult = ("admin", OperatorLevel.Level4);
+        vm.LoginCommand.Execute(null);
+
+        // 关 → 开：Mock 总线接管（ConnectionSummary 带"演示模式"）
+        vm.ToggleSimulateCommand.Execute(null);
+        Assert.True(vm.IsSimulate);
+        Assert.Equal("演示：开", vm.SimulateText);
+        Assert.Equal("1", IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Simulate", "0"));
+        Assert.Contains("演示模式", vm.ConnectionText);
+
+        // 开 → 关：切回真机总线（ini 翻回 0；真总线后台重连不阻塞断言）
+        vm.ToggleSimulateCommand.Execute(null);
+        Assert.False(vm.IsSimulate);
+        Assert.Equal("演示：关", vm.SimulateText);
+        Assert.Equal("0", IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Simulate", "0"));
+
+        // 防抖收尾：真总线刚起后台连接线程就 Dispose 有竞态残留（偶发撞串行下一用例），
+        // 切回 Mock 态再交 Dispose——Mock 线程无 TCP 资源，干净收场
+        vm.ToggleSimulateCommand.Execute(null);
+        Assert.True(vm.IsSimulate);
+    }
+
+    [Fact(DisplayName = "演示开关初始态：与 ini 同源（=1 起手即开）")]
+    public void MainVm_ToggleSimulate_InitialFromConfig()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+        var fake = new FakeCureDialogService();
+        using var vm = new CureStation.ViewModels.MainViewModel(fake);
+
+        Assert.True(vm.IsSimulate);              // 构造即 Mock（顶栏按钮高亮态）
+        Assert.Equal("演示：开", vm.SimulateText);
+        Assert.Contains("演示", vm.ConnectionText);
+    }
+
     // ---------- 工单窗 VM（P3.2） ----------
 
     [Fact]

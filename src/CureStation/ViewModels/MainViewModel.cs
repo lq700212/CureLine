@@ -320,6 +320,22 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         private set => Set(ref _postingEnabled, value);
     }
 
+    /// <summary>演示模式当前态（true=Mock 总线流转中；顶栏开关按钮 DataTrigger 高亮）。</summary>
+    private bool _isSimulate;
+    public bool IsSimulate
+    {
+        get => _isSimulate;
+        private set => Set(ref _isSimulate, value);
+    }
+
+    /// <summary>演示开关按钮文案：显示当前模式（"演示：开"=Mock 演示中 / "演示：关"=真机通讯中）。</summary>
+    private string _simulateText = "演示：关";
+    public string SimulateText
+    {
+        get => _simulateText;
+        private set => Set(ref _simulateText, value);
+    }
+
     // ---------- 顶部统计条（方案 D，2026-10-29；RefreshSlots 每拍聚合） ----------
     // 五态口径与卡片 Kind 同名（Idle/Gate/Curing/Done/Alarm），详见 SlotStatistics。
 
@@ -394,6 +410,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public RelayCommand OpenIoTestCommand { get; }
     public RelayCommand ShowLogCommand { get; }
     public RelayCommand ToggleThemeCommand { get; }
+    public RelayCommand ToggleSimulateCommand { get; }
 
     public MainViewModel(IDialogService dialogs)
     {
@@ -409,6 +426,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         OpenIoTestCommand = new RelayCommand(OpenIoTest);
         ShowLogCommand = new RelayCommand(ShowLog);
         ToggleThemeCommand = new RelayCommand(ToggleTheme);
+        ToggleSimulateCommand = new RelayCommand(ToggleSimulate);
         // 主题按钮文案对齐 App.OnStartup 已应用的当前主题（测试态无 App：ThemeManager
         // 缺省 Light，同样落"深色"文案，现场首点即切 G1，行为一致）。
         ToggleThemeText = ThemeManager.Current == "Dark" ? "浅色" : "深色";
@@ -435,6 +453,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _config = config;   // 记住当前点表（重连按钮复用，勿传 null）
         BuildSlots(config);
         LoadPolicyBook();
+        // 演示开关初始态：与 StartBus 同源读 ini——顶栏按钮状态与实际总线类型一致
+        IsSimulate = IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Simulate", "0") == "1";
+        SimulateText = IsSimulate ? "演示：开" : "演示：关";
         StartBus(config);
         _refreshTimer.Start();
     }
@@ -551,9 +572,18 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
             // 状态机接线（全部后台线程——铁律 2）：边沿直转（machine 内部有锁）；
             // 断连恢复对齐快照（托盘在架的仓位重新计时）；连接态/错误照旧回 UI。
-            bus.PointChanged += (_, e) => _machine?.OnPointChanged(e);
-            bus.ConnectionChanged += (_, connected) =>
+            // 三事件回调统一比对 sender==_bus——总线热切换（重连/演示开关）时旧总线
+            // Dispose 后残留线程仍可能晚发事件（连接超时兜圈超过停机等待上限），
+            // 不比对会把新总线的顶栏文本/状态机喂上旧总线的报错与边沿（实测踩中）。
+            bus.PointChanged += (s, e) =>
             {
+                if (ReferenceEquals(s, _bus))
+                    _machine?.OnPointChanged(e);
+            };
+            bus.ConnectionChanged += (s, connected) =>
+            {
+                if (!ReferenceEquals(s, _bus))
+                    return;
                 if (connected)
                     _machine?.AlignFromSnapshot();
                 UiInvoke(() =>
@@ -562,7 +592,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                     ConnectionText = bus.ConnectionSummary;
                 });
             };
-            bus.Error += (_, msg) => UiInvoke(() => ConnectionText = msg);
+            bus.Error += (s, msg) => UiInvoke(() =>
+            {
+                if (ReferenceEquals(s, _bus))
+                    ConnectionText = msg;
+            });
             // 顶栏连接状态列是 * 弹性宽（不挤右侧按钮），错误文本不截断完整显示；
             // 极窄窗口由 XAML TextTrimming 省略号兜底 + ToolTip 悬停看全文。
 
@@ -864,5 +898,29 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
         ToggleThemeText = target == "Dark" ? "浅色" : "深色";
         LocalLogService.Write($"主题切换：{(target == "Dark" ? "深色（G1）" : "浅色（G2）")}");
+    }
+
+    // ---------- 演示模式开关（Mock 数据热切换，2026-10-30） ----------
+
+    /// <summary>
+    /// 演示模式开关：写回 [setting] Simulate 后立即经 StartBus 重建总线
+    /// （Mock↔真机热切换，无需重启；状态机 Attach 换通道流程状态不丢，
+    /// 快照对齐语义与"重新连接"完全同链）。门禁 L4——与点表/过账配置同级：
+    /// 演示边沿会照常驱动状态机与过账链（Mock 托盘流转也会触发 MES 过账），
+    /// 影响生产数据口径，不给 L3。ini 写失败时配置保持旧值，但内存态已翻转——
+    /// 与主题切换"写盘失败只丢记忆"口径一致（下次启动按盘上值起）。
+    /// </summary>
+    private void ToggleSimulate()
+    {
+        if (!Gate(OperatorLevel.Level4, "演示模式切换"))
+            return;
+        bool target = !IsSimulate;
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", target ? "1" : "0");
+        IsSimulate = target;
+        SimulateText = target ? "演示：开" : "演示：关";
+        LocalLogService.Write(target
+            ? "演示模式开启（Mock 总线，无真实硬件）"
+            : "演示模式关闭（真机 Modbus 总线）");
+        StartBus(_config);
     }
 }

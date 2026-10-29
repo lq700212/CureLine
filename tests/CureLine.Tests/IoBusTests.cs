@@ -41,9 +41,11 @@ public class IoBusTests
         using var bus = new MockPointTableBus();
         var key = new IoPointKey(false, IoPointRole.LampRed, 1, 1);
         // Mock 总线 Start 后自动演示线程会并发发托盘/光栅边沿（模拟仓位流转）——
-        // 断言"事件序列里存在写入回显"而非"最后一个事件是它"（竞态安全）
-        var events = new List<PointChangedEventArgs>();
-        bus.PointChanged += (_, e) => events.Add(e);
+        // 断言"事件序列里存在写入回显"而非"最后一个事件是它"（竞态安全）；
+        // 收集容器必须并发安全：TickLoop 后台 Add 与本线程 enumerate 并发，
+        // List 会爆 "Collection was modified"（长跑偶发，实测踩中）
+        var events = new System.Collections.Concurrent.ConcurrentQueue<PointChangedEventArgs>();
+        bus.PointChanged += (_, e) => events.Enqueue(e);
 
         bus.Start(DefaultConfig());
         Assert.True(bus.IsConnected);

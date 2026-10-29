@@ -35,7 +35,8 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
 #    - CimGateway：复制 config.sample.ini 到其 bin 的 config/config.ini，
 #      设 Simulate=1（多机网关直起即模拟 8 机台跑全流程）
 #    - CureStation：程序①自己的 bin 下 config/config.ini 设 Simulate=1，
-#      启动即 Mock 总线按仓位流转演示（30 卡片 + 周期演示掉线重连）
+#      启动即 Mock 总线按仓位流转演示（30 卡片 + 周期演示掉线重连）；
+#      也可在主窗【演示】按钮即时切换（L4 门禁，Mock↔真机热生效免重启）
 ```
 
 ## 架构（MVVM）

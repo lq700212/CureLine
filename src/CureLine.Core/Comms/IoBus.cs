@@ -74,6 +74,10 @@ public sealed class ModbusPointTableBus : IPointTableBus
     private CancellationTokenSource? _cts;
     private Task? _pollTask;
     private readonly List<string> _lastErrors = new();
+    // 停机静默阀：Stop 后残留线程（连接超时兜圈 >StopCore 的等待上限时）仍可能
+    // 冒 Error——订阅方是 UI/VM，事件晚到会把新总线的连接文本覆盖成旧总线报错
+    // （热切换偶发，实测踩中）。置位后一切出站事件拦截，对象内部状态照常收敛。
+    private volatile bool _stopped;
 
     // 语义键 →（设备、块、位、寄存器地址）；启动时由绑定构建（校验已保证唯一）。
     private sealed record CouplerPoint(IoCouplerDevice Device, int Block, int Bit, ushort DoAddress);
@@ -105,6 +109,7 @@ public sealed class ModbusPointTableBus : IPointTableBus
         {
             if (_pollTask != null)
                 StopCore(); // 重复 Start = 先停后启（换配置热刷场景）
+            _stopped = false;
             if (config.Devices.Count == 0)
             {
                 // 调用方必须先过 PointTableValidator（空表校验已拦）——这里兜底禁止静默起空总线
@@ -296,6 +301,8 @@ public sealed class ModbusPointTableBus : IPointTableBus
 
     private void RaiseError(string msg)
     {
+        if (_stopped)
+            return; // 停机静默阀（StopCore 置位）：残留线程的报错不再出门
         lock (_lastErrors)
         {
             // 只记边沿：同文本 10 秒内不重复发
@@ -308,7 +315,13 @@ public sealed class ModbusPointTableBus : IPointTableBus
 
     private void StopCore()
     {
+        _stopped = true; // 先竖静默阀：此后残留线程再冒的 Error 一律拦下
         _cts?.Cancel();
+        // 等轮询线程退出再放资源：Cancel 后立即 Dispose CTS 会与在飞的
+        // Task.Delay(token) 竞态爆 ObjectDisposedException——async void 外层
+        // catch 会冒"轮询线程异常退出"脏 Error 事件，旧总线 Dispose 后仍触发，
+        // 把新总线的顶栏连接文本覆盖成错误文案（热切换/重连偶发，实测踩中）。
+        try { _pollTask?.Wait(2000); } catch { /* 任务内异常已在 PollLoop 兜底 */ }
         _cts?.Dispose();
         _cts = null;
         _pollTask = null;
@@ -339,6 +352,8 @@ public sealed class MockPointTableBus : IPointTableBus
     private Task? _tickTask;
     private int _boundPoints; // 绑定语义点数（演示推进用）
     private Dictionary<IoPointKey, IoPointBinding> _bindings = new();
+    // 停机静默阀：同 Modbus 总线（Stop 后残留线程的 Error 不再出门）。
+    private volatile bool _stopped;
 
     private volatile PointTableSnapshot _snapshot = PointTableSnapshot.Empty;
     private readonly Dictionary<string, bool> _manualLamps = new();
@@ -364,6 +379,7 @@ public sealed class MockPointTableBus : IPointTableBus
         {
             if (_tickTask != null)
                 StopCore();
+            _stopped = false;
             IsConnected = true;
             ConnectionSummary = $"演示模式（{config.Devices.Count} 台配置）";
             _boundPoints = config.Devices.SelectMany(d => d.Bindings)
@@ -396,7 +412,11 @@ public sealed class MockPointTableBus : IPointTableBus
     // 停止：掐演示线程 + 快照回空（幂等；已写值清除避免复启残留旧灯）
     private void StopCore()
     {
+        _stopped = true; // 先竖静默阀（同 Modbus 总线）
         _cts?.Cancel();
+        // 同 Modbus 总线 StopCore：先等演示线程退出再 Dispose CTS（防在飞
+        // Task.Delay(token) 摸到已释放 CTS 冒脏 Error 事件）。
+        try { _tickTask?.Wait(2000); } catch { /* 任务内异常已在 TickLoop 兜底 */ }
         _cts?.Dispose();
         _cts = null;
         _tickTask = null;
@@ -527,5 +547,10 @@ public sealed class MockPointTableBus : IPointTableBus
         _snapshot = new PointTableSnapshot(states, DateTimeOffset.Now);
     }
 
-    private void RaiseError(string msg) => Error?.Invoke(this, msg);
+    private void RaiseError(string msg)
+    {
+        if (_stopped)
+            return; // 停机静默阀（StopCore 置位）：残留线程的报错不再出门
+        Error?.Invoke(this, msg);
+    }
 }

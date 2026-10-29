@@ -48,14 +48,17 @@
             <Geometry x:Key="Geo.CloseX">M6 18L18 6M6 6l12 12</Geometry>                                                                                          <!-- galaxy/Buttons/Creatlydev_dull-chicken-81 -->
 
             <!-- ============ 主窗专用样式（色走语义键，随主题换皮） ============ -->
-            <!-- 幽灵按钮：主窗顶栏胶囊（HTML .btn 直译 4px 直角小圆角；Light=半透明白玻璃 / Dark=深蓝板岩） -->
+            <!-- 幽灵按钮：主窗顶栏胶囊（HTML .btn 直译 padding 5px 13px ≈ 27px 高）；
+                 VerticalAlignment=Center 必守——顶栏按钮组与 Height=44 的系统三钮同池
+                 （水平 StackPanel 子元素垂直默认 Stretch，不居中会被拉到 44 高"顶到顶"） -->
             <Style x:Key="GhostButton" TargetType="Button">
                 <Setter Property="Background" Value="{DynamicResource Brush.GhostBg}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.GhostBorder}"/>
                 <Setter Property="Foreground" Value="{DynamicResource Brush.GhostFg}"/>
-                <Setter Property="Padding" Value="10,4"/>
+                <Setter Property="Padding" Value="13,5"/>
                 <Setter Property="BorderThickness" Value="1"/>
                 <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
                 <Setter Property="VerticalContentAlignment" Value="Center"/>
                 <!-- 主窗无边框化（V0.0.28）后整个品牌顶栏都是 caption 拖动区，
                      顶栏里的按钮必须声明"chrome 可命中"否则点不到（样式级一次声明） -->
@@ -292,7 +295,7 @@
                  设 VerticalAlignment=Center 会收缩内容宿主、裁掉文字下半截（实测教训） -->
             <Style x:Key="FreshInput" TargetType="TextBox">
                 <Setter Property="Height" Value="32"/>
-                <Setter Property="Padding" Value="8,0"/>
+                <Setter Property="Padding" Value="6,0,8,0"/>
                 <Setter Property="VerticalContentAlignment" Value="Center"/>
                 <Setter Property="Background" Value="{DynamicResource Brush.Fresh.InputBg}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Border}"/>
@@ -426,10 +429,14 @@
                     </Setter.Value>
                 </Setter>
             </Style>
-            <!-- 密码输入框：与 FreshInput 同款（PasswordBox 是独立控件需独立模板） -->
+            <!-- 密码输入框：与 FreshInput 同款（PasswordBox 是独立控件需独立模板）。
+                 Padding 左 3 非 6 是实测校准值：PasswordBox 内部渲染无 TextBoxView 的
+                 额外内缩，同抄 6 会让密码首字符比用户名编辑框文本（模板 Margin 8）
+                 靠右约 3 逻辑 px——登录窗"账号/密码文本左缘对齐" UI 契约（AGENTS.md），
+                 动此值须跑目检截图像素比对两框首字符左缘 -->
             <Style x:Key="FreshPwdInput" TargetType="PasswordBox">
                 <Setter Property="Height" Value="32"/>
-                <Setter Property="Padding" Value="8,0"/>
+                <Setter Property="Padding" Value="3,0,8,0"/>
                 <Setter Property="VerticalContentAlignment" Value="Center"/>
                 <Setter Property="Background" Value="{DynamicResource Brush.Fresh.InputBg}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Border}"/>
