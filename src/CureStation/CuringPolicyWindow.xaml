@@ -10,7 +10,8 @@
         Title="工艺策略（固化时长 / 光栅门控）"
         Height="780" Width="1280"
         WindowStartupLocation="CenterScreen" MinWidth="1080" MinHeight="700"
-        WindowStyle="None" Background="{DynamicResource Brush.Fresh.WinBg}"
+        WindowStyle="None" Background="Transparent" AllowsTransparency="True"
+        Foreground="{DynamicResource Brush.Fresh.FgMid}"
         Icon="Assets/app.ico"
         FontSize="12">
     <shell:WindowChrome.WindowChrome>
@@ -28,7 +29,12 @@
          预置策略不能直接保存/激活/删除（激活只认自定义——出厂模板保证可回溯）。
          取色全走 Brush.Fresh.*（画布分档 Tier* 四键双主题同名异值：
          Light=原稿浅色块、Dark=低透明霓虹浸染+亮字）；窗口骨架统一自绘标题条。-->
-    <Border BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1">
+    <!-- 圆角弹窗骨架（全弹窗统一）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow 浮层投影，
+         根 Grid Margin=14 给阴影渲染留白 -->
+    <Grid Margin="14">
+    <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+            BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+            Effect="{StaticResource Fx.WinShadow}">
         <DockPanel>
             <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
                 <Grid>
@@ -55,9 +61,9 @@
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}"
                                    Text="策略库（激活一个生效）"/>
-                        <Button DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
+                        <Button Tag="{StaticResource Geo.Plus}" DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
                                 Content="＋ 添加策略" Command="{Binding AddPolicyCommand}" Margin="0,8"/>
-                        <Button DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
+                        <Button Tag="{StaticResource Geo.Trash}" DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
                                 Content="－ 删除选中策略" Command="{Binding RemovePolicyCommand}" Margin="0,0,0,8"/>
                         <ListBox ItemsSource="{Binding Policies, FallbackValue={x:Null}}"
                                  SelectedItem="{Binding SelectedPolicy}">
@@ -149,9 +155,9 @@
                         <TextBlock DockPanel.Dock="Top" Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="0,2,0,6" TextWrapping="Wrap"
                                    Text="只给特殊仓位单独设时长（如 3-2=45），其余仓位走层/全局。"/>
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-                            <Button Style="{StaticResource FreshButton}" Content="＋ 添加行"
+                            <Button Tag="{StaticResource Geo.Plus}" Style="{StaticResource FreshButton}" Content="＋ 添加行"
                                     Command="{Binding AddSlotRowCommand}" Margin="0,0,8,0"/>
-                            <Button Style="{StaticResource FreshButton}" Content="－ 删除选中行"
+                            <Button Tag="{StaticResource Geo.Trash}" Style="{StaticResource FreshButton}" Content="－ 删除选中行"
                                     Command="{Binding RemoveSlotRowCommand}"/>
                         </StackPanel>
                         <DataGrid ItemsSource="{Binding SlotRows, FallbackValue={x:Null}}"
@@ -269,7 +275,7 @@
                 <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
                             Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                     <!-- 预置策略专用出口：套用为自定义（缺省隐藏——设计器与缺省态显示激活/保存） -->
-                    <Button Content="套用为自定义策略（保存并激活）"
+                    <Button Tag="{StaticResource Geo.Check}" Content="套用为自定义策略（保存并激活）"
                             Command="{Binding ApplyToCustomCommand}" Width="280" Height="36" Margin="0,0,8,0">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource FreshPrimaryButton}">
@@ -282,7 +288,7 @@
                             </Style>
                         </Button.Style>
                     </Button>
-                    <Button Content="激活并生效（保存 + 启用选中策略）"
+                    <Button Tag="{StaticResource Geo.Check}" Content="激活并生效（保存 + 启用选中策略）"
                             Command="{Binding ActivateCommand}" Width="280" Height="36" Margin="0,0,8,0">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource FreshButton}">
@@ -309,4 +315,5 @@
             </Grid>
         </DockPanel>
     </Border>
+    </Grid>
 </Window>

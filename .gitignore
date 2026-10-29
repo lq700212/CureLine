@@ -46,3 +46,6 @@ docs/vb_audit_out2/
 
 # ===== DocShot 截图 harness 运行期产物（publish/种子/运行盘不入库）=====
 tools/DocShot/runner/
+
+# UI 目检临时产物（截图/自动化脚本）
+ui-check/

@@ -9,7 +9,8 @@
         d:DataContext="{d:DesignInstance Type=vm:WorkOrderViewModel, IsDesignTimeCreatable=False}"
         Title="工单信息（R/L 双工位）" Height="640" Width="900"
         WindowStartupLocation="CenterOwner"
-        WindowStyle="None" Background="{DynamicResource Brush.Fresh.WinBg}"
+        WindowStyle="None" Background="Transparent" AllowsTransparency="True"
+        Foreground="{DynamicResource Brush.Fresh.FgMid}"
         Icon="Assets/app.ico" FontSize="12">
     <shell:WindowChrome.WindowChrome>
         <!-- 无边框自绘（V0.0.27 弹窗统一）：标题条命中拖动 + 边沿 6px 缩放（系统缩放能力保留） -->
@@ -22,7 +23,12 @@
          制程代码 L3+，员工工号/条码 L1+。物料上传（API0032）：使能勾选 +
          R/L 上传按钮（先保存工单再后台提交，结果看主窗顶栏过账状态）。
          取色全走 Brush.Fresh.*；窗口骨架统一自绘标题条（WinTitleBar 三样式）。-->
-    <Border BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1">
+    <!-- 圆角弹窗骨架（全弹窗统一）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow 浮层投影，
+         根 Grid Margin=14 给阴影渲染留白 -->
+    <Grid Margin="14">
+    <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+            BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+            Effect="{StaticResource Fx.WinShadow}">
         <DockPanel>
             <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
                 <Grid>
@@ -126,10 +132,11 @@
                 <!-- 底：保存 -->
                 <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                             Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-                    <Button Style="{StaticResource FreshButton}" Content="保存工单"
+                    <Button Tag="{StaticResource Geo.Save}" Style="{StaticResource FreshButton}" Content="保存工单"
                             Command="{Binding SaveCommand}" Width="160" Height="34"/>
                 </StackPanel>
             </Grid>
         </DockPanel>
     </Border>
+    </Grid>
 </Window>

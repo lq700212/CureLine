@@ -10,7 +10,8 @@
         Title="IO 通讯测试（点表通道验证）"
         Height="760" Width="1280" MinWidth="1080" MinHeight="620"
         WindowStartupLocation="CenterOwner"
-        WindowStyle="None" Background="{DynamicResource Brush.Fresh.WinBg}"
+        WindowStyle="None" Background="Transparent" AllowsTransparency="True"
+        Foreground="{DynamicResource Brush.Fresh.FgMid}"
         Icon="Assets/app.ico" FontSize="12">
     <shell:WindowChrome.WindowChrome>
         <!-- 无边框自绘（V0.0.27 弹窗统一）：标题条命中拖动 + 边沿 6px 缩放 -->
@@ -26,7 +27,12 @@
          三态灯色：绿=ON / 灰=OFF / 浅虚灰=未读到（断连或未轮询到）——
          色走 Fresh 键板（Success/DotOff/DotNoRead，Dark 同名换深色灯珠）。
          连接共享：复用主窗 IPointTableBus，本窗不建 TCP（关窗 Detach 退订）。-->
-    <Border BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1">
+    <!-- 圆角弹窗骨架（全弹窗统一）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow 浮层投影，
+         根 Grid Margin=14 给阴影渲染留白 -->
+    <Grid Margin="14">
+    <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+            BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+            Effect="{StaticResource Fx.WinShadow}">
         <DockPanel>
             <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
                 <Grid>
@@ -65,10 +71,10 @@
                                        VerticalAlignment="Center" Foreground="{DynamicResource Brush.Fresh.FgMid}"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
-                            <Button Style="{StaticResource FreshButton}" Content="读取状态"
+                            <Button Tag="{StaticResource Geo.Eye}" Style="{StaticResource FreshButton}" Content="读取状态"
                                     Command="{Binding RefreshCommand}" Width="96" Height="32" Margin="0,0,8,0"
                                     ToolTip="立即按总线最新快照刷新全部通道灯（平时每 500ms 自动刷）"/>
-                            <Button Content="全部关闭" Width="96" Height="32" Margin="0,0,8,0"
+                            <Button Tag="{StaticResource Geo.CloseX}" Content="全部关闭" Width="96" Height="32" Margin="0,0,8,0"
                                     Command="{Binding AllOffCommand}"
                                     ToolTip="把全部 DO 通道写 OFF（测完复位；逐路写并汇总结果）">
                                 <Button.Style>
@@ -215,4 +221,5 @@
             </Grid>
         </DockPanel>
     </Border>
+    </Grid>
 </Window>

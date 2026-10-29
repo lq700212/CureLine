@@ -10,7 +10,8 @@
         d:DataContext="{d:DesignInstance Type=vm:OperatorViewModel, IsDesignTimeCreatable=False}"
         Title="权限管理（四级操作员）" Height="520" Width="720"
         WindowStartupLocation="CenterOwner"
-        WindowStyle="None" Background="{DynamicResource Brush.Fresh.WinBg}"
+        WindowStyle="None" Background="Transparent" AllowsTransparency="True"
+        Foreground="{DynamicResource Brush.Fresh.FgMid}"
         Icon="Assets/app.ico" FontSize="12">
     <shell:WindowChrome.WindowChrome>
         <!-- 无边框自绘（V0.0.27 弹窗统一）：标题条命中拖动 + 边沿 6px 缩放 -->
@@ -25,7 +26,12 @@
          编辑面板（新增/改级/改密/删除）。仅 LEVEL.4 可开（主窗门禁）。
          防锁死：最后一个 LEVEL.4 删/降一律拒绝（Store 层红线）。
          取色全走 Brush.Fresh.*；DataGrid 走 App.xaml 主题化隐式样式。-->
-    <Border BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1">
+    <!-- 圆角弹窗骨架（全弹窗统一）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow 浮层投影，
+         根 Grid Margin=14 给阴影渲染留白 -->
+    <Grid Margin="14">
+    <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+            BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+            Effect="{StaticResource Fx.WinShadow}">
         <DockPanel>
             <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
                 <Grid>
@@ -80,16 +86,16 @@
 
                         <!-- 语义色按钮（V0.0.20 参考用户管理页编排）：蓝=新增（主操作）、
                              浅蓝=改级别、绿=重置密码、红=删除（危险操作） -->
-                        <Button Style="{StaticResource FreshPrimaryButton}" Content="＋ 新增账号"
+                        <Button Tag="{StaticResource Geo.Plus}" Style="{StaticResource FreshPrimaryButton}" Content="＋ 新增账号"
                                 Command="{Binding AddUserCommand}" Margin="0,12,0,0" Height="32"
                                 ToolTip="按编辑区的用户名/级别/密码新增账号"/>
                         <Button Style="{StaticResource FreshButton}" Content="改级别（按编辑区）"
                                 Command="{Binding SetLevelCommand}" Margin="0,8,0,0" Height="32"
                                 ToolTip="把编辑区的级别应用到选中账号"/>
-                        <Button Style="{StaticResource FreshSuccessButton}" Content="重置密码（按编辑区）"
+                        <Button Tag="{StaticResource Geo.Edit}" Style="{StaticResource FreshSuccessButton}" Content="重置密码（按编辑区）"
                                 Command="{Binding SetPasswordCommand}" Margin="0,8,0,0" Height="32"
                                 ToolTip="把选中账号密码重置为编辑区密码（≥6 位）"/>
-                        <Button Style="{StaticResource FreshDangerButton}" Content="－ 删除选中账号"
+                        <Button Tag="{StaticResource Geo.Trash}" Style="{StaticResource FreshDangerButton}" Content="－ 删除选中账号"
                                 Command="{Binding RemoveUserCommand}" Margin="0,8,0,0" Height="32"
                                 ToolTip="删除选中账号（最后一个 LEVEL.4 会被拒绝——防锁死红线）"/>
 
@@ -100,4 +106,5 @@
             </Grid>
         </DockPanel>
     </Border>
+    </Grid>
 </Window>

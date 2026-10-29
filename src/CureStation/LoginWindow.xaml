@@ -9,7 +9,8 @@
         d:DataContext="{d:DesignInstance Type=vm:LoginViewModel, IsDesignTimeCreatable=False}"
         Title="操作员登录" Width="420" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        WindowStyle="None" Background="{DynamicResource Brush.Fresh.WinBg}" FontSize="13">
+        WindowStyle="None" Background="Transparent" AllowsTransparency="True" FontSize="13"
+        Foreground="{DynamicResource Brush.Fresh.FgMid}">
     <shell:WindowChrome.WindowChrome>
         <!-- 无边框自绘（V0.0.27 弹窗统一）：CaptionHeight 撑标题条命中拖动，
              NoResize 窗缩放边沿不需要；系统按钮全关（自绘 ✕ 走 VM 取消链） -->
@@ -29,7 +30,12 @@
          取色全走 Brush.Fresh.*（两主题字典同名异值，ThemeManager 切字典即换肤）；
          标题条/关闭钮走 App.xaml WinTitleBar/WinTitleClose 共享样式（拖动由
          WindowChrome CaptionHeight 接管，不再需要 MouseLeftButtonDown 拖拽代码）。-->
-    <Border BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1">
+    <!-- 圆角弹窗骨架（全弹窗统一）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow 浮层投影，
+         根 Grid Margin=14 给阴影渲染留白 -->
+    <Grid Margin="14">
+    <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+            BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+            Effect="{StaticResource Fx.WinShadow}">
         <DockPanel>
             <!-- 品牌标题条：WinTitleBar 共享样式（主窗品牌渐变同源），右侧关闭钮 -->
             <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
@@ -79,7 +85,10 @@
                                   Margin="0,0,0,10"
                                   ToolTip="下拉选在册账号或直接输入；换账号自动跟出该账号记住的密码">
                             <ComboBox.ItemContainerStyle>
-                                <Style TargetType="ComboBoxItem">
+                                <!-- BasedOn 隐式主题样式（App.xaml）：不带 BasedOn 会整体覆盖回
+                                     系统默认模板（白底黑字），深色模式下拉弹层刺眼——只补 Padding 对齐 -->
+                                <Style TargetType="ComboBoxItem"
+                                       BasedOn="{StaticResource {x:Type ComboBoxItem}}">
                                     <Setter Property="Padding" Value="19,3"/>
                                 </Style>
                             </ComboBox.ItemContainerStyle>
@@ -93,11 +102,11 @@
                               HorizontalAlignment="Left" Margin="0,10,0,0"/>
                     <!-- 按钮行：修改密码（次级灰，左）+ 登录（实色蓝主按钮，右） -->
                     <Grid Margin="0,18,0,0">
-                        <Button Style="{StaticResource FreshButton}" Content="修改密码"
+                        <Button Tag="{StaticResource Geo.Edit}" Style="{StaticResource FreshButton}" Content="修改密码"
                                 Command="{Binding ChangePwdCommand}" Width="96" Height="32"
                                 HorizontalAlignment="Left"
                                 ToolTip="改用户名框里这个账号的密码（要验原密码）"/>
-                        <Button Style="{StaticResource FreshPrimaryButton}" Content="登 录"
+                        <Button Tag="{StaticResource Geo.Login}" Style="{StaticResource FreshPrimaryButton}" Content="登 录"
                                 Command="{Binding OkCommand}" Width="128" Height="32"
                                 HorizontalAlignment="Right"/>
                     </Grid>
@@ -187,4 +196,5 @@
             </StackPanel>
         </DockPanel>
     </Border>
+    </Grid>
 </Window>

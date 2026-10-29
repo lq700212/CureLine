@@ -10,7 +10,8 @@
         Title="IO 点表配置（点点鼠标，无需改代码）"
         Height="720" Width="1120"
         WindowStartupLocation="CenterScreen"
-        WindowStyle="None" Background="{DynamicResource Brush.Fresh.WinBg}"
+        WindowStyle="None" Background="Transparent" AllowsTransparency="True"
+        Foreground="{DynamicResource Brush.Fresh.FgMid}"
         Icon="Assets/app.ico"
         FontSize="12">
     <shell:WindowChrome.WindowChrome>
@@ -24,7 +25,12 @@
          右下：选中行编辑面板（块/位/方向/角色/架/层/功能名）。
          底部：测试连接（不存盘直测）+ 保存（校验不过不落盘）。
          取色全走 Brush.Fresh.*；Expander/ListBox/DataGrid 走 App.xaml 主题化样式。-->
-    <Border BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1">
+    <!-- 圆角弹窗骨架（全弹窗统一）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow 浮层投影，
+         根 Grid Margin=14 给阴影渲染留白 -->
+    <Grid Margin="14">
+    <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+            BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+            Effect="{StaticResource Fx.WinShadow}">
         <DockPanel>
             <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
                 <Grid>
@@ -50,7 +56,7 @@
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}"
                                    Text="设备（IO 耦合器）"/>
-                        <Button DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
+                        <Button Tag="{StaticResource Geo.Plus}" DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
                                 Content="＋ 添加设备" Command="{Binding AddDeviceCommand}" Margin="0,8"/>
                         <ListBox DockPanel.Dock="Top" Height="130"
                                  ItemsSource="{Binding Devices, FallbackValue={x:Null}}"
@@ -65,7 +71,7 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                        <Button DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
+                        <Button Tag="{StaticResource Geo.Trash}" DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
                                 Content="－ 删除选中设备" Command="{Binding RemoveDeviceCommand}" Margin="0,0,0,10"/>
                         <StackPanel DockPanel.Dock="Bottom">
                             <TextBlock Style="{StaticResource SectionTitle}"
@@ -184,17 +190,18 @@
                             <TextBlock Text="功能名（中文，对照 IO 表）" Margin="0,8,0,2"/>
                             <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditFunction}"
                                      Height="44" AcceptsReturn="True" TextWrapping="Wrap"/>
-                            <Button Style="{StaticResource FreshButton}" Margin="0,8,0,0"
+                            <Button Tag="{StaticResource Geo.Check}" Style="{StaticResource FreshButton}" Margin="0,8,0,0"
                                     Content="应用修改到选中行" Command="{Binding ApplyBindingCommand}"/>
-                            <Button Style="{StaticResource FreshButton}" Margin="0,8,0,0"
+                            <Button Tag="{StaticResource Geo.Trash}" Style="{StaticResource FreshButton}" Margin="0,8,0,0"
                                     Content="删除该绑定行" Command="{Binding DeleteBindingCommand}"/>
                         </StackPanel>
                     </Border>
-                    <Button DockPanel.Dock="Bottom" Style="{StaticResource FreshButton}"
+                    <Button Tag="{StaticResource Geo.Save}" DockPanel.Dock="Bottom" Style="{StaticResource FreshButton}"
                             Content="保存（校验后写配置文件）"
                             Command="{Binding SaveCommand}" Margin="0,8" Height="40"/>
                 </DockPanel>
             </Grid>
         </DockPanel>
     </Border>
+    </Grid>
 </Window>

@@ -140,6 +140,25 @@
   （模拟 PLC + 本地 HttpListener 桩 MES，基建现成）；新增 VM 编排补
   `ViewModelTests` 用例（Fake 服务 + TestScope 隔离）。
 
+## UI 资源来源（各类 UI 资源，2026-10-29 用户拍板）
+
+- **适用范围**：不限于按钮图标——凡 UI 需要的图形资源（按钮/菜单图标、
+  装饰元素、控件视觉参考、动效思路等）一律先翻 galaxy 本地库。
+- **来源顺序**：
+  1. **本地优先**：`E:\Project\galaxy`（uiverse-io/galaxy 仓库本地镜像，按
+     Buttons/Cards/Inputs/Tooltips/Checkboxes/Toggle-switches/Loaders 等
+     分类存放，每个 HTML 文件是一个自包含组件样例（内嵌 SVG/CSS）——
+     直接 grep/打开挑，勿联网拉取已有资源）；
+  2. **本地目录不存在时**才从上游 `https://github.com/uiverse-io/galaxy` 获取。
+- **WPF 转译纪律**：galaxy 是 HTML/CSS 组件库，取的是图形形状与视觉思路——
+  SVG 图标转 XAML `Path`/`Geometry`（或 SVG 资源），**配色一律换成本项目主题
+  语义键**（`Brush.*` / `Brush.Fresh.*`，双主题同名异值），禁止照抄样例里的
+  硬编码色值（会破坏 Light/Dark 换肤）；尺寸/圆角对齐既有按钮样式
+  （`GhostButton`/`FreshButton` 系）。
+- **先库后手**：涉及图标/图形资源的任务先 grep galaxy 本地库（如
+  `grep -rl '<svg' /e/Project/galaxy/Buttons`）再动手；产出物在提交说明里
+  注明来源样例文件名（如 `galaxy/Buttons/xxx.html`），便于回溯与统一替换。
+
 ## 关键文件导航
 
 | 文件 | 作用 |

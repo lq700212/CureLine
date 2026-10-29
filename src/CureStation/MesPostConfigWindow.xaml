@@ -9,7 +9,8 @@
         d:DataContext="{d:DesignInstance Type=vm:MesPostConfigViewModel, IsDesignTimeCreatable=False}"
         Title="过账配置（单线 MES 上报）" Height="560" Width="720"
         WindowStartupLocation="CenterOwner"
-        WindowStyle="None" Background="{DynamicResource Brush.Fresh.WinBg}"
+        WindowStyle="None" Background="Transparent" AllowsTransparency="True"
+        Foreground="{DynamicResource Brush.Fresh.FgMid}"
         Icon="Assets/app.ico" FontSize="12">
     <shell:WindowChrome.WindowChrome>
         <!-- 无边框自绘（V0.0.27 弹窗统一）：标题条命中拖动 + 边沿 6px 缩放 -->
@@ -21,7 +22,12 @@
          改完保存即生效（主窗热更新过账服务，不重启）。左列开关与口径 + 静态
          参数；右列三个接口 URL + 说明。门禁：主窗 L4。
          取色全走 Brush.Fresh.*；窗口骨架统一自绘标题条。-->
-    <Border BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1">
+    <!-- 圆角弹窗骨架（全弹窗统一）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow 浮层投影，
+         根 Grid Margin=14 给阴影渲染留白 -->
+    <Grid Margin="14">
+    <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+            BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+            Effect="{StaticResource Fx.WinShadow}">
         <DockPanel>
             <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
                 <Grid>
@@ -121,10 +127,11 @@
 
                 <!-- 底：保存 -->
                 <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-                    <Button Style="{StaticResource FreshButton}" Content="保存配置"
+                    <Button Tag="{StaticResource Geo.Save}" Style="{StaticResource FreshButton}" Content="保存配置"
                             Command="{Binding SaveCommand}" Width="160" Height="34"/>
                 </StackPanel>
             </Grid>
         </DockPanel>
     </Border>
+    </Grid>
 </Window>

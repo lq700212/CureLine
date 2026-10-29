@@ -11,7 +11,8 @@
         Width="700" Height="520" MinWidth="560" MinHeight="380"
         WindowStartupLocation="Manual"
         WindowStyle="None"
-        Background="{DynamicResource Brush.WindowBg}"
+        Background="Transparent" AllowsTransparency="True"
+        Foreground="{DynamicResource Brush.FgMid}"
         FontSize="12">
     <shell:WindowChrome.WindowChrome>
         <!-- 无边框自绘（V0.0.27 与弹窗同族）：LfHead 条即命中拖动区（CaptionHeight=36 与
@@ -31,11 +32,18 @@
       - W0.0.27 起无边框自绘：LblHead 条自带 ✕（WinTitleClose 共享样式本窗
         覆盖高 36/字色 LfHeadFg），与各功能弹窗同族外观。
     -->
+    <!-- 圆角悬浮窗骨架（与各功能弹窗同族）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow，
+         根 Grid Margin=14 给阴影渲染留白；取色走主窗语义键（Brush.*） -->
+    <Grid Margin="14">
+    <Border CornerRadius="10" Background="{DynamicResource Brush.WindowBg}"
+            BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1"
+            Effect="{StaticResource Fx.WinShadow}">
     <DockPanel>
         <!-- 标题条（HTML lfhead 直译：渐变头 + 绿点 + 白字；底边共用顶栏底边键），
-             右端关闭钮（IsHitTestVisibleInChrome 已在共享样式内声明） -->
+             右端关闭钮（IsHitTestVisibleInChrome 已在共享样式内声明）；顶部圆角贴外框 -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource Brush.LfHeadGrad}"
                 BorderBrush="{DynamicResource Brush.TopbarBorder}" BorderThickness="0,0,0,1"
+                CornerRadius="10,10,0,0"
                 Height="36" Padding="12,0">
             <DockPanel>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -121,4 +129,6 @@
             </Border>
         </Grid>
     </DockPanel>
+    </Border>
+    </Grid>
 </Window>

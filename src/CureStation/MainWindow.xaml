@@ -15,7 +15,8 @@
         WindowStyle="None"
         Icon="Assets/app.ico"
         FontSize="13"
-        Background="{DynamicResource Brush.WindowBg}">
+        Background="{DynamicResource Brush.WindowBg}"
+        Foreground="{DynamicResource Brush.FgMid}">
     <!-- 无边框自绘（V0.0.28，弹窗口径盖帽加高）：OS 标题栏白条移除，品牌顶栏
          即标题条——CaptionHeight=44 整条命中拖动/双击最大化还原；
          ResizeBorderThickness=6 还原态边沿拉伸；GlassFrameThickness=0 关 DWM
@@ -333,28 +334,23 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- ① 品牌顶栏（行 0 全宽贴边）：单条品牌渐变/深蓝实底，功能与旧两段顶栏一致 -->
+        <!-- ① 品牌顶栏（行 0 全宽贴边）：结构对齐对比稿 G1 顶栏（dot+策略+连接 在左、
+             按钮组靠右、退出居末）——功能按钮为设计稿之后的真实功能超集（过账配置/
+             IO测试/点表/重新连接/深色），系统三钮为无边框窗必需（稿为网页无此项）。
+             过账/操作员两段状态文本稿中亦无，弱化色阶放按钮组前，不抢按钮区。 -->
         <Border Grid.Row="0" Height="44" Padding="14,0"
                 Background="{DynamicResource Brush.HeaderGrad}"
                 BorderBrush="{DynamicResource Brush.TopbarBorder}" BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <!-- 品牌 chip"固"（HTML 顶栏圆标直译） -->
-                <Border Width="24" Height="24" CornerRadius="7" VerticalAlignment="Center"
-                        Background="{DynamicResource Brush.HeaderChipBg}">
-                    <TextBlock Text="固" FontSize="13" FontWeight="Bold"
-                               Foreground="{DynamicResource Brush.FgOnAccent}"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Border>
                 <!-- 连接灯点（绿=已连）+ 策略（HTML topbar：dot + 策略文本） -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <Ellipse Width="12" Height="12" VerticalAlignment="Center">
                         <Ellipse.Style>
                             <Style TargetType="Ellipse">
@@ -371,44 +367,46 @@
                                VerticalAlignment="Center" Foreground="{DynamicResource Brush.TopbarFg}"/>
                 </StackPanel>
                 <!-- 连接状态 * 弹性列：文本完整显示（窄窗口省略号兜底，悬停看全文） -->
-                <TextBlock Grid.Column="2" Text="{Binding ConnectionText, FallbackValue=未启动}"
+                <TextBlock Grid.Column="1" Text="{Binding ConnectionText, FallbackValue=未启动}"
                            Margin="12,0,0,0" VerticalAlignment="Center"
                            Foreground="{DynamicResource Brush.HeaderSubFg}"
                            TextTrimming="CharacterEllipsis"
                            ToolTip="{Binding ConnectionText, FallbackValue=未启动}"/>
-                <TextBlock Grid.Column="3" Text="{Binding PostingText, FallbackValue=过账：—}"
+                <!-- 过账/操作员状态（功能状态文本，弱化色阶放按钮组前） -->
+                <TextBlock Grid.Column="2" Text="{Binding PostingText, FallbackValue=过账：—}"
                            Margin="0,0,12,0" VerticalAlignment="Center"
                            Foreground="{DynamicResource Brush.HeaderSubFg}"/>
-                <TextBlock Grid.Column="4" Text="{Binding OperatorText, FallbackValue=未登录}"
+                <TextBlock Grid.Column="3" Text="{Binding OperatorText, FallbackValue=未登录}"
                            Margin="0,0,10,0" VerticalAlignment="Center"
                            Foreground="{DynamicResource Brush.TopbarFg}"/>
-                <!-- 功能按钮组：与旧运行条同序同门禁（VM 命令/未登录灰显不变） -->
-                <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Style="{StaticResource GhostButton}" Content="登录"
+                <!-- 功能按钮组：与旧运行条同序同门禁（VM 命令/未登录灰显不变）；
+                     相对顺序对齐对比稿（登录/工单/权限/策略 在前，日志高亮居末段、退出收尾） -->
+                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Tag="{StaticResource Geo.Login}" Style="{StaticResource GhostButton}" Content="登录"
                             Command="{Binding LoginCommand}" Margin="0,0,6,0"/>
-                    <Button Style="{StaticResource GhostButton}" Content="工单"
+                    <Button Tag="{StaticResource Geo.WorkOrder}" Style="{StaticResource GhostButton}" Content="工单"
                             Command="{Binding OpenWorkOrderCommand}" Margin="0,0,6,0"/>
-                    <Button Style="{StaticResource GhostButton}" Content="权限"
+                    <Button Tag="{StaticResource Geo.Permission}" Style="{StaticResource GhostButton}" Content="权限"
                             Command="{Binding OpenOperatorsCommand}" Margin="0,0,6,0"/>
-                    <Button Style="{StaticResource GhostButton}" Content="策略"
+                    <Button Tag="{StaticResource Geo.Policy}" Style="{StaticResource GhostButton}" Content="策略"
                             Command="{Binding OpenCuringPolicyCommand}" Margin="0,0,6,0"/>
-                    <Button Style="{StaticResource GhostButton}" Content="过账配置"
+                    <Button Tag="{StaticResource Geo.Posting}" Style="{StaticResource GhostButton}" Content="过账配置"
                             Command="{Binding OpenPostConfigCommand}" Margin="0,0,6,0"/>
-                    <Button Style="{StaticResource GhostButton}" Content="IO测试"
+                    <Button Tag="{StaticResource Geo.IoTest}" Style="{StaticResource GhostButton}" Content="IO测试"
                             Command="{Binding OpenIoTestCommand}" Margin="0,0,6,0"
                             ToolTip="IO 耦合器通道通讯测试（L3+）：DI 状态灯 / DO 点击灯钮 / 一键遍历验接线"/>
-                    <Button Style="{StaticResource GhostButton}" Content="点表"
+                    <Button Tag="{StaticResource Geo.PointTable}" Style="{StaticResource GhostButton}" Content="点表"
                             Command="{Binding OpenPointTableCommand}" Margin="0,0,6,0"/>
-                    <Button Style="{StaticResource GhostButton}" Content="重新连接"
+                    <Button Tag="{StaticResource Geo.Reconnect}" Style="{StaticResource GhostButton}" Content="重新连接"
                             Command="{Binding ReconnectCommand}" Margin="0,0,6,0"/>
-                    <Button Style="{StaticResource GhostButton}" Content="退出" Click="OnExitClick" Margin="0,0,10,0"/>
                     <Button Style="{StaticResource GhostButton}"
                             Content="{Binding ToggleThemeText, FallbackValue=深色}" Margin="0,0,6,0"
                             Command="{Binding ToggleThemeCommand}"
                             ToolTip="切换 浅色(G2)/深色(G1) 主题，写回 config.ini [setting] Theme"/>
-                    <Button Style="{StaticResource PrimaryGhostButton}" Content="日志"
-                            Command="{Binding ShowLogCommand}"
+                    <Button Tag="{StaticResource Geo.Log}" Style="{StaticResource PrimaryGhostButton}" Content="日志"
+                            Command="{Binding ShowLogCommand}" Margin="0,0,6,0"
                             ToolTip="打开操作日志 / 控制台悬浮窗（L1+）"/>
+                    <Button Tag="{StaticResource Geo.Exit}" Style="{StaticResource GhostButton}" Content="退出" Click="OnExitClick"/>
                     <!-- 系统三钮（V0.0.28 无边框化补位 OS 标题栏职责）：最小化/最大化还原/关闭；
                          最大化还原图标 □↔❐ 随 WindowState 切换；关闭走"退出"同链 OnExitClick -->
                     <Button Style="{StaticResource WinSysBtn}" Content="─" Margin="4,0,0,0"
