@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>固化架显示区域 · 优化方案调研</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Segoe UI","Microsoft YaHei",sans-serif; background:#EEF1F5; color:#2b3442; padding:28px 34px 60px; }
+  h1 { font-size:22px; color:#1F4E79; margin-bottom:6px; }
+  .sub { font-size:13px; color:#66707e; margin-bottom:20px; }
+  nav { margin-bottom:26px; }
+  nav a { display:inline-block; margin-right:10px; padding:6px 14px; background:#fff; border:1px solid #C9D6E3; border-radius:18px; font-size:13px; text-decoration:none; color:#1F4E79; }
+  section { margin-bottom:46px; }
+  .head { display:flex; align-items:baseline; gap:12px; margin-bottom:6px; }
+  .head h2 { font-size:18px; color:#233; }
+  .tag { font-size:12px; padding:3px 10px; border-radius:10px; }
+  .tag-low { background:#E3F2FD; color:#1565C0; }
+  .tag-mid { background:#FFF3E0; color:#E65100; }
+  .tag-big { background:#FBE9E7; color:#BF360C; }
+  .desc { font-size:13px; color:#5b6673; line-height:1.7; margin-bottom:12px; max-width:1100px; }
+  .desc b { color:#1F4E79; }
+  .desc .pts { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .desc .pts span { font-size:12px; background:#fff; border:1px solid #d6dee8; border-radius:4px; padding:3px 8px; }
+  .mockwrap { background:#D9DEE4; border:1px solid #b9c2cc; border-radius:10px; padding:14px; max-width:1460px; }
+  .win { background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 2px 10px rgba(20,40,80,.12); position:relative; }
+  .caption { font-size:12px; color:#7a8794; margin:8px 2px 0; }
+
+  /* ───── 模拟窗口 · 顶栏（共性） ───── */
+  .topbar { display:flex; align-items:center; gap:10px; padding:9px 14px; background:#EFF6FD; border-bottom:1px solid #CFE2F3; font-size:13px; }
+  .dot { width:12px; height:12px; border-radius:50%; background:#D9534F; }
+  .dot.ok { background:#5CB85C; }
+  .btns { margin-left:auto; display:flex; gap:6px; }
+  .btn { padding:5px 13px; background:#F5FAFF; border:1px solid #B8D4EE; border-radius:4px; font-size:12.5px; color:#1F4E79; }
+
+  /* ═════════ 现状还原 ═════════ */
+  .z-grid { display:grid; grid-template-columns:repeat(10,1fr); gap:6px; padding:10px 12px 14px; }
+  .z-card { border:1px solid #DDDDDD; border-radius:4px; background:#FAFAFA; height:196px; padding:8px; display:flex; flex-direction:column; justify-content:center; }
+  .z-card.red { background:#FDECEA; } .z-card.yellow { background:#FFF8E1; } .z-card.green { background:#E8F5E9; }
+  .z-r1 { display:flex; justify-content:space-between; align-items:center; }
+  .z-code { font-size:17px; font-weight:700; color:#1F4E79; }
+  .z-title { font-size:10.5px; color:#888; }
+  .z-state { font-size:13px; font-weight:700; color:#333; margin-top:7px; }
+  .z-r3 { display:flex; justify-content:space-between; align-items:center; margin-top:7px; }
+  .z-lamp { display:flex; align-items:center; gap:5px; font-size:11.5px; color:#333; }
+  .z-lamp i { width:11px; height:11px; border-radius:50%; background:#BDBDBD; }
+  .z-lamp i.r { background:#D9534F; } .z-lamp i.y { background:#F0AD4E; } .z-lamp i.g { background:#5CB85C; }
+  .z-tray { font-size:11.5px; color:#0A7A2F; }
+  .z-grill { font-size:10.5px; color:#999; margin-top:5px; }
+
+  /* ═════════ 公共演示数据 · 徽章色 ═════════ */
+  .bdg { display:inline-block; padding:3px 9px; border-radius:12px; font-size:12px; font-weight:600; line-height:1.4; white-space:nowrap; flex-shrink:0; }
+  .bdg.idle   { background:#EDF1F5; color:#8A94A3; }
+  .bdg.gate   { background:#EDE7F6; color:#5E35B1; }
+  .bdg.curing { background:#FFF3D6; color:#B26A00; }
+  .bdg.done   { background:#E5F5E8; color:#2E7D32; }
+  .bdg.alarm  { background:#FBE9E7; color:#C62828; }
+  .lv-pill { font-size:11px; padding:2px 8px; border-radius:9px; background:#EAF2FB; color:#5B7DA3; white-space:nowrap; flex-shrink:0; }
+
+  /* ═════════ 方案 A · 清爽徽章卡 ═════════ */
+  .a-grid { display:grid; grid-template-columns:repeat(10,1fr); gap:7px; padding:12px 14px 16px; background:#F3F5F8; }
+  .a-card { position:relative; background:#fff; border:1px solid #E1E7EE; border-radius:8px; height:196px; padding:11px 12px 10px;
+            display:flex; flex-direction:column; box-shadow:0 1px 3px rgba(30,60,100,.05); overflow:hidden; }
+  .a-card::after { content:""; position:absolute; left:0; right:0; bottom:0; height:4px; background:#DFE5EB; }
+  .a-card.curing::after { background:#FFB300; } .a-card.done::after { background:#43A047; }
+  .a-card.alarm::after { background:#E53935; } .a-card.gate::after { background:#7E57C2; }
+  .a-card.idle { opacity:.82; }
+  .a-top { display:flex; justify-content:space-between; align-items:flex-start; }
+  .a-code { font-size:20px; font-weight:700; color:#22344C; letter-spacing:.5px; }
+  .a-state { margin-top:8px; }
+  .a-spacer { flex:1; }
+  .a-foot { display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#5c6774; white-space:nowrap; }
+  .a-lamp { display:flex; align-items:center; gap:6px; font-weight:600; color:#37424e; }
+  .a-lamp i { width:14px; height:14px; border-radius:50%; background:#C8CDD3; box-shadow:inset 0 0 2px rgba(0,0,0,.25); }
+  .a-lamp i.r { background:#E53935; box-shadow:0 0 6px rgba(229,57,53,.55); }
+  .a-lamp i.y { background:#FFB300; box-shadow:0 0 6px rgba(255,179,0,.55); }
+  .a-lamp i.g { background:#43A047; box-shadow:0 0 6px rgba(67,160,71,.55); }
+  .a-tray { font-size:12px; color:#98a1ab; }
+  .a-tray.on { color:#2E7D32; font-weight:600; }
+  .a-grill { font-size:10.5px; color:#A7AFB8; margin-top:4px; }
+
+  /* ═════════ 方案 B · 数据面板卡 ═════════ */
+  .b-stage { background:#E9EDF2; padding:18px 18px 22px; }
+  .b-stats { display:flex; gap:8px; margin-bottom:12px; }
+  .b-stat { display:flex; align-items:center; gap:7px; background:#fff; border:1px solid #DFE6EC; border-radius:20px; padding:4px 14px; font-size:12.5px; color:#4a5560; }
+  .b-stat b { font-size:15px; }
+  .b-stat .k { width:9px; height:9px; border-radius:50%; }
+  .b-grid { display:grid; grid-template-columns:repeat(10,1fr); gap:8px; }
+  .b-card { background:#fff; border-radius:10px; height:210px; padding:12px 13px 11px; display:flex; flex-direction:column;
+            box-shadow:0 2px 6px rgba(30,60,100,.08); border:1px solid transparent; position:relative; overflow:hidden; }
+  .b-card.idle { background:#F6F7F9; border-color:#E3E7EC; box-shadow:none; }
+  .b-card.idle .b-code { color:#B9C1CA; }
+  .b-card.curing { border-color:#FFD54F; }
+  .b-card.alarm { background:#FBEEEC; border-color:#EF9A9A; animation:pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{ box-shadow:0 0 0 0 rgba(229,57,53,.25);} 50%{ box-shadow:0 0 0 7px rgba(229,57,53,0);} }
+  .b-top { display:flex; justify-content:space-between; align-items:flex-start; }
+  .b-code { font-size:19px; font-weight:700; color:#22344C; letter-spacing:.5px; white-space:nowrap; }
+  .b-mid { flex:1; display:flex; flex-direction:column; justify-content:center; margin-top:4px; }
+  .b-num { font-size:34px; font-weight:700; color:#E65100; line-height:1; font-variant-numeric:tabular-nums; }
+  .b-num small { font-size:13px; font-weight:600; color:#B26A00; margin-left:3px; }
+  .b-num.done { color:#2E7D32; font-size:20px; white-space:nowrap; }
+  .b-sub { font-size:11.5px; color:#98a1ab; margin-top:6px; }
+  .b-bar { height:6px; border-radius:3px; background:#EDEFF2; margin-top:8px; overflow:hidden; }
+  .b-bar i { display:block; height:100%; border-radius:3px; background:#FFB300; }
+  .b-bar i.done { background:#43A047; }
+  .b-foot { display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#8b95a0; white-space:nowrap; gap:4px; }
+  .b-foot .on { color:#2E7D32; font-weight:600; }
+  .b-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#C8CDD3; margin-right:4px; vertical-align:middle; }
+  .b-dot.r { background:#E53935; } .b-dot.y { background:#FFB300; } .b-dot.g { background:#43A047; }
+  .grpbar { display:flex; align-items:center; gap:8px; background:#EFF6FD; border:1px solid #B8D4EE; border-radius:6px; padding:6px 12px; margin-bottom:10px; font-size:13px; font-weight:700; color:#1F4E79; }
+  .grpbar i { width:4px; height:14px; border-radius:2px; background:#1E90FF; }
+
+  /* ═════════ 方案 C · 紧凑阵列 ═════════ */
+  .c-stage { background:#22262B; padding:14px; }
+  .c-grid { display:grid; grid-template-columns:repeat(10,1fr); gap:6px; }
+  .c-card { border-radius:7px; height:104px; padding:8px 9px; display:flex; flex-direction:column; background:#2E3339; border:1px solid #3A4047; }
+  .c-card.idle { background:#262B30; border-color:#333a41; }
+  .c-card.curing { background:#3A3222; border-color:#7E5F1E; }
+  .c-card.done { background:#223326; border-color:#2F6B3C; }
+  .c-card.alarm { background:#43211E; border-color:#8E3B34; }
+  .c-top { display:flex; justify-content:space-between; align-items:center; }
+  .c-code { font-size:13.5px; font-weight:700; color:#c8d2dc; }
+  .c-card.idle .c-code { color:#6d7783; }
+  .c-dot { width:8px; height:8px; border-radius:50%; background:#3a424b; }
+  .c-dot.r { background:#EF5350; box-shadow:0 0 8px rgba(239,83,80,.8); }
+  .c-dot.y { background:#FFCA28; box-shadow:0 0 8px rgba(255,202,40,.8); }
+  .c-dot.g { background:#66BB6A; box-shadow:0 0 8px rgba(102,187,106,.8); }
+  .c-mid { flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .c-val { font-size:23px; font-weight:700; color:#FFD54F; line-height:1; font-variant-numeric:tabular-nums; }
+  .c-val small { font-size:11px; color:#b99b3e; }
+  .c-val.done { color:#81C784; font-size:17px; }
+  .c-val.idle { color:#58626d; font-size:13px; font-weight:600; }
+  .c-foot { font-size:10.5px; color:#8a94a0; display:flex; justify-content:space-between; white-space:nowrap; }
+
+  /* ═════════ 方案 D · 紧凑网格 + 下部信息带 ═════════ */
+  .d-stage { background:#E9EDF2; padding:12px; }
+  .d-grid { display:grid; grid-template-columns:repeat(10,1fr); gap:6px; }
+  .d-card { background:#fff; border-radius:7px; height:96px; padding:8px 10px 7px; display:flex; flex-direction:column;
+            box-shadow:0 1px 3px rgba(30,60,100,.06); border:1px solid #E3E8EE; overflow:hidden; }
+  .d-card.idle { opacity:.72; background:#F3F5F8; border-color:#E7EBEF; box-shadow:none; }
+  .d-card.curing { border-color:#FFD54F; }
+  .d-card.alarm { background:#FBEEEC; border-color:#EF9A9A; }
+  .d-card.done { border-color:#A5D6A7; }
+  .d-top { display:flex; justify-content:space-between; align-items:center;}
+  .d-code { font-size:15px; font-weight:700; color:#22344C; }
+  .d-card.idle .d-code { color:#8e99a4; }
+  .d-mid { flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .d-num { font-size:22px; font-weight:700; color:#E65100; font-variant-numeric:tabular-nums; line-height:1.1; white-space:nowrap; }
+  .d-num small { font-size:11px; color:#B26A00; font-weight:600; }
+  .d-num.done { color:#2E7D32; font-size:14px; }
+  .d-num.stat { color:#5E35B1; font-size:13px; }
+  .d-num.warn { color:#C62828; font-size:13px; }
+  .d-num.idle { color:#ADB5BD; font-size:12px; font-weight:600; }
+  .d-foot { display:flex; justify-content:space-between; font-size:10.5px; color:#8b95a0; white-space:nowrap; gap:4px; }
+  .d-foot .on { color:#2E7D32; font-weight:600; }
+  .d-wo { display:flex; gap:10px; margin-top:12px; }
+  .d-wo-card { flex:1; background:#fff; border:1px solid #E3E8EE; border-radius:8px; padding:9px 14px 8px; }
+  .d-wo-head { display:flex; justify-content:space-between; align-items:baseline; font-size:12px; color:#5b6673; white-space:nowrap; }
+  .d-wo-no { font-weight:700; color:#1F4E79; font-size:13px; }
+  .d-wo-badge { font-size:10.5px; padding:1px 8px; border-radius:8px; background:#E3F2FD; color:#1565C0; font-weight:600; }
+  .d-wo-bar { height:9px; border-radius:5px; background:#EDEFF2; margin-top:6px; overflow:hidden; position:relative; }
+  .d-wo-bar i { display:block; height:100%; background:#1E90FF; border-radius:5px; }
+  .d-wo-sub { display:flex; justify-content:space-between; font-size:10.5px; color:#8b95a0; margin-top:4px; }
+  .d-log { display:grid; grid-template-columns:1fr 265px; gap:10px; margin-top:12px; }
+  .d-log-main { background:#fff; border:1px solid #E3E8EE; border-radius:8px; padding:9px 14px 10px; min-width:0; }
+  .d-log-title { font-size:12px; font-weight:700; color:#1F4E79; display:flex; justify-content:space-between; margin-bottom:5px; }
+  .d-log-title span:last-child { font-weight:400; color:#98a1ab; }
+  .d-log-line { font-family:Consolas,"Microsoft YaHei",monospace; font-size:11.3px; color:#4a5560; line-height:1.8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .d-log-line .t { color:#98a1ab; }
+  .d-log-line .ok { color:#2E7D32; font-weight:600; }
+  .d-log-line .warn { color:#C62828; font-weight:600; }
+  .d-log-line .info { color:#6b7684; }
+  .d-log-side { background:#fff; border:1px solid #E3E8EE; border-radius:8px; padding:9px 14px 10px; }
+  .d-log-side .row { display:flex; justify-content:space-between; font-size:11.5px; color:#5b6673; padding:4.5px 0; border-bottom:1px dashed #EFEFF1; white-space:nowrap; }
+  .d-log-side .row:last-child { border-bottom:none; }
+  .d-log-side .v { font-weight:700; color:#22344C; }
+  .d-log-side .v.ok { color:#2E7D32; }
+
+/* ═════════ 双机 60 卡专项 ═════════ */
+.mockwrap.wide { max-width:1760px; }
+.m-duo { display:grid; grid-template-columns:1fr 1fr; gap:14px; align-items:start; }
+.m-duo .a-grid { padding:8px 10px 10px; gap:6px; }
+.m-duo .a-card { height:170px; padding:8px 9px 7px; }
+.m-duo .a-code { font-size:15px; }
+.m-duo .b-grid { gap:6px; }
+.m-duo .b-card { height:186px; padding:9px 10px 9px; }
+.m-duo .b-code { font-size:15px; }
+.m-duo .b-num { font-size:25px; }
+.m-duo .b-num.done { font-size:14px; }
+.m-duo .b-sub { font-size:10px; margin-top:3px; }
+.m-duo .b-bar { height:5px; margin-top:5px; }
+.m-duo .b-foot { font-size:9.5px; }
+.m-duo .c-grid { gap:5px; }
+.m-duo .c-card { height:92px; padding:6px 8px; }
+.m-duo .c-code { font-size:12px; }
+.m-duo .c-dot { width:7px; height:7px; }
+.m-duo .c-val { font-size:18px; }
+.m-duo .c-val.done { font-size:13px; }
+.m-duo .c-foot { font-size:9px; }
+/* D 方案双列字号权重已废弃（拍板=纵向堆两组），现用 .m-stack 组 */
+/* 双列下"非数字分支"用 class 驱动字号（inline 字号在 66px 窄卡会溢出） */
+.m-duo .a-foot { font-size:10.5px; gap:6px; }
+.m-duo .a-lamp .t { font-size:9.5px; font-weight:500; }
+.m-duo .b-num.gate   { font-size:14px; color:#5E35B1; white-space:nowrap; }
+.m-duo .b-num.balarm { font-size:14px; color:#C62828; white-space:nowrap; }
+.m-duo .b-num.bidle  { font-size:14px; color:#C3CBD3; white-space:nowrap; }
+.m-duo .c-val.gatetxt { font-size:12.5px; color:#B39DDB; }
+.m-duo .c-val.balarm  { font-size:12.5px; color:#EF5350; }
+
+/* 现状 60 卡：纵向堆叠后卡片被压扁 */
+.z-grid.sm { gap:5px; padding:8px 12px 12px; }
+.z-card.sm { height:108px; padding:6px 9px; justify-content:space-evenly; }
+.z-card.sm .z-code { font-size:14px; }
+.z-card.sm .z-state { margin-top:1px; font-size:11.5px; }
+.z-card.sm .z-lamp { font-size:10.5px; }
+.z-card.sm .z-lamp i { width:9px; height:9px; }
+.z-card.sm .z-tray { font-size:10.5px; }
+.z-card.sm .z-grill { font-size:9.5px; margin-top:2px; }
+
+/* 日志抽屉 · 收起态细条（点击展开） */
+.drawer-strip { cursor:pointer; background:#F3F6FA; border:1px solid #D2DCE7; border-radius:6px;
+                padding:6px 12px; font-size:12px; color:#52739C; display:flex; gap:10px; align-items:center; margin-top:10px; }
+.drawer-strip:hover { background:#E9F0F9; }
+.drawer-strip .arr { font-size:9.5px; color:#9AAABB; }
+.drawer-strip .d-cnt { color:#8A94A3; }
+.drawer-strip .d-err { margin-left:auto; color:#C62828; font-weight:600; }
+
+/* ═════════ 拍板形态（2026-10-29）：双机纵向堆两组 + 日志/控制台悬浮窗 ═════════ */
+/* m-stack：D 方案 60 卡纵向堆两组（用户拍板排列，替换原 m-duo 双列演示位置） */
+.m-stack { display:flex; flex-direction:column; gap:12px; padding:12px 14px 14px; }
+.m-stack .d-grid { gap:5px; }
+.m-stack .d-card { height:86px; padding:6px 8px 5px; }
+.m-stack .d-code { font-size:12.5px; }
+.m-stack .d-num { font-size:15px; }
+.m-stack .d-num.done { font-size:11px; }
+.m-stack .d-num.stat { font-size:11px; }
+.m-stack .d-num.warn { font-size:11px; }
+.m-stack .d-num.idle { font-size:10px; }
+.m-stack .d-foot { font-size:8.5px; }
+
+/* lf 日志/控制台悬浮窗：顶栏【日志】按钮弹出，独立悬浮层（可关闭），双栏=操作日志流+系统状态 */
+.lf { position:absolute; right:16px; bottom:16px; width:640px; max-width:88%; background:#fff; border:1px solid #C9D6E3;
+      border-radius:10px; box-shadow:0 14px 44px rgba(31,78,121,.30); z-index:60; overflow:hidden; font-size:12px; color:#38485C;
+      text-align:left; }
+.lf-head { display:flex; align-items:center; gap:10px; background:#1F4E79; color:#fff; padding:8px 12px; font-size:12.5px; }
+.lf-head b { font-weight:600; }
+.lf-head .dot { background:#7CB342; }
+.lf-head .lf-x { margin-left:auto; cursor:pointer; opacity:.9; font-size:11px; padding:2px 8px; border:1px solid rgba(255,255,255,.45); border-radius:5px; }
+.lf-head .lf-x:hover { opacity:1; background:rgba(255,255,255,.12); }
+.lf-body { display:grid; grid-template-columns:1.55fr 1fr; max-height:296px; }
+.lf-col { overflow:auto; }
+.lf-col.log { border-right:1px solid #E4EAF1; padding:5px 12px 9px; }
+.lf-col.sys { padding:5px 12px 9px; background:#F8FAFD; }
+.lf-title { font-size:11px; color:#8A98AB; padding:5px 0 4px; letter-spacing:1px; }
+.lf-line { display:flex; gap:8px; padding:4.5px 0; border-bottom:1px dashed #EFF2F6; line-height:1.45; }
+.lf-line:last-child { border-bottom:none; }
+.lf-line .t { color:#9AAABB; flex:none; font-size:11px; padding-top:1.5px; }
+.lf-line .lv { flex:none; font-size:10.5px; font-weight:600; padding:1px 7px; border-radius:9px; height:fit-content; }
+.lv.i { background:#E3F0FD; color:#1565C0; }
+.lv.w { background:#FFF4E0; color:#B26A00; }
+.lv.e { background:#FDE7E7; color:#C62828; }
+.lf-line .txt { min-width:0; }
+.lf-foot { display:flex; gap:14px; border-top:1px solid #E4EAF1; background:#F8FAFD; color:#8A98AB; font-size:11px; padding:6px 12px; }
+.lf-foot .pd { margin-left:auto; }
+/* 系统状态行（浮窗 sys 栏内） */
+.lf .frow { display:flex; justify-content:space-between; font-size:11.5px; color:#5b6673; padding:5px 0; border-bottom:1px dashed #EFEFF1; white-space:nowrap; }
+.lf .frow:last-child { border-bottom:none; }
+.lf .frow .v { font-weight:700; color:#22344C; }
+.lf .frow .v.ok { color:#2E7D32; }
+/* 【日志】按钮可点提示态（顶栏） */
+.lfbtn { background:#E8F1FC; border-color:#9CC3F0 !important; color:#1565C0 !important; }
+.lfbtn::before { content:"⌄"; margin-right:3px; font-size:10px; }
+
+/* ═════════ G 系重妆候选（galaxy 血统 · 2026-10-29 用户要求"风格更重一点"） ═════════ */
+/* 共享：G 节纵向堆两组结构沿用 m-stack；卡制造器 makeG(pfx) 按 pfx 注入 class */
+/* ── G1 · 深空玻璃舱（adamgiebl 彩斑玻璃血统）── */
+.g1-stage { background:radial-gradient(ellipse at 18% 12%, #1B2A45 0%, #0E1626 55%), #0E1626; padding:12px 14px 14px; display:flex; flex-direction:column; gap:12px; }
+.g1-stage .grpbar { background:rgba(255,255,255,.05); border-color:rgba(120,160,220,.25); color:#9DB8DC; }
+.g1-stage .grpbar i { background:#4FC3F7; }
+.g1-grid { display:grid; grid-template-columns:repeat(10,1fr); gap:5px; }
+.g1-card { position:relative; height:92px; padding:7px 9px 6px; border-radius:14px; overflow:hidden; text-align:left;
+  background:rgba(255,255,255,.055); border:1px solid rgba(148,180,225,.16); box-shadow:inset 0 1px 0 rgba(255,255,255,.09), 0 3px 10px rgba(0,0,0,.35); }
+.g1-card::before { content:""; position:absolute; left:-24px; top:-30px; width:110px; height:110px; border-radius:50%;
+  background:radial-gradient(circle, rgba(79,195,247,.20), transparent 70%); pointer-events:none; }
+.g1-card .g1-top { display:flex; justify-content:space-between; align-items:center; position:relative; }
+.g1-code { font-weight:800; font-size:14.5px; letter-spacing:.5px; color:#EAF3FF; font-family:Consolas,"Microsoft YaHei",monospace; }
+.g1-dot { width:10px; height:10px; border-radius:50%; background:#3A4A63; flex:none; }
+.g1-dot.r { background:#FF1744; box-shadow:0 0 8px #FF1744; }
+.g1-dot.y { background:#FFB300; box-shadow:0 0 8px #FFB300; }
+.g1-dot.g { background:#00E676; box-shadow:0 0 8px #00E676; }
+.g1-mid { display:flex; align-items:center; justify-content:flex-start; height:34px; position:relative; }
+.g1-num { font-family:Consolas,monospace; font-weight:800; font-size:17px; color:#EAF3FF; }
+.g1-num small { font-size:9px; font-weight:500; color:#7E9BBF; margin-left:3px; }
+.g1-num.done { color:#00E676; text-shadow:0 0 10px rgba(0,230,118,.5); font-size:12px; }
+.g1-num.stat { color:#B39DDB; font-size:12px; }
+.g1-num.warn { color:#FF5252; text-shadow:0 0 10px rgba(255,82,82,.45); font-size:12px; animation:pulseG1 1.6s ease-in-out infinite; }
+.g1-num.idle { color:#4A5B78; font-size:12px; letter-spacing:3px; }
+@keyframes pulseG1 { 0%,100% { opacity:.75; } 50% { opacity:1; } }
+.g1-card.curing { border-color:rgba(255,179,0,.38); background:rgba(255,179,0,.09); }
+.g1-card.curing::before { background:radial-gradient(circle, rgba(255,179,0,.22), transparent 70%); }
+.g1-card.done { border-color:rgba(0,230,118,.38); background:rgba(0,230,118,.08); }
+.g1-card.done::before { background:radial-gradient(circle, rgba(0,230,118,.20), transparent 70%); }
+.g1-card.alarm { border-color:rgba(255,23,68,.5); background:rgba(255,23,68,.13); box-shadow:0 0 14px rgba(255,23,68,.28), inset 0 1px 0 rgba(255,255,255,.09); }
+.g1-card.alarm::before { background:radial-gradient(circle, rgba(255,23,68,.3), transparent 70%); }
+.g1-foot { display:flex; justify-content:space-between; font-size:9.5px; color:#7E9BBF; position:relative; }
+.g1-foot .on { color:#00E676; }
+/* G1 工单带/统计/浮窗 */
+.g1-stats { display:flex; gap:8px; align-items:center; font-size:11.5px; color:#9DB8DC; flex-wrap:wrap; }
+.g1-stat { display:inline-flex; gap:6px; align-items:center; background:rgba(255,255,255,.05); border:1px solid rgba(148,180,225,.18); border-radius:18px; padding:4px 11px; }
+.g1-stat .k { width:8px; height:8px; border-radius:50%; }
+.g1-stat b { color:#EAF3FF; }
+.g1-wo { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.g1-wo-card { background:rgba(255,255,255,.055); border:1px solid rgba(148,180,225,.18); border-radius:12px; padding:8px 12px; text-align:left; }
+.g1-wo-head { display:flex; justify-content:space-between; font-size:11.5px; color:#9DB8DC; }
+.g1-wo-no { color:#EAF3FF; font-weight:700; }
+.g1-wo-badge { font-size:10px; padding:1px 8px; border-radius:8px; background:rgba(0,230,118,.14); color:#00E676; border:1px solid rgba(0,230,118,.3); }
+.g1-wo-bar { height:6px; border-radius:4px; background:rgba(255,255,255,.09); margin:6px 1px 5px; overflow:hidden; }
+.g1-wo-bar i { display:block; height:100%; border-radius:4px; background:linear-gradient(90deg,#0A84FF,#64D2FF); box-shadow:0 0 8px rgba(100,210,255,.5); }
+.g1-wo-sub { display:flex; justify-content:space-between; font-size:10.5px; color:#7E9BBF; }
+.g1-wo-sub b { color:#64D2FF; font-size:13px; }
+/* G1 悬浮窗 */
+.g1-lf { position:absolute; right:16px; bottom:16px; width:620px; max-width:88%; background:rgba(17,26,42,.92); border:1px solid rgba(120,160,220,.28); border-radius:12px;
+  box-shadow:0 16px 46px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.08); z-index:60; overflow:hidden; font-size:12px; color:#9DB8DC; text-align:left; }
+.g1-lf .lfhead { display:flex; align-items:center; gap:10px; background:linear-gradient(90deg, rgba(10,132,255,.22), rgba(100,210,255,.08)); border-bottom:1px solid rgba(120,160,220,.2); color:#EAF3FF; padding:8px 12px; font-size:12.5px; }
+.g1-lf .lfhead .dot { background:#00E676; box-shadow:0 0 8px #00E676; }
+.g1-lf .lfbody { display:grid; grid-template-columns:1.55fr 1fr; max-height:280px; }
+.g1-lf .lf-col { overflow:auto; min-width:0; }
+.g1-lf .lf-col.log { border-right:1px solid rgba(120,160,220,.16); padding:5px 12px 9px; }
+.g1-lf .lf-col.sys { padding:5px 12px 9px; background:rgba(255,255,255,.02); }
+.g1-lf .lftitle { font-size:10.5px; color:#6E86A6; padding:5px 0 4px; letter-spacing:2px; }
+.g1-lf .lfline { display:flex; gap:8px; padding:5px 0; border-bottom:1px dashed rgba(120,160,220,.14); line-height:1.45; font-size:11.5px; }
+.g1-lf .lfline .t { color:#5C7392; flex:none; font-size:10.5px; padding-top:1.5px; font-family:Consolas,monospace; }
+.g1-lf .lfline .lv { flex:none; font-size:10px; font-weight:700; padding:1px 7px; border-radius:9px; height:fit-content; }
+.g1-lf .lv.i { background:rgba(10,132,255,.16); color:#64D2FF; }
+.g1-lf .lv.w { background:rgba(255,179,0,.14); color:#FFB300; }
+.g1-lf .lv.e { background:rgba(255,23,68,.15); color:#FF5252; }
+.g1-lf .lfline .txt { color:#AAC6E9; }
+.g1-lf .lfline .txt b { color:#EAF3FF; }
+.g1-lf .frow { display:flex; justify-content:space-between; font-size:11px; color:#7E9BBF; padding:5.5px 0; border-bottom:1px dashed rgba(120,160,220,.14); white-space:nowrap; }
+.g1-lf .frow .v { font-weight:700; color:#EAF3FF; }
+.g1-lf .frow .v.ok { color:#00E676; }
+.g1-lf .lffoot { display:flex; gap:14px; border-top:1px solid rgba(120,160,220,.16); color:#6E86A6; font-size:10.5px; padding:6px 12px; background:rgba(255,255,255,.02); }
+.g1-lf .lffoot .pd { margin-left:auto; }
+
+/* ── G2 · 浅色重妆·渐变浸染（alexruix 渐变卡血统）── */
+.g2-stage { background:linear-gradient(160deg,#EAF1FA 0%,#F5F8FC 60%); padding:12px 14px 14px; display:flex; flex-direction:column; gap:12px; }
+.g2-stage .grpbar { background:linear-gradient(90deg,#DCEBFA,#F0F6FD); border-color:#B9D4EF; color:#1F4E79; }
+.g2-grid { display:grid; grid-template-columns:repeat(10,1fr); gap:6px; }
+.g2-card { position:relative; height:96px; padding:8px 10px 7px; border-radius:16px; overflow:hidden; text-align:left;
+  background:#fff; box-shadow:0 0 16px 3px rgba(170,195,220,.55); border:1px solid rgba(190,210,235,.5); }
+.g2-card::before { content:""; position:absolute; left:0; top:0; right:0; height:5px; background:linear-gradient(90deg,#B7C6D6,#D3DEEA); }
+.g2-card.curing::before { background:linear-gradient(90deg,#FFB300,#FFD54F); }
+.g2-card.done::before { background:linear-gradient(90deg,#2E9E5B,#66BB6A); }
+.g2-card.alarm::before { background:linear-gradient(90deg,#D32F2F,#EF5350); }
+.g2-card.gate::before { background:linear-gradient(90deg,#5E35B1,#9575CD); }
+.g2-card.curing { background:linear-gradient(to bottom,#FFF6E0 0%,#FFFFFF 58%); }
+.g2-card.done { background:linear-gradient(to bottom,#E7F6EC 0%,#FFFFFF 58%); }
+.g2-card.alarm { background:linear-gradient(to bottom,#FDEAEA 0%,#FFFFFF 58%); box-shadow:0 0 16px 3px rgba(211,47,47,.35); }
+.g2-card.gate { background:linear-gradient(to bottom,#F0EAFB 0%,#FFFFFF 58%); }
+.g2-top { display:flex; justify-content:space-between; align-items:center; }
+.g2-code { font-weight:800; font-size:15px; color:#17334F; font-family:Consolas,"Microsoft YaHei",monospace; }
+.g2-dot { width:10px; height:10px; border-radius:50%; background:#C3CBD3; flex:none; }
+.g2-dot.r { background:#D32F2F; box-shadow:0 0 6px rgba(211,47,47,.6); }
+.g2-dot.y { background:#F59E0B; box-shadow:0 0 6px rgba(245,158,11,.6); }
+.g2-dot.g { background:#43A047; box-shadow:0 0 6px rgba(67,160,71,.6); }
+.g2-num { font-family:Consolas,monospace; font-weight:800; font-size:18px; color:#17334F; }
+.g2-num small { font-size:9.5px; font-weight:500; color:#7A8CA0; margin-left:3px; }
+.g2-num.done { color:#1B7A38; font-size:13px; }
+.g2-num.stat { color:#5E35B1; font-size:13px; }
+.g2-num.warn { color:#C62828; font-size:13px; animation:pulseG2 1.4s ease-in-out infinite; }
+.g2-num.idle { color:#AEB9C4; font-size:13px; letter-spacing:3px; }
+@keyframes pulseG2 { 0%,100% { opacity:.7; } 50% { opacity:1; } }
+.g2-mid { display:flex; align-items:center; height:36px; }
+.g2-foot { display:flex; justify-content:space-between; font-size:10px; color:#7A8CA0; }
+.g2-foot .on { color:#1B7A38; font-weight:600; }
+/* G2 工单带/统计/浮窗 */
+.g2-stats { display:flex; gap:8px; align-items:center; font-size:11.5px; color:#52739C; flex-wrap:wrap; }
+.g2-stat { display:inline-flex; gap:6px; align-items:center; background:#fff; border:1px solid #CBD9E6; border-radius:18px; padding:4px 11px; box-shadow:0 1px 4px rgba(170,195,220,.4); }
+.g2-stat .k { width:8px; height:8px; border-radius:50%; }
+.g2-stat b { color:#17334F; }
+.g2-wo { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.g2-wo-card { background:#fff; border:1px solid #CBD9E6; border-radius:14px; padding:9px 12px; color:#52739C; box-shadow:0 2px 10px rgba(170,195,220,.45); text-align:left; }
+.g2-wo-head { display:flex; justify-content:space-between; font-size:11.5px; }
+.g2-wo-no { color:#17334F; font-weight:800; }
+.g2-wo-badge { font-size:10px; padding:1px 8px; border-radius:8px; background:#E7F6EC; color:#1B7A38; border:1px solid #BBDFC8; }
+.g2-wo-bar { height:7px; border-radius:5px; background:#E7EDF4; margin:7px 0 6px; overflow:hidden; }
+.g2-wo-bar i { display:block; height:100%; border-radius:5px; background:linear-gradient(90deg,#1E90FF,#64C4FF); }
+.g2-wo-card.lbar .g2-wo-bar i { background:linear-gradient(90deg,#6A46C2,#9B7BE8); }
+.g2-wo-sub { display:flex; justify-content:space-between; font-size:10.5px; }
+.g2-wo-sub b { font-size:13px; color:#1E90FF; }
+.g2-wo-card.lbar .g2-wo-sub b { color:#6A46C2; }
+/* G2 悬浮窗 */
+.g2-lf { position:absolute; right:16px; bottom:16px; width:620px; max-width:88%; background:#fff; border:1px solid #C9D6E3; border-radius:16px;
+  box-shadow:0 16px 46px rgba(60,90,130,.30); z-index:60; overflow:hidden; font-size:12px; color:#38485C; text-align:left; }
+.g2-lf .lfhead { display:flex; align-items:center; gap:10px; background:linear-gradient(90deg,#1E90FF,#4EC3FF); color:#fff; padding:9px 13px; font-size:12.5px; }
+.g2-lf .lfhead .dot { background:#B9F6CA; }
+.g2-lf .lfbody { display:grid; grid-template-columns:1.55fr 1fr; max-height:280px; }
+.g2-lf .lf-col { overflow:auto; min-width:0; }
+.g2-lf .lf-col.log { border-right:1px solid #E8EEF5; padding:5px 12px 9px; }
+.g2-lf .lf-col.sys { padding:5px 12px 9px; background:#F7FAFD; }
+.g2-lf .lftitle { font-size:10.5px; color:#8A98AB; padding:5px 0 4px; letter-spacing:2px; }
+.g2-lf .lfline { display:flex; gap:8px; padding:5px 0; border-bottom:1px dashed #EDF2F7; line-height:1.45; font-size:11.5px; }
+.g2-lf .lfline .t { color:#9AAABB; flex:none; font-size:10.5px; padding-top:1.5px; font-family:Consolas,monospace; }
+.g2-lf .lfline .lv { flex:none; font-size:10px; font-weight:700; padding:1px 7px; border-radius:9px; height:fit-content; }
+.g2-lf .lv.i { background:#E3F0FD; color:#1565C0; }
+.g2-lf .lv.w { background:#FFF4E0; color:#B26A00; }
+.g2-lf .lv.e { background:#FDE7E7; color:#C62828; }
+.g2-lf .lfline .txt b { color:#17334F; }
+.g2-lf .frow { display:flex; justify-content:space-between; font-size:11px; color:#5B6673; padding:5.5px 0; border-bottom:1px dashed #EFEFF1; white-space:nowrap; }
+.g2-lf .frow .v { font-weight:700; color:#22344C; }
+.g2-lf .frow .v.ok { color:#1B7A38; }
+.g2-lf .lffoot { display:flex; gap:14px; border-top:1px solid #E8EEF5; color:#8A98AB; font-size:10.5px; padding:6px 12px; background:#F7FAFD; }
+.g2-lf .lffoot .pd { margin-left:auto; }
+
+/* ── G3 · 异形描边呼吸卡（StealthWorm 双层渐变 clip + ElSombrero2 霓虹描边血统）── */
+.g3-stage { background:#F1F4E8; padding:12px 14px 14px; display:flex; flex-direction:column; gap:12px; }
+.g3-stage .grpbar { background:#2E3328; border-color:#2E3328; color:#E8EAD9; }
+.g3-stage .grpbar i { background:#C0CA33; }
+.g3-grid { display:grid; grid-template-columns:repeat(10,1fr); gap:6px; }
+.g3-card { position:relative; height:94px; padding:7px 9px 6px; border-radius:0 14px; text-align:left;
+  color:#F2F5EC; background:linear-gradient(160deg,#3A4030 0%,#242A1E 100%); box-shadow:2px 3px 12px rgba(46,51,40,.4); }
+/* 双层渐变描边（background-clip: content-box, border-box 技法血统） */
+.g3-card::before { content:""; position:absolute; inset:0; border-radius:0 14px; padding:1.5px;
+  background:linear-gradient(135deg,#9E9D24 0%,#4A5568 45%,#9E9D24 100%);
+  -webkit-mask:linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; }
+.g3-card .g3-top { display:flex; justify-content:space-between; align-items:center; position:relative; }
+.g3-code { font-weight:800; font-size:14.5px; letter-spacing:.5px; color:#F2F5EC; font-family:Consolas,"Microsoft YaHei",monospace; }
+.g3-dot { width:10px; height:10px; border-radius:50%; background:#5C6455; flex:none; }
+.g3-dot.r { background:#FF5252; box-shadow:0 0 9px #FF5252; }
+.g3-dot.y { background:#FFD740; box-shadow:0 0 9px #FFD740; }
+.g3-dot.g { background:#69F0AE; box-shadow:0 0 9px #69F0AE; }
+.g3-mid { display:flex; align-items:center; height:34px; position:relative; }
+.g3-num { font-family:Consolas,monospace; font-weight:800; font-size:17px; color:#F2F5EC; }
+.g3-num small { font-size:9px; font-weight:500; color:#A9B29B; margin-left:3px; }
+.g3-num.done { color:#69F0AE; text-shadow:0 0 10px rgba(105,240,174,.5); font-size:12px; }
+.g3-num.stat { color:#D6C86E; font-size:12px; }
+.g3-num.warn { color:#FF8A80; text-shadow:0 0 10px rgba(255,138,128,.45); font-size:12px; animation:pulseG3 1.5s ease-in-out infinite; }
+.g3-num.idle { color:#6E7565; font-size:12px; letter-spacing:3px; }
+@keyframes pulseG3 { 0%,100% { opacity:.72; } 50% { opacity:1; } }
+.g3-card.curing { background:linear-gradient(160deg,#4A4A26 0%,#2A2D18 100%); box-shadow:2px 3px 12px rgba(255,215,64,.14); }
+.g3-card.curing::before { background:linear-gradient(135deg,#FFD740 0%,#5D6B4E 45%,#FFD740 100%); }
+.g3-card.done { background:linear-gradient(160deg,#2E4A32 0%,#1C2E20 100%); box-shadow:2px 3px 12px rgba(105,240,174,.18); }
+.g3-card.done::before { background:linear-gradient(135deg,#69F0AE 0%,#4A5568 45%,#69F0AE 100%); }
+.g3-card.alarm { background:linear-gradient(160deg,#4A2426 0%,#2E1C1A 100%); box-shadow:2px 3px 12px rgba(255,82,82,.28); animation:pulseCardG3 2.6s ease-in-out infinite; }
+.g3-card.alarm::before { background:linear-gradient(135deg,#FF5252 0%,#5D4A4E 45%,#FF5252 100%); }
+@keyframes pulseCardG3 { 0%,100% { box-shadow:2px 3px 12px rgba(255,82,82,.28); } 50% { box-shadow:2px 3px 20px rgba(255,82,82,.55); } }
+.g3-foot { display:flex; justify-content:space-between; font-size:9.5px; color:#A9B29B; position:relative; }
+.g3-foot .on { color:#69F0AE; }
+/* G3 工单带/统计/浮窗 */
+.g3-stats { display:flex; gap:8px; align-items:center; font-size:11.5px; color:#5B6152; flex-wrap:wrap; }
+.g3-stat { display:inline-flex; gap:6px; align-items:center; background:#2E3328; color:#E8EAD9; border-radius:0 10px; padding:5px 11px; }
+.g3-stat .k { width:8px; height:8px; border-radius:50%; }
+.g3-stat b { color:#fff; }
+.g3-wo { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.g3-wo-card { position:relative; background:linear-gradient(160deg,#3A4030 0%,#242A1E 100%); border-radius:0 12px; padding:9px 12px; text-align:left;
+  box-shadow:2px 3px 10px rgba(46,51,40,.35); }
+.g3-wo-card::before { content:""; position:absolute; inset:0; border-radius:0 12px; padding:1.5px;
+  background:linear-gradient(135deg,#C0CA33 0%,#4A5568 50%,#C0CA33 100%);
+  -webkit-mask:linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; }
+.g3-wo-head { display:flex; justify-content:space-between; font-size:11.5px; color:#A9B29B; }
+.g3-wo-no { color:#F2F5EC; font-weight:800; }
+.g3-wo-badge { font-size:10px; padding:1px 8px; border-radius:0 7px; background:rgba(105,240,174,.12); color:#69F0AE; border:1px solid rgba(105,240,174,.35); }
+.g3-wo-bar { height:6px; border-radius:0 4px; background:rgba(255,255,255,.10); margin:7px 0 6px; overflow:hidden; }
+.g3-wo-bar i { display:block; height:100%; background:linear-gradient(90deg,#9E9D24,#C6DE57); box-shadow:0 0 7px rgba(198,222,87,.55); }
+.g3-wo-card.lbar .g3-wo-bar i { background:linear-gradient(90deg,#8D6E63,#BCAAA4); }
+.g3-wo-sub { display:flex; justify-content:space-between; font-size:10.5px; color:#A9B29B; }
+.g3-wo-sub b { color:#C6DE57; font-size:13px; }
+.g3-wo-card.lbar .g3-wo-sub b { color:#D7CCC8; }
+/* G3 悬浮窗 */
+.g3-lf { position:absolute; right:16px; bottom:16px; width:620px; max-width:88%; background:#242A1E; border-radius:0 14px;
+  box-shadow:0 16px 46px rgba(36,42,30,.55); z-index:60; overflow:hidden; font-size:12px; color:#C9CDBB; text-align:left; }
+.g3-lf::before { content:""; position:absolute; inset:0; border-radius:0 14px; padding:1.5px; z-index:2;
+  background:linear-gradient(135deg,#C0CA33 0%,#4A5568 50%,#C0CA33 100%);
+  -webkit-mask:linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; }
+.g3-lf .lfhead { display:flex; align-items:center; gap:10px; background:#2E3328; color:#F2F5EC; padding:9px 13px; font-size:12.5px; }
+.g3-lf .lfhead .dot { background:#69F0AE; box-shadow:0 0 8px #69F0AE; }
+.g3-lf .lfbody { display:grid; grid-template-columns:1.55fr 1fr; max-height:280px; }
+.g3-lf .lf-col { overflow:auto; min-width:0; }
+.g3-lf .lf-col.log { border-right:1px solid rgba(255,255,255,.08); padding:5px 12px 9px; }
+.g3-lf .lf-col.sys { padding:5px 12px 9px; background:rgba(255,255,255,.03); }
+.g3-lf .lftitle { font-size:10.5px; color:#8B937B; padding:5px 0 4px; letter-spacing:2px; }
+.g3-lf .lfline { display:flex; gap:8px; padding:5px 0; border-bottom:1px dashed rgba(255,255,255,.08); line-height:1.45; font-size:11.5px; }
+.g3-lf .lfline .t { color:#79816B; flex:none; font-size:10.5px; padding-top:1.5px; font-family:Consolas,monospace; }
+.g3-lf .lfline .lv { flex:none; font-size:10px; font-weight:700; padding:1px 7px; border-radius:0 8px; height:fit-content; }
+.g3-lf .lv.i { background:rgba(198,222,87,.13); color:#C6DE57; }
+.g3-lf .lv.w { background:rgba(255,215,64,.12); color:#FFD740; }
+.g3-lf .lv.e { background:rgba(255,82,82,.14); color:#FF8A80; }
+.g3-lf .lfline .txt b { color:#F2F5EC; }
+.g3-lf .frow { display:flex; justify-content:space-between; font-size:11px; color:#A9B29B; padding:5.5px 0; border-bottom:1px dashed rgba(255,255,255,.08); white-space:nowrap; }
+.g3-lf .frow .v { font-weight:700; color:#F2F5EC; }
+.g3-lf .frow .v.ok { color:#69F0AE; }
+.g3-lf .lffoot { display:flex; gap:14px; border-top:1px solid rgba(255,255,255,.08); color:#8B937B; font-size:10.5px; padding:6px 12px; background:rgba(255,255,255,.03); }
+.g3-lf .lffoot .pd { margin-left:auto; }
+</style>
+</head>
+<body>
+
+<h1>固化架显示区域 · 优化方案调研</h1>
+<div class="sub">基于截图运行状态同源数据渲染 · 仓位卡（SlotCard 模板）重设计 · 两种成本路径 + 一种组态风备选</div>
+<nav>
+  <a href="#z">现状还原</a><a href="#a">方案 A · 清爽徽章卡</a><a href="#b">方案 B · 数据面板卡（推荐）</a><a href="#c">方案 C · 紧凑阵列（组态风）</a><a href="#d">方案 D · 紧凑网格+信息带</a><a href="#m">双机 60 卡专项</a><a href="#g">G 系 · galaxy 重妆候选</a>
+</nav>
+
+<!-- ══════════ 现状 ══════════ -->
+<section id="z">
+  <div class="head"><h2>现状还原</h2><span class="tag tag-low">仅对照</span></div>
+  <div class="desc">还原截图视觉，标出 6 个病灶：<b>①</b> 大卡小字下半全空；<b>②</b> 层名飘在右上与库位码割裂；<b>③</b> 灯点 12px 太弱、空闲卡无节奏；<b>④</b> 剩余时间无可视化（数据已有 <code>SlotStatus.RemainMinutes</code> 却只拼文本）；<b>⑤</b> 托盘/光栅纯文本难读；<b>⑥</b> 异常卡与空闲卡视觉权重相同。</div>
+  <div class="mockwrap"><div class="win">
+    <div class="topbar"><span class="dot"></span><span style="color:#1F4E79">策略：自定义</span><span>A线OP30固化架IO耦合器 连接超时 (3000ms)</span><div class="btns"><span class="btn">登录</span><span class="btn">工单</span><span class="btn">权限</span><span class="btn">策略</span><span class="btn">退出</span></div></div>
+    <div class="z-grid" id="zgrid"></div>
+  </div></div>
+</section>
+
+<!-- ══════════ 方案 A ══════════ -->
+<section id="a">
+  <div class="head"><h2>方案 A · 清爽徽章卡</h2><span class="tag tag-low">低成本：只动 XAML</span></div>
+  <div class="desc">
+    保持信息量不变，纯排版重构：<b>内容四段式锚定上/下两端</b>（顶部＝仓位身份，中部＝状态徽章，底部＝灯与托盘），消灭下半空白；
+    状态全部改<b>胶囊徽章</b>，灯点加大到 14px 带<b>发光晕</b>（更像实体三色灯）；
+    卡底加 4px <b>状态色条</b>强化远看识别；空闲卡整体降不透明度，让干活中的仓位"浮"出来。
+    <div class="pts"><span>✎ 仅 MainWindow.xaml 的 SlotCard 模板重写</span><span>VM 零改动</span><span>约半天</span></div>
+  </div>
+  <div class="mockwrap"><div class="win">
+    <div class="topbar"><span class="dot"></span><span style="color:#1F4E79">策略：自定义</span><span>A线OP30固化架IO耦合器 连接超时 (3000ms)</span><div class="btns"><span class="btn">登录</span><span class="btn">工单</span><span class="btn">权限</span><span class="btn">策略</span><span class="btn">退出</span></div></div>
+    <div class="a-grid" id="agrid"></div>
+  </div></div>
+  <div class="caption">同款数据渲染：A01 占用(红) · B02 计时剩47/120 · C03 待门控 · D04 空闲(光栅遮挡) · F06 计时剩118/240 · H09 放行 · 其余空闲</div>
+</section>
+
+<!-- ══════════ 方案 B ══════════ -->
+<section id="b">
+  <div class="head"><h2>方案 B · 数据面板卡</h2><span class="tag tag-mid">推荐 · 中成本：VM 补 3 个属性 + XAML</span></div>
+  <div class="desc">
+    在 A 的排版基础上，把固化最核心的过程量<b>大数字化</b>：计时中显示"剩 47 分"大号数字 + <b>进度条</b>（RemainMinutes/TotalMinutes，状态机已给，只差 VM 暴露）；
+    放行显示"✓ 已放行"；空闲卡灰化下沉；异常卡<b>红色浸染 + 呼吸脉冲</b>一眼锁定；
+    顶部加<b>统计胶囊条</b>（空闲/计时/待取/异常计数），还原色的浅蓝组标题条融合进画面。
+    <div class="pts"><span>✎ RackSlotViewModel 补 RemainMin/TotalMin/Progress</span><span>✎ SlotCard 模板 + 统计条</span><span>约 1 天（含测试）</span></div>
+  </div>
+  <div class="mockwrap"><div class="win">
+    <div class="topbar"><span class="dot ok"></span><span style="color:#1F4E79">策略：自定义</span><span>A线OP30固化架IO耦合器 已连接</span><div class="btns"><span class="btn">登录</span><span class="btn">工单</span><span class="btn">权限</span><span class="btn">策略</span><span class="btn">退出</span></div></div>
+    <div class="b-stage">
+      <div class="b-stats">
+        <span class="b-stat"><span class="k" style="background:#B0BEC5"></span>空闲 <b>24</b></span>
+        <span class="b-stat"><span class="k" style="background:#FFB300"></span>计时中 <b>2</b></span>
+        <span class="b-stat"><span class="k" style="background:#7E57C2"></span>待门控 <b>1</b></span>
+        <span class="b-stat"><span class="k" style="background:#43A047"></span>待取件 <b>1</b></span>
+        <span class="b-stat"><span class="k" style="background:#E53935"></span>占用报警 <b>1</b></span>
+        <span style="flex:1"></span>
+        <span class="b-stat" style="border-style:dashed">⚡ 剩余最短：B02 · 47 分钟</span>
+      </div>
+      <div class="grpbar"><i></i>1号固化架</div>
+      <div class="b-grid" id="bgrid"></div>
+    </div>
+  </div></div>
+  <div class="caption">大数字区＝该仓位剩余固化时间；空闲卡收缩到底色；H09 为"放行待取"，取走后回到空闲。红色脉冲模拟异常位占用警示。</div>
+</section>
+
+<!-- ══════════ 方案 C ══════════ -->
+<section id="c">
+  <div class="head"><h2>方案 C · 紧凑阵列（组态风）</h2><span class="tag tag-big">大改动：布局密度重排</span></div>
+  <div class="desc">
+    借鉴 SCADA 机柜阵列图：<b>卡片压扁成色块</b>，中央只保留最大信息（剩余分钟/状态字），明细靠悬浮提示；
+    深色底 = 工业 flora，灯点发光 = 实体灯，异常红块极其扎眼，<b>一屏可放双架/四架</b>不拥挤。
+    风险：信息密度下降对操作员习惯改变大，且深色主题与现有全浅色界面割裂——适合作为"双架/多架扩展后又嫌挤"的储备答案。
+    <div class="pts"><span>✎ 模板+布局+悬浮详情</span><span>约 1.5~2 天</span><span>深色主题需整体换肤配合</span></div>
+  </div>
+  <div class="mockwrap"><div class="win">
+    <div class="topbar" style="background:#262B30;border-bottom:1px solid #3A4047"><span class="dot ok"></span><span style="color:#9fb3c8">策略：自定义</span><span style="color:#9fb3c8">A线OP30固化架IO耦合器 已连接</span><div class="btns"><span class="btn" style="background:#2E3339;border-color:#3A4047;color:#9fb3c8">登录</span><span class="btn" style="background:#2E3339;border-color:#3A4047;color:#9fb3c8">工单</span><span class="btn" style="background:#2E3339;border-color:#3A4047;color:#9fb3c8">策略</span><span class="btn" style="background:#2E3339;border-color:#3A4047;color:#9fb3c8">退出</span></div></div>
+    <div class="c-stage"><div class="c-grid" id="cgrid"></div></div>
+  </div></div>
+</section>
+
+<!-- ══════════ 方案 D ══════════ -->
+<section id="d">
+  <div class="head"><h2>方案 D · 紧凑网格 + 下部信息带</h2><span class="tag tag-mid">回答"空出来的区域干什么"</span></div>
+  <div class="desc">
+    卡片压扁（210px → 96px）省下的不是空白，是<b>本该有的信息位</b>——
+    ① <b>工单进度带</b>：R/L 双工位"过账+1"实时跳动（<code>WorkOrderStore</code> 数据现成，现在深藏在工单窗里要打开才看得见）；
+    ② <b>日志/控制台悬浮窗</b>（拍板形态）：托盘到位/放行/取件/过账/通讯事件自动滚动 + 系统状态——
+    <b>点顶栏【日志】按钮弹出独立悬浮窗</b>，主窗不再固化日志带（见本节实景图右下角演示，可点 ✕ 收起）；
+    ③ <b>预留双架</b>：V0.0.20 已是双架点位模型——来日接第 2 台固化架网格区纵向再铺一组正好够。
+    卡片本体 = B 的信息结构（进度数字照留），只是把"装饰性留白"还给了业务信息。
+    <div class="pts"><span>✎ RackSlotViewModel 3 属性</span><span>✎ SlotCard 紧凑模板</span><span>✎ 工单进度带（数据现成）</span><span>✎ 日志/控制台悬浮窗（LocalLogService 事件链现成）</span><span>约 1.5 天（含测试）</span></div>
+  </div>
+  <div class="mockwrap"><div class="win">
+    <div class="topbar"><span class="dot ok"></span><span style="color:#1F4E79">策略：自定义</span><span>A线OP30固化架IO耦合器 已连接</span><div class="btns"><span class="btn">登录</span><span class="btn">工单</span><span class="btn">权限</span><span class="btn">策略</span><span class="btn lfbtn" id="lfBtnD" title="点击弹出/收起 日志 · 控制台悬浮窗">日志</span><span class="btn">退出</span></div></div>
+    <div class="b-stats" style="margin:10px 18px 0">
+      <span class="b-stat"><span class="k" style="background:#B0BEC5"></span>空闲 <b>24</b></span>
+      <span class="b-stat"><span class="k" style="background:#FFB300"></span>计时中 <b>2</b></span>
+      <span class="b-stat"><span class="k" style="background:#7E57C2"></span>待门控 <b>1</b></span>
+      <span class="b-stat"><span class="k" style="background:#43A047"></span>待取件 <b>1</b></span>
+      <span class="b-stat"><span class="k" style="background:#E53935"></span>占用报警 <b>1</b></span>
+      <span style="flex:1"></span>
+      <span class="b-stat" style="border-style:dashed">⚡ 剩余最短：B02 · 47 分钟</span>
+    </div>
+    <div class="d-stage">
+      <div class="grpbar"><i></i>1号固化架</div>
+      <div class="d-grid" id="dgrid"></div>
+      <div class="d-wo">
+        <div class="d-wo-card">
+          <div class="d-wo-head"><span class="d-wo-no">R 工位 · 2405A2301</span><span class="d-wo-badge">过账启用</span></div>
+          <div class="d-wo-bar"><i style="width:31%"></i></div>
+          <div class="d-wo-sub"><span>已产出 <b style="color:#1E90FF">37</b> / 120</span><span>今日首次过账 12:47</span></div>
+        </div>
+        <div class="d-wo-card">
+          <div class="d-wo-head"><span class="d-wo-no">L 工位 · 2405B1180</span><span class="d-wo-badge">过账启用</span></div>
+          <div class="d-wo-bar"><i style="width:12%;background:#7E57C2"></i></div>
+          <div class="d-wo-sub"><span>已产出 <b style="color:#7E57C2">12</b> / 100</span><span>待接收第一批托盘</span></div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:4px 18px 12px;font-size:11.5px;color:#8A98AB">◈ 主窗底部不再固化日志带——操作日志与系统状态收进右侧悬浮窗（点击顶栏【日志】按钮弹出 / ✕ 收起；本图为弹出态演示）。</div>
+    <div class="lf" id="lfD" title="示意形态：真实实现为独立悬浮窗（顶栏【日志】按钮弹出）">
+      <div class="lf-head"><span class="dot"></span><b>日志 · 控制台</b><span style="opacity:.75;font-size:11px">程序① CureStation</span><span class="lf-x" id="lfXd">✕ 收起</span></div>
+      <div class="lf-body">
+        <div class="lf-col log">
+          <div class="lf-title">操作日志（最新在上 · 自动滚动）</div>
+          <div class="lf-line"><span class="t">12:47:52</span><span class="lv i">INFO</span><span class="txt"><b>A01-上层</b> 托盘到位（真实边沿）→ 进站 API0030·I 已发送</span></div>
+          <div class="lf-line"><span class="t">12:47:33</span><span class="lv i">过账</span><span class="txt">L 工位物料上传成功（API0032 · 批次 2405B1179）</span></div>
+          <div class="lf-line"><span class="t">12:47:29</span><span class="lv i">INFO</span><span class="txt"><b>B02-上层</b> 固化到点放行（绿灯，共 120 分钟）</span></div>
+          <div class="lf-line"><span class="t">12:46:58</span><span class="lv w">WARN</span><span class="txt"><b>C03-上层</b> 光栅 LON 让空（I/O 1→0）· 待门控解除</span></div>
+          <div class="lf-line"><span class="t">12:45:09</span><span class="lv i">IO总线</span><span class="txt">全部设备已连接（192.168.1.20:502）</span></div>
+          <div class="lf-line"><span class="t">12:44:57</span><span class="lv e">ERR</span><span class="txt"><b>1号架 C03</b> DO 黄灯写入失败 → 已补写成功（去重缓存命中）</span></div>
+        </div>
+        <div class="lf-col sys">
+          <div class="lf-title">系统状态</div>
+          <div class="frow"><span>IO 耦合器</span><span class="v ok">已连接 · 192.168.1.20</span></div>
+          <div class="frow"><span>点表通道</span><span class="v">30 路（DI 15 / DO 15）</span></div>
+          <div class="frow"><span>过账服务</span><span class="v ok">启用 · R 工位</span></div>
+          <div class="frow"><span>激活策略</span><span class="v">自定义（120 分）</span></div>
+          <div class="frow"><span>登录账号</span><span class="v">L4：admin</span></div>
+          <div class="frow"><span>连续运行</span><span class="v">02:14:33</span></div>
+          <div class="frow"><span>模拟模式</span><span class="v">关闭</span></div>
+        </div>
+      </div>
+      <div class="lf-foot"><span>保留最近 200 条 · 收档 LocalLogService</span><span class="pd">清屏</span></div>
+    </div>
+  </div></div>
+  <div class="caption">拍板形态参考分配（1080p 最大化）：顶栏 ~50px / 统计条 ~34px / 网格区（96px 卡 ×3 行）~380px / 工单进度带 ~90px / 底部提示 ~24px——<b>省出的 ~260px 不再给日志带</b>；日志/控制台走顶栏【日志】按钮弹出悬浮窗（右下演示，双栏 = 操作日志流 + 系统状态）。双架时网格区纵向再铺一组 ~285px，总计 ~800px 仍富余。</div>
+</section>
+
+<!-- ══════════ 双机 60 卡专项 ══════════ -->
+<section id="m">
+  <div class="head"><h2>双机扩展 · 60 卡布局专项</h2><span class="tag tag-mid">2 台机台 = 2 组 × 30 卡</span></div>
+  <div class="desc">
+    接入两台机台后主窗出现 <b>60 张仓位卡</b>（2 组 × 10×3，V0.0.20 双架模组已按全局架号
+    每 10 站切一组）。<b>已拍板（2026-10-29）：D 方案 + 纵向堆两组</b>（1 号架在上、2 号架在下，
+    与现状分组排列一致）——D 的 86px 矮卡纵向核算最省（网格 3×86 + 组标题 ≈ 285px/组，
+    2 组 + 统计条 + 工单带在 1080p 工作区共约 ~800px，仍富余 ~200px），无需换布局范式；
+    左右双列保留在下方作为调研归档（大卡方案 B/A 才用得上）。
+    <div class="pts"><span>▸ ✅ 拍板：D 纵向堆两组（矮卡最省纵向）</span><span>▸ 调研备档：A/B 左右双列（大卡方案出路）</span><span>▸ 兜底：≥4 架"组页签切换"</span></div>
+  </div>
+
+  <!-- 双机 · 现状：纵向堆叠、卡被压扁 -->
+  <div class="mockwrap"><div class="win">
+    <div class="topbar"><span class="dot"></span><span style="color:#1F4E79">策略：自定义</span><span>A线OP30固化架IO耦合器 已连接 · 2 组固化架</span><div class="btns"><span class="btn">登录</span><span class="btn">工单</span><span class="btn">权限</span><span class="btn">策略</span><span class="btn">退出</span></div></div>
+    <div class="grpbar" style="margin:10px 12px 0"><i></i>1号固化架</div>
+    <div class="z-grid sm" id="mz1"></div>
+    <div class="grpbar" style="margin:10px 12px 0"><i></i>2号固化架</div>
+    <div class="z-grid sm" id="mz2" style="padding-bottom:16px"></div>
+  </div></div>
+  <div class="caption">现状 · 纵向堆两组：每卡被压到 ~110px 高（本该 196px），6 个病灶里"大卡小字"虽被稀释但"状态没有重量"反被放大——两排灰白块难分主次。</div>
+
+  <!-- 双机 · A：左右双列 -->
+  <div class="mockwrap wide"><div class="win">
+    <div class="topbar"><span class="dot ok"></span><span style="color:#1F4E79">策略：自定义</span><span>A线OP30固化架IO耦合器 已连接</span><div class="btns"><span class="btn">登录</span><span class="btn">工单</span><span class="btn">权限</span><span class="btn">策略</span><span class="btn">退出</span></div></div>
+    <div class="m-duo" style="padding:12px 14px 14px; background:#F3F5F8">
+      <div><div class="grpbar"><i></i>1号固化架</div><div class="a-grid" id="ma1"></div></div>
+      <div><div class="grpbar"><i></i>2号固化架</div><div class="a-grid" id="ma2"></div></div>
+    </div>
+  </div></div>
+  <div class="caption">方案 A · 左右双列：徽章四段式在 ~170px 矮卡里仍能保持上下锚定，只在 1080p 下字号微缩（库位码 15px、灯点 11px）。VM 零改动，纯 XAML。</div>
+
+  <!-- 双机 · B：左右双列 -->
+  <div class="mockwrap wide"><div class="win">
+    <div class="topbar"><span class="dot ok"></span><span style="color:#1F4E79">策略：自定义</span><span>A线OP30固化架IO耦合器 已连接</span><div class="btns"><span class="btn">登录</span><span class="btn">工单</span><span class="btn">权限</span><span class="btn">策略</span><span class="btn">退出</span></div></div>
+    <div class="m-duo" style="padding:12px 14px 14px">
+      <div><div class="grpbar"><i></i>1号固化架</div><div class="b-grid" id="mb1"></div></div>
+      <div><div class="grpbar"><i></i>2号固化架</div><div class="b-grid" id="mb2"></div></div>
+    </div>
+  </div></div>
+  <div class="caption">方案 B · 左右双列：数据面板卡瘦身到 ~186px（大数字 25px、进度条 5px）——信息结构完整保留，双列网格高度 = 186×3 + 组标题 ≈ 610px，与统计条、底部抽屉共存于 1080p。推荐方案在双机下依然推荐。</div>
+
+  <!-- 双机 · C：左右双列 -->
+  <div class="mockwrap wide"><div class="win">
+    <div class="topbar" style="background:#262B30;border-bottom:1px solid #3A4047"><span class="dot ok"></span><span style="color:#9fb3c8">策略：自定义</span><span style="color:#9fb3c8">A线OP30固化架IO耦合器 已连接</span><div class="btns"><span class="btn" style="background:#2E3339;border-color:#3A4047;color:#9fb3c8">登录</span><span class="btn" style="background:#2E3339;border-color:#3A4047;color:#9fb3c8">工单</span><span class="btn" style="background:#2E3339;border-color:#3A4047;color:#9fb3c8">策略</span><span class="btn" style="background:#2E3339;border-color:#3A4047;color:#9fb3c8">退出</span></div></div>
+    <div class="c-stage"><div class="m-duo">
+      <div><div class="grpbar" style="background:#2E3339;border-color:#3A4047;color:#c8d2dc"><i style="background:#FFCA28"></i>1号固化架</div><div class="c-grid" id="mc1"></div></div>
+      <div><div class="grpbar" style="background:#2E3339;border-color:#3A4047;color:#c8d2dc"><i style="background:#FFCA28"></i>2号固化架</div><div class="c-grid" id="mc2"></div></div>
+    </div></div>
+  </div></div>
+  <div class="caption">方案 C · 左右双列：深色密排本来就是为"多机一屏"设计的——92px 矮卡双列后仍有纵向富余；短板依旧：信息密度低、与浅色全站风格割裂。</div>
+
+  <!-- 双机 · D：拍板形态 = 纵向堆两组 + 工单带 +【日志】按钮弹出悬浮窗 -->
+  <div class="mockwrap"><div class="win">
+    <div class="topbar"><span class="dot ok"></span><span style="color:#1F4E79">策略：自定义</span><span>A线OP30固化架IO耦合器 已连接</span><div class="btns"><span class="btn">登录</span><span class="btn">工单</span><span class="btn">权限</span><span class="btn">策略</span><span class="btn lfbtn" id="lfBtnM" title="点击弹出/收起 日志 · 控制台悬浮窗">日志</span><span class="btn">退出</span></div></div>
+    <div class="b-stats" style="margin:10px 14px 0">
+      <span class="b-stat"><span class="k" style="background:#B0BEC5"></span>空闲 <b>49</b></span>
+      <span class="b-stat"><span class="k" style="background:#FFB300"></span>计时中 <b>4</b></span>
+      <span class="b-stat"><span class="k" style="background:#7E57C2"></span>待门控 <b>2</b></span>
+      <span class="b-stat"><span class="k" style="background:#43A047"></span>待取件 <b>2</b></span>
+      <span class="b-stat"><span class="k" style="background:#E53935"></span>占用报警 <b>1</b></span>
+      <span style="flex:1"></span>
+      <span class="b-stat" style="border-style:dashed">⚡ 剩余最短：B02 · 47 分钟</span>
+    </div>
+    <div class="m-stack">
+      <div><div class="grpbar"><i></i>1号固化架</div><div class="d-grid" id="md1"></div></div>
+      <div><div class="grpbar"><i></i>2号固化架</div><div class="d-grid" id="md2"></div></div>
+    </div>
+    <div class="d-wo" style="margin:0 14px 14px">
+      <div class="d-wo-card">
+        <div class="d-wo-head"><span class="d-wo-no">R 工位 · 2405A2301</span><span class="d-wo-badge">过账启用</span></div>
+        <div class="d-wo-bar"><i style="width:31%"></i></div>
+        <div class="d-wo-sub"><span>已产出 <b style="color:#1E90FF">37</b> / 120</span><span>今日首次过账 12:47</span></div>
+      </div>
+      <div class="d-wo-card">
+        <div class="d-wo-head"><span class="d-wo-no">L 工位 · 2405B1180</span><span class="d-wo-badge">过账启用</span></div>
+        <div class="d-wo-bar"><i style="width:12%;background:#7E57C2"></i></div>
+        <div class="d-wo-sub"><span>已产出 <b style="color:#7E57C2">12</b> / 100</span><span>待接收第一批托盘</span></div>
+      </div>
+    </div>
+    <div class="lf" id="lfM" title="示意形态：真实实现为独立悬浮窗（顶栏【日志】按钮弹出，不遮挡点表-tabs 关闭）">
+      <div class="lf-head"><span class="dot"></span><b>日志 · 控制台</b><span style="opacity:.75;font-size:11px">程序① CureStation</span><span class="lf-x" id="lfXm">✕ 收起</span></div>
+      <div class="lf-body">
+        <div class="lf-col log">
+          <div class="lf-title">操作日志（最新在上 · 自动滚动）</div>
+          <div class="lf-line"><span class="t">12:47:52</span><span class="lv i">INFO</span><span class="txt"><b>A01-上层</b> 托盘到位（真实边沿）→ 进站 API0030·I 已发送</span></div>
+          <div class="lf-line"><span class="t">12:47:29</span><span class="lv i">INFO</span><span class="txt"><b>B02-上层</b> 固化到点放行（绿灯，共 120 分钟）</span></div>
+          <div class="lf-line"><span class="t">12:47:29</span><span class="lv i">过账</span><span class="txt">出站 API0030·O 已接受 → R 工位已生产 +1（37/120）</span></div>
+          <div class="lf-line"><span class="t">12:46:58</span><span class="lv w">WARN</span><span class="txt"><b>C03-上层</b> 光栅 LON 让空（I/O 1→0）· 待门控解除</span></div>
+          <div class="lf-line"><span class="t">12:45:09</span><span class="lv i">IO总线</span><span class="txt">全部设备已连接（192.168.1.20:502）· 5s 节流重连挂起</span></div>
+          <div class="lf-line"><span class="t">12:44:57</span><span class="lv e">ERR</span><span class="txt"><b>1号架 C03</b> DO 黄灯写入失败 → 已补写成功（去重缓存命中）</span></div>
+        </div>
+        <div class="lf-col sys">
+          <div class="lf-title">系统状态</div>
+          <div class="frow"><span>IO 耦合器</span><span class="v ok">已连接 · 192.168.1.20</span></div>
+          <div class="frow"><span>点表通道</span><span class="v">60 路（DI 30 / DO 30）</span></div>
+          <div class="frow"><span>过账服务</span><span class="v ok">启用 · R/L 双工位</span></div>
+          <div class="frow"><span>激活策略</span><span class="v">自定义（120 分）</span></div>
+          <div class="frow"><span>登录账号</span><span class="v">L4：admin</span></div>
+          <div class="frow"><span>连续运行</span><span class="v">02:14:33</span></div>
+          <div class="frow"><span>模拟模式</span><span class="v">关闭</span></div>
+        </div>
+      </div>
+      <div class="lf-foot"><span>保留最近 200 条 · 收档 LocalLogService</span><span class="pd">清屏</span></div>
+    </div>
+  </div></div>
+  <div class="caption">方案 D · <b>拍板形态</b>（双机纵向堆两组）：顶栏新增【日志】按钮，点一下弹出右下角悬浮窗（如本图，可点 ✕ 收起）——操作日志流 + 系统状态双栏；主窗本体只有 ① 统计条 ② 纵向两组网格 ③ 工单带，全部纵向预算 ~800px，1080p 富余。悬浮窗与主窗分离（WPF 实现为独立 Window 或 Popup，见文档 5.5），日志滚动不占主窗一寸布局。</div>
+
+  <!-- 决策小结 -->
+  <div class="desc" style="margin-top:14px">
+    <b>✅ 60 卡布局拍板（2026-10-29）</b>——<b>方案 D + 纵向堆两组</b>（聚合在上方拍板形态实景图）：1 号架在上、
+    2 号架在下，与现状分组排列一致，V0.0.20 的分组契约（组标题条 + 组内 10×3）原样保留，VM 零改动。<br>
+    ▸ D 矮卡（86px）纵向堆两组 = 网格区 ~600px，加统计条/工单带在 1080p 工作区共 ~800px，<b>不需要新的布局范式</b>——左右双列只对 A/B 大卡方案有意义，A/B 双列图保留在上方做调研归档；<br>
+    ▸ <b>日志/控制台</b>：主窗不再固化日志带，顶栏【日志】按钮弹出独立悬浮窗（操作日志流 + 系统状态双栏），按 ✕ 或再点按钮收起——详见文档 5.5 伸缩形态拍板记录；<br>
+    ▸ 兜底备档：≥4 架（>60 卡）转"组页签切换"或缩略色块图，属后续储备。<br>
+    <b style="color:#5E35B1">待萤工确认后按文档第 5 节清单实施。</b>
+  </div>
+</section>
+
+<!-- ══════════ G 系重妆候选（galaxy 血统） ══════════ -->
+<section id="g">
+  <div class="head"><h2>G 系 · galaxy 重妆候选</h2><span class="tag tag-mid">galaxy 血统 ×3 · 结构 = D 拍板形态不变</span></div>
+  <div class="desc">
+    用户确认后要求"galaxy 风格想更重一点"。从 `E:\Project\galaxy`（Uiverse.io 镜像）Cards 里
+    挑了三组高份量视觉血统，<b>只重妆视觉、不动 D 拍板结构</b>（统计条 + 纵向堆两组 60 卡 + 工单带 + 日志/控制台悬浮窗）——
+    三个候选在"重"的方向上各走一路，看图选；主窗为拍板的双机形态实景（60 卡）。
+    <div class="pts"><span><b>G1</b> 深空玻璃舱（暗底·玻璃卡·霓虹灯）——最重</span><span><b>G2</b> 浅色渐变浸染（白底·顶部色带·大投影）——衔接最稳</span><span><b>G3</b> 异形描边呼吸（军绿深卡·渐变描边·发光）——最独特</span></div>
+  </div>
+
+  <!-- G1 深空玻璃舱 -->
+  <div class="mockwrap"><div class="win">
+    <div class="topbar" style="background:#101A2C;border-bottom:1px solid rgba(120,160,220,.25)"><span class="dot ok"></span><span style="color:#9DB8DC">策略：自定义</span><span style="color:#9DB8DC">A线OP30固化架IO耦合器 已连接 · 2 组固化架</span><div class="btns"><span class="btn" style="background:#1B2740;border-color:#33486B;color:#9DB8DC">登录</span><span class="btn" style="background:#1B2740;border-color:#33486B;color:#9DB8DC">工单</span><span class="btn" style="background:#1B2740;border-color:#33486B;color:#9DB8DC">权限</span><span class="btn" style="background:#1B2740;border-color:#33486B;color:#9DB8DC">策略</span><span class="btn" style="background:rgba(10,132,255,.18);border-color:rgba(100,210,255,.4);color:#64D2FF">日志</span><span class="btn" style="background:#1B2740;border-color:#33486B;color:#9DB8DC">退出</span></div></div>
+    <div class="g1-stage">
+      <div class="g1-stats">
+        <span class="g1-stat"><span class="k" style="background:#5A6B85"></span>空闲 <b>49</b></span>
+        <span class="g1-stat"><span class="k" style="background:#FFB300"></span>计时中 <b>4</b></span>
+        <span class="g1-stat"><span class="k" style="background:#7E57C2"></span>待门控 <b>2</b></span>
+        <span class="g1-stat"><span class="k" style="background:#00E676"></span>待取件 <b>2</b></span>
+        <span class="g1-stat"><span class="k" style="background:#FF1744"></span>占用报警 <b>1</b></span>
+        <span style="flex:1"></span>
+        <span class="g1-stat" style="border-style:dashed">⚡ 剩余最短：B02 · 47 分钟</span>
+      </div>
+      <div><div class="grpbar"><i></i>1号固化架</div><div class="g1-grid" id="gg11"></div></div>
+      <div><div class="grpbar"><i></i>2号固化架</div><div class="g1-grid" id="gg12"></div></div>
+      <div class="g1-wo">
+        <div class="g1-wo-card">
+          <div class="g1-wo-head"><span class="g1-wo-no">R 工位 · 2405A2301</span><span class="g1-wo-badge">过账启用</span></div>
+          <div class="g1-wo-bar"><i style="width:31%"></i></div>
+          <div class="g1-wo-sub"><span>已产出 <b>37</b> / 120</span><span>今日首次过账 12:47</span></div>
+        </div>
+        <div class="g1-wo-card">
+          <div class="g1-wo-head"><span class="g1-wo-no">L 工位 · 2405B1180</span><span class="g1-wo-badge">过账启用</span></div>
+          <div class="g1-wo-bar"><i style="width:12%;background:linear-gradient(90deg,#9C27B0,#CE93D8);box-shadow:0 0 8px rgba(206,147,216,.5)"></i></div>
+          <div class="g1-wo-sub"><span>已产出 <b style="color:#CE93D8">12</b> / 100</span><span>待接收第一批托盘</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="g1-lf">
+      <div class="lfhead"><span class="dot"></span><b>日志 · 控制台</b><span style="opacity:.7;font-size:11px">程序① CureStation</span><span class="lf-x" style="margin-left:auto;cursor:pointer;border:1px solid rgba(255,255,255,.35);padding:2px 8px;border-radius:5px;font-size:11px">✕ 收起</span></div>
+      <div class="lfbody">
+        <div class="lf-col log">
+          <div class="lftitle">操作日志（最新在上 · 自动滚动）</div>
+          <div class="lfline"><span class="t">12:47:52</span><span class="lv i">INFO</span><span class="txt"><b>A01-上层</b> 托盘到位 → 进站 API0030·I 已发送</span></div>
+          <div class="lfline"><span class="t">12:47:29</span><span class="lv i">INFO</span><span class="txt"><b>B02-上层</b> 固化到点放行（绿灯，共 120 分钟）</span></div>
+          <div class="lfline"><span class="t">12:46:58</span><span class="lv w">WARN</span><span class="txt"><b>C03-上层</b> 光栅 LON 让空 · 待门控解除</span></div>
+          <div class="lfline"><span class="t">12:44:57</span><span class="lv e">ERR</span><span class="txt"><b>1号架 C03</b> DO 黄灯写入失败 → 已补写成功</span></div>
+        </div>
+        <div class="lf-col sys">
+          <div class="lftitle">系统状态</div>
+          <div class="frow"><span>IO 耦合器</span><span class="v ok">已连接</span></div>
+          <div class="frow"><span>点表通道</span><span class="v">60 路</span></div>
+          <div class="frow"><span>过账服务</span><span class="v ok">R/L 双工位</span></div>
+          <div class="frow"><span>激活策略</span><span class="v">自定义（120 分）</span></div>
+          <div class="frow"><span>连续运行</span><span class="v">02:14:33</span></div>
+        </div>
+      </div>
+      <div class="lffoot"><span>保留最近 200 条 · 收档 LocalLogService</span><span class="pd">清屏</span></div>
+    </div>
+  </div></div>
+  <div class="caption"><b>G1 · 深空玻璃舱</b>（adamgiebl 彩斑玻璃血统）：深蓝黑底 + 半透明玻璃卡（左上光斑暗纹）+ 状态色外描边浸染 + 霓虹灯点/数字发光；报警卡整卡红光。"重"指视觉份量与夜班氛围，车间灯下对比度最高。WPF 转译：深色调色板换肤 + 半透明卡 + DropShadow；光斑用径向渐变 Border 模拟（WPF 无 backdrop-filter，不追求真模糊）；<b>最大需做</b>：全窗深色成套（顶栏/按钮/浮窗/所有窗体联动），工作量最大。</div>
+
+  <!-- G2 浅色渐变浸染 -->
+  <div class="mockwrap"><div class="win">
+    <div class="topbar" style="background:linear-gradient(90deg,#1E90FF,#3AA9F7);border-bottom:none"><span class="dot ok"></span><span style="color:#fff">策略：自定义</span><span style="color:#EAF5FF">A线OP30固化架IO耦合器 已连接 · 2 组固化架</span><div class="btns"><span class="btn" style="background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.5);color:#fff">登录</span><span class="btn" style="background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.5);color:#fff">工单</span><span class="btn" style="background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.5);color:#fff">权限</span><span class="btn" style="background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.5);color:#fff">策略</span><span class="btn" style="background:#fff;border-color:#fff;color:#1E90FF;font-weight:700">日志</span><span class="btn" style="background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.5);color:#fff">退出</span></div></div>
+    <div class="g2-stage">
+      <div class="g2-stats">
+        <span class="g2-stat"><span class="k" style="background:#B0BEC5"></span>空闲 <b>49</b></span>
+        <span class="g2-stat"><span class="k" style="background:#F59E0B"></span>计时中 <b>4</b></span>
+        <span class="g2-stat"><span class="k" style="background:#7E57C2"></span>待门控 <b>2</b></span>
+        <span class="g2-stat"><span class="k" style="background:#43A047"></span>待取件 <b>2</b></span>
+        <span class="g2-stat"><span class="k" style="background:#D32F2F"></span>占用报警 <b>1</b></span>
+        <span style="flex:1"></span>
+        <span class="g2-stat" style="border-style:dashed">⚡ 剩余最短：B02 · 47 分钟</span>
+      </div>
+      <div><div class="grpbar"><i></i>1号固化架</div><div class="g2-grid" id="gg21"></div></div>
+      <div><div class="grpbar"><i></i>2号固化架</div><div class="g2-grid" id="gg22"></div></div>
+      <div class="g2-wo">
+        <div class="g2-wo-card">
+          <div class="g2-wo-head"><span class="g2-wo-no">R 工位 · 2405A2301</span><span class="g2-wo-badge">过账启用</span></div>
+          <div class="g2-wo-bar"><i style="width:31%"></i></div>
+          <div class="g2-wo-sub"><span>已产出 <b>37</b> / 120</span><span>今日首次过账 12:47</span></div>
+        </div>
+        <div class="g2-wo-card lbar">
+          <div class="g2-wo-head"><span class="g2-wo-no">L 工位 · 2405B1180</span><span class="g2-wo-badge">过账启用</span></div>
+          <div class="g2-wo-bar"><i style="width:12%"></i></div>
+          <div class="g2-wo-sub"><span>已产出 <b>12</b> / 100</span><span>待接收第一批托盘</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="g2-lf">
+      <div class="lfhead"><span class="dot"></span><b>日志 · 控制台</b><span style="opacity:.8;font-size:11px">程序① CureStation</span><span class="lf-x" style="margin-left:auto;cursor:pointer;border:1px solid rgba(255,255,255,.5);padding:2px 8px;border-radius:5px;font-size:11px">✕ 收起</span></div>
+      <div class="lfbody">
+        <div class="lf-col log">
+          <div class="lftitle">操作日志（最新在上 · 自动滚动）</div>
+          <div class="lfline"><span class="t">12:47:52</span><span class="lv i">INFO</span><span class="txt"><b>A01-上层</b> 托盘到位 → 进站 API0030·I 已发送</span></div>
+          <div class="lfline"><span class="t">12:47:29</span><span class="lv i">INFO</span><span class="txt"><b>B02-上层</b> 固化到点放行（绿灯，共 120 分钟）</span></div>
+          <div class="lfline"><span class="t">12:46:58</span><span class="lv w">WARN</span><span class="txt"><b>C03-上层</b> 光栅 LON 让空 · 待门控解除</span></div>
+          <div class="lfline"><span class="t">12:44:57</span><span class="lv e">ERR</span><span class="txt"><b>1号架 C03</b> DO 黄灯写入失败 → 已补写成功</span></div>
+        </div>
+        <div class="lf-col sys">
+          <div class="lftitle">系统状态</div>
+          <div class="frow"><span>IO 耦合器</span><span class="v ok">已连接</span></div>
+          <div class="frow"><span>点表通道</span><span class="v">60 路</span></div>
+          <div class="frow"><span>过账服务</span><span class="v ok">R/L 双工位</span></div>
+          <div class="frow"><span>激活策略</span><span class="v">自定义（120 分）</span></div>
+          <div class="frow"><span>连续运行</span><span class="v">02:14:33</span></div>
+        </div>
+      </div>
+      <div class="lffoot"><span>保留最近 200 条 · 收档 LocalLogService</span><span class="pd">清屏</span></div>
+    </div>
+  </div></div>
+  <div class="caption"><b>G2 · 浅色渐变浸染</b>（alexruix 渐变卡血统）：仍是白底浅色站，但每张卡顶部 5px <b>状态渐变头带</b> + 卡内向状态色 8% 透明度渐变浸染 + 16px 大圆角 + 光圈式大投影；顶栏换成品牌蓝渐变（主按钮反白）。"重"指色块份量与层次阴影，<b>加重而不改浅色基因</b>——与程序其余窗体、程序② 主窗气质完全兼容，换肤成本最小（Fresh 族加渐变色板即可）。</div>
+
+  <!-- G3 异形描边呼吸 -->
+  <div class="mockwrap"><div class="win">
+    <div class="topbar" style="background:#2E3328;border-bottom:1px solid #4A5568"><span class="dot ok"></span><span style="color:#E8EAD9">策略：自定义</span><span style="color:#A9B29B">A线OP30固化架IO耦合器 已连接 · 2 组固化架</span><div class="btns"><span class="btn" style="background:#3A4030;border-color:#5A6152;color:#E8EAD9;border-radius:0 10px 0 10px">登录</span><span class="btn" style="background:#3A4030;border-color:#5A6152;color:#E8EAD9;border-radius:0 10px 0 10px">工单</span><span class="btn" style="background:#3A4030;border-color:#5A6152;color:#E8EAD9;border-radius:0 10px 0 10px">权限</span><span class="btn" style="background:#3A4030;border-color:#5A6152;color:#E8EAD9;border-radius:0 10px 0 10px">策略</span><span class="btn" style="background:#C0CA33;border-color:#C0CA33;color:#1D2112;font-weight:700;border-radius:0 10px 0 10px">日志</span><span class="btn" style="background:#3A4030;border-color:#5A6152;color:#E8EAD9;border-radius:0 10px 0 10px">退出</span></div></div>
+    <div class="g3-stage">
+      <div class="g3-stats">
+        <span class="g3-stat"><span class="k" style="background:#5A6152"></span>空闲 <b>49</b></span>
+        <span class="g3-stat"><span class="k" style="background:#FFD740"></span>计时中 <b>4</b></span>
+        <span class="g3-stat"><span class="k" style="background:#D6C86E"></span>待门控 <b>2</b></span>
+        <span class="g3-stat"><span class="k" style="background:#69F0AE"></span>待取件 <b>2</b></span>
+        <span class="g3-stat"><span class="k" style="background:#FF5252"></span>占用报警 <b>1</b></span>
+        <span style="flex:1"></span>
+        <span class="g3-stat" style="border-style:dashed;border-color:#69F0AE">⚡ 剩余最短：B02 · 47 分钟</span>
+      </div>
+      <div><div class="grpbar"><i></i>1号固化架</div><div class="g3-grid" id="gg31"></div></div>
+      <div><div class="grpbar"><i></i>2号固化架</div><div class="g3-grid" id="gg32"></div></div>
+      <div class="g3-wo">
+        <div class="g3-wo-card">
+          <div class="g3-wo-head"><span class="g3-wo-no">R 工位 · 2405A2301</span><span class="g3-wo-badge">过账启用</span></div>
+          <div class="g3-wo-bar"><i style="width:31%"></i></div>
+          <div class="g3-wo-sub"><span>已产出 <b>37</b> / 120</span><span>今日首次过账 12:47</span></div>
+        </div>
+        <div class="g3-wo-card lbar">
+          <div class="g3-wo-head"><span class="g3-wo-no">L 工位 · 2405B1180</span><span class="g3-wo-badge">过账启用</span></div>
+          <div class="g3-wo-bar"><i style="width:12%"></i></div>
+          <div class="g3-wo-sub"><span>已产出 <b>12</b> / 100</span><span>待接收第一批托盘</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="g3-lf">
+      <div class="lfhead"><span class="dot"></span><b>日志 · 控制台</b><span style="opacity:.75;font-size:11px">程序① CureStation</span><span class="lf-x" style="margin-left:auto;cursor:pointer;border:1px solid rgba(255,255,255,.35);padding:2px 8px;border-radius:0 6px;font-size:11px">✕ 收起</span></div>
+      <div class="lfbody">
+        <div class="lf-col log">
+          <div class="lftitle">操作日志（最新在上 · 自动滚动）</div>
+          <div class="lfline"><span class="t">12:47:52</span><span class="lv i">INFO</span><span class="txt"><b>A01-上层</b> 托盘到位 → 进站 API0030·I 已发送</span></div>
+          <div class="lfline"><span class="t">12:47:29</span><span class="lv i">INFO</span><span class="txt"><b>B02-上层</b> 固化到点放行（绿灯，共 120 分钟）</span></div>
+          <div class="lfline"><span class="t">12:46:58</span><span class="lv w">WARN</span><span class="txt"><b>C03-上层</b> 光栅 LON 让空 · 待门控解除</span></div>
+          <div class="lfline"><span class="t">12:44:57</span><span class="lv e">ERR</span><span class="txt"><b>1号架 C03</b> DO 黄灯写入失败 → 已补写成功</span></div>
+        </div>
+        <div class="lf-col sys">
+          <div class="lftitle">系统状态</div>
+          <div class="frow"><span>IO 耦合器</span><span class="v ok">已连接</span></div>
+          <div class="frow"><span>点表通道</span><span class="v">60 路</span></div>
+          <div class="frow"><span>过账服务</span><span class="v ok">R/L 双工位</span></div>
+          <div class="frow"><span>激活策略</span><span class="v">自定义（120 分）</span></div>
+          <div class="frow"><span>连续运行</span><span class="v">02:14:33</span></div>
+        </div>
+      </div>
+      <div class="lffoot"><span>保留最近 200 条 · 收档 LocalLogService</span><span class="pd">清屏</span></div>
+    </div>
+  </div></div>
+  <div class="caption"><b>G3 · 异形描边呼吸</b>（StealthWorm 双层渐变 clip + ElSombrero2 霓虹描边血统）：军绿深卡 + <b>异形圆角（左下直角 0,14）</b> + 渐变描边（135° 状态色→灰）+ 状态光晕外溢；报警卡<b>整卡呼吸</b>（2.6s 光强脉动，对应 WPF Storyboard 直落）。"重"指材质感与辨识度——每个状态有自己的描边"钩边"，远看先见轮廓。风险居中：异形圆角与 mask 描边在 WPF 用"外层渐变 Border + 1px padding 内层深色"的经典夹层技法落实，技巧成熟但卡片模板复杂度 +30%。</div>
+
+  <!-- 决策小结 -->
+  <div class="desc" style="margin-top:14px">
+    <b>三个重妆候选怎么选（决策速览）</b>：<br>
+    ▸ <b>G2 最稳</b>：白底基因不变、加海军蓝不惊动其它窗体；卡顶部渐变带 + 浸染一次性把"视觉份量"拉到当前 Fresh 的 2 倍；<br>
+    ▸ <b>G1 最重</b>：整窗深色换肤，夜班车间氛围最强、对比度最高；但深色会波及所有窗体统一性（点表/策略/工单/权限窗要不要一并深色？），工作量与回归面最大；<br>
+    ▸ <b>G3 最独特</b>：异形轮廓 + 渐变钩边辨识度最高，也是 galaxy 原味最浓的一版；主题仅 2 色（军绿+状态霓虹）， WPF 夹层描边技法成熟；风格鲜明属"爱恨分明"型，现场接受度需拍板；<br>
+    ▸ 结构三版一致：D 拍板形态（统计 + 纵向两组 60 卡 + 工单带 + 日志/控制台悬浮窗）——<b>选哪版都不影响已拍板的工程结构，纯粹是视觉语言抉择</b>。
+  </div>
+</section>
+
+<script>
+// ── 演示数据（行优先：先层后架，与 VM Slots 契约一致）──
+// state: idle | gate | curing | done | alarm(红占用)
+const slots = [];
+function add(code, levelName, state, opt = {}) {
+  slots.push(Object.assign({ code, levelName, state,
+    lamp:"灭", lampOn:false, tray:false, grill:"—" }, opt));
+}
+// 第1层（上层）
+add("A01","第1-上层","alarm",{ lamp:"红灯",lampOn:true,tray:true,grill:"L:ON R:OFF" });
+add("B02","第2-上层","curing",{ lamp:"黄灯",lampOn:true,tray:true,remain:47,total:120 });
+add("C03","第3-上层","gate",{ tray:true,grill:"L:ON R:ON" });
+add("D04","第4-上层","idle",{ grill:"L:ON R:OFF" });
+add("E05","第5-上层","idle",{}); add("F06","第6-上层","curing",{ lamp:"黄灯",lampOn:true,tray:true,remain:118,total:240 });
+["G07","H08","I09","J10"].forEach((c,i)=>add(c,`第${7+i}-上层`,"idle"));
+// 第2层（中层）
+add("A02","第1-中层","idle",{}); add("B03","第2-中层","idle",{});
+add("C04","第3-中层","idle"); add("D05","第4-中层","idle");
+add("E06","第5-中层","idle"); add("F07","第6-中层","idle");
+add("G08","第7-中层","idle"); add("H09","第8-中层","done",{ lamp:"绿灯",lampOn:true,tray:true });
+add("I10","第9-中层","idle"); add("J11","第10-中层","idle");
+// 第3层（下层）
+["A03","B04","C05","D06","E07","F08","G09","H10","I11","J12"].forEach((c,i)=>add(c,`第${i+1}-下层`,"idle"));
+
+const $ = id => document.getElementById(id);
+const mk = (cls, html) => `<div class="${cls}">${html}</div>`;
+const lamp = (s, a, z) => {
+  const c = s.lampOn ? (s.lamp=="红灯"?"r":s.lamp=="黄灯"?"y":"g") : "";
+  return `<i class="${c}"></i>`;
+};
+
+// ── 现状 ──
+$("zgrid").innerHTML = slots.map(s=>{
+  const bg = s.state=="alarm"?"red":s.state=="curing"?"yellow":s.state=="done"?"green":"";
+  const st = s.state=="alarm"?"占用":s.state=="curing"?`计时中 剩${s.remain}分`:s.state=="gate"?"待门控":s.state=="done"?"放行"
+           : s.tray?"托盘在":"空闲";
+  const tray = s.tray?"托盘在":"—";
+  return mk("z-card "+bg, `
+    <div class="z-r1"><span class="z-code">${s.code}</span><span class="z-title">${s.levelName}</span></div>
+    <div class="z-state">${st}</div>
+    <div class="z-r3"><span class="z-lamp">${lamp(s)}${s.lamp}</span><span class="z-tray">${tray}</span></div>
+    <div class="z-grill">${s.grill}</div>`);
+}).join("");
+
+// ── 方案 A ──
+$("agrid").innerHTML = slots.map(s=>{
+  const st = s.state=="alarm"?"占用":s.state=="curing"?`计时中`:""
+  const bdg = s.state=="alarm"?"<span class='bdg alarm'>占用</span>"
+    : s.state=="curing"?"<span class='bdg curing'>计时中</span>"
+    : s.state=="gate"?"<span class='bdg gate'>待门控</span>"
+    : s.state=="done"?"<span class='bdg done'>放行</span>"
+    : "<span class='bdg idle'>空闲</span>";
+  const shortLv = s.levelName.replace(/^第\d+-/, "");
+  return mk("a-card "+s.state, `
+    <div class="a-top"><span class="a-code">${s.code}</span><span class="lv-pill">${shortLv}</span></div>
+    <div class="a-spacer"></div>
+    <div class="a-state">${bdg}</div>
+    <div class="a-spacer"></div>
+    <div class="a-foot">
+      <span class="a-lamp">${lamp(s)}${s.lamp}</span>
+      <span class="a-tray ${s.tray?"on":""}">${s.tray?"◈ 在架":"◌ 空"}</span>
+    </div>
+    <div class="a-grill">光栅 ${s.grill}</div>`);
+}).join("");
+
+// ── 方案 B ──
+$("bgrid").innerHTML = slots.map(s=>{
+  let mid = "";
+  const shortLv = s.levelName.replace(/^第\d+-/, "");
+  if (s.state=="curing") {
+    const pct = Math.round((s.total-s.remain)/s.total*100);
+    mid = `<div class="b-mid"><div class="b-num">${s.remain}<small>分</small></div>
+      <div class="b-sub">共 ${s.total} 分 · 已固化 ${pct}%</div>
+      <div class="b-bar"><i style="width:${pct}%"></i></div></div>`;
+  } else if (s.state=="done") {
+    mid = `<div class="b-mid"><div class="b-num done">✓ 已放行</div><div class="b-sub">待取件</div></div>`
+  } else if (s.state=="gate") {
+    mid = `<div class="b-mid"><div class="b-num" style="color:#5E35B1;font-size:20px;white-space:nowrap">待门控</div><div class="b-sub">光栅让空后计时</div></div>`
+  } else if (s.state=="alarm") {
+    mid = `<div class="b-mid"><div class="b-num" style="color:#C62828;font-size:20px;white-space:nowrap">⚠ 占用</div><div class="b-sub">红灯 · 请检查</div></div>`
+  } else {
+    mid = `<div class="b-mid"><div class="b-num" style="color:#C3CBD3;font-size:20px;white-space:nowrap">空闲</div></div>`
+  }
+  const bbdg = s.state=="alarm"?"<span class='bdg alarm'>占用</span>"
+    : s.state=="curing"?"<span class='bdg curing'>计时中</span>"
+    : s.state=="gate"?"<span class='bdg gate'>待门控</span>"
+    : s.state=="done"?"<span class='bdg done'>放行</span>"
+    : "<span class='bdg idle'>空闲</span>";
+  const lc = s.lampOn ? (s.lamp=="红灯"?"r":s.lamp=="黄灯"?"y":"g") : "";
+  return mk("b-card "+s.state, `
+    <div class="b-top"><span class="b-code">${s.code}</span>${bbdg}</div>
+    ${mid}
+    <div class="b-foot"><span><i class="b-dot ${lc}"></i>${shortLv}</span><span class="${s.tray?"on":""}">${s.tray?"◈ 托盘在":"无托盘"}</span></div>`);
+}).join("");
+
+// ── 方案 C ──
+$("cgrid").innerHTML = slots.map(s=>{
+  const dot = s.lampOn ? (s.lamp=="红灯"?"r":s.lamp=="黄灯"?"y":"g") : "";
+  const shortLv = s.levelName.replace(/^第\d+-/, "");
+  let val = `<span class="c-val idle">— 空闲</span>`;
+  if (s.state=="curing") val = `<span class="c-val">${s.remain}<small> 分</small></span>`;
+  else if (s.state=="done") val = `<span class="c-val done">✓ 放行</span>`;
+  else if (s.state=="gate") val = `<span class="c-val" style="color:#B39DDB;font-size:17px">待门控</span>`;
+  else if (s.state=="alarm") val = `<span class="c-val" style="color:#EF5350;font-size:17px">⚠ 占用</span>`;
+  return mk("c-card "+s.state, `
+    <div class="c-top"><span class="c-code">${s.code}</span><span class="c-dot ${dot}"></span></div>
+    <div class="c-mid">${val}</div>
+    <div class="c-foot"><span>${shortLv}</span><span>${s.tray?"托盘在":"—"}</span></div>`);
+}).join("");
+
+// ── 方案 D ──
+$("dgrid").innerHTML = slots.map(s=>{
+  const dot = s.lampOn ? (s.lamp=="红灯"?"r":s.lamp=="黄灯"?"y":"g") : "";
+  const shortLv = s.levelName.replace(/^第\d+-/, "");
+  let mid = "";
+  if (s.state=="curing") {
+    const pct = Math.round((s.total-s.remain)/s.total*100);
+    mid = `<div class="d-num">${s.remain}<small> 分 · ${pct}%</small></div>`;
+  } else if (s.state=="done") mid = `<div class="d-num done">✓ 已放行 · 待取</div>`;
+  else if (s.state=="gate") mid = `<div class="d-num stat">待门控</div>`;
+  else if (s.state=="alarm") mid = `<div class="d-num warn">⚠ 占用</div>`;
+  else mid = `<div class="d-num idle">空 闲</div>`;
+  const lc = s.lampOn ? (s.lamp=="红灯"?"r":s.lamp=="黄灯"?"y":"g") : "";
+  return mk("d-card "+s.state, `
+    <div class="d-top"><span class="d-code">${s.code}</span><i class="c-dot ${dot}"></i></div>
+    <div class="d-mid">${mid}</div>
+    <div class="d-foot"><span>${shortLv}</span><span class="${s.tray?"on":""}">${s.tray?"◈ 托盘在":"无托盘"}</span></div>`);
+}).join("");
+
+// ── 双机 60 卡专项 ──
+// 第二架演示数据：浅拷贝后改动 4 个柜位（现场"一忙一闲"常态），两架各 A01~J12 同套标签
+const slots2 = slots.map(s => Object.assign({}, s));
+(function(){
+  const set = (i, st, lamp, lampOn, tray, opt) => Object.assign(slots2[i], { state:st, lamp, lampOn, tray }, opt || {});
+  set(0, "idle", "灭", false, false, { grill:"—" });             // A01 占用 → 空闲
+  set(2, "curing", "黄灯", true, true, { remain:32, total:90 }); // C03 待门控 → 计时中
+  set(5, "done", "绿灯", true, true);                            // F06 计时 → 放行
+  set(7, "curing", "黄灯", true, true, { remain:64, total:240 });// H09 放行 → 计时中
+})();
+
+const fill2 = (pfx, maker) => {
+  $(pfx+"1").innerHTML = slots.map(maker).join("");
+  $(pfx+"2").innerHTML = slots2.map(maker).join("");
+};
+
+const makeZ = s => {
+  const bg = s.state=="alarm"?"red":s.state=="curing"?"yellow":s.state=="done"?"green":"";
+  const st = s.state=="alarm"?"占用":s.state=="curing"?`计时中 剩${s.remain}分`:s.state=="gate"?"待门控":s.state=="done"?"放行": s.tray?"托盘在":"空闲";
+  return mk("z-card sm "+bg, `
+    <div class="z-r1"><span class="z-code">${s.code}</span><span class="z-title">${s.levelName}</span></div>
+    <div class="z-state">${st}</div>
+    <div class="z-r3"><span class="z-lamp">${lamp(s)}${s.lamp}</span><span class="z-tray">${s.tray?"托盘在":"—"}</span></div>
+    <div class="z-grill">${s.grill}</div>`);
+};
+
+const makeA = s => {
+  const bdg = s.state=="alarm"?"<span class='bdg alarm'>占用</span>"
+    : s.state=="curing"?"<span class='bdg curing'>计时中</span>"
+    : s.state=="gate"?"<span class='bdg gate'>待门控</span>"
+    : s.state=="done"?"<span class='bdg done'>放行</span>"
+    : "<span class='bdg idle'>空闲</span>";
+  const shortLv = s.levelName.replace(/^第\d+-/, "");
+  return mk("a-card "+s.state, `
+    <div class="a-top"><span class="a-code">${s.code}</span><span class="lv-pill">${shortLv}</span></div>
+    <div class="a-spacer"></div>
+    <div class="a-state">${bdg}</div>
+    <div class="a-spacer"></div>
+    <div class="a-foot">
+      <span class="a-lamp">${lamp(s)}<span class="t">${s.lamp[0]}</span></span>
+      <span class="a-tray ${s.tray?"on":""}">${s.tray?"◈":"◌"}</span>
+    </div>
+    <div class="a-grill">光栅 ${s.grill}</div>`);
+};
+
+const makeB = s => {
+  let mid = "";
+  const shortLv = s.levelName.replace(/^第\d+-/, "");
+  if (s.state=="curing") {
+    const pct = Math.round((s.total-s.remain)/s.total*100);
+    mid = `<div class="b-mid"><div class="b-num">${s.remain}<small>分</small></div>
+      <div class="b-sub">共 ${s.total} 分 · 已固化 ${pct}%</div>
+      <div class="b-bar"><i style="width:${pct}%"></i></div></div>`;
+  } else if (s.state=="done") {
+    mid = `<div class="b-mid"><div class="b-num done">✓ 已放行</div><div class="b-sub">待取件</div></div>`
+  } else if (s.state=="gate") {
+    mid = `<div class="b-mid"><div class="b-num gate">待门控</div><div class="b-sub">光栅让空后计时</div></div>`
+  } else if (s.state=="alarm") {
+    mid = `<div class="b-mid"><div class="b-num balarm">⚠ 占用</div><div class="b-sub">红灯 · 请检查</div></div>`
+  } else {
+    mid = `<div class="b-mid"><div class="b-num bidle">空闲</div></div>`
+  }
+  const bbdg = s.state=="alarm"?"<span class='bdg alarm'>占用</span>"
+    : s.state=="curing"?"<span class='bdg curing'>计时中</span>"
+    : s.state=="gate"?"<span class='bdg gate'>待门控</span>"
+    : s.state=="done"?"<span class='bdg done'>放行</span>"
+    : "<span class='bdg idle'>空闲</span>";
+  const lc = s.lampOn ? (s.lamp=="红灯"?"r":s.lamp=="黄灯"?"y":"g") : "";
+  return mk("b-card "+s.state, `
+    <div class="b-top"><span class="b-code">${s.code}</span>${bbdg}</div>
+    ${mid}
+    <div class="b-foot"><span><i class="b-dot ${lc}"></i>${shortLv}</span><span class="${s.tray?"on":""}">${s.tray?"◈":"◌"}</span></div>`);
+};
+
+const makeC = s => {
+  const dot = s.lampOn ? (s.lamp=="红灯"?"r":s.lamp=="黄灯"?"y":"g") : "";
+  const shortLv = s.levelName.replace(/^第\d+-/, "");
+  let val = `<span class="c-val idle">— 空闲</span>`;
+  if (s.state=="curing") val = `<span class="c-val">${s.remain}<small> 分</small></span>`;
+  else if (s.state=="done") val = `<span class="c-val done">✓ 放行</span>`;
+  else if (s.state=="gate") val = `<span class="c-val gatetxt">待门控</span>`;
+  else if (s.state=="alarm") val = `<span class="c-val balarm">⚠ 占用</span>`;
+  return mk("c-card "+s.state, `
+    <div class="c-top"><span class="c-code">${s.code}</span><span class="c-dot ${dot}"></span></div>
+    <div class="c-mid">${val}</div>
+    <div class="c-foot"><span>${shortLv}</span><span>${s.tray?"托盘在":"—"}</span></div>`);
+};
+
+const makeD = s => {
+  const dot = s.lampOn ? (s.lamp=="红灯"?"r":s.lamp=="黄灯"?"y":"g") : "";
+  const shortLv = s.levelName.replace(/^第\d+-/, "");
+  let mid = "";
+  if (s.state=="curing") {
+    const pct = Math.round((s.total-s.remain)/s.total*100);
+    mid = `<div class="d-num">${s.remain}<small>分·${pct}%</small></div>`;
+  } else if (s.state=="done") mid = `<div class="d-num done">✓ 放行</div>`;
+  else if (s.state=="gate") mid = `<div class="d-num stat">待门控</div>`;
+  else if (s.state=="alarm") mid = `<div class="d-num warn">⚠ 占用</div>`;
+  else mid = `<div class="d-num idle">空 闲</div>`;
+  return mk("d-card "+s.state, `
+    <div class="d-top"><span class="d-code">${s.code}</span><i class="c-dot ${dot}"></i></div>
+    <div class="d-mid">${mid}</div>
+    <div class="d-foot"><span>${shortLv}</span><span class="${s.tray?"on":""}">${s.tray?"◈ 托盘在":"无托盘"}</span></div>`);
+};
+
+fill2("mz", makeZ); fill2("ma", makeA); fill2("mb", makeB); fill2("mc", makeC); fill2("md", makeD);
+
+// ── 日志/控制台悬浮窗交互（demo）：点【日志】按钮切换显示，✕ 收起 ──
+function bindLf(btnId, floatId) {
+  const btn = document.getElementById(btnId), fl = document.getElementById(floatId);
+  if (!btn || !fl) return;
+  btn.addEventListener("click", () => { fl.style.display = (fl.style.display === "none") ? "" : "none"; });
+  const x = fl.querySelector(".lf-x");
+  if (x) x.addEventListener("click", () => { fl.style.display = "none"; });
+}
+bindLf("lfBtnD", "lfD"); bindLf("lfBtnM", "lfM");
+
+// ── G 系重妆候选（视觉语言差异只在 class，逻辑与 makeD 同源）──
+const makeG = pfx => s => {
+  const dot = s.lampOn ? (s.lamp=="红灯"?"r":s.lamp=="黄灯"?"y":"g") : "";
+  const shortLv = s.levelName.replace(/^第\d+-/, "");
+  let mid = "";
+  if (s.state=="curing") {
+    const pct = Math.round((s.total-s.remain)/s.total*100);
+    mid = `<div class="${pfx}-num">${s.remain}<small>分·${pct}%</small></div>`;
+  } else if (s.state=="done") mid = `<div class="${pfx}-num done">✓ 放行</div>`;
+  else if (s.state=="gate") mid = `<div class="${pfx}-num stat">待门控</div>`;
+  else if (s.state=="alarm") mid = `<div class="${pfx}-num warn">⚠ 占用</div>`;
+  else mid = `<div class="${pfx}-num idle">空 闲</div>`;
+  return mk(pfx+"-card "+s.state, `
+    <div class="${pfx}-top"><span class="${pfx}-code">${s.code}</span><i class="${pfx}-dot ${dot}"></i></div>
+    <div class="${pfx}-mid">${mid}</div>
+    <div class="${pfx}-foot"><span>${shortLv}</span><span class="${s.tray?"on":""}">${s.tray?"◈ 托盘在":"无托盘"}</span></div>`);
+};
+fill2("gg1", makeG("g1")); fill2("gg2", makeG("g2")); fill2("gg3", makeG("g3"));
+</script>
+</body>
+</html>

@@ -5,10 +5,11 @@
 
 * `src/CimGateway` — 主程序（程序②，CIM 整线过账网关；原名 PlcMesBridge，V0.0.21 改名）：MES 多机网关（八机 Modbus TCP 统一底座；
   Phase 2 演化为程序② CIM 整线过账，单机模式已删）
-* `src/CureStation` — **程序①固化程控**：IO 耦合器（Modbus TCP）30 仓位程控——
-  点表"点点鼠标"配置 + 主窗仓位网格 + 仓位状态机（到位计时→放行→三色灯）+
-  工艺策略窗（时长三级覆盖/光栅门控）+ 配置自愈，Phase 3 剩单线过账与
-  工单/权限页
+* `src/CureStation` — **程序①固化程控**：IO 耦合器（Modbus TCP）30 仓位程控
+  （双架 60）——点表"点点鼠标"配置 + 主窗仓位网格（V0.0.25 方案 D 版式 +
+  Light/Dark 双主题 `[setting] Theme` 切换 + 日志悬浮窗）+ 仓位状态机
+  （到位计时→放行→三色灯）+ 工艺策略窗（时长三级覆盖/光栅门控）+
+  单线过账 + 工单/权限页 + 配置自愈
 
 详见 `AGENTS.md`（开工必读）、`docs/重构设计_20261028.md`（两程序拆分设计）
 与 `CHANGELOG.md`。
@@ -51,14 +52,26 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
 
 ## 程序① CureStation（固化程控）
 
-- **主窗**：仓位卡按机台实景排布——每台固化架 **三排（上中下三层）× 一排
+- **主窗（V0.0.25 方案 D 版式）**：上下两条信息带夹网格——顶部运行条
+  （连接状态/当前策略/过账状态/重连 + 【日志】【深色】入口按钮）与统计条
+  （空闲/待门控/计时/放行/异常五态计数 + ⚡剩余最短库位），底部工单带
+  （R/L 双工位纪要 + 进度条）。仓位卡每台固化架 **三排（上中下三层）× 一排
   10 站**，卡片主标题为客户库位编码（Date Matrix：A01~J12，换算收在 Core
-  `SlotLocationCode`，后续扫码绑定同源复用），右上角架层辅助定位；每卡
-  实时显示仓位状态（状态机口径：空闲/待门控/计时中 剩X分/放行）+ 状态
-  底色（红/黄/绿/空闲）+ 托盘/左右光栅/三色灯状态点；默认最大化启动，
-  网格随窗口拉伸均分（不同分辨率自适应，MinWidth=1200 兜底）；顶栏连接
-  状态 + 当前策略 + 过账状态 + 重连 + 工艺策略/过账配置/点表配置入口；
-  500ms 拉快照刷新。
+  `SlotLocationCode`，后续扫码绑定同源复用）；卡片 5px 状态头带 + 状态
+  浸染六态（空闲/待门控/计时中/放行/异常/未配置），计时中显示剩余分钟
+  大数字 + 4px 进度条，异常卡呼吸脉冲；旧版托盘/光栅状态点与架层角标
+  已随方案 D 精简（状态统一由六态色表达）；默认最大化启动，网格随窗口
+  拉伸均分（不同分辨率自适应，MinWidth=1200 兜底）；500ms 拉快照刷新。
+- **双主题（V0.0.25）**：主窗与日志悬浮窗全套配色收在语义键（`Brush.*`
+  同名异值两字典）：Light（浅色渐变浸染，缺省）与 Dark（深空玻璃舱）；
+  config.ini `[setting] Theme=Light|Dark`（非法值回 Light），顶栏【深色/
+  浅色】按钮切换即写回盘上；其余功能配置弹窗维持 Fresh 浅色（固定键
+  不随主题换肤），弹窗随主题属后续待办。
+- **日志悬浮窗（V0.0.25）**：顶栏【日志】按钮（L1+ 门禁）弹非模态悬浮窗
+  （右下角贴主窗右下沿、Owner=主窗，单实例防重复开）：左栏操作日志流
+  （`LocalLogService` 事件驱动入队、100ms 批量上屏，最新在上封顶 200 条），
+  右栏系统状态卡（打开一刻定格快照，含当日日志目录路径）；关窗退订事件，
+  再开不重复订阅。
 - **双固化架（V0.0.20）**：一台工控机可接两台架（60 卡）——主窗按架分组
   上下堆叠，每组"N号固化架"标题条 + 组内 10×3；**单架时标题条自动隐藏，
   界面与单机版完全一致**。接入方式全在点表配置窗点点鼠标：添加第二台 IO
@@ -156,13 +169,15 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   **IO 点表家族** `Comms/IoPointTable*`/`IoBus`/连通测试 + 真机底座
   `Comms/ModbusStationClient`（Modbus TCP，地址/打包/分帧集中点）+
   **固化工艺家族** `Curing/CuringPolicy*`/`SlotCuringMachine`（策略三级覆盖 +
-  仓位状态机）+ `ViewModels/` 下沉的 VM 基建）
+  仓位状态机）+ 统计纯函数 `Curing/SlotStatistics` + `ViewModels/` 下沉的
+  VM 基建）
 - `src/CureStation/` — **程序①固化程控**（30 仓位主窗 + IO 点表配置窗 +
   工艺策略窗 + 工单信息窗 + 权限管理窗 + 登录窗 + 过账配置窗 + 仓位状态机
-  + 单线过账服务）
+  + 单线过账服务 + 日志悬浮窗 `LogWindow.*` + 双主题 `Themes/`
+  （`ThemeManager` + Light/Dark 两字典））
 - `src/CimGateway/` — 主程序 WPF 界面（主窗/调试/报警/日志/图片窗），
   图标在 `Assets/`（`app.ico` 程序图标 / `app.png` 高清源备用）
-- `tests/CureLine.Tests/` — 315 例 xUnit（`Mocks/`：本地桩 MES /
+- `tests/CureLine.Tests/` — 338 例 xUnit（`Mocks/`：本地桩 MES /
   网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus`
   状态机桩，加用例直接复用）
 - `extern/kaleidoscope/` — 通讯子模块（独立仓库，勿直接改，见 AGENTS.md）

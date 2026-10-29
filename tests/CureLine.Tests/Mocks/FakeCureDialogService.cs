@@ -4,6 +4,7 @@
 // =========================================================================
 
 using CureLine.Core.Security;
+using CureStation.ViewModels;
 
 namespace CureLine.Tests.Mocks;
 
@@ -68,6 +69,15 @@ public class FakeCureDialogService : CureStation.ViewModels.IDialogService
 
     public void ShowIoTest(CureLine.Core.Comms.IPointTableBus bus, CureLine.Core.Comms.PointTableConfig config)
         => Calls.Add("ShowIoTest");
+
+    /// <summary>ShowLog 收到的快照（测试断言状态卡内容用）。</summary>
+    public LogSystemSnapshot? LogSnapshot { get; private set; }
+
+    public void ShowLog(LogSystemSnapshot snapshot)
+    {
+        Calls.Add("ShowLog");
+        LogSnapshot = snapshot;
+    }
 
     public void Shutdown() => Calls.Add("Shutdown");
 }

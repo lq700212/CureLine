@@ -1,4 +1,4 @@
-<Window x:Class="CureStation.MainWindow"
+﻿<Window x:Class="CureStation.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -13,89 +13,236 @@
         Icon="Assets/app.ico"
         FontSize="13">
     <!--
-      布局口径（与现场机台实景一致）：
+      布局口径（与现场机台实景一致，方案 D · 紧凑网格+下部信息带，2026-10-29 重画）：
       - 单台固化架 = 10 站一排（列 A~J）× 上中下 3 层；仓位卡按"行优先"集合
         逐格填充（见 MainViewModel.BuildSlots），UniformGrid 列/行绑定组 VM 的
         Columns/Rows（与 VM 的 RackCount/LevelCount 同源）；
       - 双架（V0.0.20）：全局架号每 10 站切一组（1~10=1号架、11~20=2号架），
         主内容按组上下堆叠（外层 UniformGrid Rows=GroupCount 纵向均分铺满），
         每组带"N号固化架"标题条；单架只有 1 组且标题条隐藏，视觉与单架版完全一致；
-      - 屏幕适配：默认最大化启动（WindowState=Maximized），网格随窗口拉伸均分
-        （卡片不设固定宽高，大屏铺满、小屏压缩，MinWidth/MinHeight 兜极小屏），
-        卡片内容垂直居中，行高/列宽变化时版式稳定。
+      - 方案 D 五段（自上而下）：品牌条（HeaderGrad）/ 运行条（连接+过账+操作按钮
+        / 统计条（五态 pill + ⚡下口）/ 固化架分组（fill）/ 工单带（Bottom）；
+      - 双主题：全部颜色走 Themes/Light.xaml|Dark.xaml 的语义键（Brush.*）——
+        [setting] Theme 切字典即换肤，本文件零主题分支（DynamicResource 全员）；
+      - 动画/Effect 纪律：只挂 Alarm 卡（脉冲提醒）与卡片悬停反馈，不做全局动效；
+      - 展示文本绑定一律 FallbackValue（设计时纪律）；运行态数据不设固定宽高
+        （默认最大化 + 均分拉伸，V0.0.19 教训，勿加回固定 Width/Height）。
     -->
     <Window.Resources>
-        <!--仓位卡片：库位编码主标题 + 状态底色（空闲=灰白、红/黄/绿对应三色灯业务语义）。
-            卡片四行：编码+架层 / 状态 / 灯点+灯色+托盘 / 光栅（小字），均给 FallbackValue。-->
+        <!-- 仓位卡模板（方案 D）：顶部 5px 状态渐变头带 + 状态浸染底/描边 +
+             码/灯点首行 + 计时中=大数字/进度条/其余=状态字；动画只挂 Alarm -->
         <DataTemplate x:Key="SlotCard">
-            <Border BorderBrush="#DDDDDD" BorderThickness="1" CornerRadius="4"
-                    Margin="3" Padding="8,6">
+            <Border CornerRadius="10" BorderThickness="1" Padding="4" Margin="3">
                 <Border.Style>
                     <Style TargetType="Border">
-                        <Setter Property="Background" Value="#FAFAFA"/>
+                        <Setter Property="Background" Value="{DynamicResource Brush.CardBg}"/>
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.CardBorder}"/>
+                        <!-- 状态浸染（缺省 Idle；未配置 Tint 同灰蓝） -->
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding CardState, FallbackValue=Idle}" Value="Red">
-                                <Setter Property="Background" Value="#FDECEA"/>
+                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Gate">
+                                <Setter Property="Background" Value="{DynamicResource Brush.TintGate}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderGate}"/>
                             </DataTrigger>
-                            <DataTrigger Binding="{Binding CardState, FallbackValue=Idle}" Value="Yellow">
-                                <Setter Property="Background" Value="#FFF8E1"/>
+                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing">
+                                <Setter Property="Background" Value="{DynamicResource Brush.TintCuring}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderCuring}"/>
                             </DataTrigger>
-                            <DataTrigger Binding="{Binding CardState, FallbackValue=Idle}" Value="Green">
-                                <Setter Property="Background" Value="#E8F5E9"/>
+                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Done">
+                                <Setter Property="Background" Value="{DynamicResource Brush.TintDone}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderDone}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
+                                <Setter Property="Background" Value="{DynamicResource Brush.TintAlarm}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderAlarm}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="NotConfigured">
+                                <Setter Property="Background" Value="{DynamicResource Brush.TintNotConfigured}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderNotConfigured}"/>
+                            </DataTrigger>
+                            <!-- 悬停：描边提亮（轻反馈，不加投影动效） -->
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.CardBorderHover}"/>
+                            </Trigger>
+                            <!-- 阿尔法脉冲只挂 Alarm（红=占用/异常提醒） -->
+                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
+                                <DataTrigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                             From="1" To="0.62" AutoReverse="True"
+                                                             RepeatBehavior="Forever" Duration="0:0:0:0.9"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </DataTrigger.EnterActions>
+                                <DataTrigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="0:0:0:0.001"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </DataTrigger.ExitActions>
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
                 </Border.Style>
-                <StackPanel VerticalAlignment="Center">
-                    <!-- 行1：库位编码（主标题）+ 架层（辅助定位） -->
-                    <Grid>
-                        <TextBlock Text="{Binding Code, FallbackValue=A01}"
-                                   FontSize="18" FontWeight="Bold" Foreground="#1F4E79"/>
-                        <TextBlock Text="{Binding Title, FallbackValue=架1-上层}"
-                                   HorizontalAlignment="Right" FontSize="11" VerticalAlignment="Center"
-                                   Foreground="#888"/>
-                    </Grid>
-                    <!-- 行2：仓位状态（状态机口径优先，见 RackSlotViewModel.Refresh） -->
-                    <TextBlock Text="{Binding SlotStateText, FallbackValue=空闲}"
-                               FontSize="14" FontWeight="Bold" Foreground="#333" Margin="0,7,0,0"/>
-                    <!-- 行3：三色灯状态点 + 灯色文本 + 托盘在位 -->
-                    <Grid Margin="0,7,0,0">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="12" Height="12" VerticalAlignment="Center" Margin="0,0,6,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 顶部 5px 状态渐变头带（Kind 同步换色） -->
+                    <Border Height="5" CornerRadius="4,4,1,1">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{DynamicResource Brush.HeadIdle}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Gate">
+                                        <Setter Property="Background" Value="{DynamicResource Brush.HeadGate}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing">
+                                        <Setter Property="Background" Value="{DynamicResource Brush.HeadCuring}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Done">
+                                        <Setter Property="Background" Value="{DynamicResource Brush.HeadDone}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
+                                        <Setter Property="Background" Value="{DynamicResource Brush.HeadAlarm}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="NotConfigured">
+                                        <Setter Property="Background" Value="{DynamicResource Brush.HeadNotConfigured}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                    </Border>
+
+                    <!-- 首行：库位编码 + 状态灯点（Kind→State* 同色，一眼分辨业务态） -->
+                    <Grid Grid.Row="1" Margin="4,2,4,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <TextBlock Text="{Binding Code, FallbackValue=A01}" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Brush.FgStrong}" VerticalAlignment="Center"/>
+                            <Ellipse Width="8" Height="8" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <Ellipse.Style>
                                     <Style TargetType="Ellipse">
-                                        <Setter Property="Fill" Value="#BDBDBD"/>
+                                        <Setter Property="Fill" Value="{DynamicResource Brush.StateIdle}"/>
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding LampText, FallbackValue=灭}" Value="红灯">
-                                                <Setter Property="Fill" Value="#D9534F"/>
+                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Gate">
+                                                <Setter Property="Fill" Value="{DynamicResource Brush.StatePurple}"/>
                                             </DataTrigger>
-                                            <DataTrigger Binding="{Binding LampText, FallbackValue=灭}" Value="黄灯">
-                                                <Setter Property="Fill" Value="#F0AD4E"/>
+                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing">
+                                                <Setter Property="Fill" Value="{DynamicResource Brush.StateYellow}"/>
                                             </DataTrigger>
-                                            <DataTrigger Binding="{Binding LampText, FallbackValue=灭}" Value="绿灯">
-                                                <Setter Property="Fill" Value="#5CB85C"/>
+                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Done">
+                                                <Setter Property="Fill" Value="{DynamicResource Brush.StateGreen}"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
+                                                <Setter Property="Fill" Value="{DynamicResource Brush.StateRed}"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="NotConfigured">
+                                                <Setter Property="Fill" Value="{DynamicResource Brush.StateBlue}"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
                                 </Ellipse.Style>
                             </Ellipse>
-                            <TextBlock Text="{Binding LampText, FallbackValue=灭}"
-                                       FontSize="12" VerticalAlignment="Center" Foreground="#333"/>
+                        </Grid>
+                        <!-- 状态区两视图互补（同格多视图：状态字缺省 Visible；计时视图默认 Collapsed） -->
+                        <TextBlock Grid.Row="1" Text="{Binding SlotStateText, FallbackValue=空闲}"
+                                   Margin="0,2,0,0" VerticalAlignment="Bottom"
+                                   Foreground="{DynamicResource Brush.FgMid}"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding SlotStateText, FallbackValue=空闲}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing"/>
+                                                <Condition Binding="{Binding HasDetail, FallbackValue=False}" Value="True"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <!-- 计时视图：大数字（剩余分）+ 小字（总时长）+ 4px 进度条；状态机精确值 -->
+                        <StackPanel Grid.Row="1" Margin="0,0,0,2" VerticalAlignment="Bottom">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing"/>
+                                                <Condition Binding="{Binding HasDetail, FallbackValue=False}" Value="True"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <Grid>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom">
+                                    <TextBlock Text="{Binding RemainMin, FallbackValue=0}" FontSize="20" FontWeight="Bold"
+                                               Foreground="{DynamicResource Brush.FgStrong}"/>
+                                    <TextBlock Text="分" Margin="3,0,8,2" VerticalAlignment="Bottom"
+                                               Foreground="{DynamicResource Brush.FgDim}"/>
+                                    <TextBlock Text="{Binding SlotStateText, FallbackValue=计时中}" FontSize="11"
+                                               Foreground="{DynamicResource Brush.FgDim}" VerticalAlignment="Bottom"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                                <TextBlock HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                           Text="{Binding TotalMin, FallbackValue=0, StringFormat=/{0} 分}"
+                                           Foreground="{DynamicResource Brush.FgDim}"/>
+                            </Grid>
+                            <ProgressBar Style="{StaticResource SlotProgressBar}" Maximum="100" Margin="0,3,0,0"
+                                         Value="{Binding ProgressPct, Mode=OneWay, FallbackValue=0}"/>
                         </StackPanel>
-                        <TextBlock Text="{Binding TrayText, FallbackValue=—}"
-                                   HorizontalAlignment="Right" FontSize="12" VerticalAlignment="Center"
-                                   Foreground="#0A7A2F"/>
                     </Grid>
-                    <!-- 行4：光栅左右检测（辅助信息，小字弱化） -->
-                    <TextBlock Text="{Binding GrillText, FallbackValue=—}"
-                               FontSize="11" Foreground="#999" Margin="0,5,0,0"/>
-                </StackPanel>
+                </Grid>
             </Border>
         </DataTemplate>
     </Window.Resources>
     <DockPanel>
-        <!-- 顶栏：连接状态卡 + 操作按钮 -->
-        <Border DockPanel.Dock="Top" Style="{StaticResource FreshHintBorder}" Margin="8,8,8,4">
+        <!-- ① 品牌条：品牌蓝渐变 + 主题切换 / 日志悬浮窗入口（方案 D 新增） -->
+        <Border DockPanel.Dock="Top" Height="46" MinHeight="40" Margin="8,8,8,0" CornerRadius="10"
+                Padding="12,0" Background="{DynamicResource Brush.HeaderGrad}">
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="26" Height="26" CornerRadius="7"
+                            Background="{DynamicResource Brush.HeaderChipBg}">
+                        <TextBlock Text="固" Foreground="{DynamicResource Brush.FgOnAccent}" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="固化程控" FontSize="15" FontWeight="Bold" Margin="10,0,0,0"
+                               Foreground="{DynamicResource Brush.FgOnAccent}" VerticalAlignment="Center"/>
+                    <TextBlock Text="· 单线固化 / IO 程控 / MES 过账" Margin="8,0,0,0"
+                               Foreground="{DynamicResource Brush.HeaderSubFg}" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Button Style="{StaticResource GhostButton}"
+                            Content="{Binding ToggleThemeText, FallbackValue=深色}"
+                            Command="{Binding ToggleThemeCommand}" Margin="0,0,8,0"
+                            ToolTip="切换 浅色(G2)/深色(G1) 主题，写回 config.ini [setting] Theme"/>
+                    <Button Style="{StaticResource GhostButton}" Content="日志"
+                            Command="{Binding ShowLogCommand}"
+                            ToolTip="打开操作日志 / 控制台悬浮窗（L1+）"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ② 运行条：连接状态卡 + 操作按钮（原顶栏内容迁移，功能与门禁零变化） -->
+        <Border DockPanel.Dock="Top" Margin="8,6,8,0" CornerRadius="10" Padding="10,8"
+                Background="{DynamicResource Brush.PanelGrad}"
+                BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -111,55 +258,229 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <Ellipse Width="14" Height="14" VerticalAlignment="Center" Margin="6,0,10,0">
                     <Ellipse.Style>
                         <Style TargetType="Ellipse">
-                            <Setter Property="Fill" Value="#D9534F"/>
+                            <Setter Property="Fill" Value="{DynamicResource Brush.StateRed}"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsConnected, FallbackValue=False}" Value="True">
-                                    <Setter Property="Fill" Value="#5CB85C"/>
+                                    <Setter Property="Fill" Value="{DynamicResource Brush.StateGreen}"/>
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </Ellipse.Style>
                 </Ellipse>
                 <TextBlock Grid.Column="1" Text="{Binding PolicyText, FallbackValue=策略：—}"
-                           VerticalAlignment="Center" Margin="0,0,12,0" Foreground="#1F4E79"/>
+                           VerticalAlignment="Center" Margin="0,0,12,0"
+                           Foreground="{DynamicResource Brush.FgStrong}"/>
                 <!-- 连接状态 * 弹性列：文本完整显示（极窄窗口省略号兜底，悬停看全文） -->
                 <TextBlock Grid.Column="2" Text="{Binding ConnectionText, FallbackValue=未启动}"
-                           VerticalAlignment="Center" Foreground="#333"
+                           VerticalAlignment="Center" Foreground="{DynamicResource Brush.FgMid}"
                            TextTrimming="CharacterEllipsis"
                            ToolTip="{Binding ConnectionText, FallbackValue=未启动}"/>
                 <TextBlock Grid.Column="3" Text="{Binding PostingText, FallbackValue=过账：—}"
-                           VerticalAlignment="Center" Margin="0,0,12,0" Foreground="#0A7A2F"/>
-                <Button Grid.Column="4" Style="{StaticResource FreshButton}"
+                           VerticalAlignment="Center" Margin="0,0,12,0"
+                           Foreground="{DynamicResource Brush.FgMid}"/>
+                <TextBlock Grid.Column="4" Text="{Binding OperatorText, FallbackValue=未登录}"
+                           VerticalAlignment="Center" Margin="0,0,8,0"
+                           Foreground="{DynamicResource Brush.FgStrong}"/>
+                <Button Grid.Column="5" Style="{StaticResource GhostButton}"
                         Content="登录" Command="{Binding LoginCommand}" Margin="8,0"/>
-                <TextBlock Grid.Column="5" Text="{Binding OperatorText, FallbackValue=未登录}"
-                           VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#1F4E79"/>
-                <Button Grid.Column="6" Style="{StaticResource FreshButton}"
+                <Button Grid.Column="6" Style="{StaticResource GhostButton}"
                         Content="工单" Command="{Binding OpenWorkOrderCommand}" Margin="0,0,8,0"/>
-                <Button Grid.Column="7" Style="{StaticResource FreshButton}"
+                <Button Grid.Column="7" Style="{StaticResource GhostButton}"
                         Content="权限" Command="{Binding OpenOperatorsCommand}" Margin="0,0,8,0"/>
-                <Button Grid.Column="8" Style="{StaticResource FreshButton}"
+                <Button Grid.Column="8" Style="{StaticResource GhostButton}"
                         Content="策略" Command="{Binding OpenCuringPolicyCommand}" Margin="0,0,8,0"/>
-                <Button Grid.Column="9" Style="{StaticResource FreshButton}"
+                <Button Grid.Column="9" Style="{StaticResource GhostButton}"
                         Content="过账配置" Command="{Binding OpenPostConfigCommand}" Margin="0,0,8,0"/>
-                <Button Grid.Column="10" Style="{StaticResource FreshButton}"
+                <Button Grid.Column="10" Style="{StaticResource GhostButton}"
                         Content="IO测试" Command="{Binding OpenIoTestCommand}" Margin="0,0,8,0"
                         ToolTip="IO 耦合器通道通讯测试（L3+）：DI 状态灯 / DO 点击灯钮 / 一键遍历验接线"/>
-                <Button Grid.Column="11" Style="{StaticResource FreshButton}"
+                <Button Grid.Column="11" Style="{StaticResource GhostButton}"
                         Content="点表" Command="{Binding OpenPointTableCommand}" Margin="0,0,8,0"/>
-                <Button Grid.Column="12" Style="{StaticResource FreshButton}"
+                <Button Grid.Column="12" Style="{StaticResource GhostButton}"
                         Content="重新连接" Command="{Binding ReconnectCommand}" Margin="0,0,8,0"/>
-                <Button Grid.Column="13" Style="{StaticResource FreshButton}" Content="退出"
+                <Button Grid.Column="13" Style="{StaticResource GhostButton}" Content="退出"
                         Click="OnExitClick"/>
             </Grid>
         </Border>
-        <!-- 主内容：固化架分组（单架 1 组=无标题条，双架 2 组各带标题条，
+
+        <!-- ③ 统计条：五态 pill + ⚡下口（RefreshStats 500ms 聚合，见 SlotStatistics） -->
+        <Border DockPanel.Dock="Top" Margin="8,6,8,0" CornerRadius="10" Padding="10,7"
+                Background="{DynamicResource Brush.PanelGrad}"
+                BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1">
+            <DockPanel>
+                <Border DockPanel.Dock="Right" CornerRadius="14" Padding="10,4" VerticalAlignment="Center"
+                        Background="{DynamicResource Brush.NextCloseBg}"
+                        BorderBrush="{DynamicResource Brush.NextCloseBorder}" BorderThickness="1"
+                        ToolTip="计时中最先到点的库位（到自己工位取件前盯这个）">
+                    <TextBlock Text="{Binding NextCloseText, FallbackValue=暂无计时}" FontSize="12"
+                               FontWeight="SemiBold" Foreground="{DynamicResource Brush.NextCloseFg}"/>
+                </Border>
+                <StackPanel Orientation="Horizontal">
+                    <!-- 空闲 -->
+                    <Border CornerRadius="14" Padding="10,4" Margin="0,0,8,0"
+                            Background="{DynamicResource Brush.StatPillIdle}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="7" Height="7" Fill="{DynamicResource Brush.StateIdle}"
+                                     VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="空闲" Foreground="{DynamicResource Brush.StateIdle}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding IdleCount, FallbackValue=0}" FontWeight="Bold" Margin="6,0,0,0"
+                                       Foreground="{DynamicResource Brush.FgStrong}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- 待门控 -->
+                    <Border CornerRadius="14" Padding="10,4" Margin="0,0,8,0"
+                            Background="{DynamicResource Brush.StatPillGate}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="7" Height="7" Fill="{DynamicResource Brush.StatePurple}"
+                                     VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="待门控" Foreground="{DynamicResource Brush.StatePurple}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding GateCount, FallbackValue=0}" FontWeight="Bold" Margin="6,0,0,0"
+                                       Foreground="{DynamicResource Brush.FgStrong}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- 计时中 -->
+                    <Border CornerRadius="14" Padding="10,4" Margin="0,0,8,0"
+                            Background="{DynamicResource Brush.StatPillCuring}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="7" Height="7" Fill="{DynamicResource Brush.StateYellow}"
+                                     VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="计时中" Foreground="{DynamicResource Brush.StateYellow}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding CuringCount, FallbackValue=0}" FontWeight="Bold" Margin="6,0,0,0"
+                                       Foreground="{DynamicResource Brush.FgStrong}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- 放行 -->
+                    <Border CornerRadius="14" Padding="10,4" Margin="0,0,8,0"
+                            Background="{DynamicResource Brush.StatPillDone}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="7" Height="7" Fill="{DynamicResource Brush.StateGreen}"
+                                     VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="放行" Foreground="{DynamicResource Brush.StateGreen}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding DoneCount, FallbackValue=0}" FontWeight="Bold" Margin="6,0,0,0"
+                                       Foreground="{DynamicResource Brush.FgStrong}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- 红灯占用 -->
+                    <Border CornerRadius="14" Padding="10,4"
+                            Background="{DynamicResource Brush.StatPillAlarm}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="7" Height="7" Fill="{DynamicResource Brush.StateRed}"
+                                     VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="红灯" Foreground="{DynamicResource Brush.StateRed}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding AlarmCount, FallbackValue=0}" FontWeight="Bold" Margin="6,0,0,0"
+                                       Foreground="{DynamicResource Brush.FgStrong}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- ⑤ 工单带（Dock=Bottom）：R/L 双工位工单纪要（下部信息带，收尾布局就此铺满） -->
+        <Border DockPanel.Dock="Bottom" Margin="8,6,8,8" CornerRadius="10" Padding="10,8"
+                Background="{DynamicResource Brush.PanelGrad}"
+                BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1"
+                ToolTip="工单信息窗保存后自动联动（R/L 各：途程单号 / 已产/预设 / 进度）">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <!-- 芯片列：工单标识 -->
+                <Border Width="46" CornerRadius="8" Background="{DynamicResource Brush.PanelBg2}"
+                        BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1">
+                    <TextBlock Text="工　单" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center"
+                               VerticalAlignment="Center" Foreground="{DynamicResource Brush.AccentDeep}"/>
+                </Border>
+                <!-- R 工位 -->
+                <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="8" Padding="10,6"
+                        Background="{DynamicResource Brush.PanelBg}"
+                        BorderBrush="{DynamicResource Brush.CardBorder}" BorderThickness="1">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="120" MinWidth="70"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Border CornerRadius="6" Padding="8,4" Background="{DynamicResource Brush.PanelBg2}"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="R 工位" FontWeight="Bold"
+                                       Foreground="{DynamicResource Brush.AccentDeep}"/>
+                        </Border>
+                        <TextBlock Grid.Column="1" Margin="10,0" VerticalAlignment="Center"
+                                   Text="{Binding WorkOrderRcNoR, FallbackValue=—}" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.FgStrong}"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding WorkOrderRcNoR, FallbackValue=—}"/>
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="10,0">
+                            <TextBlock Text="已产/预设" FontSize="10" HorizontalAlignment="Right"
+                                       Foreground="{DynamicResource Brush.FgDim}"/>
+                            <TextBlock Text="{Binding WorkOrderQtyR, FallbackValue=0/0}" FontWeight="Bold"
+                                       HorizontalAlignment="Right" Foreground="{DynamicResource Brush.FgStrong}"/>
+                        </StackPanel>
+                        <ProgressBar Grid.Column="3" Style="{StaticResource SlotProgressBar}" Maximum="100"
+                                     VerticalAlignment="Center" Margin="0,0,10,0"
+                                     Value="{Binding WorkOrderPctR, Mode=OneWay, FallbackValue=0}"/>
+                        <TextBlock Grid.Column="4" VerticalAlignment="Center"
+                                   Text="{Binding WorkOrderPctR, FallbackValue=0, StringFormat={}{0}%}"
+                                   Foreground="{DynamicResource Brush.FgMid}"/>
+                    </Grid>
+                </Border>
+                <!-- L 工位 -->
+                <Border Grid.Column="2" Margin="10,0,0,0" CornerRadius="8" Padding="10,6"
+                        Background="{DynamicResource Brush.PanelBg}"
+                        BorderBrush="{DynamicResource Brush.CardBorder}" BorderThickness="1">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="120" MinWidth="70"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Border CornerRadius="6" Padding="8,4" Background="{DynamicResource Brush.PanelBg2}"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="L 工位" FontWeight="Bold"
+                                       Foreground="{DynamicResource Brush.AccentDeep}"/>
+                        </Border>
+                        <TextBlock Grid.Column="1" Margin="10,0" VerticalAlignment="Center"
+                                   Text="{Binding WorkOrderRcNoL, FallbackValue=—}" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.FgStrong}"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding WorkOrderRcNoL, FallbackValue=—}"/>
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="10,0">
+                            <TextBlock Text="已产/预设" FontSize="10" HorizontalAlignment="Right"
+                                       Foreground="{DynamicResource Brush.FgDim}"/>
+                            <TextBlock Text="{Binding WorkOrderQtyL, FallbackValue=0/0}" FontWeight="Bold"
+                                       HorizontalAlignment="Right" Foreground="{DynamicResource Brush.FgStrong}"/>
+                        </StackPanel>
+                        <ProgressBar Grid.Column="3" Style="{StaticResource SlotProgressBar}" Maximum="100"
+                                     VerticalAlignment="Center" Margin="0,0,10,0"
+                                     Value="{Binding WorkOrderPctL, Mode=OneWay, FallbackValue=0}"/>
+                        <TextBlock Grid.Column="4" VerticalAlignment="Center"
+                                   Text="{Binding WorkOrderPctL, FallbackValue=0, StringFormat={}{0}%}"
+                                   Foreground="{DynamicResource Brush.FgMid}"/>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- ④ 主内容：固化架分组（单架 1 组=无标题条，双架 2 组各带标题条，
              外层 UniformGrid Rows=GroupCount 纵向均分铺满；组内三排十站随窗口拉伸均分） -->
         <ItemsControl ItemsSource="{Binding RackGroups, FallbackValue={x:Null}}"
-                      Margin="8,4,8,8">
+                      Margin="8,6,8,6">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                     <!-- DataContext 是组 VM，GroupCount 在主 VM——经 Window 中转；
@@ -172,8 +493,9 @@
                 <DataTemplate>
                     <DockPanel>
                         <!-- 组标题条：单架（IsHeaderVisible=False）整条隐藏，视觉与单架版一致 -->
-                        <Border DockPanel.Dock="Top" Background="#EFF6FD" BorderBrush="#B8D4EE"
-                                BorderThickness="1" CornerRadius="4" Padding="10,4" Margin="0,0,0,2">
+                        <Border DockPanel.Dock="Top" Background="{DynamicResource Brush.PanelBg2}"
+                                BorderBrush="{DynamicResource Brush.PanelBorder}"
+                                BorderThickness="1" CornerRadius="6" Padding="10,4" Margin="0,0,0,2">
                             <Border.Style>
                                 <Style TargetType="Border">
                                     <Setter Property="Visibility" Value="Visible"/>
@@ -185,10 +507,12 @@
                                 </Style>
                             </Border.Style>
                             <StackPanel Orientation="Horizontal">
-                                <Rectangle Width="4" Height="14" Fill="#1E90FF"
-                                           VerticalAlignment="Center" Margin="0,0,6,0" RadiusX="1" RadiusY="1"/>
+                                <Rectangle Width="4" Height="14" RadiusX="1" RadiusY="1"
+                                           Fill="{DynamicResource Brush.Accent}"
+                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
                                 <TextBlock Text="{Binding Title, FallbackValue=1号固化架}"
-                                           FontWeight="Bold" Foreground="#1F4E79" VerticalAlignment="Center"/>
+                                           FontWeight="Bold" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Brush.FgStrong}"/>
                             </StackPanel>
                         </Border>
                         <ItemsControl ItemsSource="{Binding Slots, FallbackValue={x:Null}}"

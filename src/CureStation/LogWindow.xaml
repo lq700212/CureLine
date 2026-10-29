@@ -1,0 +1,106 @@
+<Window x:Class="CureStation.LogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:CureStation.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:LogWindowViewModel, IsDesignTimeCreatable=False}"
+        Title="操作日志 / 控制台 - 固化程控"
+        Width="700" Height="520" MinWidth="560" MinHeight="380"
+        WindowStartupLocation="Manual"
+        Background="{DynamicResource Brush.WindowBg}"
+        FontSize="12">
+    <!--
+      日志/控制台悬浮窗（方案 D：日志带移出主窗，顶栏【日志】弹出，L1+ 门禁）：
+      - 双栏：左=操作日志流（最新在上、封顶 200 条；Written→队列→100ms 批量搬运），
+              右=系统状态卡（打开一刻定格，含当日日志目录路径）；
+      - 非模态单例（DialogService 防重复开）；Owner=主窗，主窗退出联动关闭；
+      - 显示位置：屏幕工作区右下角（code-behind PositionBottomRight，不加
+        记忆位置的 ini 键——拍板）；
+      - 全部取色走语义键（Brush.*）→ ThemeManager 切主题本窗自动跟换。
+    -->
+    <DockPanel>
+        <!-- 标题条：面板玻璃 + 主色竖条 -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource Brush.PanelGrad}"
+                BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="0,0,0,1" Padding="12,8">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Rectangle Width="4" Height="14" RadiusX="1" RadiusY="1" Fill="{DynamicResource Brush.Accent}"
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock Text="操作日志 / 控制台" FontSize="14" FontWeight="Bold"
+                               Foreground="{DynamicResource Brush.FgStrong}" VerticalAlignment="Center"/>
+                    <TextBlock Text="· 状态快照" Margin="12,0,4,0"
+                               Foreground="{DynamicResource Brush.FgDim}" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding GeneratedAtText, FallbackValue=—}"
+                               Foreground="{DynamicResource Brush.FgDim}" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding LogLines.Count, FallbackValue=0, StringFormat={}{0} 条}"
+                           Foreground="{DynamicResource Brush.FgDim}" VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="300" MinWidth="240"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 左栏：操作日志流（等宽字体，最新在上） -->
+            <Border Grid.Column="0" BorderBrush="{DynamicResource Brush.DimLine}" BorderThickness="0,0,1,0">
+                <ListBox ItemsSource="{Binding LogLines, FallbackValue={x:Null}}"
+                         Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         VirtualizingPanel.ScrollUnit="Item" Margin="6,4">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Focusable" Value="False"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="4,1"/>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" FontFamily="Consolas" FontSize="12"
+                                       TextWrapping="NoWrap"
+                                       Foreground="{DynamicResource Brush.FgMid}"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+
+            <!-- 右栏：系统状态卡（打开一刻定格） -->
+            <Border Grid.Column="1" Margin="8" CornerRadius="8" Padding="12"
+                    Background="{DynamicResource Brush.PanelBg}"
+                    BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="系统状态" FontSize="13" FontWeight="Bold" Margin="0,0,0,6"
+                                   Foreground="{DynamicResource Brush.FgStrong}"/>
+                        <ItemsControl ItemsSource="{Binding StatusRows, FallbackValue={x:Null}}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Padding="0,5" BorderBrush="{DynamicResource Brush.DimLine}"
+                                            BorderThickness="0,0,0,1">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Label, FallbackValue=—}"
+                                                       Foreground="{DynamicResource Brush.FgDim}"
+                                                       VerticalAlignment="Top"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value, FallbackValue=—}"
+                                                       TextWrapping="Wrap" Margin="12,0,0,0"
+                                                       Foreground="{DynamicResource Brush.FgMid}"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </DockPanel>
+</Window>

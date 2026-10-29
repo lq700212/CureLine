@@ -423,6 +423,71 @@ public class CureStationViewModelTests
         Assert.Contains(fake.Calls, c => c == "ShowPointTable");
     }
 
+    // ---------- 日志悬浮窗 + 主题切换（方案 D · 双主题，2026-10-29） ----------
+
+    [Fact(DisplayName = "ShowLog 门禁：未登录先拦")]
+    public void MainVm_ShowLog_BlocksWithoutLogin()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+        var fake = new FakeCureDialogService();
+        using var vm = new CureStation.ViewModels.MainViewModel(fake);
+
+        vm.ShowLogCommand.Execute(null);   // 未登录 → Gate 拦（L1 起）
+        Assert.DoesNotContain(fake.Calls, c => c == "ShowLog");
+        Assert.Contains(fake.Calls, c => c.Contains("未登录"));
+    }
+
+    [Fact(DisplayName = "ShowLog：登录后放行 + 快照含日志目录与仓位统计")]
+    public void MainVm_ShowLog_PassesWithSnapshot()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+        var fake = new FakeCureDialogService();
+        using var vm = new CureStation.ViewModels.MainViewModel(fake);
+
+        fake.LoginResult = ("op1", OperatorLevel.Level1);  // L1 即可开（只读不碰配置）
+        vm.LoginCommand.Execute(null);
+        vm.ShowLogCommand.Execute(null);
+        Assert.Contains(fake.Calls, c => c == "ShowLog");
+        Assert.NotNull(fake.LogSnapshot);
+        Assert.NotNull(fake.LogSnapshot!.GeneratedAtText);
+        Assert.Contains(fake.LogSnapshot.Rows, r => r.Label == "日志目录");
+        Assert.Contains(fake.LogSnapshot.Rows, r => r.Label == "仓位" && r.Value.Contains("30"));
+        Assert.Contains(fake.LogSnapshot.Rows, r => r.Label == "连接状态");
+    }
+
+    [Fact(DisplayName = "主题切换：翻目标 + 写回 ini + 文案跟随")]
+    public void MainVm_ToggleTheme_SwitchesAndWritesIni()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Theme", "Light");  // 起手 Light 态
+        var fake = new FakeCureDialogService();
+        using var vm = new CureStation.ViewModels.MainViewModel(fake);
+
+        try
+        {
+            Assert.Equal("深色", vm.ToggleThemeText); // 浅色下按钮显示目标"深色"
+            vm.ToggleThemeCommand.Execute(null);
+            Assert.Equal("Dark", CureStation.Themes.ThemeManager.Current);
+            Assert.Equal("Dark", IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Theme", "?"));  // 落盘记忆
+            Assert.Equal("浅色", vm.ToggleThemeText); // 深色下按钮显示目标"浅色"
+
+            vm.ToggleThemeCommand.Execute(null);
+            Assert.Equal("Light", CureStation.Themes.ThemeManager.Current);
+            Assert.Equal("Light", IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Theme", "?"));
+        }
+        finally
+        {
+            // 恢复全局静态（ThemeManager.Current 是静态记账，防止污染其它用例）
+            CureStation.Themes.ThemeManager.ApplyTheme("Light");
+        }
+    }
+
     // ---------- 工单窗 VM（P3.2） ----------
 
     [Fact]

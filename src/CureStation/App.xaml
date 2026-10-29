@@ -3,244 +3,337 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
       CureStation（固化程控）资源字典：
-      风格呼应主程序 Fresh 卡片风（浅蓝边药丸/白底卡片），Phase 2 统一换肤与
-      语言服务时再收编进共享字典。
-      V0.0.20：FreshButton 升级为带圆角/悬停反馈的模板；新增语义色按钮
-      （FreshPrimary/FreshSuccess/FreshDanger）与统一输入框（FreshInput），
-      供登录窗重做与权限管理窗语义色按钮使用——主色板：实色蓝 #1E90FF、
-      深蓝字 #1F4E79、浅蓝边 #B8D4EE、状态绿 #5CB85C、状态红 #D9534F。
+      双主题架构（2026-10-29 UI 重画）：
+      - Themes/Light.xaml（G2 浅色渐变浸染）/ Themes/Dark.xaml（G1 深空玻璃舱）
+        各持一套【语义键】（Brush.WindowBg / Brush.CardBg / Brush.StateRed …），
+        ThemeManager 替换 MergedDictionaries[0] 即全窗换皮（主窗 + 日志悬浮窗
+        全键化）；缺省挂 Light，App.OnStartup 按 configparser[setting] Theme 再应用。
+      - Fresh.* 固定键（Brush.Fresh.*）专供各功能弹窗（登录/工单/权限/点表/
+        策略/过账配置/IO 测试）：双主题下输出同一组浅色值，弹窗视觉不随主题变
+        （拍板"弹窗维持浅色，第 2 期再统一"）。FreshButton 等样式的 Setter 全部
+        DynamicResource 指向 Fresh.* 键——改弹窗配色只动键值，不动样式。
     -->
     <Application.Resources>
-        <Style x:Key="FreshCardBorder" TargetType="Border">
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="BorderBrush" Value="#B8D4EE"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Padding" Value="8"/>
-        </Style>
-        <Style x:Key="FreshHintBorder" TargetType="Border">
-            <Setter Property="Background" Value="#EFF6FD"/>
-            <Setter Property="BorderBrush" Value="#B8D4EE"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Padding" Value="8"/>
-        </Style>
-        <Style x:Key="SectionTitle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#1F4E79"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-        </Style>
-        <!-- 次级按钮（白底浅蓝边）：圆角 + 悬停加深，全局默认按钮观感 -->
-        <Style x:Key="FreshButton" TargetType="Button">
-            <Setter Property="Background" Value="#F5FAFF"/>
-            <Setter Property="BorderBrush" Value="#B8D4EE"/>
-            <Setter Property="Foreground" Value="#1F4E79"/>
-            <Setter Property="Padding" Value="10,4"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                              RecognizesAccessKey="True"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#E3F0FC"/>
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="#8FC1EC"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#D0E6F9"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <!-- 实色主按钮（CTA）：登录/新增等主操作，蓝底白字悬停变深 -->
-        <Style x:Key="FreshPrimaryButton" TargetType="Button" BasedOn="{StaticResource FreshButton}">
-            <Setter Property="Background" Value="#1E90FF"/>
-            <Setter Property="BorderBrush" Value="#1873CC"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                              RecognizesAccessKey="True"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#1873CC"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#135EA8"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <!-- 危险操作按钮（删除账号等）：红底白字 -->
-        <Style x:Key="FreshDangerButton" TargetType="Button" BasedOn="{StaticResource FreshPrimaryButton}">
-            <Setter Property="Background" Value="#D9534F"/>
-            <Setter Property="BorderBrush" Value="#C9302C"/>
-            <Setter Property="FontWeight" Value="Normal"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                              RecognizesAccessKey="True"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#C9302C"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#AC2925"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <!-- 成功操作按钮（重置密码等）：绿底白字 -->
-        <Style x:Key="FreshSuccessButton" TargetType="Button" BasedOn="{StaticResource FreshDangerButton}">
-            <Setter Property="Background" Value="#5CB85C"/>
-            <Setter Property="BorderBrush" Value="#449D44"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                              RecognizesAccessKey="True"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#449D44"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#398439"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <!-- 统一输入框（登录窗/表单）：圆角 4、聚焦变主蓝边。
-             注意：PART_ContentHost 必须 Stretch 填满内容区，文字垂直居中交给
-             VerticalContentAlignment（TextBoxView 自己算）——模板里给 ScrollViewer
-             设 VerticalAlignment=Center 会收缩内容宿主、裁掉文字下半截（实测教训） -->
-        <Style x:Key="FreshInput" TargetType="TextBox">
-            <Setter Property="Height" Value="32"/>
-            <Setter Property="Padding" Value="8,0"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="BorderBrush" Value="#B8D4EE"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TextBox">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4">
-                            <ScrollViewer x:Name="PART_ContentHost"
-                                          Margin="{TemplateBinding Padding}"
-                                          Focusable="False"
-                                          HorizontalScrollBarVisibility="Hidden"
-                                          VerticalScrollBarVisibility="Hidden"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="#1E90FF"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <!-- 下拉框统一：与 FreshInput/按钮同高（32）同字号（继承窗口）——
-             全项目输入区"框=按钮=32"口径的 ComboBox 侧（V0.0.20 权限窗反馈）。
-             只统一尺寸不做完整模板：原生 ComboBox 模板保留（展开箭头/项样式不受影响）。 -->
-        <Style x:Key="FreshCombo" TargetType="ComboBox">
-            <Setter Property="Height" Value="32"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-        </Style>
-        <!-- 密码输入框：与 FreshInput 同款（PasswordBox 是独立控件需独立模板） -->
-        <Style x:Key="FreshPwdInput" TargetType="PasswordBox">
-            <Setter Property="Height" Value="32"/>
-            <Setter Property="Padding" Value="8,0"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="BorderBrush" Value="#B8D4EE"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="PasswordBox">
-                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4">
-                            <ScrollViewer x:Name="PART_ContentHost"
-                                          Margin="{TemplateBinding Padding}"
-                                          Focusable="False"
-                                          HorizontalScrollBarVisibility="Hidden"
-                                          VerticalScrollBarVisibility="Hidden"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="#1E90FF"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style TargetType="DataGrid">
-            <Setter Property="AutoGenerateColumns" Value="False"/>
-            <Setter Property="CanUserAddRows" Value="False"/>
-            <Setter Property="CanUserDeleteRows" Value="False"/>
-            <Setter Property="HeadersVisibility" Value="Column"/>
-            <Setter Property="SelectionMode" Value="Single"/>
-            <Setter Property="IsReadOnly" Value="True"/>
-            <Setter Property="FontSize" Value="12"/>
-        </Style>
-        <Style TargetType="DataGridTextColumn">
-            <Setter Property="Foreground" Value="#333"/>
-        </Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- 缺省浅色（XAML 期兜底）；运行时 ThemeManager 按 ini 覆换 -->
+                <ResourceDictionary Source="Themes/Light.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- ============ Fresh.* 弹窗固定浅色键（双主题同值，勿随主题改） ============ -->
+            <SolidColorBrush x:Key="Brush.Fresh.CardBg" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="Brush.Fresh.HintBg" Color="#EFF6FD"/>
+            <SolidColorBrush x:Key="Brush.Fresh.Border" Color="#B8D4EE"/>
+            <SolidColorBrush x:Key="Brush.Fresh.FgStrong" Color="#1F4E79"/>
+            <SolidColorBrush x:Key="Brush.Fresh.FgMid" Color="#333333"/>
+            <SolidColorBrush x:Key="Brush.Fresh.ButtonBg" Color="#F5FAFF"/>
+            <SolidColorBrush x:Key="Brush.Fresh.ButtonHoverBg" Color="#E3F0FC"/>
+            <SolidColorBrush x:Key="Brush.Fresh.ButtonHoverBorder" Color="#8FC1EC"/>
+            <SolidColorBrush x:Key="Brush.Fresh.ButtonPressedBg" Color="#D0E6F9"/>
+            <SolidColorBrush x:Key="Brush.Fresh.Accent" Color="#1E90FF"/>
+            <SolidColorBrush x:Key="Brush.Fresh.AccentBorder" Color="#1873CC"/>
+            <SolidColorBrush x:Key="Brush.Fresh.AccentHover" Color="#1873CC"/>
+            <SolidColorBrush x:Key="Brush.Fresh.AccentPressed" Color="#135EA8"/>
+            <SolidColorBrush x:Key="Brush.Fresh.OnAccent" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="Brush.Fresh.Danger" Color="#D9534F"/>
+            <SolidColorBrush x:Key="Brush.Fresh.DangerBorder" Color="#C9302C"/>
+            <SolidColorBrush x:Key="Brush.Fresh.DangerHover" Color="#C9302C"/>
+            <SolidColorBrush x:Key="Brush.Fresh.DangerPressed" Color="#AC2925"/>
+            <SolidColorBrush x:Key="Brush.Fresh.Success" Color="#5CB85C"/>
+            <SolidColorBrush x:Key="Brush.Fresh.SuccessBorder" Color="#449D44"/>
+            <SolidColorBrush x:Key="Brush.Fresh.SuccessHover" Color="#449D44"/>
+            <SolidColorBrush x:Key="Brush.Fresh.SuccessPressed" Color="#398439"/>
+            <SolidColorBrush x:Key="Brush.Fresh.InputBg" Color="#FFFFFF"/>
+
+            <!-- ============ Fresh 弹窗样式（颜色全部走 Fresh.* 固定键） ============ -->
+            <Style x:Key="FreshCardBorder" TargetType="Border">
+                <Setter Property="Background" Value="{DynamicResource Brush.Fresh.CardBg}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Border}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="6"/>
+                <Setter Property="Padding" Value="8"/>
+            </Style>
+            <Style x:Key="FreshHintBorder" TargetType="Border">
+                <Setter Property="Background" Value="{DynamicResource Brush.Fresh.HintBg}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Border}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="6"/>
+                <Setter Property="Padding" Value="8"/>
+            </Style>
+            <Style x:Key="SectionTitle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.FgStrong}"/>
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+            </Style>
+            <!-- 次级按钮（淡底浅蓝边）：圆角 + 悬停加深，弹窗内全局默认按钮观感 -->
+            <Style x:Key="FreshButton" TargetType="Button">
+                <Setter Property="Background" Value="{DynamicResource Brush.Fresh.ButtonBg}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Border}"/>
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.FgStrong}"/>
+                <Setter Property="Padding" Value="10,4"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Fresh.ButtonHoverBg}"/>
+                                    <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Fresh.ButtonHoverBorder}"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Fresh.ButtonPressedBg}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.5"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <!-- 实色主按钮（CTA）：登录/新增等主操作，蓝底白字悬停变深 -->
+            <Style x:Key="FreshPrimaryButton" TargetType="Button" BasedOn="{StaticResource FreshButton}">
+                <Setter Property="Background" Value="{DynamicResource Brush.Fresh.Accent}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.AccentBorder}"/>
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.OnAccent}"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Fresh.AccentHover}"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Fresh.AccentPressed}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.5"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <!-- 危险操作按钮（删除账号等）：红底白字 -->
+            <Style x:Key="FreshDangerButton" TargetType="Button" BasedOn="{StaticResource FreshPrimaryButton}">
+                <Setter Property="Background" Value="{DynamicResource Brush.Fresh.Danger}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.DangerBorder}"/>
+                <Setter Property="FontWeight" Value="Normal"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Fresh.DangerHover}"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Fresh.DangerPressed}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.5"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <!-- 成功操作按钮（重置密码等）：绿底白字 -->
+            <Style x:Key="FreshSuccessButton" TargetType="Button" BasedOn="{StaticResource FreshDangerButton}">
+                <Setter Property="Background" Value="{DynamicResource Brush.Fresh.Success}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.SuccessBorder}"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Fresh.SuccessHover}"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Fresh.SuccessPressed}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.5"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <!-- 统一输入框（弹窗表单）：圆角 4、聚焦变主蓝边。
+                 注意：PART_ContentHost 必须 Stretch 填满内容区，文字垂直居中交给
+                 VerticalContentAlignment（TextBoxView 自己算）——模板里给 ScrollViewer
+                 设 VerticalAlignment=Center 会收缩内容宿主、裁掉文字下半截（实测教训） -->
+            <Style x:Key="FreshInput" TargetType="TextBox">
+                <Setter Property="Height" Value="32"/>
+                <Setter Property="Padding" Value="8,0"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                <Setter Property="Background" Value="{DynamicResource Brush.Fresh.InputBg}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Border}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TextBox">
+                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="4">
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                              Margin="{TemplateBinding Padding}"
+                                              Focusable="False"
+                                              HorizontalScrollBarVisibility="Hidden"
+                                              VerticalScrollBarVisibility="Hidden"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                    <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Accent}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.5"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <!-- 下拉框统一：与 FreshInput/按钮同高（32）同字号（继承窗口）——
+                 全项目输入区"框=按钮=32"口径的 ComboBox 侧（V0.0.20 权限窗反馈）。
+                 只统一尺寸不做完整模板：原生 ComboBox 模板保留（展开箭头/项样式不受影响）。 -->
+            <Style x:Key="FreshCombo" TargetType="ComboBox">
+                <Setter Property="Height" Value="32"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+            </Style>
+            <!-- 密码输入框：与 FreshInput 同款（PasswordBox 是独立控件需独立模板） -->
+            <Style x:Key="FreshPwdInput" TargetType="PasswordBox">
+                <Setter Property="Height" Value="32"/>
+                <Setter Property="Padding" Value="8,0"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                <Setter Property="Background" Value="{DynamicResource Brush.Fresh.InputBg}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Border}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="PasswordBox">
+                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="4">
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                              Margin="{TemplateBinding Padding}"
+                                              Focusable="False"
+                                              HorizontalScrollBarVisibility="Hidden"
+                                              VerticalScrollBarVisibility="Hidden"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                    <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Accent}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.5"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <!-- 数据网格缺省（弹窗浅色 DataGrid 通用；文字色保持硬编码——
+                 DataGridTextColumn 非 FrameworkElement，DynamicResource 不可靠，弹窗也固定浅色无需换） -->
+            <Style TargetType="DataGrid">
+                <Setter Property="AutoGenerateColumns" Value="False"/>
+                <Setter Property="CanUserAddRows" Value="False"/>
+                <Setter Property="CanUserDeleteRows" Value="False"/>
+                <Setter Property="HeadersVisibility" Value="Column"/>
+                <Setter Property="SelectionMode" Value="Single"/>
+                <Setter Property="IsReadOnly" Value="True"/>
+                <Setter Property="FontSize" Value="12"/>
+            </Style>
+            <Style TargetType="DataGridTextColumn">
+                <Setter Property="Foreground" Value="#333333"/>
+            </Style>
+
+            <!-- ============ 主窗专用样式（色走语义键，随主题换皮） ============ -->
+            <!-- 幽灵按钮：主窗顶栏胶囊（Light=浅蓝药丸 / Dark=白玻璃胶囊） -->
+            <Style x:Key="GhostButton" TargetType="Button">
+                <Setter Property="Background" Value="{DynamicResource Brush.GhostBg}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.GhostBorder}"/>
+                <Setter Property="Foreground" Value="{DynamicResource Brush.GhostFg}"/>
+                <Setter Property="Padding" Value="10,4"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="14" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.GhostHoverBg}"/>
+                                    <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.GhostBorderHover}"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.GhostPressedBg}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Opacity" Value="0.5"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <!-- 细进度条（4px 圆角胶囊）：仓位卡计时 / 工单带产出共用。
+                 Foreground 由使用处定（本样式统一给状态绿）；模板依赖 ProgressBar
+                 约定名 PART_Track / PART_Indicator——勿改名。 -->
+            <Style x:Key="SlotProgressBar" TargetType="ProgressBar">
+                <Setter Property="Height" Value="4"/>
+                <Setter Property="Foreground" Value="{DynamicResource Brush.StateGreen}"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ProgressBar">
+                            <Grid>
+                                <Border x:Name="PART_Track" CornerRadius="2"
+                                        Background="{DynamicResource Brush.BarTrack}"/>
+                                <Border x:Name="PART_Indicator" CornerRadius="2" HorizontalAlignment="Left"
+                                        Background="{TemplateBinding Foreground}"/>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

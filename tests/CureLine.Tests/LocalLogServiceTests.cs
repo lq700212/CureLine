@@ -56,4 +56,38 @@ public class LocalLogServiceTests
         string line = LocalLogService.Write("abc", -1);
         Assert.Matches(@"^\d{2}:\d{2}:\d{2} abc$", line);
     }
+
+    [Fact(DisplayName = "Written 事件首发完整行")]
+    public void Written_Invoked_WithTimePrefixedLine()
+    {
+        // 日志悬浮窗的单一数据源：Write 落盘后统一发自含时间戳的完整行
+        // （与返回值同款）。无人订阅零副作用（返回值语义不变）。
+        using var scope = new TestScope();
+        string? received = null;
+        void Handler(string line) => received = line;
+        LocalLogService.Written += Handler;
+        try
+        {
+            LocalLogService.Write("evt-msg", -1);
+            Assert.NotNull(received);
+            Assert.Matches(@"^\d{2}:\d{2}:\d{2} evt-msg$", received);
+        }
+        finally
+        {
+            LocalLogService.Written -= Handler;
+        }
+    }
+
+    [Fact(DisplayName = "Written 退订后不再推送")]
+    public void Written_Unsubscribed_NoPush()
+    {
+        using var scope = new TestScope();
+        int count = 0;
+        void Handler(string line) => count++;
+        LocalLogService.Written += Handler;
+        LocalLogService.Write("z1", -1);   // 订阅期间 → 推送 1 次
+        LocalLogService.Written -= Handler;
+        LocalLogService.Write("z2", -1);   // 退订后 → 静默
+        Assert.Equal(1, count);
+    }
 }

@@ -13,7 +13,9 @@
 // =========================================================================
 
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows.Threading;
+using CureStation.Themes;
 using CureLine.Core.Comms;
 using CureLine.Core.Curing;
 using CureLine.Core.Infrastructure;
@@ -80,6 +82,64 @@ public sealed class RackSlotViewModel : ViewModelBase
         private set => Set(ref _cardState, value);
     }
 
+    // ---------- 卡片视觉状态（Kind，方案 D 新卡模板的状态口径，2026-10-29） ----------
+    // 六态键与主题字典 Brush.Tint*/Brush.Head*/Brush.SlotBorder* 的 XAML 触发器
+    // 同名（改键名要同步：这里 + 两字典 + MainWindow.xaml 触发器）。
+    // 与 CardState 分工：CardState=老"灯色三态"（保留，防破坏既有语义用例）；
+    //   Kind=新模板/统计条的六态业务口径（Alarm=红灯占用、Gate=待门控、Curing=计时）。
+
+    /// <summary>空闲/待门控/计时中/放行/红灯占用/未配置（统计条与卡片触发器同源）。</summary>
+    private string _kind = "Idle";
+    public string Kind
+    {
+        get => _kind;
+        private set => Set(ref _kind, value);
+    }
+
+    private int _remainMin;
+    /// <summary>剩余固化分钟（状态机 Curing 精确值；灯色反推=0）。</summary>
+    public int RemainMin
+    {
+        get => _remainMin;
+        private set => Set(ref _remainMin, value);
+    }
+
+    private int _totalMin;
+    /// <summary>本仓锁定总时长分钟（>0 才有精确计时数据）。</summary>
+    public int TotalMin
+    {
+        get => _totalMin;
+        private set
+        {
+            if (Set(ref _totalMin, value))
+                Raise(nameof(HasDetail)); // 派生属性手动补通知（卡内"大数字/状态字"切换依据）
+        }
+    }
+
+    private int _progressPct;
+    /// <summary>进度百分比 0~100（(总-剩)/总；未计时=0）。</summary>
+    public int ProgressPct
+    {
+        get => _progressPct;
+        private set => Set(ref _progressPct, value);
+    }
+
+    /// <summary>有精确计时数据（状态机 Curing 且 TotalMin&gt;0）——卡内大数字+进度条只在它成立时展示，
+    /// 否则显示状态字（灯色反推的"计时中"没有精确数值，硬显 0 反误导）。</summary>
+    public bool HasDetail => TotalMin > 0;
+
+    /// <summary>统一落 Kind/Remain/Total/Progress（保持不变量：Total=0 → Remain=0、Pct=0）。</summary>
+    private void ApplyKind(string kind, int remainMinutes, int totalMinutes)
+    {
+        Kind = kind;
+        TotalMin = Math.Max(0, totalMinutes);
+        RemainMin = TotalMin > 0 ? Math.Clamp(remainMinutes, 0, TotalMin) : 0;
+        ProgressPct = TotalMin > 0
+            ? Math.Clamp((int)Math.Round(100.0 * (TotalMin - RemainMin) / TotalMin,
+                MidpointRounding.AwayFromZero), 0, 100)
+            : 0;
+    }
+
     /// <summary>
     /// 一拍快照刷新（调用方 500ms 定时；数据从语义键直查快照）。
     /// machineStatus=状态机状态（非空闲时展示口径以状态机为准——剩余分钟数
@@ -90,6 +150,7 @@ public sealed class RackSlotViewModel : ViewModelBase
         if (!hasTable)
         {
             SlotStateText = "未配置";
+            ApplyKind("NotConfigured", 0, 0);
             return;
         }
 
@@ -119,6 +180,20 @@ public sealed class RackSlotViewModel : ViewModelBase
             _ => red == true ? "Red" : yellow == true ? "Yellow"
                 : green == true ? "Green" : "Idle",
         };
+        // Kind（新口径）：状态机给精确状态的仓位以状态机为准（含剩余分钟）；
+        // 状态机空闲/未涉足的仓位灯色反推——红=Alarm（占用）、黄=Curing（无精确
+        // 数值，HasDetail=false 显示状态字）、绿=Done、托盘在=Gate（待判定）、全空=Idle。
+        if (machineStatus is { Phase: SlotPhase.Curing } cur)
+            ApplyKind("Curing", cur.RemainMinutes, cur.TotalMinutes);
+        else if (machineStatus is { Phase: SlotPhase.Done })
+            ApplyKind("Done", 0, 0);
+        else if (machineStatus is { Phase: SlotPhase.WaitingGate })
+            ApplyKind("Gate", 0, 0);
+        else if (red == true) ApplyKind("Alarm", 0, 0);
+        else if (yellow == true) ApplyKind("Curing", 0, 0);
+        else if (green == true) ApplyKind("Done", 0, 0);
+        else if (tray == true) ApplyKind("Gate", 0, 0);
+        else ApplyKind("Idle", 0, 0);
     }
 
     private static string BoolText(bool? v) => v == true ? "ON" : v == false ? "OFF" : "—";
@@ -248,6 +323,64 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         private set => Set(ref _postingText, value);
     }
 
+    // ---------- 顶部统计条（方案 D，2026-10-29；RefreshSlots 每拍聚合） ----------
+    // 五态口径与卡片 Kind 同名（Idle/Gate/Curing/Done/Alarm），详见 SlotStatistics。
+
+    private int _idleCount;
+    public int IdleCount { get => _idleCount; private set => Set(ref _idleCount, value); }
+
+    private int _curingCount;
+    public int CuringCount { get => _curingCount; private set => Set(ref _curingCount, value); }
+
+    private int _gateCount;
+    public int GateCount { get => _gateCount; private set => Set(ref _gateCount, value); }
+
+    private int _doneCount;
+    public int DoneCount { get => _doneCount; private set => Set(ref _doneCount, value); }
+
+    private int _alarmCount;
+    public int AlarmCount { get => _alarmCount; private set => Set(ref _alarmCount, value); }
+
+    private string _nextCloseText = "暂无计时";
+    /// <summary>⚡剩余最短（计时中最早到点的库位，操作员一眼锁定下一个取件口）。</summary>
+    public string NextCloseText
+    {
+        get => _nextCloseText;
+        private set => Set(ref _nextCloseText, value);
+    }
+
+    // ---------- 下部工单带（信息带） ----------
+    // 数据源=config/workorder.json（WorkOrderStore）。LastWriteTime 变了才重读
+    // （500ms 同拍不反复碰磁盘）；工单窗保存返回 true 也主动刷一次。
+
+    private string _workOrderRcNoR = "—";
+    public string WorkOrderRcNoR { get => _workOrderRcNoR; private set => Set(ref _workOrderRcNoR, value); }
+
+    private string _workOrderQtyR = "0/0";
+    public string WorkOrderQtyR { get => _workOrderQtyR; private set => Set(ref _workOrderQtyR, value); }
+
+    private int _workOrderPctR;
+    public int WorkOrderPctR { get => _workOrderPctR; private set => Set(ref _workOrderPctR, value); }
+
+    private string _workOrderRcNoL = "—";
+    public string WorkOrderRcNoL { get => _workOrderRcNoL; private set => Set(ref _workOrderRcNoL, value); }
+
+    private string _workOrderQtyL = "0/0";
+    public string WorkOrderQtyL { get => _workOrderQtyL; private set => Set(ref _workOrderQtyL, value); }
+
+    private int _workOrderPctL;
+    public int WorkOrderPctL { get => _workOrderPctL; private set => Set(ref _workOrderPctL, value); }
+
+    // ---------- 主题切换（双主题 G2/G1） ----------
+
+    private string _toggleThemeText = "深色";
+    /// <summary>主题切换按钮文案：显示【目标】主题名——浅色下显示"深色"（点了切去 G1），反之"浅色"。</summary>
+    public string ToggleThemeText
+    {
+        get => _toggleThemeText;
+        private set => Set(ref _toggleThemeText, value);
+    }
+
     private PointTableConfig? _config;
     private IPointTableBus? _bus;
     private SlotCuringMachine? _machine;   // 仓位状态机（与 VM 同生命周期，总线可换不丢流程）
@@ -262,6 +395,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public RelayCommand OpenWorkOrderCommand { get; }
     public RelayCommand OpenOperatorsCommand { get; }
     public RelayCommand OpenIoTestCommand { get; }
+    public RelayCommand ShowLogCommand { get; }
+    public RelayCommand ToggleThemeCommand { get; }
 
     public MainViewModel(IDialogService dialogs)
     {
@@ -275,6 +410,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         OpenWorkOrderCommand = new RelayCommand(OpenWorkOrder);
         OpenOperatorsCommand = new RelayCommand(OpenOperators);
         OpenIoTestCommand = new RelayCommand(OpenIoTest);
+        ShowLogCommand = new RelayCommand(ShowLog);
+        ToggleThemeCommand = new RelayCommand(ToggleTheme);
+        // 主题按钮文案对齐 App.OnStartup 已应用的当前主题（测试态无 App：ThemeManager
+        // 缺省 Light，同样落"深色"文案，现场首点即切 G1，行为一致）。
+        ToggleThemeText = ThemeManager.Current == "Dark" ? "浅色" : "深色";
         _refreshTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = TimeSpan.FromMilliseconds(500),
@@ -462,6 +602,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             var status = _machine?.GetStatus(slot.Rack, slot.Level);
             slot.Refresh(snapshot ?? PointTableSnapshot.Empty, snapshot != null, status);
         }
+        // 统计条 + 工单带同拍刷（挂在同一 500ms tick 内，不另起定时器；UI 线程）。
+        RefreshStats();
+        RefreshWorkOrder();
     }
 
     private void OpenPointTable()
@@ -534,7 +677,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             return;
         var saved = _dialogs.ShowWorkOrder(_currentLevel);
         if (saved)
+        {
+            // 工单窗刚落盘——主动重读一次（下部工单带立见新号，不等 500ms 下一拍；
+            // LastWriteTime 戳变了 RefreshWorkOrder 自然重读，这里显式调只是不等待）。
+            RefreshWorkOrder();
             _dialogs.ShowMessage("工单信息已保存。", "保存成功");
+        }
     }
 
     /// <summary>权限管理窗：L4 专属。</summary>
@@ -592,5 +740,130 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             _bus?.Dispose();
             _bus = null;
         }
+    }
+
+    // ---------- 顶部统计条 + 下部工单带（方案 D 信息带，2026-10-29） ----------
+
+    /// <summary>
+    /// 卡片集合 → 统计条：五态计数 + ⚡剩余最短。纯函数收在 Core 的
+    /// SlotStatistics（可测，主 VM 只做搬运）；500ms 同拍，UI 线程。
+    /// </summary>
+    private void RefreshStats()
+    {
+        IEnumerable<SlotStatItem> items = Slots.Select(s => new SlotStatItem(s.Kind, s.RemainMin, s.Code));
+        var (idle, curing, gate, done, alarm) = SlotStatistics.Count(items);
+        IdleCount = idle;
+        CuringCount = curing;
+        GateCount = gate;
+        DoneCount = done;
+        AlarmCount = alarm;
+        NextCloseText = SlotStatistics.NextClose(items, prefix: "⚡");
+    }
+
+    /// <summary>
+    /// 工单簿 → 底部信息带六件事（R/L 各：单号文本—空单号显示"—" / "已产/预设"文本 /
+    /// 产出百分比 0~100——预设为 0 时 0%）。纯映射静态函数（测试锁口径不用起 VM）。
+    /// </summary>
+    public static (string RcNoR, string QtyR, int PctR, string RcNoL, string QtyL, int PctL)
+        SummarizeWorkOrder(WorkOrderBook book)
+    {
+        static (string, string, int) One(WorkOrderSlot s) => (
+            string.IsNullOrWhiteSpace(s.RcNo) ? "—" : s.RcNo,
+            $"{Math.Max(0, s.ProducedQty)}/{Math.Max(0, s.PresetQty)}",
+            s.PresetQty > 0
+                ? Math.Clamp(100 * Math.Min(s.ProducedQty, s.PresetQty) / s.PresetQty, 0, 100)
+                : 0);
+        var r = One(book.Right);
+        var l = One(book.Left);
+        return (r.Item1, r.Item2, r.Item3, l.Item1, l.Item2, l.Item3);
+    }
+
+    // 工单带磁盘读节流：LastWriteTime 戳 + 首刷标记——同拍戳没变直接跳过读文件。
+    private DateTime _workOrderStampUtc = DateTime.MinValue;
+    private bool _workOrderLoaded;
+
+    /// <summary>
+    /// 刷下部工单带：文件"最后写时间戳"变了才 Load（避免 500ms 反复碰盘）；
+    /// 缺文件按空工单兜底（WorkOrderStore 自愈语义）。工单窗保存后也会被
+    /// OpenWorkOrder 主动调一次（不靠 500ms 兜底，操作员保存即见）。
+    /// </summary>
+    private void RefreshWorkOrder()
+    {
+        string path = WorkOrderStore.DefaultPath;
+        try
+        {
+            var stamp = File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
+            if (_workOrderLoaded && stamp == _workOrderStampUtc)
+                return;
+            _workOrderStampUtc = stamp;
+        }
+        catch
+        {
+            // 取时间戳失败沿用上次状态（下一拍再试；文件 IO 出错不拖 UI 拍）
+            return;
+        }
+        _workOrderLoaded = true;
+
+        var book = WorkOrderStore.Load() ?? WorkOrderStore.BuildDefault();
+        var (rcR, qtyR, pctR, rcL, qtyL, pctL) = SummarizeWorkOrder(book);
+        WorkOrderRcNoR = rcR;
+        WorkOrderQtyR = qtyR;
+        WorkOrderPctR = pctR;
+        WorkOrderRcNoL = rcL;
+        WorkOrderQtyL = qtyL;
+        WorkOrderPctL = pctL;
+    }
+
+    // ---------- 日志悬浮窗（顶栏【日志】；非模态单例由 DialogService 防重复） ----------
+
+    /// <summary>日志/控制台悬浮窗：L1+（只读不碰配置，操作员即可开）。</summary>
+    private void ShowLog()
+    {
+        if (!Gate(OperatorLevel.Level1, "日志悬浮窗"))
+            return;
+        _dialogs.ShowLog(BuildSystemSnapshot());
+    }
+
+    /// <summary>
+    /// 日志悬浮窗右侧"系统状态卡"快照（打开一刻定格）——顺手把当日日志目录
+    /// 一并带上，现场找日志文件直接看路径。
+    /// </summary>
+    public LogSystemSnapshot BuildSystemSnapshot()
+    {
+        var rows = new List<SystemStatusRow>
+        {
+            new("连接状态", IsConnected ? "已连接" : "未连接"),
+            new("总线", string.IsNullOrWhiteSpace(ConnectionText) ? "—" : ConnectionText),
+            new("激活策略", _policyBook?.ResolveActive()?.Name ?? "无"),
+            new("过账", PostingText),
+            new("登录", OperatorText),
+            new("仓位", $"{Slots.Count} 个（空闲{IdleCount} 计时{CuringCount} 待门控{GateCount} " +
+                        $"放行{DoneCount} 红灯{AlarmCount}）"),
+            new("日志目录", AppPaths.TodayLogDir()),
+        };
+        return new LogSystemSnapshot(DateTime.Now.ToString("HH:mm:ss"), rows);
+    }
+
+    // ---------- 双主题切换（Light=G2 浅色 / Dark=G1 深空） ----------
+
+    /// <summary>
+    /// 主题切换：目标名 → ThemeManager 换字典（UI 线程，DynamicResource 全窗生效）
+    /// → 写回 ini（现场记住，下次启动同主题；写盘失败只丢记忆不回切）→
+    /// 按钮文案翻新目标。切完记一笔操作日志（含主题名，方便现场回溯）。
+    /// </summary>
+    private void ToggleTheme()
+    {
+        var target = ThemeManager.ToggleTarget;
+        ThemeManager.ApplyTheme(target);
+        try
+        {
+            IniFile.Write(AppPaths.ConfigIni, "setting", "Theme", target);
+        }
+        catch
+        {
+            // 写盘失败不回切——界面已换，只是没记住（下次启动回旧主题）
+        }
+        ToggleThemeText = target == "Dark" ? "浅色" : "深色";
+        LocalLogService.Write($"主题切换：{(target == "Dark" ? "深色（G1）" : "浅色（G2）")}");
     }
 }

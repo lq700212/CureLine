@@ -15,6 +15,15 @@ using CureLine.Core.Security;
 
 namespace CureStation.ViewModels;
 
+/// <summary>日志悬浮窗"系统状态卡"一行（标签 + 值）。</summary>
+public sealed record SystemStatusRow(string Label, string Value);
+
+/// <summary>
+/// 日志悬浮窗的系统状态卡快照（打开一刻定格，不随主窗 500ms 续推——
+/// 状态卡看的是"开窗时系统在什么状态"，日志流才是实时件）。
+/// </summary>
+public sealed record LogSystemSnapshot(string GeneratedAtText, IReadOnlyList<SystemStatusRow> Rows);
+
 public interface IDialogService
 {
     /// <summary>提示框（确定）。前阻塞，纯通知。</summary>
@@ -52,6 +61,10 @@ public interface IDialogService
     /// config=点表配置（通道清单来源——通用化核心：点表怎么配测试窗就怎么显示）。
     /// </summary>
     void ShowIoTest(CureLine.Core.Comms.IPointTableBus bus, CureLine.Core.Comms.PointTableConfig config);
+
+    ///
+    /// <summary>打开日志/控制台悬浮窗（非模态、单例——已开则只刷新快照并置前）。</summary>
+    void ShowLog(LogSystemSnapshot snapshot);
 
     /// <summary>程序化关闭主进程（退出）。</summary>
     void Shutdown();
@@ -154,6 +167,24 @@ public sealed class DialogService : IDialogService
             DataContext = new MesPostConfigViewModel(new DialogService()),
         };
         return win.ShowDialog() == true;
+    }
+
+    // 日志悬浮窗单例（static：各窗 new DialogService() 装配，单例要跨实例共享）。
+    // 关窗（含 Owner 主窗退出联动关闭）即清引用；下次 ShowLog 重建重订日志流。
+    private static LogWindow? _logWindow;
+
+    public void ShowLog(LogSystemSnapshot snapshot)
+    {
+        // 非模态单例：已开只换系统状态卡快照 + 置前激活（防连点堆窗）；
+        // 初开时右下角定位（LogWindow.Present 内部处理）。
+        if (_logWindow == null)
+        {
+            _logWindow = new LogWindow();
+            _logWindow.Closed += (_, _) => _logWindow = null;
+        }
+        _logWindow.Owner = Application.Current?.MainWindow;
+        _logWindow.Present(snapshot);
+        _logWindow.Activate();
     }
 
     public void Shutdown() => Application.Current?.Shutdown();

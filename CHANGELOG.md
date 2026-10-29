@@ -2,6 +2,48 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.25（2026-10-29，程序①主窗方案 D 重画 + 双主题 + 日志悬浮窗）
+
+背景：程序①主窗沿用骨架期灰色网格，信息密度与观感落后于拍摄设备实景。
+本轮按 docs/UI设计_固化架显示区优化_20261029.md 拍板的**方案 D（紧凑网格
++ 下部信息带）**全量重画主窗，并落地**双主题切换**与**日志/控制台悬浮窗**。
+
+- **方案 D 五段布局**（`MainWindow.xaml` 全量重画）：品牌条（品牌蓝渐变）/
+  运行条（连接状态 + 过账 + 操作按钮）/ 统计条（五态 pill + ⚡剩余最短）/
+  固化架分组（双架纵向堆两组，单架视觉不变）/ 工单带（R/L 双工位纪要，
+  LastWriteTime 变了才重读工单簿，500ms 同拍不反复碰盘）。卡片换新模板：
+  顶部 5px 状态渐变头带 + 状态浸染底/描边 + 六态 Kind（Idle/Gate/Curing/
+  Done/Alarm/NotConfigured，`RackSlotViewModel` 新增，老 CardState 保留），
+  计时中显示剩余分钟大数字 + 4px 进度条（`SlotProgressBar` 模板，
+  PART_Track/PART_Indicator）；脉冲动画仅挂 Alarm 卡。行优先集合契约不动。
+- **双主题**：`Themes/ThemeManager.cs`（ParseTheme 纯函数 + ApplyTheme 换
+  MergedDictionaries[0]）+ `Themes/Light.xaml`（G2 浅色渐变浸染，缺省）/
+  `Themes/Dark.xaml`（G1 深空玻璃舱）——两字典语义键同名异值（约 60 个
+  `Brush.*`），主窗/日志悬浮窗全键化 DynamicResource 取色，窗体 XAML 零
+  主题分支；`[setting] Theme` 落盘（缺省 Light、非法回 Light，主窗右上
+  【深色/浅色】按钮切换即写回，App.OnStartup 按 ini 应用）。**其余功能弹窗
+  维持浅色**（`Brush.Fresh.*` 固定键收 App.xaml 主字典，切主题不影响），
+  弹窗随主题属第 2 期。
+- **日志/控制台悬浮窗**：主窗日志带移出 → 顶栏【日志】按钮（L1+ 门禁）
+  弹出非模态悬浮窗 `LogWindow`（右下角定位、Owner=主窗、`DialogService`
+  静态单例防重复开）：左栏操作日志流（`LocalLogService.Written` → 无锁入队
+  → 100ms 批量搬运，最新在上封顶 200 条），右栏系统状态卡（打开一刻定格
+  快照，含当日日志目录路径）。锁内事件"轻量投递"红线以 ConcurrentQueue
+  落地；关窗 Detach 退订防悬挂。
+- **统计纯函数下沉 Core**（可测）：`SlotStatistics.Count`（五态计数）/
+  `NextClose`（⚡剩余最短库位）；主窗工单带文案映射 `SummarizeWorkOrder`
+  纯静态函数。测试 +23 例（338 全绿，基线 315 只增不减）。
+- **crash 修复（关键）**：`ProgressBar.Value` 默认双向绑定，绑到 VM 只读
+  属性（`ProgressPct`/`WorkOrderPctR`/`WorkOrderPctL` private set）在
+  500ms 刷新首次给值时抛异常——现场表现为启动后报"无法对只读属性
+  ProgressPct 进行 TwoWay 绑定"错误弹窗（无人点框时 fail-fast 0xC0000405，
+  事件日志伴生 TextShaping.dll 栈溢出假象）。三处绑定补 `Mode=OneWay`。
+  教训沉淀：**给只读 VM 属性绑 RangeBase 类控件（ProgressBar/Slider/
+  ComboBox.SelectedItem）必须显式 Mode=OneWay**。
+- **配置样例同步**：`config.sample.ini` 新增 `[setting] Theme=Light`（铁律 8）。
+- **验证**：`dotnet build` 0 警告 0 错误；`dotnet test` 338/338 全绿；
+  GUI 冒烟双主题截图目检（Light/Dark 各 30 卡与双架 60 卡两版）。
+
 ## V0.0.24（2026-10-29，项目更名——PlcMesBridge → CureLine）
 
 背景：仓库/解决方案/共享库的历史名 PlcMesBridge 源自 VB 老项目 PLC_ReadData 的
