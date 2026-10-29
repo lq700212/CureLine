@@ -2,7 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/CureStation/CureStation.csproj" />
     <Project Path="src/PlcMesBridge.Core/PlcMesBridge.Core.csproj" />
-    <Project Path="src/PlcMesBridge/PlcMesBridge.csproj" />
+    <Project Path="src/CimGateway/CimGateway.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj" />

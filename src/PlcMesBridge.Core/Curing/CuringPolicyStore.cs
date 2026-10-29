@@ -73,16 +73,51 @@ public static class CuringPolicyStore
     }
 
     /// <summary>
-    /// 缺省策略库：一个"标准固化"策略（全局 120 分钟、门控关）并激活。
-    /// 120 分钟是骨架期占位值——现场工艺时长确认后在策略窗改（客户口径
-    /// "固化几小时"待确认，见报价文档待确认项①）。
+    /// 缺省策略库：预置出厂策略（IsPreset=true，可看可改可"套用为自定义"，
+    /// 不能激活/删除）+ 一个"自定义"策略并激活它（激活只认自定义——预置是
+    /// 起点模板，现场按预置改参数套用即可，不用从 0 配）。
+    /// 时长是骨架期占位值——现场工艺时长确认后套用改参（客户口径"固化几小时"
+    /// 待确认，见报价文档待确认项①）。每层/每仓位覆盖在"分层固化/特殊仓位"
+    /// 两个预置里给示例值，顺带演示三级覆盖怎么用。
     /// </summary>
     public static CuringPolicyBook BuildDefaultBook() => new()
     {
         Policies =
         {
-            new CuringPolicy { Name = "标准固化", GlobalMinutes = 120 },
+            new CuringPolicy
+            {
+                Name = "自定义", GlobalMinutes = 120,
+                IsPreset = false,
+            },
+            new CuringPolicy
+            {
+                Name = "标准固化", GlobalMinutes = 120,
+                IsPreset = true,
+            },
+            new CuringPolicy
+            {
+                Name = "快速固化", GlobalMinutes = 60,
+                IsPreset = true,
+            },
+            new CuringPolicy
+            {
+                Name = "深度固化", GlobalMinutes = 240,
+                GrillGate = true,
+                IsPreset = true,
+            },
+            new CuringPolicy
+            {
+                Name = "分层固化", GlobalMinutes = 120,
+                LevelMinutes = { [1] = 90, [2] = 120, [3] = 150 },
+                IsPreset = true,
+            },
+            new CuringPolicy
+            {
+                Name = "特殊仓位示例", GlobalMinutes = 120,
+                SlotMinutes = { ["3-2"] = 45, ["7-1"] = 180 },
+                IsPreset = true,
+            },
         },
-        ActiveName = "标准固化",
+        ActiveName = "自定义",
     };
 }

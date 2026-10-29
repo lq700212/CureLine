@@ -62,6 +62,15 @@ public static class OperatorLevelInfo
         _ => "LEVEL.4 管理员",
     };
 
+    /// <summary>级别短名（不带 LEVEL 前缀，顶栏"管理员：admin"这类拼接用）。</summary>
+    public static string ShortName(OperatorLevel level) => level switch
+    {
+        OperatorLevel.Level1 => "操作员",
+        OperatorLevel.Level2 => "班长",
+        OperatorLevel.Level3 => "工程师",
+        _ => "管理员",
+    };
+
     /// <summary>门禁：操作者级别是否够得上 required（L4 ≥ L3 ≥ L2 ≥ L1）。</summary>
     public static bool AtLeast(OperatorLevel? operatorLevel, OperatorLevel required) =>
         operatorLevel.HasValue && operatorLevel.Value >= required;

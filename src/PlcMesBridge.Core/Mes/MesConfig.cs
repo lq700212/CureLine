@@ -28,6 +28,13 @@ public static class MesConfig
     public static int DataLength { get; set; } = 799;
 
     /// <summary>
+    /// API0030/0031 返回 DATA 三段拆写的偏移（base+off1=第2段、base+off2=第3段；
+    /// 老项目硬编码 30/60，V0.0.22 配置化——W68 终版偏移不同改 ini 即可零代码适配）。
+    /// AppConfig.Load 保证恒有 ≥2 个合法值（非法配置整体回缺省 30/60）。
+    /// </summary>
+    public static int[] DataSegmentOffsets { get; set; } = { 30, 60 };
+
+    /// <summary>
     /// 单个接口的 PLC 地址束（复刻自老项目 Addressinfo.vb 的 5 字段）。
     /// plcData=PLC 准备好的 JSON；status/msg/data=MES 返回回写；complete=完成标志。
     /// </summary>

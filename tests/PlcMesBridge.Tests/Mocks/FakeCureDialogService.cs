@@ -66,5 +66,8 @@ public class FakeCureDialogService : CureStation.ViewModels.IDialogService
         return MesPostConfigResult;
     }
 
+    public void ShowIoTest(PlcMesBridge.Core.Comms.IPointTableBus bus, PlcMesBridge.Core.Comms.PointTableConfig config)
+        => Calls.Add("ShowIoTest");
+
     public void Shutdown() => Calls.Add("Shutdown");
 }

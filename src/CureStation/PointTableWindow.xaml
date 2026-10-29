@@ -55,14 +55,14 @@
                                Foreground="#888" Margin="0,2,0,6" TextWrapping="Wrap"/>
                     <UniformGrid Columns="2">
                         <TextBlock Text="IP：" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding TemplateIp, FallbackValue=192.168.1.20}"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding TemplateIp, FallbackValue=192.168.1.20}"/>
                         <TextBlock Text="起始架号：" VerticalAlignment="Center"
                                    ToolTip="全局架号从几号起编（单架=1；双架第二台耦合器填 11，生成架 11~20）"/>
-                        <TextBox Text="{Binding TemplateRackStart, FallbackValue=1}"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding TemplateRackStart, FallbackValue=1}"/>
                         <TextBlock Text="架数：" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding TemplateRacks, FallbackValue=10}"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding TemplateRacks, FallbackValue=10}"/>
                         <TextBlock Text="每架层数：" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding TemplateLevels, FallbackValue=3}"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding TemplateLevels, FallbackValue=3}"/>
                     </UniformGrid>
                     <TextBlock Text="双架：第二台设备起始架号填 11（架号全局唯一，撞号保存时会被拦）。"
                                Foreground="#888" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
@@ -73,9 +73,9 @@
                 <!-- 设备级编辑（选中设备回显） -->
                 <UniformGrid Columns="2" Margin="0,0,0,8">
                     <TextBlock Text="设备名：" VerticalAlignment="Center"/>
-                    <TextBox Text="{Binding DeviceName, FallbackValue=IO耦合器1}"/>
+                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding DeviceName, FallbackValue=IO耦合器1}"/>
                     <TextBlock Text="IP：" VerticalAlignment="Center"/>
-                    <TextBox Text="{Binding DeviceIp, FallbackValue=192.168.1.20}"/>
+                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding DeviceIp, FallbackValue=192.168.1.20}"/>
                 </UniformGrid>
                 <!-- 设备高级参数（V0.0.20 全 UI 化，此前只能手编 pointtable.json）：
                      地址段/端口/轮询/取反——真机联调"点点鼠标"校准，缺省即缺省模板口径 -->
@@ -84,28 +84,28 @@
                     <StackPanel Margin="0,4,0,0">
                         <UniformGrid Columns="2">
                             <TextBlock Text="端口：" VerticalAlignment="Center" ToolTip="Modbus TCP 端口，缺省 502"/>
-                            <TextBox Text="{Binding EditDevicePort, FallbackValue=502}"/>
+                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDevicePort, FallbackValue=502}"/>
                             <TextBlock Text="从站号(UnitId)：" VerticalAlignment="Center" Margin="0,6,0,0"
                                        ToolTip="Modbus 从站地址，缺省 1"/>
-                            <TextBox Text="{Binding EditDeviceUnitId, FallbackValue=1}" Margin="0,6,0,0"/>
+                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDeviceUnitId, FallbackValue=1}" Margin="0,6,0,0"/>
                             <TextBlock Text="DI 起始地址：" VerticalAlignment="Center" Margin="0,6,0,0"
                                        ToolTip="输入(DI)寄存器首地址，支持 0x 十六进制或十进制；缺省 0x1000=4096"/>
-                            <TextBox Text="{Binding EditDeviceDiStart, FallbackValue=0x1000}" Margin="0,6,0,0"/>
+                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDeviceDiStart, FallbackValue=0x1000}" Margin="0,6,0,0"/>
                             <TextBlock Text="DO 起始地址：" VerticalAlignment="Center" Margin="0,6,0,0"
                                        ToolTip="输出(DO)保持寄存器首地址；缺省 0x1010=4112"/>
-                            <TextBox Text="{Binding EditDeviceDoStart, FallbackValue=0x1010}" Margin="0,6,0,0"/>
+                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDeviceDoStart, FallbackValue=0x1010}" Margin="0,6,0,0"/>
                             <TextBlock Text="块跨度(寄存器)：" VerticalAlignment="Center" Margin="0,6,0,0"
                                        ToolTip="相邻两块（架）的地址间隔；缺省 0x20=32。地址=起始+(块号-1)×跨度"/>
-                            <TextBox Text="{Binding EditDeviceStride, FallbackValue=0x20}" Margin="0,6,0,0"/>
+                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDeviceStride, FallbackValue=0x20}" Margin="0,6,0,0"/>
                             <TextBlock Text="每块点数：" VerticalAlignment="Center" Margin="0,6,0,0"
                                        ToolTip="每块占用寄存器位数（1~16），缺省 16"/>
-                            <TextBox Text="{Binding EditDevicePointsPerBlock, FallbackValue=16}" Margin="0,6,0,0"/>
+                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDevicePointsPerBlock, FallbackValue=16}" Margin="0,6,0,0"/>
                             <TextBlock Text="超时(ms)：" VerticalAlignment="Center" Margin="0,6,0,0"
                                        ToolTip="TCP 连接/读写超时，缺省 3000"/>
-                            <TextBox Text="{Binding EditDeviceTimeoutMs, FallbackValue=3000}" Margin="0,6,0,0"/>
+                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDeviceTimeoutMs, FallbackValue=3000}" Margin="0,6,0,0"/>
                             <TextBlock Text="轮询周期(ms)：" VerticalAlignment="Center" Margin="0,6,0,0"
                                        ToolTip="IO 扫描周期，最小 50，缺省 250"/>
-                            <TextBox Text="{Binding EditDevicePollIntervalMs, FallbackValue=250}" Margin="0,6,0,0"/>
+                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDevicePollIntervalMs, FallbackValue=250}" Margin="0,6,0,0"/>
                         </UniformGrid>
                         <CheckBox IsChecked="{Binding EditDeviceInvertInputs, FallbackValue=False}"
                                   Content="输入取反（现场 DI 高电平=灭时勾）" Margin="0,8,0,0"/>
@@ -148,22 +148,22 @@
                     <TextBlock Style="{StaticResource SectionTitle}" Text="绑定编辑（选中行）"/>
                     <UniformGrid Columns="2" Margin="0,8,0,0">
                         <TextBlock Text="块号：" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding EditBlock, FallbackValue=1}"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditBlock, FallbackValue=1}"/>
                         <TextBlock Text="位号：" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding EditBit, FallbackValue=0}"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditBit, FallbackValue=0}"/>
                         <TextBlock Text="方向：" VerticalAlignment="Center"/>
                         <CheckBox IsChecked="{Binding EditIsInput, FallbackValue=True}"
                                   Content="输入点" VerticalAlignment="Center"/>
                         <TextBlock Text="角色：" VerticalAlignment="Center"/>
-                        <ComboBox ItemsSource="{Binding RoleOptions, FallbackValue={x:Null}}"
+                        <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding RoleOptions, FallbackValue={x:Null}}"
                                   SelectedItem="{Binding EditRole}"/>
                         <TextBlock Text="架号：" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding EditRack, FallbackValue=0}"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditRack, FallbackValue=0}"/>
                         <TextBlock Text="层号：" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding EditLevel, FallbackValue=0}"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditLevel, FallbackValue=0}"/>
                     </UniformGrid>
                     <TextBlock Text="功能名（中文，对照 IO 表）" Margin="0,8,0,2"/>
-                    <TextBox Text="{Binding EditFunction}"
+                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditFunction}"
                              Height="44" AcceptsReturn="True" TextWrapping="Wrap"/>
                     <Button Style="{StaticResource FreshButton}" Margin="0,8,0,0"
                             Content="应用修改到选中行" Command="{Binding ApplyBindingCommand}"/>

@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <!--程序②身份名：exe/程序集/根命名空间 = CimGateway（CIM 整线过账网关）；
+        共享库 PlcMesBridge.Core 的 namespace 不随动（基建下沉既定约定）。-->
+    <RootNamespace>CimGateway</RootNamespace>
+    <AssemblyName>CimGateway</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
+    <!--程序图标（exe 文件 / 任务栏 / 桌面快捷方式图标来源）：取 Assets/app.ico 内嵌 Win32 图标。-->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!--窗体左上角图标资源：8 个 Window 的 Icon="Assets/app.ico" 指向此资源；
+      app.png 为 800 高清源，留作关于页/大尺寸展示备用。-->
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+    <Resource Include="Assets\app.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PlcMesBridge.Core\PlcMesBridge.Core.csproj" />
+  </ItemGroup>
+
+</Project>

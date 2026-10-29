@@ -24,6 +24,8 @@ public sealed class TestScope : IDisposable
     private readonly string[] _triggers = new string[6];
     private readonly string[,] _addrSets = new string[6, 5];
     private readonly int _dataLength;
+    private readonly int[] _segOffsets;
+    private readonly int _scanIntervalMs;
     private readonly Dictionary<string, string> _params = new();
     private readonly string _lang;
     private readonly string _baseDir;
@@ -52,6 +54,8 @@ public sealed class TestScope : IDisposable
             _addrSets[i, 4] = s.MesComplete;
         }
         _dataLength = MesConfig.DataLength;
+        _segOffsets = (int[])MesConfig.DataSegmentOffsets.Clone(); // V0.0.22 分段偏移静态
+        _scanIntervalMs = AppConfig.ScanIntervalMs;                 // V0.0.22 扫描周期静态
         foreach (var (field, _) in MesParamStore.AllFields)
             _params[field] = MesParamStore.Get(field);
         _lang = LanguageService.CurrentLanguage;
@@ -94,6 +98,8 @@ public sealed class TestScope : IDisposable
             s.MesComplete = _addrSets[i, 4];
         }
         MesConfig.DataLength = _dataLength;
+        MesConfig.DataSegmentOffsets = (int[])_segOffsets.Clone();
+        AppConfig.ScanIntervalMs = _scanIntervalMs;
         foreach (var kv in _params)
             MesParamStore.Set(kv.Key, kv.Value);
         LanguageService.CurrentLanguage = _lang;

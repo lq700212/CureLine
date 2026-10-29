@@ -6,6 +6,7 @@
 // =========================================================================
 
 using PlcMesBridge.Core.Infrastructure;
+using CimGateway.ViewModels;
 using PlcMesBridge.ViewModels;
 
 namespace PlcMesBridge.Tests.Mocks;

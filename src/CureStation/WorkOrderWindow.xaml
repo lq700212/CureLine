@@ -38,11 +38,11 @@
                     <TextBlock Style="{StaticResource SectionTitle}" Text="工单信息（R）"/>
                     <UniformGrid Columns="2" Margin="0,4,0,0">
                         <TextBlock Text="途程单号(RC_NO)：" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding EditRtRcNo}" IsEnabled="{Binding CanEditRoute}"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditRtRcNo}" IsEnabled="{Binding CanEditRoute}"/>
                         <TextBlock Text="预设数量：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                        <TextBox Text="{Binding EditRtPreset, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditRtPreset, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"/>
                         <TextBlock Text="已生产数量：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                        <TextBox Text="{Binding EditRtProduced, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditRtProduced, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"
                                  Background="#F5F5F5"/>
                     </UniformGrid>
                     <Button Style="{StaticResource FreshButton}" Content="R 计数清零"
@@ -52,11 +52,11 @@
                     <TextBlock Style="{StaticResource SectionTitle}" Text="工单信息（L）" Margin="0,12,0,0"/>
                     <UniformGrid Columns="2" Margin="0,4,0,0">
                         <TextBlock Text="途程单号(RC_NO)：" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding EditLfRcNo}" IsEnabled="{Binding CanEditRoute}"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditLfRcNo}" IsEnabled="{Binding CanEditRoute}"/>
                         <TextBlock Text="预设数量：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                        <TextBox Text="{Binding EditLfPreset, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditLfPreset, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"/>
                         <TextBlock Text="已生产数量：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                        <TextBox Text="{Binding EditLfProduced, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditLfProduced, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"
                                  Background="#F5F5F5"/>
                     </UniformGrid>
                     <Button Style="{StaticResource FreshButton}" Content="L 计数清零"
@@ -66,13 +66,13 @@
                     <TextBlock Style="{StaticResource SectionTitle}" Text="基础信息" Margin="0,12,0,0"/>
                     <UniformGrid Columns="2" Margin="0,4,0,0">
                         <TextBlock Text="员工工号(EMP_NO)：" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding EditEmpNo}"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditEmpNo}"/>
                     </UniformGrid>
 
                     <TextBlock Style="{StaticResource SectionTitle}" Text="批次物料上报" Margin="0,12,0,0"/>
                     <UniformGrid Columns="2" Margin="0,4,0,0">
                         <TextBlock Text="物料条码(BC_NO)：" VerticalAlignment="Center"/>
-                        <TextBox Text="{Binding EditBcNo}"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditBcNo}"/>
                     </UniformGrid>
                     <CheckBox IsChecked="{Binding EditUploadEnabled, FallbackValue=False}"
                               IsEnabled="{Binding CanEditProcess}"
@@ -96,9 +96,9 @@
             <StackPanel>
                 <TextBlock Style="{StaticResource SectionTitle}" Text="制程代码输入"/>
                 <TextBlock Text="制程代码-1(PT_NO)：" Margin="0,8,0,2"/>
-                <TextBox Text="{Binding EditPtNo1}" IsEnabled="{Binding CanEditProcess}"/>
+                <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditPtNo1}" IsEnabled="{Binding CanEditProcess}"/>
                 <TextBlock Text="制程代码-2(PT_NO)：" Margin="0,12,0,2"/>
-                <TextBox Text="{Binding EditPtNo2}" IsEnabled="{Binding CanEditProcess}"/>
+                <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditPtNo2}" IsEnabled="{Binding CanEditProcess}"/>
                 <TextBlock Text="制程代码需 LEVEL.3（工程师）及以上可改。"
                            Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"/>
             </StackPanel>

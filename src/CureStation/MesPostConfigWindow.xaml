@@ -32,14 +32,14 @@
                                   Content="启用单线过账（关闭=只程控不过账）" Margin="0,6,0,0"/>
                         <UniformGrid Columns="2" Margin="0,10,0,0">
                             <TextBlock Text="过账工位（自动进/出站取哪侧工单）：" VerticalAlignment="Center"/>
-                            <ComboBox ItemsSource="{Binding SideOptions, FallbackValue={x:Null}}"
+                            <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding SideOptions, FallbackValue={x:Null}}"
                                       SelectedItem="{Binding EditSide}" Width="80" HorizontalAlignment="Left"/>
                             <TextBlock Text="固化时间单位（API0027）：" VerticalAlignment="Center" Margin="0,8,0,0"/>
-                            <ComboBox ItemsSource="{Binding TimeUnitOptions, FallbackValue={x:Null}}"
+                            <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding TimeUnitOptions, FallbackValue={x:Null}}"
                                       SelectedIndex="{Binding EditTimeUnitIndex, FallbackValue=0}"
                                       Width="220" HorizontalAlignment="Left" Margin="0,8,0,0"/>
                             <TextBlock Text="进站上传时机（API0030 I）：" VerticalAlignment="Center" Margin="0,8,0,0"/>
-                            <ComboBox ItemsSource="{Binding InAtOptions, FallbackValue={x:Null}}"
+                            <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding InAtOptions, FallbackValue={x:Null}}"
                                       SelectedIndex="{Binding EditInAtIndex, FallbackValue=0}"
                                       Width="220" HorizontalAlignment="Left" Margin="0,8,0,0"/>
                         </UniformGrid>
@@ -49,27 +49,27 @@
                         <TextBlock Style="{StaticResource SectionTitle}" Text="双架工位映射（单架不用管）" Margin="0,14,0,0"/>
                         <TextBlock Text="架号段:工位，分号分隔多段（例 11-20:L = 第二台固化架报 L 工位）；留空=全部用上面的过账工位。"
                                    Foreground="#888" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,4"/>
-                        <TextBox Text="{Binding EditRackSides}"
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditRackSides}"
                                  ToolTip="格式：架号段:工位，分号分隔。架号段支持 '11-20' 闭区间或单号 '11'。例：11-20:L"/>
 
                         <TextBlock Style="{StaticResource SectionTitle}" Text="静态参数（留空=用 MES 参数记忆）" Margin="0,14,0,0"/>
                         <UniformGrid Columns="2" Margin="0,4,0,0">
                             <TextBlock Text="机台编号(MAC_NO)：" VerticalAlignment="Center"/>
-                            <TextBox Text="{Binding EditMacNo}"/>
+                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditMacNo}"/>
                             <TextBlock Text="机台编号-L工位(MAC_NO_L)：" VerticalAlignment="Center" Margin="0,6,0,0"
                                        ToolTip="可选：L 工位专用机台号（双架映射到 L 时用）；留空=同 MAC_NO"/>
-                            <TextBox Text="{Binding EditMacNoL}" Margin="0,6,0,0"/>
+                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditMacNoL}" Margin="0,6,0,0"/>
                             <TextBlock Text="机台位置号(MAC_LOC_NO)：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                            <TextBox Text="{Binding EditMacLocNo}" Margin="0,6,0,0"/>
+                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditMacLocNo}" Margin="0,6,0,0"/>
                             <TextBlock Text="机台位置号-L工位(MAC_LOC_NO_L)：" VerticalAlignment="Center" Margin="0,6,0,0"
                                        ToolTip="可选：L 工位专用机台位置号；留空=同 MAC_LOC_NO"/>
-                            <TextBox Text="{Binding EditMacLocNoL}" Margin="0,6,0,0"/>
+                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditMacLocNoL}" Margin="0,6,0,0"/>
                             <TextBlock Text="厂别(PLANT)：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                            <TextBox Text="{Binding EditPlant}" Margin="0,6,0,0"/>
+                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditPlant}" Margin="0,6,0,0"/>
                             <TextBlock Text="参数编码(PRA_CODE)：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                            <TextBox Text="{Binding EditPraCode}" Margin="0,6,0,0"/>
+                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditPraCode}" Margin="0,6,0,0"/>
                             <TextBlock Text="检测结果(CHECK_RESULT)：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                            <TextBox Text="{Binding EditCheckResult}" Margin="0,6,0,0"/>
+                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditCheckResult}" Margin="0,6,0,0"/>
                         </UniformGrid>
                     </StackPanel>
                 </ScrollViewer>
@@ -81,11 +81,11 @@
                     <StackPanel>
                         <TextBlock Style="{StaticResource SectionTitle}" Text="接口 URL（W68 终版到位后在此改）"/>
                         <TextBlock Text="API0027（固化时间上传）：" Margin="0,8,0,2"/>
-                        <TextBox Text="{Binding EditUrl27}"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditUrl27}"/>
                         <TextBlock Text="API0030（进出站）：" Margin="0,10,0,2"/>
-                        <TextBox Text="{Binding EditUrl30}"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditUrl30}"/>
                         <TextBlock Text="API0032（物料上传）：" Margin="0,10,0,2"/>
-                        <TextBox Text="{Binding EditUrl32}"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditUrl32}"/>
 
                         <TextBlock Style="{StaticResource SectionTitle}" Text="口径说明" Margin="0,16,0,0"/>
                         <TextBlock TextWrapping="Wrap" Foreground="#555"

@@ -5,7 +5,7 @@
 // 为什么独立成类：WPF 层只做"事件→控件"搬运（项目约定），业务进 Core 可测；
 //   路径拼接是纯函数，单元测试不碰真实桌面；真正写 .lnk 的只有 Create 一处。
 // 怎么改：
-//   - 快捷方式名默认取 exe 文件名（不带扩展，如 PlcMesBridge.lnk），改名即改 exe 名；
+//   - 快捷方式名默认取 exe 文件名（不带扩展，如 CimGateway.lnk），改名即改 exe 名；
 //     如需固定中文名，调 BuildShortcutPath 后自行改文件名再 Create。
 //   - 图标不单独指定文件：IconLocation 指向 exe 自身（",0" 取第一个内嵌图标，
 //     即 csproj 的 ApplicationIcon = Assets/app.ico），换图标只换 Assets/app.ico
@@ -21,14 +21,14 @@ public static class DesktopShortcut
 {
     /// <summary>
     /// 拼快捷方式完整路径。纯函数（不碰磁盘，方便单测）。
-    /// 例：folder="C:\Users\a\Desktop", exe="D:\app\PlcMesBridge.exe"
-    ///   → "C:\Users\a\Desktop\PlcMesBridge.lnk"。
+    /// 例：folder="C:\Users\a\Desktop", exe="D:\app\CimGateway.exe"
+    ///   → "C:\Users\a\Desktop\CimGateway.lnk"。
     /// </summary>
     public static string BuildShortcutPath(string folder, string exePath)
     {
         string name = Path.GetFileNameWithoutExtension(exePath);
         if (string.IsNullOrWhiteSpace(name))
-            name = "PlcMesBridge"; // exe 路径异常时的兜底名，保证总能拼出合法路径
+            name = "CimGateway"; // exe 路径异常时的兜底名，保证总能拼出合法路径
         return Path.Combine(folder, name + ".lnk");
     }
 

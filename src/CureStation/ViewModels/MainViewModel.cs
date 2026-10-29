@@ -261,6 +261,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public RelayCommand LoginCommand { get; }
     public RelayCommand OpenWorkOrderCommand { get; }
     public RelayCommand OpenOperatorsCommand { get; }
+    public RelayCommand OpenIoTestCommand { get; }
 
     public MainViewModel(IDialogService dialogs)
     {
@@ -273,6 +274,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         LoginCommand = new RelayCommand(Login);
         OpenWorkOrderCommand = new RelayCommand(OpenWorkOrder);
         OpenOperatorsCommand = new RelayCommand(OpenOperators);
+        OpenIoTestCommand = new RelayCommand(OpenIoTest);
         _refreshTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = TimeSpan.FromMilliseconds(500),
@@ -422,8 +424,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                     ConnectionText = bus.ConnectionSummary;
                 });
             };
-            bus.Error += (_, msg) => UiInvoke(() =>
-                ConnectionText = msg.Length > 40 ? msg[..40] + "…" : msg);
+            bus.Error += (_, msg) => UiInvoke(() => ConnectionText = msg);
+            // 顶栏连接状态列是 * 弹性宽（不挤右侧按钮），错误文本不截断完整显示；
+            // 极窄窗口由 XAML TextTrimming 省略号兜底 + ToolTip 悬停看全文。
 
             // 状态机：首次创建（带总线），重连只换通道（Attach，流程状态不丢）。
             // 顺序刻意"先建/换妥新通道、再停旧总线"——状态机中途不会摸到已释放对象。
@@ -518,7 +521,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         if (result == null)
             return;
         (_currentUserName, _currentLevel) = result.Value;
-        OperatorText = $"操作员：{_currentUserName}（{OperatorLevelInfo.DisplayName(_currentLevel.Value)}）";
+        // 顶栏格式"管理员：admin"——权限短名开头（V0.0.20 口径：不带"操作员"前缀、
+        // 不带 LEVEL 字样），级别全名只在权限管理窗展示。
+        OperatorText = $"{OperatorLevelInfo.ShortName(_currentLevel.Value)}：{_currentUserName}";
         LocalLogService.Write($"操作员登录：{_currentUserName}（{OperatorLevelInfo.ToText(_currentLevel.Value)}）");
     }
 
@@ -538,6 +543,23 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         if (!Gate(OperatorLevel.Level4, "权限管理"))
             return;
         _dialogs.ShowOperators();
+    }
+
+    /// <summary>
+    /// IO 通讯测试窗：L3+（工程师——现场接线的角色；比点表 L4 低一档，
+    /// 因为测试只动 IO 不改配置）。共享当前总线与点表（null 拦下——总线
+    /// 还没启动时无连接可共享）。
+    /// </summary>
+    private void OpenIoTest()
+    {
+        if (!Gate(OperatorLevel.Level3, "IO通讯测试"))
+            return;
+        if (_bus == null || _config == null)
+        {
+            _dialogs.ShowMessage("总线尚未启动（无连接可共享）。\n请先在点表配置窗保存点表并重连。", "IO通讯测试");
+            return;
+        }
+        _dialogs.ShowIoTest(_bus, _config);
     }
 
     /// <summary>

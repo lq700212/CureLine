@@ -326,7 +326,8 @@ public class CureStationViewModelTests
         var loaded = CuringPolicyStore.Load();
         Assert.NotNull(loaded);
         Assert.Equal("快固", loaded!.ActiveName);
-        Assert.Equal(2, loaded.Policies.Count);
+        // 缺省库 6 策略（1 自定义 + 5 预置，V0.0.20 三轮）+ 本用例新增 1
+        Assert.Equal(7, loaded.Policies.Count);
     }
 
     [Fact]
@@ -338,8 +339,8 @@ public class CureStationViewModelTests
         var fake = new FakeCureDialogService();
         using var vm = new CureStation.ViewModels.MainViewModel(fake);
 
-        // 策略自愈：缺省库落盘 + 顶栏显示激活策略
-        Assert.Contains("标准固化", vm.PolicyText);
+        // 策略自愈：缺省库落盘（V0.0.20 三轮起激活名="自定义"）+ 顶栏显示激活策略
+        Assert.Contains("自定义", vm.PolicyText);
         Assert.True(File.Exists(CuringPolicyStore.DefaultPath));
     }
 
@@ -351,7 +352,7 @@ public class CureStationViewModelTests
         IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
         var fake = new FakeCureDialogService();
         using var vm = new CureStation.ViewModels.MainViewModel(fake);
-        Assert.Contains("标准固化", vm.PolicyText);
+        Assert.Contains("自定义", vm.PolicyText);   // 缺省库激活名（V0.0.20 三轮）
 
         // 登录 L4（策略窗现在有门禁：L3+，未登录会被 Gate 拦下）→ 激活"快固"落盘 → 顶栏刷新
         fake.LoginResult = ("admin", OperatorLevel.Level4);
@@ -404,8 +405,8 @@ public class CureStationViewModelTests
         // L1 登录：工单可开、权限管理拦（需 L4）、策略拦（需 L3）
         fake.LoginResult = ("op1", OperatorLevel.Level1);
         vm.LoginCommand.Execute(null);
-        Assert.Contains("op1", vm.OperatorText);
-        Assert.Contains("LEVEL.1", vm.OperatorText);
+        // 顶栏格式"操作员：op1"（V0.0.20 口径：权限短名开头，不带 LEVEL 字样）
+        Assert.Equal("操作员：op1", vm.OperatorText);
 
         vm.OpenWorkOrderCommand.Execute(null);
         Assert.Contains(fake.Calls, c => c.StartsWith("ShowWorkOrder:Level1"));
@@ -900,5 +901,284 @@ public class CureStationViewModelTests
         Assert.False(vm.IsChangePwd);
         Assert.Equal("账号登录", vm.BannerText);
         Assert.Equal("", vm.Tip);
+    }
+
+    // ---------- 工艺策略：预置库/套用/拦截/可视化预览（V0.0.20 三轮） ----------
+
+    [Fact]
+    public void PolicyVm_DefaultBook_HasPresetsAndCustomActive()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+
+        // 缺省库：1 个自定义（非预置）+ 5 个预置；激活名=自定义；开窗默认选中它
+        Assert.Equal(6, vm.Policies.Count);
+        Assert.Equal(5, vm.Policies.Count(p => p.IsPreset));
+        Assert.Contains(vm.Policies, p => p.Name == "自定义" && !p.IsPreset);
+        Assert.False(vm.SelectedIsPreset);
+        Assert.Equal("自定义", vm.SelectedPolicy!.Name);
+    }
+
+    [Fact]
+    public void PolicyVm_DefaultBook_PresetSamplesResolve()
+    {
+        // 预置样例的三级覆盖口径（教学样例：现场套用后照此改）
+        var book = CuringPolicyStore.BuildDefaultBook();
+        var layered = book.Policies.First(p => p.Name == "分层固化");
+        Assert.Equal(90, layered.ResolveMinutes(1, 1));   // 层1 覆盖
+        Assert.Equal(120, layered.ResolveMinutes(1, 2));  // 层2 覆盖
+        Assert.Equal(150, layered.ResolveMinutes(1, 3));  // 层3 覆盖
+        Assert.Equal(120, layered.ResolveMinutes(1, 4));  // 层4 没配→回全局
+
+        var special = book.Policies.First(p => p.Name == "特殊仓位示例");
+        Assert.Equal(45, special.ResolveMinutes(3, 2));   // 仓位覆盖
+        Assert.Equal(180, special.ResolveMinutes(7, 1));  // 仓位覆盖
+        Assert.Equal(120, special.ResolveMinutes(1, 1));  // 没配→回全局
+
+        var deep = book.Policies.First(p => p.Name == "深度固化");
+        Assert.True(deep.GrillGate);                      // 深度固化带光栅门控
+        Assert.Equal("自定义", book.ActiveName);
+        Assert.False(book.ResolveActive()!.IsPreset);     // 生效的是自定义
+    }
+
+    [Fact]
+    public void PolicyVm_OldJsonWithoutIsPreset_AllCustom()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        // 老版本 JSON（无 IsPreset 字段）——反序列化缺省 false=全按自定义，兼容零迁移
+        File.WriteAllText(CuringPolicyStore.DefaultPath,
+            """{"Policies":[{"Name":"甲","GlobalMinutes":60},{"Name":"乙","GlobalMinutes":30}],"ActiveName":"乙"}""");
+
+        var loaded = CuringPolicyStore.Load();
+        Assert.NotNull(loaded);
+        Assert.All(loaded!.Policies, p => Assert.False(p.IsPreset));
+        Assert.Equal("乙", loaded.ResolveActive()!.Name);
+    }
+
+    [Fact]
+    public void PolicyVm_SelectedIsPreset_FlipsWithSelection()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+
+        Assert.False(vm.SelectedIsPreset);                 // 缺省选中自定义
+        vm.SelectedPolicy = vm.Policies.First(p => p.IsPreset);
+        Assert.True(vm.SelectedIsPreset);
+        vm.SelectedPolicy = vm.Policies.First(p => !p.IsPreset);
+        Assert.False(vm.SelectedIsPreset);
+    }
+
+    [Fact]
+    public void PolicyVm_ApplyToCustom_WritesCustomActivatesAndKeepsPreset()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+
+        // 选预置"快速固化"改参（现场改工艺时长的典型路径）
+        vm.SelectedPolicy = vm.Policies.First(p => p.Name == "快速固化");
+        vm.EditGlobalMinutes = "90";
+
+        vm.ApplyToCustomCommand.Execute(null);
+
+        Assert.True(vm.CloseDialog);
+        var loaded = CuringPolicyStore.Load();
+        Assert.NotNull(loaded);
+        Assert.Equal("自定义", loaded!.ActiveName);        // 套用即激活自定义
+        var custom = loaded.Policies.First(p => p.Name == "自定义" && !p.IsPreset);
+        Assert.Equal(90, custom.GlobalMinutes);            // 编辑值落到自定义
+        var preset = loaded.Policies.First(p => p.Name == "快速固化");
+        Assert.Equal(60, preset.GlobalMinutes);            // 预置本体保持原样（模板可回溯）
+        Assert.True(preset.IsPreset);
+        Assert.False(vm.SelectedIsPreset);                 // 套用后选中的是自定义
+        Assert.Equal(90, vm.SelectedPolicy!.GlobalMinutes);
+    }
+
+    [Fact]
+    public void PolicyVm_ApplyToCustom_ReplacesOverridesNotMerges()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+
+        // 第一次套用"分层固化"：自定义带上层覆盖
+        vm.SelectedPolicy = vm.Policies.First(p => p.Name == "分层固化");
+        vm.ApplyToCustomCommand.Execute(null);
+        Assert.Equal(90, vm.SelectedPolicy!.LevelMinutes[1]);
+
+        // 第二次套用"快速固化"（无层覆盖）：自定义覆盖行整体替换，不残留
+        vm.SelectedPolicy = vm.Policies.First(p => p.Name == "快速固化");
+        vm.ApplyToCustomCommand.Execute(null);
+        Assert.Empty(vm.SelectedPolicy!.LevelMinutes);
+        Assert.Equal("", vm.EditLevel2Min);                // 编辑区回显同步（无残留旧值）
+
+        var loaded = CuringPolicyStore.Load();
+        var custom = loaded!.Policies.First(p => p.Name == "自定义" && !p.IsPreset);
+        Assert.Empty(custom.LevelMinutes);
+        Assert.Equal(60, custom.GlobalMinutes);
+    }
+
+    [Fact]
+    public void PolicyVm_ApplyToCustom_CreatesCustomIfMissing()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        // 盘上只有预置策略（无自定义）——套用应创建并激活
+        var book = new CuringPolicyBook
+        {
+            Policies = { new CuringPolicy { Name = "标准固化", GlobalMinutes = 120, IsPreset = true } },
+            ActiveName = "标准固化",
+        };
+        CuringPolicyStore.Save(book);
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+
+        vm.ApplyToCustomCommand.Execute(null);
+
+        var loaded = CuringPolicyStore.Load();
+        Assert.NotNull(loaded);
+        Assert.Equal("自定义", loaded!.ActiveName);
+        Assert.Contains(loaded.Policies, p => p.Name == "自定义" && !p.IsPreset);
+    }
+
+    [Fact]
+    public void PolicyVm_ApplyToCustom_BadNumberBlocks()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        CuringPolicyStore.Save(CuringPolicyStore.BuildDefaultBook());   // 等价自愈后的盘面
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        vm.SelectedPolicy = vm.Policies.First(p => p.Name == "快速固化");
+        vm.EditGlobalMinutes = "abc";
+
+        vm.ApplyToCustomCommand.Execute(null);
+
+        Assert.False(vm.CloseDialog);
+        Assert.Contains(fake.Calls, c => c.Contains("数字格式"));
+        var loaded = CuringPolicyStore.Load();
+        // 被拦后自定义保持缺省值 120（编辑错误未污染既有自定义策略）
+        Assert.Equal(120, loaded!.Policies.First(p => p.Name == "自定义" && !p.IsPreset).GlobalMinutes);
+    }
+
+    [Fact]
+    public void PolicyVm_Preset_SaveActivateRemove_Blocked()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        CuringPolicyStore.Save(CuringPolicyStore.BuildDefaultBook());   // 等价自愈后的盘面
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        vm.SelectedPolicy = vm.Policies.First(p => p.Name == "标准固化");
+        Assert.True(vm.SelectedIsPreset);
+
+        // 保存拦（出厂模板保持原样——出口只有"套用为自定义"）
+        vm.SaveCommand.Execute(null);
+        Assert.False(vm.CloseDialog);
+        Assert.Contains(fake.Calls, c => c.Contains("套用为自定义"));
+
+        // 激活拦（激活只认自定义）
+        vm.ActivateCommand.Execute(null);
+        Assert.False(vm.CloseDialog);
+        Assert.Contains(fake.Calls, c => c.Contains("激活"));
+        Assert.Equal("自定义", CuringPolicyStore.Load()!.ActiveName);
+
+        // 删除拦（预置永远可回溯）
+        int before = vm.Policies.Count;
+        vm.RemovePolicyCommand.Execute(null);
+        Assert.Contains(fake.Calls, c => c.Contains("不能删除"));
+        Assert.Equal(before, vm.Policies.Count);
+    }
+
+    [Fact]
+    public void PolicyVm_SaveFailure_DoesNotPolluteSelected()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var book = new CuringPolicyBook
+        {
+            Policies =
+            {
+                new CuringPolicy { Name = "甲", GlobalMinutes = 120 },
+                new CuringPolicy { Name = "乙", GlobalMinutes = 30 },
+            },
+            ActiveName = "甲",
+        };
+        CuringPolicyStore.Save(book);
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+
+        // 改名撞"乙"（重名校验拦）——先改副本语义：选中对象不被半截编辑污染
+        vm.EditName = "乙";
+        vm.EditGlobalMinutes = "90";
+        vm.SaveCommand.Execute(null);
+
+        Assert.False(vm.CloseDialog);
+        Assert.Contains(fake.Calls, c => c.Contains("校验"));
+        Assert.Equal(120, vm.SelectedPolicy!.GlobalMinutes);   // 未被 90 污染
+        Assert.Equal("甲", vm.SelectedPolicy.Name);
+    }
+
+    [Fact]
+    public void PolicyVm_Preview_RebuildsOnEdit()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+
+        // 缺省库自定义 120：30 格全 120（Orange 档）
+        Assert.Equal(30, vm.SlotPreviewItems.Count);
+        Assert.All(vm.SlotPreviewItems, i => Assert.Equal(120, i.Minutes));
+        Assert.All(vm.SlotPreviewItems, i => Assert.Equal("Orange", i.Tier));
+
+        // 改全局时长 → 全格跟随（30 分钟落 Green 档：<60）
+        vm.EditGlobalMinutes = "30";
+        Assert.All(vm.SlotPreviewItems, i => Assert.Equal(30, i.Minutes));
+        Assert.All(vm.SlotPreviewItems, i => Assert.Equal("Green", i.Tier));
+
+        // 层覆盖：层1 变 10（Green），其余仍 30
+        vm.EditLevel1Min = "10";
+        Assert.All(vm.SlotPreviewItems.Where(i => i.Level == 1), i => Assert.Equal(10, i.Minutes));
+        Assert.All(vm.SlotPreviewItems.Where(i => i.Level == 2), i => Assert.Equal(30, i.Minutes));
+
+        // 仓位覆盖：3-2=45 只动一格
+        vm.AddSlotRowCommand.Execute(null);
+        vm.SlotRows[0].Rack = "3";
+        vm.SlotRows[0].Level = "2";
+        vm.SlotRows[0].Minutes = "45";
+        Assert.Equal(45, vm.SlotPreviewItems.First(i => i.Rack == 3 && i.Level == 2).Minutes);
+        Assert.All(vm.SlotPreviewItems.Where(i => i.Level == 2 && i.Rack != 3), i => Assert.Equal(30, i.Minutes));
+
+        // 数字错兜底照画：全局回落原选中值 120，但层1 覆盖 10 与仓位 3-2=45 仍生效
+        vm.EditGlobalMinutes = "abc";
+        Assert.All(vm.SlotPreviewItems.Where(i => i.Level == 1), i => Assert.Equal(10, i.Minutes));
+        Assert.All(vm.SlotPreviewItems.Where(i => i.Level == 2 && i.Rack != 3), i => Assert.Equal(120, i.Minutes));
+        Assert.Equal(45, vm.SlotPreviewItems.First(i => i.Rack == 3 && i.Level == 2).Minutes);
+
+        // 清空仓位行 → 该格回落层/全局
+        vm.RemoveSlotRowCommand.Execute(null);
+        Assert.Equal(120, vm.SlotPreviewItems.First(i => i.Rack == 3 && i.Level == 2).Minutes);
+    }
+
+    [Fact]
+    public void PolicyVm_Preview_GridFollowsRackCount()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        // 双架点表（架数 11→垫底仍 10？不——DialogService 传最大架号；VM 下限 10）：
+        // 直接验证构造参数链（测试绕过 DialogService，传 11）
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake, rackCount: 11, levelCount: 3);
+        Assert.Equal(11, vm.RackCount);
+        Assert.Equal(33, vm.SlotPreviewItems.Count);
+        Assert.Equal(11, vm.SlotPreviewItems.Count(i => i.Level == 1));
     }
 }

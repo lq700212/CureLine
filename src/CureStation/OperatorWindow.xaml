@@ -44,10 +44,10 @@
                 <TextBlock Style="{StaticResource SectionTitle}" Text="账号操作"/>
 
                 <TextBlock Text="用户名：" Margin="0,8,0,2"/>
-                <TextBox Text="{Binding EditUserName, FallbackValue=admin}"/>
+                <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditUserName, FallbackValue=admin}"/>
 
                 <TextBlock Text="级别：" Margin="0,8,0,2"/>
-                <ComboBox ItemsSource="{Binding AllLevels, FallbackValue={x:Null}}"
+                <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding AllLevels, FallbackValue={x:Null}}"
                           SelectedItem="{Binding EditLevel}">
                     <ComboBox.ItemTemplate>
                         <DataTemplate>
@@ -57,7 +57,7 @@
                 </ComboBox>
 
                 <TextBlock Text="密码（新增/改密用；改级别时忽略）：" Margin="0,8,0,2"/>
-                <TextBox Text="{Binding EditPassword}" FontFamily="Consolas"/>
+                <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditPassword}" FontFamily="Consolas"/>
 
                 <!-- 语义色按钮（V0.0.20 参考用户管理页编排）：蓝=新增（主操作）、
                      浅蓝=改级别、绿=重置密码、红=删除（危险操作） -->

@@ -80,4 +80,58 @@ public class AppConfigTests
         Assert.Equal("R17001", MesConfig.ApiAddresses[2].PlcData);
         Assert.Equal("R17900", MesConfig.ApiAddresses[2].MesData);
     }
+
+    [Fact(DisplayName = "分段偏移缺省30,60并自愈落盘")]
+    public void Load_SegmentOffsets_Default_Heals()
+    {
+        using var scope = new TestScope();
+        AppConfig.Load(scope.IniPath());
+        Assert.Equal(new[] { 30, 60 }, MesConfig.DataSegmentOffsets);
+        Assert.Equal("30,60",
+            IniFile.ReadStr(scope.IniPath(), "MES", "DataSegmentOffsets", ""));
+    }
+
+    [Fact(DisplayName = "分段偏移合法照读非法整体回缺省")]
+    public void Load_SegmentOffsets_Custom_And_Invalid()
+    {
+        using var scope = new TestScope();
+        IniFile.Write(scope.IniPath(), "MES", "DataSegmentOffsets", "45,90");
+        AppConfig.Load(scope.IniPath());
+        Assert.Equal(new[] { 45, 90 }, MesConfig.DataSegmentOffsets);
+
+        // 任一非法整体回缺省（不做部分生效，防现场配一半），并回写自愈。
+        foreach (string bad in new[] { "abc", "30", "30,60,0", "30,-5", "30,65536", "30,60,70,80,90,100,110,120,130" })
+        {
+            IniFile.Write(scope.IniPath(), "MES", "DataSegmentOffsets", bad);
+            var ex = Record.Exception(() => AppConfig.Load(scope.IniPath()));
+            Assert.Null(ex);
+            Assert.Equal(new[] { 30, 60 }, MesConfig.DataSegmentOffsets);
+            Assert.Equal("30,60",
+                IniFile.ReadStr(scope.IniPath(), "MES", "DataSegmentOffsets", ""));
+        }
+    }
+
+    [Fact(DisplayName = "扫描周期缺省200合法照读越界钳回200")]
+    public void Load_ScanIntervalMs_Default_Clamped()
+    {
+        using var scope = new TestScope();
+        AppConfig.Load(scope.IniPath());
+        Assert.Equal(200, AppConfig.ScanIntervalMs);
+        Assert.Equal("200",
+            IniFile.ReadStr(scope.IniPath(), "setting", "ScanIntervalMs", ""));
+
+        IniFile.Write(scope.IniPath(), "setting", "ScanIntervalMs", "300");
+        AppConfig.Load(scope.IniPath());
+        Assert.Equal(300, AppConfig.ScanIntervalMs);
+
+        foreach (string bad in new[] { "abc", "", "10", "9999", "-1", "200.5" })
+        {
+            IniFile.Write(scope.IniPath(), "setting", "ScanIntervalMs", bad);
+            var ex = Record.Exception(() => AppConfig.Load(scope.IniPath()));
+            Assert.Null(ex);
+            Assert.Equal(200, AppConfig.ScanIntervalMs);
+            Assert.Equal("200",
+                IniFile.ReadStr(scope.IniPath(), "setting", "ScanIntervalMs", ""));
+        }
+    }
 }

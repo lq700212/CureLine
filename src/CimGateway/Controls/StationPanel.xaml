@@ -1,0 +1,31 @@
+<UserControl x:Class="CimGateway.Controls.StationPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:CimGateway.ViewModels"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:StationPanelViewModel, IsDesignTimeCreatable=False}"
+             MinWidth="280" MinHeight="380">
+    <!--机台面板（MVVM：状态走 StationPanelViewModel，DataContext 由父项继承）。
+        双击日志行开窗走命令；单击选中即全文（SelectedLine setter 回调）。
+        设计时 DataContext 为空，名称/灯色取 FallbackValue 占位（仅预览，运行时走真值）。-->
+    <UserControl.InputBindings>
+        <MouseBinding MouseAction="LeftDoubleClick"
+                      Command="{Binding OpenLogCommand}"/>
+    </UserControl.InputBindings>
+    <Border BorderBrush="{StaticResource FreshLightBorderBrush}" BorderThickness="1"
+            CornerRadius="8" Margin="3" Padding="4" Background="White">
+        <DockPanel>
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" VerticalAlignment="Center">
+                <Label Content="{Binding Name, FallbackValue='橡胶装配PCB设备'}" FontSize="14" FontWeight="Bold"
+                       VerticalAlignment="Center"
+                       Foreground="{StaticResource FreshPrimaryDeepBrush}" />
+                <Label Content="⚫" FontSize="16" Foreground="{Binding LampColor, FallbackValue=Gray}"
+                       VerticalAlignment="Center" ToolTip="PLC心跳" />
+            </StackPanel>
+            <ListBox ItemsSource="{Binding LogLines}" SelectedItem="{Binding SelectedLine}"
+                     HorizontalContentAlignment="Left" FontSize="12" />
+        </DockPanel>
+    </Border>
+</UserControl>

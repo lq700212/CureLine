@@ -1,0 +1,17 @@
+<Window x:Class="CimGateway.ImageWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:CimGateway.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:ImageViewModel, IsDesignTimeCreatable=False}"
+        Icon="Assets/app.ico"
+        Title="{Binding TitleText, FallbackValue='图片查看'}" Width="801" Height="560" WindowStartupLocation="CenterScreen">
+    <!--图片查看（MVVM：展示走 ImageViewModel，本文件纯绑定）。
+        设计时 DataContext 为空，标题取 FallbackValue 占位（仅预览，运行时走真值）。-->
+    <DockPanel>
+        <Label Content="{Binding PathText}" DockPanel.Dock="Top" FontSize="12"/>
+        <Image Source="{Binding ImageSource}" Stretch="Uniform"/>
+    </DockPanel>
+</Window>

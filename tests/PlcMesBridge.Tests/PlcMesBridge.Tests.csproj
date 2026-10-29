@@ -22,8 +22,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\PlcMesBridge.Core\PlcMesBridge.Core.csproj" />
-    <!--VM 测试直引主工程（只用 ViewModels，不建 Window；UseWPF 类型已就绪）-->
-    <ProjectReference Include="..\..\src\PlcMesBridge\PlcMesBridge.csproj" />
+    <!--程序②（CIM 整线过账，原 PlcMesBridge 演化改名）：VM 测试直引主工程（只用 ViewModels，不建 Window；UseWPF 类型已就绪）-->
+    <ProjectReference Include="..\..\src\CimGateway\CimGateway.csproj" />
     <!--程序①（固化程控）：点表/IoBus/主窗 VM 用例同原则（只用 ViewModels 与 Core，不建窗）-->
     <ProjectReference Include="..\..\src\CureStation\CureStation.csproj" />
   </ItemGroup>

@@ -28,29 +28,29 @@ public class DesktopShortcutTests : IDisposable
     [Fact(DisplayName = "快捷方式名取exe名")]
     public void BuildPath_UsesExeName()
     {
-        string lnk = DesktopShortcut.BuildShortcutPath(_tmp, @"D:\app\PlcMesBridge.exe");
-        Assert.Equal(Path.Combine(_tmp, "PlcMesBridge.lnk"), lnk);
+        string lnk = DesktopShortcut.BuildShortcutPath(_tmp, @"D:\app\CimGateway.exe");
+        Assert.Equal(Path.Combine(_tmp, "CimGateway.lnk"), lnk);
     }
 
     [Fact(DisplayName = "exe路径异常时兜底默认名")]
     public void BuildPath_FallbackName()
     {
         string lnk = DesktopShortcut.BuildShortcutPath(_tmp, "");
-        Assert.Equal(Path.Combine(_tmp, "PlcMesBridge.lnk"), lnk);
+        Assert.Equal(Path.Combine(_tmp, "CimGateway.lnk"), lnk);
     }
 
     [Fact(DisplayName = "图标指向exe自身第一个内嵌图标")]
     public void IconLocation_PointsToExe()
     {
-        Assert.Equal(@"D:\app\PlcMesBridge.exe,0",
-            DesktopShortcut.BuildIconLocation(@"D:\app\PlcMesBridge.exe"));
+        Assert.Equal(@"D:\app\CimGateway.exe,0",
+            DesktopShortcut.BuildIconLocation(@"D:\app\CimGateway.exe"));
     }
 
     [Fact(DisplayName = "临时目录新建lnk成功且已存在不覆盖")]
     public void Ensure_CreatesThenKeepsExisting()
     {
         // 用当前测试 dll 冒充目标 exe（只拼路径，不启动它，安全）。
-        string fakeExe = Path.Combine(_tmp, "PlcMesBridge.exe");
+        string fakeExe = Path.Combine(_tmp, "CimGateway.exe");
         File.WriteAllText(fakeExe, "fake");
 
         var (r1, p1) = DesktopShortcut.EnsureOnDesktop(fakeExe, _tmp);

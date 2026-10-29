@@ -27,6 +27,15 @@ public static class AppConfig
     public static int[] StationPorts { get; private set; } =
         new[] { 6060, 6060, 6060, 6060, 6060, 6060, 6060, 6060 };
 
+    /// <summary>
+    /// 网关触发扫描周期 ms（键 [setting] ScanIntervalMs，缺省 200=老项目口径；
+    /// V0.0.22 配置化，钳制 50~5000——下限防空转打爆 PLC，上限防触发响应过钝）。
+    /// 网关循环每次 Sleep 读本值，配置窗保存即热生效（无需重连）。
+    /// setter 为 public 仅供 TestScope 快照恢复（与 MesConfig.DataLength 同风格）；
+    /// 产品代码只有 AppConfig.Load 应写本值。
+    /// </summary>
+    public static int ScanIntervalMs { get; set; } = 200;
+
     private static readonly string[] IpKeys = PlcConfigStore.IpKeys;
 
     private static readonly string[] DefaultUrls =
@@ -103,6 +112,35 @@ public static class AppConfig
             MesConfig.DataLength = 799;
         }
 
+        // DATA 分段偏移（V0.0.22 配置化，W68 联调预备）：格式"30,60"逗号分隔，
+        // 要求 2~8 段、每段 1~65535（65535 上限=Modbus 协议地址边界，防溢出误写）。
+        // 任一非法整体回缺省 30,60 并回写 ini（同 DataLength 自愈口径），保证
+        // WriteDataSegment 取 [0]/[1] 永不越界。
+        string segRaw = IniFile.ReadStr(ini, "MES", "DataSegmentOffsets", "30,60");
+        int[]? segs = ParseSegmentOffsets(segRaw);
+        if (segs != null)
+        {
+            MesConfig.DataSegmentOffsets = segs;
+        }
+        else
+        {
+            IniFile.Write(ini, "MES", "DataSegmentOffsets", "30,60");
+            MesConfig.DataSegmentOffsets = new[] { 30, 60 };
+        }
+
+        // 扫描周期（V0.0.22 配置化）：钳制 50~5000ms，越界回写钳制值（自愈语义），
+        // 网关循环每次 Sleep 读静态值，配置窗保存 AppConfig.Load 后即热生效。
+        string scanRaw = IniFile.ReadStr(ini, "setting", "ScanIntervalMs", "200");
+        if (int.TryParse(scanRaw, out int scan) && scan is >= 50 and <= 5000)
+        {
+            ScanIntervalMs = scan;
+        }
+        else
+        {
+            IniFile.Write(ini, "setting", "ScanIntervalMs", "200");
+            ScanIntervalMs = 200;
+        }
+
         string[] names = { "API0027", "API0028", "API0030", "API0031", "API0032", "API0033" };
         for (int i = 0; i < 6; i++)
         {
@@ -115,5 +153,24 @@ public static class AppConfig
         }
 
         MesParamStore.LoadParams();
+    }
+
+    /// <summary>
+    /// 解析 DATA 分段偏移串（"30,60"）：2~8 段、每段 1~65535，全合法返回数组；
+    /// 任一非法返回 null（调用方整体回缺省——不做部分生效，防现场配一半）。
+    /// </summary>
+    private static int[]? ParseSegmentOffsets(string raw)
+    {
+        string[] parts = raw.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length is < 2 or > 8)
+            return null;
+        var values = new int[parts.Length];
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (!int.TryParse(parts[i], out int v) || v is < 1 or > 65535)
+                return null;
+            values[i] = v;
+        }
+        return values;
     }
 }

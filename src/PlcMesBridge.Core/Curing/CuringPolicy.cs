@@ -47,6 +47,14 @@ public sealed class CuringPolicy
     /// </summary>
     public bool PersistMinutes { get; set; }
 
+    /// <summary>
+    /// 是否预置策略（出厂模板）。true=预置：策略窗可查看/编辑参数、可"套用为
+    /// 自定义"，但不能激活/不能删除/不能直接保存（激活只认自定义策略——预置
+    /// 是起点模板，保证出厂推荐永远能回溯）；false=自定义：全套操作可用。
+    /// 老版本 JSON 无此字段，反序列化缺省 false=全按自定义（兼容零迁移）。
+    /// </summary>
+    public bool IsPreset { get; set; }
+
     /// <summary>解析某仓位的有效时长：仓位 > 层 > 全局（值 ≤0 视为没配）。</summary>
     public int ResolveMinutes(int rack, int level)
     {

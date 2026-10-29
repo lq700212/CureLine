@@ -190,6 +190,13 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- 下拉框统一：与 FreshInput/按钮同高（32）同字号（继承窗口）——
+             全项目输入区"框=按钮=32"口径的 ComboBox 侧（V0.0.20 权限窗反馈）。
+             只统一尺寸不做完整模板：原生 ComboBox 模板保留（展开箭头/项样式不受影响）。 -->
+        <Style x:Key="FreshCombo" TargetType="ComboBox">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
         <!-- 密码输入框：与 FreshInput 同款（PasswordBox 是独立控件需独立模板） -->
         <Style x:Key="FreshPwdInput" TargetType="PasswordBox">
             <Setter Property="Height" Value="32"/>

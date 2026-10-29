@@ -9,7 +9,8 @@
 // ① JSON 校验：0027/0028/0033 外层是数组（List），0030/0031/0032 是对象；
 // ② 回写 STATUS/MSG/DATA 三个串地址，空值写 " "（空格占位，防通讯库报空串错）；
 // ③ API0030 的 DATA 是数组 [{OUT_RESULT,OUT_REMARK,OUT_NEXTOP}]，拆三段写
-//    DATA/+30/+60；API0031 的 DATA 拆 BC_NO/+30 CHECK_RESULT/+60 REMARK；
+//    DATA/+30/+60（偏移可配 [MES] DataSegmentOffsets，缺省 30/60）；
+//    API0031 的 DATA 拆 BC_NO/+30 CHECK_RESULT/+60 REMARK；
 // ④ 分段地址算法：(含R?"R":"D") + (数字部分+偏移)，无补零（老项目原样）；
 // ⑤ writeFail：STATUS=2、MSG=NG、DATA=" "、完成=1、触发复 0；
 // ⑥ 每次触发成功与否都记 MESLogger（分机台），STATUS=1 记成功否则弹报警。
@@ -108,7 +109,9 @@ public class StationGateway : IDisposable
             sw.Stop();
             if (_stationId == 0)
                 ScanElapsed?.Invoke(_stationId, sw.ElapsedMilliseconds);
-            Thread.Sleep(200);
+            // 周期读静态值（V0.0.22 配置化 [setting] ScanIntervalMs，缺省 200；
+            // Math.Max 兜底：配置窗保存钳制 50~5000，此处再兜一层防 0 空转）。
+            Thread.Sleep(Math.Max(AppConfig.ScanIntervalMs, 20));
         }
     }
 
@@ -284,16 +287,20 @@ public class StationGateway : IDisposable
     }
 
     /// <summary>
-    /// DATA 三段写（DATA/+30/+60，老项目分段地址算法原样：有R用R否则D，数字+偏移，无补零）。
-    /// 空值写 " " 占位（防空串写 PLC 报错，老项目 IIf 原注）。
+    /// DATA 三段写（DATA/+off1/+off2；偏移可配 [MES] DataSegmentOffsets，缺省
+    /// 30/60=老项目口径，AppConfig.Load 保证恒有合法值）。分段地址算法老项目原样：
+    /// 有R用R否则D，数字+偏移，无补零。空值写 " " 占位（防空串写 PLC 报错，
+    /// 老项目 IIf 原注）。
     /// </summary>
     internal void WriteDataSegment(string baseAddr, string? v0, string? v1, string? v2)
     {
+        int off1 = MesConfig.DataSegmentOffsets.Length > 0 ? MesConfig.DataSegmentOffsets[0] : 30;
+        int off2 = MesConfig.DataSegmentOffsets.Length > 1 ? MesConfig.DataSegmentOffsets[1] : 60;
         _plc.WriteString(baseAddr, string.IsNullOrEmpty(v0) ? " " : v0,
             Math.Max(v0?.Length ?? 0, 1));
-        _plc.WriteString(ShiftAddr(baseAddr, 30), string.IsNullOrEmpty(v1) ? " " : v1,
+        _plc.WriteString(ShiftAddr(baseAddr, off1), string.IsNullOrEmpty(v1) ? " " : v1,
             Math.Max(v1?.Length ?? 0, 1));
-        _plc.WriteString(ShiftAddr(baseAddr, 60), string.IsNullOrEmpty(v2) ? " " : v2,
+        _plc.WriteString(ShiftAddr(baseAddr, off2), string.IsNullOrEmpty(v2) ? " " : v2,
             Math.Max(v2?.Length ?? 0, 1));
     }
 

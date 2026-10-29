@@ -9,6 +9,7 @@
 using PlcMesBridge.Core.Infrastructure;
 using PlcMesBridge.Core.Security;
 using PlcMesBridge.Tests.Mocks;
+using CimGateway.ViewModels;
 using PlcMesBridge.ViewModels;
 
 namespace PlcMesBridge.Tests;

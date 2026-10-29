@@ -126,8 +126,11 @@
                 </Ellipse>
                 <TextBlock Grid.Column="1" Text="{Binding PolicyText, FallbackValue=策略：—}"
                            VerticalAlignment="Center" Margin="0,0,12,0" Foreground="#1F4E79"/>
+                <!-- 连接状态 * 弹性列：文本完整显示（极窄窗口省略号兜底，悬停看全文） -->
                 <TextBlock Grid.Column="2" Text="{Binding ConnectionText, FallbackValue=未启动}"
-                           VerticalAlignment="Center" Foreground="#333"/>
+                           VerticalAlignment="Center" Foreground="#333"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding ConnectionText, FallbackValue=未启动}"/>
                 <TextBlock Grid.Column="3" Text="{Binding PostingText, FallbackValue=过账：—}"
                            VerticalAlignment="Center" Margin="0,0,12,0" Foreground="#0A7A2F"/>
                 <Button Grid.Column="4" Style="{StaticResource FreshButton}"
@@ -143,10 +146,13 @@
                 <Button Grid.Column="9" Style="{StaticResource FreshButton}"
                         Content="过账配置" Command="{Binding OpenPostConfigCommand}" Margin="0,0,8,0"/>
                 <Button Grid.Column="10" Style="{StaticResource FreshButton}"
-                        Content="点表" Command="{Binding OpenPointTableCommand}" Margin="0,0,8,0"/>
+                        Content="IO测试" Command="{Binding OpenIoTestCommand}" Margin="0,0,8,0"
+                        ToolTip="IO 耦合器通道通讯测试（L3+）：DI 状态灯 / DO 点击灯钮 / 一键遍历验接线"/>
                 <Button Grid.Column="11" Style="{StaticResource FreshButton}"
+                        Content="点表" Command="{Binding OpenPointTableCommand}" Margin="0,0,8,0"/>
+                <Button Grid.Column="12" Style="{StaticResource FreshButton}"
                         Content="重新连接" Command="{Binding ReconnectCommand}" Margin="0,0,8,0"/>
-                <Button Grid.Column="12" Style="{StaticResource FreshButton}" Content="退出"
+                <Button Grid.Column="13" Style="{StaticResource FreshButton}" Content="退出"
                         Click="OnExitClick"/>
             </Grid>
         </Border>

@@ -3,7 +3,7 @@
 //
 // 干什么：VM 不许直接 new Window/MessageBox（那样 VM 就测不了）——
 //   一律走本服务；测试用 FakeDialogService 桩（tests 工程）断言调用。
-// 为什么与主程序 PlcMesBridge 的 IDialogService 平行而不下沉共享：
+// 为什么与主程序 CimGateway（原 PlcMesBridge，程序②）的 IDialogService 平行而不下沉共享：
 //   窗集合是程序的私有资产——程序①的窗集（点表配置/工单/权限）与主程序
 //   （登录/PLC 配置/调试）完全不同，共用接口会把两个程序的窗耦合死。
 // 怎么改：新增窗体在这里加专用方法（生产实现 + Fake 桩 + VM 测试三处同步）。
@@ -47,6 +47,12 @@ public interface IDialogService
     /// <summary>打开过账配置窗（模态）。返回 true 表示保存了配置（调用方热更新过账服务）。</summary>
     bool ShowMesPostConfig();
 
+    /// <summary>
+    /// 打开 IO 通讯测试窗（模态）。bus=主窗已启动的共享总线（测试窗不建 TCP），
+    /// config=点表配置（通道清单来源——通用化核心：点表怎么配测试窗就怎么显示）。
+    /// </summary>
+    void ShowIoTest(PlcMesBridge.Core.Comms.IPointTableBus bus, PlcMesBridge.Core.Comms.PointTableConfig config);
+
     /// <summary>程序化关闭主进程（退出）。</summary>
     void Shutdown();
 }
@@ -75,12 +81,32 @@ public sealed class DialogService : IDialogService
     public bool ShowCuringPolicy()
     {
         // 生产装配：同点表窗模式（VM 在服务里 new，测试用 Fake 桩）。
+        // 架数/层数与主窗仓位网格同口径（点表最大架/层号，垫底 10×3）——
+        // 可视化预览画布按它铺格子，双架点表时预览铺 20×3。
+        var config = PlcMesBridge.Core.Comms.IoPointTableStore.Load();
+        int racks = Math.Max(PlcMesBridge.Core.Curing.SlotLocationCode.RacksPerRow,
+            config?.Devices.SelectMany(d => d.Bindings)
+                .Where(b => b.Rack > 0).Select(b => b.Rack).DefaultIfEmpty(1).Max() ?? 10);
+        int levels = Math.Max(PlcMesBridge.Core.Curing.SlotLocationCode.Levels,
+            config?.Devices.SelectMany(d => d.Bindings)
+                .Where(b => b.Level > 0).Select(b => b.Level).DefaultIfEmpty(1).Max() ?? 3);
         var win = new CuringPolicyWindow
         {
             Owner = Application.Current?.MainWindow,
-            DataContext = new CuringPolicyViewModel(new DialogService()),
+            DataContext = new CuringPolicyViewModel(new DialogService(), racks, levels),
         };
         return win.ShowDialog() == true;
+    }
+
+    public void ShowIoTest(PlcMesBridge.Core.Comms.IPointTableBus bus, PlcMesBridge.Core.Comms.PointTableConfig config)
+    {
+        // 生产装配：测试窗共享主窗总线（不自建 TCP——对齐 AgingTestSystem V1.23）。
+        var win = new IoTestWindow
+        {
+            Owner = Application.Current?.MainWindow,
+            DataContext = new IoTestViewModel(bus, config),
+        };
+        win.ShowDialog();
     }
 
     public (string User, OperatorLevel Level)? ShowLogin()

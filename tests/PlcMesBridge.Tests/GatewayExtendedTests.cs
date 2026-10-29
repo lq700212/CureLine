@@ -50,6 +50,7 @@ public class GatewayExtendedTests : IDisposable
         MesConfig.ApiAddresses[4].PlcData = "R19001";
         MesConfig.ApiAddresses[5].PlcData = "R12001";
         MesConfig.DataLength = 799;
+        MesConfig.DataSegmentOffsets = new[] { 30, 60 }; // 防其它用例改偏移的静态残留
     }
 
     public void Dispose()
@@ -189,6 +190,27 @@ public class GatewayExtendedTests : IDisposable
         Assert.Equal(" ", _plc.PeekString("R17900"));
         Assert.Equal(" ", _plc.PeekString("R17930"));
         Assert.Equal(" ", _plc.PeekString("R17960"));
+    }
+
+    [Fact(DisplayName = "WriteDataSegment自定义偏移")]
+    public void WriteDataSegment_CustomOffsets()
+    {
+        // V0.0.22 分段偏移可配（W68 终版预备）：改 {45,90} → 拆写走 DATA/+45/+90，
+        // 缺省 30/60 的旧地址不该被碰；finally 恢复缺省防污染其它用例。
+        try
+        {
+            MesConfig.DataSegmentOffsets = new[] { 45, 90 };
+            using var gw = Gw();
+            gw.WriteDataSegment("R17900", "A", "B", "C");
+            Assert.Equal("A", _plc.PeekString("R17900"));
+            Assert.Equal("B", _plc.PeekString("R17945"));
+            Assert.Equal("C", _plc.PeekString("R17990"));
+            Assert.Equal("", _plc.PeekString("R17930")); // 旧偏移地址没写过（模拟器未写=空串）
+        }
+        finally
+        {
+            MesConfig.DataSegmentOffsets = new[] { 30, 60 };
+        }
     }
 
     [Fact(DisplayName = "RequiredFields为5接口0033字段归调试窗")]

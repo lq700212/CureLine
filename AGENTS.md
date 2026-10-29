@@ -16,8 +16,8 @@
 ## 技术栈
 
 - **.NET 8 WPF**（`net8.0-windows`，SDK 风格四工程：`Core` 共享类库 + `CureStation`
-  程序①固化程控（IO 耦合器程控 + 单线过账）+ `PlcMesBridge` 主程序（Phase 2
-  演化成程序② CimGateway：6 接口整线过账）+ `Tests` xUnit，见 `PlcMesBridge.slnx`；
+  程序①固化程控（IO 耦合器程控 + 单线过账）+ `CimGateway` 主程序（程序② CIM 整线
+  过账，原名 PlcMesBridge，V0.0.21 改名定名）+ `Tests` xUnit，见 `PlcMesBridge.slnx`；
   两程序可分机部署，拆分设计见 `docs/重构设计_20261028.md`）
 - 通讯子模块 **`extern/kaleidoscope`**（git submodule，net472，零改动直接引用，
   详见"子模块"节）；PLC 协议用其 `libs/HslCommunication.dll`（12.6.0，公司已购，
@@ -62,7 +62,11 @@
   用户拍板"物理搬运即可"，git 历史可找回）+ 真机底座统一 Modbus TCP
   （`ModbusStationClient`，地址/打包/分帧集中一处）+ 配置模型收敛
   （删 `RunMode`/`[SinglePLC]`/`PLCAscii`）。**P2.2 待做**：6 接口迁移与
-  整线联调（待 D/R 终版地址 + CIM W68 终版）。
+  整线联调（待 D/R 终版地址 + CIM W68 终版）。**网关参数已全配置化
+  （V0.0.22 补齐最后两处）**：URL/触发字/6 组地址束/DataLength/字节序/
+  分段偏移/扫描周期全部 ini 键 + 配置窗可编辑、保存即热生效——W68 终版
+  到位后改配置即可，代码零改动（`MesConfig.DataSegmentOffsets`/
+  `AppConfig.ScanIntervalMs`）。
 - **P3 固化程控（进行中，P3.1 完成 + P3.2 完成）**：**P3.1=仓位状态机 +
   工艺策略**（`Core/Curing/` 三件套 + `CuringStateStore` 断电续算开关；工艺
   策略窗 + 主窗接线）。**P3.2 前半=四级权限 + 登录 + 工单信息页（已完成）**：
@@ -95,8 +99,8 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 287/287（P3.1 增 36 例 + P3.2 前半增 17 例 + P3.2 后半增
-   22 例 + V0.0.19 增 25 例 + V0.0.20 增 32 例 + 登录记忆/改密链增 7 例；
+   `dotnet test` 315/315（P3.1 增 36 例 + P3.2 前半增 17 例 + P3.2 后半增
+   22 例 + V0.0.19 增 25 例 + V0.0.20 增 32 例 + 登录记忆/改密链增 7 例 + 策略预置/IO 测试增 21 例；
    基线此后只增不减）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
@@ -137,13 +141,13 @@
 | --- | --- |
 | **两程序骨架** | |
 | `src/CureStation/` | **程序①固化程控**（新 exe）：30 仓位主窗 + IO 点表配置窗 + 工艺策略窗 + 工单信息窗 + 权限管理窗 + 登录窗（`ViewModels/` 六个 VM）+ 自建 `DialogService.cs` |
-| `src/PlcMesBridge/MainWindow.*` | 主窗：多机网关视图、视图筛选（替代 Form2/Form6；单机视图与"运行模式"菜单已随单机链路删除；Phase 2 演化 CimGateway） |
-| `src/PlcMesBridge/Controls/StationPanel.*` | 机台面板复用件（MVVM View，VM 由主窗注入，8 实例） |
-| `src/PlcMesBridge/ViewModels/` | 主程序各窗 VM（`IDialogService` 基建 + 各窗 VM，主窗 VM 含视图筛选/门禁） |
-| `src/PlcMesBridge/MesDebugWindow.*` | 调试窗：5 接口表单 + API0033 扩展 + 预览上传 |
-| `src/PlcMesBridge/MesLogWindow.*` | 日志窗（-1 全部机台 / >=0 分机台，关窗退订） |
-| `src/PlcMesBridge/PlcConfigWindow.*` | PLC 配置窗（多机/接口两页 + 测试连接 + 保存重启，逻辑在 Core；单机页已删） |
-| `src/PlcMesBridge/MesAlarmWindow.*` / `ImageWindow.*` | 报警窗 / 图片查看 |
+| `src/CimGateway/MainWindow.*` | 主窗：多机网关视图、视图筛选（替代 Form2/Form6；单机视图与"运行模式"菜单已随单机链路删除；Phase 2 演化 CimGateway） |
+| `src/CimGateway/Controls/StationPanel.*` | 机台面板复用件（MVVM View，VM 由主窗注入，8 实例） |
+| `src/CimGateway/ViewModels/` | 主程序各窗 VM（`IDialogService` 基建 + 各窗 VM，主窗 VM 含视图筛选/门禁） |
+| `src/CimGateway/MesDebugWindow.*` | 调试窗：5 接口表单 + API0033 扩展 + 预览上传 |
+| `src/CimGateway/MesLogWindow.*` | 日志窗（-1 全部机台 / >=0 分机台，关窗退订） |
+| `src/CimGateway/PlcConfigWindow.*` | PLC 配置窗（多机/接口两页 + 测试连接 + 保存重启，逻辑在 Core；单机页已删） |
+| `src/CimGateway/MesAlarmWindow.*` / `ImageWindow.*` | 报警窗 / 图片查看 |
 | **Core 共享（固化工艺家族，P3.1 新增）** | |
 | `src/PlcMesBridge.Core/Curing/CuringPolicy.cs` | 工艺策略模型：时长三级覆盖（仓位>层>全局，`ResolveMinutes` 唯一出口）+ 光栅门控 + `CuringPolicyValidator`（时长/层号/仓位键/重名） |
 | `src/PlcMesBridge.Core/Curing/CuringPolicyStore.cs` | `config/curingpolicy.json` 存取（策略库+激活名）+ `BuildDefaultBook` 缺省库自愈 |
@@ -163,6 +167,9 @@
 | `src/PlcMesBridge.Core/Comms/IoPointTableStore.cs` | `config/pointtable.json` 存取 + `BuildDefaultTemplate` 缺省模板（自愈） |
 | `src/PlcMesBridge.Core/Comms/IoBus.cs` | `IPointTableBus` + 真机 `ModbusPointTableBus`（逐块读写/RMW 写 DO/5s 重连）+ 演示 `MockPointTableBus` |
 | `src/PlcMesBridge.Core/Comms/IoCouplerConnectionTester.cs` | IO 耦合器连通测试（三态文案，先测再存） |
+| **程序①（策略预置 + IO 测试，V0.0.20 三轮新增）** | |
+| `src/CureStation/ViewModels/CuringPolicyViewModel.cs` | 策略窗编排：预置库（IsPreset）/套用为自定义/三拦截/先改副本/可视化预览数据（`SlotPreviewItem` 四档色键） |
+| `src/CureStation/ViewModels/IoTestViewModel.cs` + `IoTestWindow.*` | IO 通讯测试窗：点表驱动仓位卡网格（DI 只读灯/DO 点击钮）+ 一键遍历跑马灯 + 共享总线（关窗 Detach） |
 | **Core 共享（业务既有）** | |
 | `src/PlcMesBridge.Core/Services/LocalLogService.cs` | 本机操作日志落盘（截 50 字写文件，全量上界面） |
 | `src/PlcMesBridge.Core/Modes/MultiMachineGateway.cs` | 多机网关：触发→JSON→POST→回写 + Manager（Modbus 底座已接，业务零改动） |
@@ -171,7 +178,7 @@
 | `src/PlcMesBridge.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段） |
 | `src/PlcMesBridge.Core/Data/CureRecordStore.cs` | `PLCtable` CRUD + `ComputeStats` 纯统计 |
 | `src/PlcMesBridge.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/PLC 配置模型与校验 |
-| `tests/PlcMesBridge.Tests/` | 287 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
+| `tests/PlcMesBridge.Tests/` | 315 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
 | `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
 
 ## 构建与验证命令
@@ -179,7 +186,7 @@
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build PlcMesBridge.slnx --nologo
-# 全量测试（287/287 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
+# 全量测试（315/315 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
 dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 # 子模块改动后（VS MSBuild，net472，原样沿用上游命令）
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
@@ -188,7 +195,7 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 # GUI 冒烟：Start-Process 起 exe，确认进程存活 + config/DataBase/log 生成，再 Stop-Process
 #   （程序①起 CureStation.exe，看 config/pointtable.json 自愈落盘 + 30 张仓位卡）
 # 模拟联调：config.ini [setting] Simulate=1（两程序同名键，无真机跑全流程）——
-#   PlcMesBridge 直起即模拟 8 机台网关；CureStation 直起即 Mock 总线按仓位流转演示
+#   CimGateway（程序②，exe 同名）直起即模拟 8 机台网关；CureStation 直起即 Mock 总线按仓位流转演示
 ```
 
 ## 已知坑（复刻 heritage，改前必读代码注释）
@@ -246,7 +253,7 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
   ② **防锁死红线**：最后一个 LEVEL.4 删/降一律拒绝（`OperatorStore` 层拦，
   权限窗只负责弹框展示）；③ 未知级别文本按 L1 兜底（安全侧：错降无害错升
   危险）；④ 门禁级别缺省：工单 L1（途程/数量/清零 L2、制程代码 L3）、
-  工艺策略 L3、点表/权限管理 L4——改门禁只动 `MainViewModel.Gate` 调用处；
+  工艺策略 L3、IO 测试 L3、点表/权限管理 L4——改门禁只动 `MainViewModel.Gate` 调用处；
   ⑤ 工单窗 Flush 有门禁兜底：级别不够的字段回读盘上原值（防绕过 IsEnabled
   直改 VM 属性越权落盘）；⑥ 初始密码 admin/123456 只在 App.OnStartup 一处，
   上线必改，文档不得记录现场真实密码；⑦ **登录窗记忆/改密语义（V0.0.20 对齐
@@ -258,7 +265,35 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
   （≥6 位+不与旧同）→ 两次一致；用户名下拉=在册账号实时表（ListUsers），
   不是登录历史文件；改密三框/登录密码框共四个 PasswordBox 双向接线（VM→框
   回写靠"值不同才走"防互踢），键盘链统一在 View 层 PreviewKeyDown（按钮
-  禁用 IsDefault/IsCancel——双面板下会吃错回车；下拉展开时回车/Esc 放行）。
+  禁用 IsDefault/IsCancel——双面板下会吃错回车；下拉展开时回车/Esc 放行）；
+  ⑧ 顶栏登录态格式="级别短名：账号"（`ShortName`，如"管理员：admin"，
+  不带"操作员"前缀/LEVEL 字样——UI 口径 V0.0.20 二轮定）；登录窗下拉
+  编辑框/下拉项（ItemContainerStyle Padding=19）/密码框三处文本左缘对齐
+  是 UI 契约，动输入框内边距须放大截图核对；顶栏连接文本不截断（* 弹性列
+  完整显示，TextTrimming+ToolTip 兜底），勿再引入按长度截断。
+- **策略预置/套用语义（V0.0.20 三轮起，全在 `CuringPolicy.IsPreset` +
+  `CuringPolicyViewModel`）**：① 预置策略（IsPreset=true，出厂模板）可选中
+  查看/编辑，但保存/激活/删除一律 VM 层拦下——唯一出口【套用为自定义策略】
+  （编辑内容**整体替换**写入"自定义"并激活，不残留旧覆盖行）；② **激活只认
+  自定义**（BuildDefaultBook 激活名="自定义"且"自定义"排 Policies[0]——
+  ResolveActive 兜底回它，激活名失效时程控不停摆）；③ 老版本 JSON 无
+  IsPreset 字段反序列化 false=全按自定义，兼容零迁移；④ 保存链=先改副本：
+  BuildDraftFromEditor 产草稿→**草稿替换选中项进库校验**→过了才
+  ApplyDraftToSelected+落盘（改名撞车不污染原对象，对齐 AgingTestSystem
+  大扫荡教训）；⑤ 可视化画布：SlotPreviewItems=RackCount×LevelCount 格
+  （与主窗网格同源，DialogService 从点表算最大架/层传入，下限 10×3），
+  编辑任一时长 RebuildPreview 实时反映；分档四色（绿<60/黄/橙/红≥180）
+  在 XAML DataTrigger；拖动/滚轮缩放/双击复位在 View 层 RenderTransform
+  （CuringPolicyWindow.xaml.cs），业务零耦合。
+- **IO 通讯测试窗语义（V0.0.20 三轮，全在 `IoTestViewModel`）**：① 通道
+  清单完全来自点表（Role≠Reserved、架层>0），仓位卡补占位保持三格齐整
+  （Exists=false 不响应点击）——**换项目零代码**，勿写死通道表；② 共享
+  主窗 `IPointTableBus`（不另建 TCP），WritePoint 一律 Task.Run 后台
+  （内部 TCP IO，UI 线程禁网络铁律），失败灯弹回快照真值不误导；③ 一键
+  遍历=500ms/路跑马灯（只动本拍两路，同寄存器其它位靠总线 RMW 保位），
+  停止自动全 DO 关闭；④ 总线 Error/ConnectionChanged 后台线程触发——
+  订阅处立即 UiInvoke 封送，**窗口 Closed 必须 Detach()**（停计时器/
+  停遍历/退订，防悬挂订阅）。
 - **单线过账语义（P3.2 后半起生效，全在 `CuringMesPoster`/`CuringMesOptions`
   一处）**：① 触发映射=老项目命令字——托盘到位=进站（API0030 I）、托盘
   离开=出站链（先 API0027 外层数组后 API0030 O）、出站被接受（STATUS=1）

@@ -3,7 +3,7 @@
 从 VB 老项目（`PLC_ReadData` 单机固化收料 + `PLC_ReadDataA` 八机通用网关）
 融合重构的 .NET 8 解决方案，含两个可独立部署的 WPF 程序：
 
-* `src/PlcMesBridge` — 主程序：MES 多机网关（八机 Modbus TCP 统一底座；
+* `src/CimGateway` — 主程序（程序②，CIM 整线过账网关；原名 PlcMesBridge，V0.0.21 改名）：MES 多机网关（八机 Modbus TCP 统一底座；
   Phase 2 演化为程序② CIM 整线过账，单机模式已删）
 * `src/CureStation` — **程序①固化程控**：IO 耦合器（Modbus TCP）30 仓位程控——
   点表"点点鼠标"配置 + 主窗仓位网格 + 仓位状态机（到位计时→放行→三色灯）+
@@ -39,7 +39,7 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 
 ## 架构（MVVM）
 
-- View（`src/PlcMesBridge/*.xaml` 纯绑定）← ViewModel（`ViewModels/`：
+- View（`src/CimGateway/*.xaml` 纯绑定）← ViewModel（`ViewModels/`：
   状态 + 命令，`ViewModelBase` 管通知与跨线程封送）→ Model/Core
   （业务，可测）+ `IDialogService`（VM 开窗/提示唯一出口）。
 - xaml.cs 只做三件事：设 DataContext、PasswordBox 密码转交（不可绑定）、
@@ -68,7 +68,7 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
   "架号段:工位"映射（如 `11-20:L`），L 工位还可配专用机台号（缺省同主值）。
 - **登录与四级权限（P3.2）**：顶栏"登录"进四级操作员（L1 操作员/L2 班长/
   L3 工程师/L4 管理员，对照参考 HMI）；主窗功能入口按级别门禁——工单 L1+、
-  工艺策略 L3+、点表/权限管理 L4+，未登录一律拦下。账号存 operators 表
+  工艺策略 L3+、IO 测试 L3+、点表/权限管理 L4+，未登录一律拦下。账号存 operators 表
   （PBKDF2 哈希），初始 admin/123456 上线必改；防锁死：最后一个 L4 不可删/降。
   **登录窗功能对齐参考 mFormLogin（V0.0.20 补丁）**：用户名下拉列在册账号
   （可点选可手输）+ 记住密码（按账号各记各的，DPAPI 密文存 config.ini 无
@@ -93,10 +93,24 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
   **断电续算可配置**：策略勾"断电续算"后进行中仓位随状态变化落盘
   `config/curingstate.json`，重启按记录续算（断电时间计入固化时长）；缺省关
   =断电重计（宁可重计也不放行没固化够的货）。
-- **工艺策略窗（参考配方管理模式）**：策略库增删选 + 编辑（策略名/全局时长/
-  光栅门控/每层覆盖/每仓位覆盖行表）+ **激活并生效**（保存+启用选中策略）+
-  **仅保存**（先校验后落盘，错弹框不写文件）。时长三级覆盖：仓位 > 层 > 全局，
-  缺值自动回退，三种粒度可混用；光栅门控可开关（开=左右光栅都灭才开计时）。
+- **工艺策略窗（参考 AgingTestSystem 配方管理模式 + 预置库）**：策略库
+  增删选 + 编辑（策略名/全局时长/光栅门控/每层覆盖/每仓位覆盖行表）+
+  **激活并生效**（保存+启用选中策略）+ **仅保存**（先校验后落盘，错弹框
+  不写文件）。时长三级覆盖：仓位 > 层 > 全局，缺值自动回退，三种粒度可
+  混用；光栅门控可开关（开=左右光栅都灭才开计时）。**预置策略库**：
+  出厂自带 5 个预置样例（标准 120/快速 60/深度 240/分层固化/特殊仓位
+  示例——顺带演示每层与每仓位覆盖怎么配），选中预置可查看修改参数，但
+  保存请点**【套用为自定义策略】**（修改落到"自定义"并自动激活）——预置
+  本身不能激活/删除，保证出厂推荐可回溯；**激活只认自定义策略**，开窗
+  默认选中"自定义"。**仓位时长可视化画布**（窗口底部）：每仓位一格按
+  解析时长四档着色（绿<60/黄/橙/红≥180 分钟）+ 图例，编辑参数实时反映；
+  支持拖动平移、滚轮缩放、双击复位。
+- **IO 通讯测试窗（顶栏"IO测试"，L3+；现场接线验证）**：按点表铺仓位卡
+  网格（与主窗同布局）——DI 只读状态灯（500ms 自动刷新）+ DO 点击灯钮
+  （点击切换 ON/OFF，写入失败灯弹回真实读数）；**一键遍历**=500ms/路
+  跑马灯逐路点亮快速验接线（再点停止并全部关闭）+ 全部关闭复位；共享
+  主窗总线连接（不另建 TCP），操作全程日志。**换项目零代码**：通道清单
+  完全来自点表配置，改点表即适配新线体。
 - **点表配置窗（"点点鼠标"核心，现场不改代码）**：设备增删（IP/端口）+
   **一键缺省模板**（按起始架号×架数×层数生成全套绑定，双架第二台填 11）+
   **设备高级参数**（端口/从站号/DI·DO 起始地址/块跨度/每块点数/超时/轮询
@@ -125,10 +139,16 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
   全界面改，"测试连接"拿表单值直测（不用先保存），"保存并重启"先校验
   格式、错当场拦，通过后自动重启生效。
   去现场只点鼠标，不改代码不改 ini。
+  W68 联调预备（V0.0.22 起全配置化）：接口页含 6 接口的 URL/触发字/数据/
+  MSG/DATA/状态/完成 7 项 + 数据长度 + **分段偏移**（API0030/0031 返回 DATA
+  三段拆写 DATA/+30/+60 的偏移，缺省 30,60；终版拆段规则不同改这里即可）；
+  多机页含每台 IP/端口/启用 + **扫描周期ms**（触发轮询间隔，缺省 200，
+  保存即热生效无需重连）。字符串字节序（StringByteOrder）等其余键见
+  `config.sample.ini` 注释。
 - "创建桌面快捷方式"：一键在桌面建 `.lnk`（图标取 exe 内嵌图标，
   已存在不覆盖只提示路径）。exe/任务栏/全部 8 个窗体左上角图标统一为
-  `src/PlcMesBridge/Assets/app.ico`，换图标只换该文件重新编译。
-- 风格：天蓝色小清新全局样式（`src/PlcMesBridge/Styles/FreshBlue.xaml`）。
+  `src/CimGateway/Assets/app.ico`，换图标只换该文件重新编译。
+- 风格：天蓝色小清新全局样式（`src/CimGateway/Styles/FreshBlue.xaml`）。
 
 ## 目录
 
@@ -140,7 +160,7 @@ dotnet test tests/PlcMesBridge.Tests/PlcMesBridge.Tests.csproj --nologo
 - `src/CureStation/` — **程序①固化程控**（30 仓位主窗 + IO 点表配置窗 +
   工艺策略窗 + 工单信息窗 + 权限管理窗 + 登录窗 + 过账配置窗 + 仓位状态机
   + 单线过账服务）
-- `src/PlcMesBridge/` — 主程序 WPF 界面（主窗/调试/报警/日志/图片窗），
+- `src/CimGateway/` — 主程序 WPF 界面（主窗/调试/报警/日志/图片窗），
   图标在 `Assets/`（`app.ico` 程序图标 / `app.png` 高清源备用）
 - `tests/PlcMesBridge.Tests/` — 223 例 xUnit（`Mocks/`：本地桩 MES /
   网关标准报文 / 静态全局快照恢复 / Fake 对话框两套 / ScriptedPointBus 状态机桩，
