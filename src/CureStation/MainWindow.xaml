@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:CureStation.ViewModels"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:local="clr-namespace:CureStation"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainViewModel, IsDesignTimeCreatable=False}"
@@ -11,11 +12,23 @@
         MinWidth="1200" MinHeight="600"
         WindowState="Maximized"
         WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
         Icon="Assets/app.ico"
         FontSize="13"
         Background="{DynamicResource Brush.WindowBg}">
+    <!-- 无边框自绘（V0.0.28，弹窗口径盖帽加高）：OS 标题栏白条移除，品牌顶栏
+         即标题条——CaptionHeight=44 整条命中拖动/双击最大化还原；
+         ResizeBorderThickness=6 还原态边沿拉伸；GlassFrameThickness=0 关 DWM
+         玻璃边（最大化溢出断症在 code-behind ApplyRootMargin 垫回）。 -->
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="44" GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False"
+                            ResizeBorderThickness="6"/>
+    </shell:WindowChrome.WindowChrome>
     <!--
       布局口径（docs/UI设计_固化架显示区优化_对比稿.html G 系直译，一比一复刻，2026-10-29）：
+      - 无边框自绘（V0.0.28）：OS 标题栏移除，品牌顶栏=标题条（caption 44 +
+        系统三钮 ─□✕ 在功能按钮组末尾）；最大化时根 Grid 垫回 resize 边框防裁切；
       - 窗底 = Brush.WindowBg（G2 160°淡蓝→白 / G1 深空径向冷光），主题字典全键化；
       - 单条品牌顶栏（行 0 全宽贴边）：Light=品牌蓝渐变 / Dark=#101A2C 深蓝实底；
         左=chip"固"+连接灯点+策略+连接(*弹性)+过账+操作员，右=功能按钮组
@@ -312,7 +325,7 @@
         </DataTemplate>
     </Window.Resources>
 
-    <Grid>
+    <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -396,6 +409,26 @@
                     <Button Style="{StaticResource PrimaryGhostButton}" Content="日志"
                             Command="{Binding ShowLogCommand}"
                             ToolTip="打开操作日志 / 控制台悬浮窗（L1+）"/>
+                    <!-- 系统三钮（V0.0.28 无边框化补位 OS 标题栏职责）：最小化/最大化还原/关闭；
+                         最大化还原图标 □↔❐ 随 WindowState 切换；关闭走"退出"同链 OnExitClick -->
+                    <Button Style="{StaticResource WinSysBtn}" Content="─" Margin="4,0,0,0"
+                            Click="OnMinClick" ToolTip="最小化"/>
+                    <Button Style="{StaticResource WinSysBtn}" Click="OnMaxClick" ToolTip="最大化 / 还原">
+                        <TextBlock>
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="□"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Path=WindowState, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=Maximized}"
+                                                     Value="Maximized">
+                                            <Setter Property="Text" Value="❐"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Button>
+                    <Button Style="{StaticResource WinSysClose}" Content="✕" Click="OnExitClick" ToolTip="关闭"/>
                 </StackPanel>
             </Grid>
         </Border>

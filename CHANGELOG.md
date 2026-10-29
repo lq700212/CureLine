@@ -2,6 +2,33 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.28（2026-10-29，主窗 OS 标题栏自绘 + 过账配置窗"固化时间单位"截断修复）
+
+背景：V0.0.26 主窗仍是 OS 系统标题栏（顶部 30px 白条与品牌顶栏割裂），
+V0.0.27 已把 8 个弹窗统一无边框自绘，主窗作为最后一块补齐；另过账配置窗
+"固化时间单位"下拉文案尾部截断（V0.0.26 既有列宽口径）一并修。
+
+- **主窗无边框自绘**：`WindowStyle=None + WindowChrome`（CaptionHeight=44
+  对齐品牌顶栏，整条命中拖动 + 双击最大化还原；ResizeBorderThickness=6
+  还原态可拉伸；GlassFrameThickness=0 关 DWM 玻璃边）。顶栏功能按钮组末补
+  **系统三钮**（最小化 ─/最大化还原 □↔❐/关闭 ✕，新增 `WinSysBtn/
+  WinSysClose` 两通用样式——关闭与"退出"按钮同链 Dispose+Shutdown，
+  还原图标随 WindowState 切换）；顶栏 `GhostButton` 样式级声明
+  `IsHitTestVisibleInChrome`（caption 区内所有按钮可点）；最大化时根 Grid
+  按 `SystemParameters.WindowResizeBorderThickness`（已含 DPI 修正）垫回
+  边距，防顶栏/工单卡被屏幕边裁切（`ApplyRootMargin`，Loaded+StateChanged
+  双锚）。Light/Dark 同构生效。
+- **过账配置窗"固化时间单位"行重排**：定宽 220 与 Auto 均被 UniformGrid
+  两列式列宽（≈164px）钳住，最宽选项"Seconds（秒，老项目口径）"（自然宽
+  ≈206px）尾部截断；该行拆为"标签一行 + 下拉一行"独占整卡宽，Auto 自然
+  舒展完整显示（"进站上传时机"行保持两列式不动）。Light 侧该窗布局随之
+  微调（用户批准，其余界面 Light 零变化）。
+- **DocShot 双主题重拍**：cs-main-idle/flow/flow2/cs-mespost 四张两套均重
+  拍归档后仅保留受影响四张入库；Dark 全套像素白区扫描 cs_ 12/12 OK
+  （主窗 OS 白条消失，不再计入白区）；gw_* 属程序②浅色窗口固有白底控件
+  形态，不在主题跟随范围，与本轮无关。
+- 测试 0 改动：全量 342/342 全绿；build 0 警 0 错。
+
 ## V0.0.27（2026-10-29，弹窗跟主题第 2 期：Fresh 键板两字典化 + 8 窗无边框自绘 + ListBox 容器换肤）
 
 背景：V0.0.26 主窗双主题完成后，8 个功能弹窗仍是硬编码浅色一套，与 Dark

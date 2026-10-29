@@ -14,7 +14,29 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // 无边框化（V0.0.28）：最大化时窗矩形比可视工作区四周大一个 resize 边框
+        // （96dpi≈8px，SystemParameters 已含 DPI 修正），自绘窗没有 OS 非客户区帮
+        // 我们裁掉——这里给根 Grid 垫回同厚度，防顶栏/工单卡被屏幕边裁切。
+        StateChanged += (_, _) => ApplyRootMargin();
+        Loaded += (_, _) => ApplyRootMargin(); // XAML 预设 Maximized 启动也要对齐一次
     }
+
+    /// <summary>根元素边距随窗口态同步：最大化垫回 resize 边框，还原/最小化归零。</summary>
+    private void ApplyRootMargin()
+    {
+        if (RootGrid == null) return; // 构造早期 StateChanged 可能先到
+        RootGrid.Margin = WindowState == WindowState.Maximized
+            ? SystemParameters.WindowResizeBorderThickness
+            : new Thickness(0);
+    }
+
+    /// <summary>系统钮：最小化（自绘窗没有 OS 按钮了，顶栏三钮顶替）。</summary>
+    private void OnMinClick(object sender, RoutedEventArgs e) =>
+        WindowState = WindowState.Minimized;
+
+    /// <summary>系统钮：最大化 ↔ 还原切换（双击顶栏走 WindowChrome 原生行为）。</summary>
+    private void OnMaxClick(object sender, RoutedEventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
 
     /// <summary>退出去掉自带确认（骨架期一键关；状态机接入后加确认）。</summary>
     private void OnExitClick(object sender, RoutedEventArgs e)
