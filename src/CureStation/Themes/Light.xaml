@@ -199,4 +199,72 @@
     </LinearGradientBrush>
     <SolidColorBrush x:Key="Brush.LfHeadFg" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="Brush.LfHeadSubFg" Color="#CCFFFFFF"/>
+
+    <!-- ══════════ 弹窗键板 Fresh.*（V0.0.27 第 2 期起弹窗跟主题） ══════════ -->
+    <!-- 功能弹窗（登录/工单/策略/权限/点表/过账配置/IO 测试）共用的样式 Setter 全部
+         DynamicResource 指向本段键。此前 Fresh.* 收在 App.xaml 固定浅色（弹窗不随主题
+         ——拍板"弹窗维持浅色，第 2 期再统一"），本期起键值搬进两主题字典同名异值：
+         本文件（Light）=原 Fresh 固定浅色值一字未动（浅色弹窗视觉零回归），Dark.xaml
+         给同名键 G1 深空玻璃口径。键名勿改：App.xaml 弹窗样式的 DynamicResource
+         引用点与本段须同步，改键名两处都要动。 -->
+    <SolidColorBrush x:Key="Brush.Fresh.CardBg" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Brush.Fresh.HintBg" Color="#EFF6FD"/>
+    <SolidColorBrush x:Key="Brush.Fresh.Border" Color="#B8D4EE"/>
+    <SolidColorBrush x:Key="Brush.Fresh.FgStrong" Color="#1F4E79"/>
+    <SolidColorBrush x:Key="Brush.Fresh.FgMid" Color="#333333"/>
+    <SolidColorBrush x:Key="Brush.Fresh.FgDim" Color="#888888"/>          <!-- 辅助说明字（原 #888/#666/#999 硬编码统一） -->
+    <SolidColorBrush x:Key="Brush.Fresh.ButtonBg" Color="#F5FAFF"/>
+    <SolidColorBrush x:Key="Brush.Fresh.ButtonHoverBg" Color="#E3F0FC"/>
+    <SolidColorBrush x:Key="Brush.Fresh.ButtonHoverBorder" Color="#8FC1EC"/>
+    <SolidColorBrush x:Key="Brush.Fresh.ButtonPressedBg" Color="#D0E6F9"/>
+    <SolidColorBrush x:Key="Brush.Fresh.Accent" Color="#1E90FF"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AccentBorder" Color="#1873CC"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AccentHover" Color="#1873CC"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AccentPressed" Color="#135EA8"/>
+    <SolidColorBrush x:Key="Brush.Fresh.OnAccent" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Brush.Fresh.Danger" Color="#D9534F"/>
+    <SolidColorBrush x:Key="Brush.Fresh.DangerBorder" Color="#C9302C"/>
+    <SolidColorBrush x:Key="Brush.Fresh.DangerHover" Color="#C9302C"/>
+    <SolidColorBrush x:Key="Brush.Fresh.DangerPressed" Color="#AC2925"/>
+    <SolidColorBrush x:Key="Brush.Fresh.Success" Color="#5CB85C"/>
+    <SolidColorBrush x:Key="Brush.Fresh.SuccessBorder" Color="#449D44"/>
+    <SolidColorBrush x:Key="Brush.Fresh.SuccessHover" Color="#449D44"/>
+    <SolidColorBrush x:Key="Brush.Fresh.SuccessPressed" Color="#398439"/>
+    <SolidColorBrush x:Key="Brush.Fresh.InputBg" Color="#FFFFFF"/>
+    <!-- 窗体骨架（V0.0.27 起弹窗 WindowStyle=None 自绘：底 / 标题条字 / 关闭钮悬停红） -->
+    <SolidColorBrush x:Key="Brush.Fresh.WinBg" Color="#F2F7FC"/>          <!-- 窗底（比白卡蓝灰一档，衬托白卡） -->
+    <SolidColorBrush x:Key="Brush.Fresh.CloseHoverBg" Color="#E81123"/>   <!-- 关闭钮悬停红（Win32 惯例色，双主题同值） -->
+    <!-- 变体面板（分区底/边 + 只读框 + 子卡） -->
+    <SolidColorBrush x:Key="Brush.Fresh.PanelBorder" Color="#D7E4F2"/>    <!-- 分区淡边（画布/IO 分区，比卡边更淡一档） -->
+    <SolidColorBrush x:Key="Brush.Fresh.SubCardBg" Color="#FBFDFF"/>      <!-- 卡内子区底（IO 测试仓位格） -->
+    <SolidColorBrush x:Key="Brush.Fresh.LockedBg" Color="#F5F5F5"/>       <!-- 只读框底（工单已生产数） -->
+    <!-- 提示条三族（警示黄 / 错误红 / 成功绿：底-边-字） -->
+    <SolidColorBrush x:Key="Brush.Fresh.WarnBg" Color="#FFF8E1"/>
+    <SolidColorBrush x:Key="Brush.Fresh.WarnBorder" Color="#F0D48A"/>
+    <SolidColorBrush x:Key="Brush.Fresh.WarnFg" Color="#8A6D3B"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AlertErrBg" Color="#FDECEA"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AlertErrBorder" Color="#F5C6CB"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AlertErrFg" Color="#C8102E"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AlertOkBg" Color="#E8F5E9"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AlertOkBorder" Color="#C8E6C9"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AlertOkFg" Color="#2E7D32"/>
+    <!-- 策略可视化画布：画布底（凹面工作区）+ 时长分档四色（浅色块直译原稿）+ 块上双阶字 -->
+    <SolidColorBrush x:Key="Brush.Fresh.CanvasBg" Color="#F4F7FA"/>
+    <SolidColorBrush x:Key="Brush.Fresh.TierGreen" Color="#C8E6C9"/>
+    <SolidColorBrush x:Key="Brush.Fresh.TierYellow" Color="#FFF59D"/>
+    <SolidColorBrush x:Key="Brush.Fresh.TierOrange" Color="#FFCC80"/>
+    <SolidColorBrush x:Key="Brush.Fresh.TierRed" Color="#EF9A9A"/>
+    <SolidColorBrush x:Key="Brush.Fresh.TierFg" Color="#37474F"/>
+    <SolidColorBrush x:Key="Brush.Fresh.TierFgSub" Color="#607D8B"/>
+    <!-- IO 测试灯珠（OFF 灰 / 未读到浅灰 / 灯边框；ON=Success、ON边=SuccessBorder 复用） -->
+    <SolidColorBrush x:Key="Brush.Fresh.DotOff" Color="#BDBDBD"/>
+    <SolidColorBrush x:Key="Brush.Fresh.DotNoRead" Color="#ECEFF1"/>
+    <SolidColorBrush x:Key="Brush.Fresh.DotBorder" Color="#90A4AE"/>
+    <!-- DataGrid（列头底 / 选中底 / 网线；字色走 FgStrong/FgMid 复用） -->
+    <SolidColorBrush x:Key="Brush.Fresh.GridHeaderBg" Color="#F5FAFF"/>
+    <SolidColorBrush x:Key="Brush.Fresh.GridSelBg" Color="#E3F0FC"/>
+    <SolidColorBrush x:Key="Brush.Fresh.GridLine" Color="#E7EDF4"/>
+    <!-- 滚动条胶囊（常态/悬停） -->
+    <SolidColorBrush x:Key="Brush.Fresh.ScrollThumb" Color="#BFD3E8"/>
+    <SolidColorBrush x:Key="Brush.Fresh.ScrollThumbHover" Color="#8FC1EC"/>
 </ResourceDictionary>

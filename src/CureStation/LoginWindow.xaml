@@ -4,12 +4,20 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:CureStation.ViewModels"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:LoginViewModel, IsDesignTimeCreatable=False}"
         Title="操作员登录" Width="420" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        WindowStyle="None" Background="White" FontSize="13">
-    <!--★★ 登录窗（V0.0.20 对齐 HJVision mFormLogin 功能清单，配色按本项目 Fresh 风）：
+        WindowStyle="None" Background="{DynamicResource Brush.Fresh.WinBg}" FontSize="13">
+    <shell:WindowChrome.WindowChrome>
+        <!-- 无边框自绘（V0.0.27 弹窗统一）：CaptionHeight 撑标题条命中拖动，
+             NoResize 窗缩放边沿不需要；系统按钮全关（自绘 ✕ 走 VM 取消链） -->
+        <shell:WindowChrome CaptionHeight="34" GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False"
+                            ResizeBorderThickness="0"/>
+    </shell:WindowChrome.WindowChrome>
+    <!--★★ 登录窗（V0.0.20 对齐 HJVision mFormLogin 功能清单，配色走主题 Fresh 键板）：
          双面板同窗切换（登录 ⇄ 修改密码，横幅随面板换文案）；
          登录面板=用户名下拉（在册账号，可手输）+ 密码 + 记住密码勾选；
          改密面板=原密码/新密码/确认三框（四道闸在 VM：在册→原密码验对→
@@ -17,30 +25,18 @@
          官方 workaround），VM 侧改密码经 PropertyChanged 回写框（见 xaml.cs Wire）；
          键盘链（回车跳框/Esc 回面板/下拉展开放行回车）在 xaml.cs PreviewKeyDown，
          故按钮不用 IsDefault/IsCancel（双面板下会吃错回车）。
-         VM 与门禁链零改动（LoginName/Level 输出、OkCommand/CancelCommand 原样）。-->
-    <Border BorderBrush="#B8D4EE" BorderThickness="1">
+         VM 与门禁链零改动（LoginName/Level 输出、OkCommand/CancelCommand 原样）。
+         取色全走 Brush.Fresh.*（两主题字典同名异值，ThemeManager 切字典即换肤）；
+         标题条/关闭钮走 App.xaml WinTitleBar/WinTitleClose 共享样式（拖动由
+         WindowChrome CaptionHeight 接管，不再需要 MouseLeftButtonDown 拖拽代码）。-->
+    <Border BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1">
         <DockPanel>
-            <!-- 品牌标题条：拖动移动窗体，右侧关闭钮（悬停变红） -->
-            <Border DockPanel.Dock="Top" Background="#1E90FF" Height="38"
-                    MouseLeftButtonDown="OnTitleBarMouseDown">
+            <!-- 品牌标题条：WinTitleBar 共享样式（主窗品牌渐变同源），右侧关闭钮 -->
+            <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
                 <Grid>
-                    <!-- 标题条只留色条+关闭钮（V0.0.20 口径：文字删除，拖动/关闭不受影响） -->
-                    <Button HorizontalAlignment="Right" Width="40" Height="38" Content="✕"
-                            Foreground="White" FontSize="13" Cursor="Hand"
-                            Click="OnCloseClick" ToolTip="关闭（Esc）">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border x:Name="Bd" Background="Transparent">
-                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="#E81123"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Button.Template>
-                    </Button>
+                    <Button Style="{StaticResource WinTitleClose}" Content="✕"
+                            HorizontalAlignment="Right"
+                            Click="OnCloseClick" ToolTip="关闭（Esc）"/>
                 </Grid>
             </Border>
 
@@ -48,7 +44,8 @@
             <StackPanel Margin="36,18,36,18">
                 <!-- 居中横幅：随面板切换（"账号登录" / "修改密码（xxx）"） -->
                 <TextBlock Text="{Binding BannerText, FallbackValue=账号登录}" FontSize="20"
-                           FontWeight="Bold" Foreground="#1F4E79" HorizontalAlignment="Center"/>
+                           FontWeight="Bold" Foreground="{DynamicResource Brush.Fresh.FgStrong}"
+                           HorizontalAlignment="Center"/>
 
                 <!-- ===== 登录面板（缺省可见；进改密面板时收起） ===== -->
                 <StackPanel>
@@ -92,7 +89,7 @@
                                      Style="{StaticResource FreshPwdInput}"/>
                     </Grid>
                     <CheckBox Content="记住密码（按账号各记各的）" IsChecked="{Binding Remember}"
-                              FontSize="12" Foreground="#666" Cursor="Hand"
+                              FontSize="12" Cursor="Hand"
                               HorizontalAlignment="Left" Margin="0,10,0,0"/>
                     <!-- 按钮行：修改密码（次级灰，左）+ 登录（实色蓝主按钮，右） -->
                     <Grid Margin="0,18,0,0">
@@ -139,7 +136,7 @@
                                      Style="{StaticResource FreshPwdInput}"/>
                     </Grid>
                     <TextBlock Text="新密码至少 6 位，且不得与旧密码相同。"
-                               FontSize="11" Foreground="#999" Margin="0,8,0,0"/>
+                               FontSize="11" Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="0,8,0,0"/>
                     <!-- 按钮行：返回（次级灰，左）+ 保存修改（实色蓝主按钮，右） -->
                     <Grid Margin="0,18,0,0">
                         <Button Style="{StaticResource FreshButton}" Content="返 回"
@@ -151,12 +148,13 @@
                     </Grid>
                 </StackPanel>
 
-                <!-- 共用提示条：错误=浅红底红字 / 成功=浅绿底绿字（改密成功走绿条） -->
+                <!-- 共用提示条：错误=浅红底红字 / 成功=浅绿底绿字（改密成功走绿条）。
+                     底/边/字全走 AlertErr*/AlertOk* 键（Dark=低透明状态浸染） -->
                 <Border CornerRadius="4" Padding="10,6" Margin="0,12,0,0">
                     <Border.Style>
                         <Style TargetType="Border">
-                            <Setter Property="Background" Value="#FDECEA"/>
-                            <Setter Property="BorderBrush" Value="#F5C6CB"/>
+                            <Setter Property="Background" Value="{DynamicResource Brush.Fresh.AlertErrBg}"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.AlertErrBorder}"/>
                             <Setter Property="BorderThickness" Value="1"/>
                             <Style.Triggers>
                                 <!-- Tip 为空整条收起（登录/改密两面板共用一条） -->
@@ -165,8 +163,8 @@
                                 </DataTrigger>
                                 <!-- 成功提示换绿（改密成功走绿条，错误保持红条） -->
                                 <DataTrigger Binding="{Binding TipIsError, FallbackValue=True}" Value="False">
-                                    <Setter Property="Background" Value="#E8F5E9"/>
-                                    <Setter Property="BorderBrush" Value="#C8E6C9"/>
+                                    <Setter Property="Background" Value="{DynamicResource Brush.Fresh.AlertOkBg}"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.AlertOkBorder}"/>
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -176,10 +174,10 @@
                     <TextBlock Text="{Binding Tip}" TextWrapping="Wrap">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
-                                <Setter Property="Foreground" Value="#C8102E"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.AlertErrFg}"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding TipIsError, FallbackValue=True}" Value="False">
-                                        <Setter Property="Foreground" Value="#2E7D32"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.AlertOkFg}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>

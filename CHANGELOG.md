@@ -2,6 +2,36 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.27（2026-10-29，弹窗跟主题第 2 期：Fresh 键板两字典化 + 8 窗无边框自绘 + ListBox 容器换肤）
+
+背景：V0.0.26 主窗双主题完成后，8 个功能弹窗仍是硬编码浅色一套，与 Dark
+主窗配色断层。本轮把"弹窗维持浅色"的旧口径**整体废止**：弹窗与主窗同用
+Light/Dark 两套主题字典，切主题（V0.0.21 起的顶栏按钮）全程序一动全换皮。
+
+- **Fresh 键板两字典化**：`Brush.Fresh.*` 54 键（输入框底/边框/前景三阶/
+  强调/按钮三态/卡片/胜利红/警示橙/点表网格等）收进 `Themes/Light.xaml`
+  与 `Themes/Dark.xaml` **同名异值**；`App.xaml` 删除全部固定色键（grep
+  0 残留），FreshButton/FreshInput/FreshCombo/CheckBox/DataGrid 等样式
+  Setter 全改 `DynamicResource`——弹窗浅色值一字未动（Light 零回归），
+  Dark 出一套 G1 深空玻璃同族口径（WinBg=#0F1B30/CardBg=#12203A/
+  InputBg=#0F1D33/ButtonHoverBg=#22345A 等）。
+- **8 窗无边框自绘统一**：登录/工单/策略/IO 测试/点表/权限/过账配置/日志
+  窗全部 `WindowStyle=None` + `WindowChrome`（标题条命中拖动 Caption 34/
+  36，ResizeBorder 6 可拉伸，登录窗 0）+ `WinTitleBar/WinTitleText/
+  WinTitleClose` 三通用样式；各窗 xaml.cs 加 OnCloseClick。
+- **通用控件主题化（App.xaml 隐式样式）**：ComboBoxItem/CheckBox/
+  Expander/ToolTip/ListBoxItem/ScrollBar/DataGrid 行列选中 + FreshCombo
+  自绘下拉模板（PART_Popup 主题弹层）；**ListBox 容器本体也上隐式样式**
+  （缺省 Aero2 呈白底大块——"选中行白底"的表象根因是整框没换肤，策略库/
+  设备列表/日志窗一并覆盖）。
+- **DocShot 双主题截图 harness**：`DOCSHOT_THEME=Dark/Light` 环境变量
+  注入（与 seed ini 主题同源）；run_docshot.ps1 从 App.xaml 摘生成的
+  字典剥壳 + 移除内层 MergedDictionaries（相对 Source 在 DocShot 组件
+  解析不到），DocShot.cs 直接 pack 加载 CureStation 编译好的主题字典。
+  两主题各 20 张全 ALL PASS，Dark 像素级白区扫描除主窗系统标题栏外 0 白。
+- **测试 +2**：`ThemeDictionaryTests`（两字典 `x:Key` 集合全等锁键不漂移
+  + Fresh 全集两字典齐）；全量 342/342 基线只增不减。
+
 ## V0.0.26（2026-10-29，主窗 G2/G1 对比稿一比一复刻）
 
 背景：V0.0.25 方案 D 的双主题是"意译色板"（键都有但视觉与设计稿对不上）。

@@ -132,22 +132,6 @@ public partial class LoginWindow : Window
         }
     }
 
-    /// <summary>标题条拖动移动窗体（无边框窗标配；DragMove 只在按下中合法，兜底吞异常）。</summary>
-    private void OnTitleBarMouseDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ChangedButton == MouseButton.Left)
-        {
-            try
-            {
-                DragMove();
-            }
-            catch (InvalidOperationException)
-            {
-                // 鼠标已释放等边缘场景：静默忽略（拖不动而已，无功能影响）
-            }
-        }
-    }
-
     /// <summary>右上 ×：走 VM 取消命令（与 Esc/取消同一条 RequestClose(false) 链）。</summary>
     private void OnCloseClick(object sender, RoutedEventArgs e)
     {

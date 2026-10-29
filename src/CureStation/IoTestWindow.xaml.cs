@@ -17,4 +17,7 @@ public partial class IoTestWindow : Window
         InitializeComponent();
         Closed += (_, _) => (DataContext as IoTestViewModel)?.Detach();
     }
+
+    /// <summary>标题条 ✕（无边框自绘标配；与 Esc/IsCancel 同走 Close → Closed 退订链）。</summary>
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 }

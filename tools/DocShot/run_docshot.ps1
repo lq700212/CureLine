@@ -1,4 +1,4 @@
-# =====================================================================
+﻿# =====================================================================
 # run_docshot.ps1 -- doc-screenshot harness runner (unattended)
 # Steps: build solution -> build self -> assemble runner dir (bin deps +
 # harness output) -> prepare seed dirs -> run DocShot.exe.
@@ -25,7 +25,34 @@ $s = $text.IndexOf($sHead, [System.StringComparison]::Ordinal)
 $t = $text.IndexOf($sTail, [System.StringComparison]::Ordinal)
 if (($s -lt 0) -or ($t -le $s)) { throw "cannot locate Resources block in App.xaml" }
 $inner = $text.Substring($s + $sHead.Length, $t - ($s + $sHead.Length)).Trim()
-$dict = "<ResourceDictionary xmlns=`"http://schemas.microsoft.com/winfx/2006/xaml/presentation`" xmlns:x=`"http://schemas.microsoft.com/winfx/2006/xaml`">`n$inner`n</ResourceDictionary>"
+# App.Resources 结构为 <ResourceDictionary><RD.MergedDictionaries>…</RD>
+# （2026-10-29 弹窗跟主题起；旧脚本直接平铺 wrap 会两层嵌套 = 编译 MC3022）：
+# 1) 剥掉 inner 的外层 <ResourceDictionary> 壳——生成文件自带一层
+# 2) 删掉 MergedDictionaries 整段——内层相对 Source="Themes/Light.xaml" 在
+#    DocShot 组件里解析不到（字典编译进 harness 程序集），主题键板由
+#    DocShot.cs 直接从 CureStation 程序集 pack 加载，此节必须移除
+if ($inner.StartsWith('<ResourceDictionary')) {
+    $open = $inner.IndexOf('>')
+    $close = $inner.LastIndexOf('</ResourceDictionary>')
+    if ($open -ge 0 -and $close -gt $open) {
+        $inner = $inner.Substring($open + 1, $close - $open - 1)
+    }
+    $mStart = $inner.IndexOf('<ResourceDictionary.MergedDictionaries>')
+    if ($mStart -ge 0) {
+        $mEnd = $inner.IndexOf('</ResourceDictionary.MergedDictionaries>')
+        if ($mEnd -gt $mStart) {
+            $inner = $inner.Substring(0, $mStart) +
+                $inner.Substring($mEnd + '</ResourceDictionary.MergedDictionaries>'.Length)
+        }
+    }
+}
+# 生成字典头照搬根节点的 xmlns:xxx 声明——App.xaml 内层样式引用前缀
+# （V0.0.27 无边框自绘 WinTitleClose 用 shell:WindowChrome.IsHitTestVisibleInChrome），
+# 漏声明 = 生成字典编译 MC3071；xmlns:x 已在头里手写，照搬时排除
+$extraNs = [regex]::Matches($text, 'xmlns:(?!x=)[\w]+="[^"]*"') |
+    ForEach-Object { $_.Value } | Select-Object -Unique
+$nsHead = if ($extraNs) { " " + ($extraNs -join ' ') } else { "" }
+$dict = "<ResourceDictionary xmlns=`"http://schemas.microsoft.com/winfx/2006/xaml/presentation`" xmlns:x=`"http://schemas.microsoft.com/winfx/2006/xaml`"$nsHead>`n$inner`n</ResourceDictionary>"
 Set-Content -Path $genPath -Value $dict -Encoding UTF8
 Write-Host "generated: $genPath"
 

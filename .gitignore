@@ -43,3 +43,6 @@ docs/vb_audit_out2/
 
 # ===== AI 会话辅助目录（ZCode 本地工作数据，不入库）=====
 .zcode/
+
+# ===== DocShot 截图 harness 运行期产物（publish/种子/运行盘不入库）=====
+tools/DocShot/runner/

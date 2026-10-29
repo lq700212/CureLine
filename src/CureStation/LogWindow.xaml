@@ -4,13 +4,22 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:CureStation.ViewModels"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:LogWindowViewModel, IsDesignTimeCreatable=False}"
         Title="操作日志 / 控制台 - 固化程控"
         Width="700" Height="520" MinWidth="560" MinHeight="380"
         WindowStartupLocation="Manual"
+        WindowStyle="None"
         Background="{DynamicResource Brush.WindowBg}"
         FontSize="12">
+    <shell:WindowChrome.WindowChrome>
+        <!-- 无边框自绘（V0.0.27 与弹窗同族）：LfHead 条即命中拖动区（CaptionHeight=36 与
+             条高对齐），边沿 6px 缩放；系统按钮全关，✕ 内置于头条右端 -->
+        <shell:WindowChrome CaptionHeight="36" GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False"
+                            ResizeBorderThickness="6"/>
+    </shell:WindowChrome.WindowChrome>
     <!--
       日志/控制台悬浮窗（方案 D：日志带移出主窗，顶栏【日志】弹出，L1+ 门禁）：
       - 双栏：左=操作日志流（最新在上、封顶 200 条；Written→队列→100ms 批量搬运），
@@ -18,12 +27,16 @@
       - 非模态单例（DialogService 防重复开）；Owner=主窗，主窗退出联动关闭；
       - 显示位置：屏幕工作区右下角（code-behind PositionBottomRight，不加
         记忆位置的 ini 键——拍板）；
-      - 全部取色走语义键（Brush.*）→ ThemeManager 切主题本窗自动跟换。
+      - 全部取色走语义键（Brush.*）→ ThemeManager 切主题本窗自动跟换；
+      - W0.0.27 起无边框自绘：LblHead 条自带 ✕（WinTitleClose 共享样式本窗
+        覆盖高 36/字色 LfHeadFg），与各功能弹窗同族外观。
     -->
     <DockPanel>
-        <!-- 标题条（HTML lfhead 直译：渐变头 + 绿点 + 白字；G1 专题意底边共用顶栏底边键） -->
+        <!-- 标题条（HTML lfhead 直译：渐变头 + 绿点 + 白字；底边共用顶栏底边键），
+             右端关闭钮（IsHitTestVisibleInChrome 已在共享样式内声明） -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource Brush.LfHeadGrad}"
-                BorderBrush="{DynamicResource Brush.TopbarBorder}" BorderThickness="0,0,0,1" Padding="12,8">
+                BorderBrush="{DynamicResource Brush.TopbarBorder}" BorderThickness="0,0,0,1"
+                Height="36" Padding="12,0">
             <DockPanel>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- 绿点（HTML lfhead .dot ok 直译） -->
@@ -36,6 +49,10 @@
                     <TextBlock Text="{Binding GeneratedAtText, FallbackValue=—}"
                                Foreground="{DynamicResource Brush.LfHeadSubFg}" VerticalAlignment="Center"/>
                 </StackPanel>
+                <!-- ✕ 先声明先靠最右；条数文本在其左侧 -->
+                <Button DockPanel.Dock="Right" Style="{StaticResource WinTitleClose}"
+                        Height="36" Foreground="{DynamicResource Brush.LfHeadFg}"
+                        Content="✕" Click="OnCloseClick" ToolTip="关闭（Alt+F4）"/>
                 <TextBlock DockPanel.Dock="Right" Text="{Binding LogLines.Count, FallbackValue=0, StringFormat={}{0} 条}"
                            Foreground="{DynamicResource Brush.LfHeadSubFg}" VerticalAlignment="Center"/>
             </DockPanel>

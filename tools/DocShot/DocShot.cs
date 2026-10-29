@@ -60,6 +60,7 @@ using CureIoTestVm = CureStation.ViewModels.IoTestViewModel;
 using CurePointTableVm = CureStation.ViewModels.PointTableViewModel;
 using CureOperatorVm = CureStation.ViewModels.OperatorViewModel;
 using CureMesPostVm = CureStation.ViewModels.MesPostConfigViewModel;
+using CureLogSnap = CureStation.ViewModels.LogSystemSnapshot;
 
 using GwMain = CimGateway.MainWindow;
 using GwLogin = CimGateway.LoginWindow;
@@ -135,10 +136,21 @@ public static class Program
         try
         {
             // 编译进 harness 程序集的资源字典（run_docshot.ps1 自动从
-            // CureStation/App.xaml 摘取生成）——与运行时视觉同源。
+            // CureStation/App.xaml 摘取生成，仅含应用级样式——生成时已剥壳并
+            // 移除 MergedDictionaries 节：内层相对 Source 在 DocShot 组件里解析不到）
             app.Resources.MergedDictionaries.Add(new ResourceDictionary
             {
                 Source = new Uri("pack://application:,,,/DocShot;component/Cure.App.Resources.xaml"),
+            });
+            // 主题键板：直接取 CureStation 程序集里编译好的主题字典（与
+            // ThemeManager 相对 URI 同源可 pack 加载）；DOCSHOT_THEME=Dark/Light，
+            // 缺省 Light——与 WriteCureSeedIni 注入 ini 的 Theme 键同源一致
+            var theme = Environment.GetEnvironmentVariable("DOCSHOT_THEME");
+            theme = string.IsNullOrWhiteSpace(theme) ? "Light" : theme.Trim();
+            app.Resources.MergedDictionaries.Add(new ResourceDictionary
+            {
+                Source = new Uri(
+                    $"pack://application:,,,/CureStation;component/Themes/{theme}.xaml"),
             });
         }
         catch (Exception ex)
@@ -549,6 +561,11 @@ public static class Program
         lines.AppendLine("[setting]");
         lines.AppendLine("Language=CH");
         lines.AppendLine("Simulate=1");               // Mock 总线演示流转
+        // 主题拣选（截图对拍用）：环境变量 DOCSHOT_THEME=Dark/Light——不设=缺省 Light
+        // （缺键走 App.OnStartup 的 IniFile 缺省自愈，与产品缺省口径一致）
+        var theme = Environment.GetEnvironmentVariable("DOCSHOT_THEME");
+        if (!string.IsNullOrWhiteSpace(theme))
+            lines.AppendLine($"Theme={theme.Trim()}");
         lines.AppendLine("[MES]");
         lines.AppendLine("Url_API0027=");            // URL 空 → 门槛双保险不发请求
         lines.AppendLine("Url_API0030=");
@@ -595,6 +612,7 @@ public static class Program
         public bool ShowWorkOrder(OperatorLevel? currentLevel) => false;
         public bool ShowMesPostConfig() => false;
         public void ShowIoTest(IPointTableBus bus, PointTableConfig config) { }
+        public void ShowLog(CureLogSnap snapshot) { }                 // 日志窗桩（截图段另开真实 LogWindow）
         public void Shutdown() { }                                    // harness 不退出
     }
 
@@ -615,7 +633,6 @@ public static class Program
     }
 
     // ---------- Win32（PrintWindow 截图三件套） ----------
-
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
     private static int wndRect(IntPtr hwnd, out RECT r) { var ok = GetWindowRect(hwnd, out r); return ok ? 1 : 0; }
     [DllImport("user32.dll")] private static extern bool PrintWindow(IntPtr hWnd, IntPtr hdc, uint flags); // flags=2=FULLCONTENT

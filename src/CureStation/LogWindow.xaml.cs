@@ -45,6 +45,9 @@ public partial class LogWindow : Window
     /// <summary>关窗必退订（悬挂订阅=内存泄漏 + 幽灵重复入队，见 VM 注释红线）。</summary>
     private void OnClosedDetach(object? sender, EventArgs e) => _vm?.Detach();
 
+    /// <summary>标题条 ✕（无边框自绘标配；单例生命周期由 Closed 回调接管）。</summary>
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
+
     /// <summary>屏幕工作区右下角定位（不加记忆位置的 ini 键——拍板口径）。</summary>
     private void PositionBottomRight()
     {

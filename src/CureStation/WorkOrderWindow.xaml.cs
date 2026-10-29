@@ -12,4 +12,7 @@ public partial class WorkOrderWindow : Window
     {
         InitializeComponent();
     }
+
+    /// <summary>标题条 ✕（无边框自绘标配；ShowDialog 返回值不受影响——保存走命令）。</summary>
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 }

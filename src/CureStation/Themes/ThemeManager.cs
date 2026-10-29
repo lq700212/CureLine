@@ -1,16 +1,17 @@
 // =========================================================================
-// ThemeManager：程序①双主题切换中枢（V0.0.21 UI 双主题实施）
+// ThemeManager：程序①双主题切换中枢（V0.0.21 UI 双主题实施，V0.0.27 弹窗跟主题）
 //
 // 干什么：在 Light（G2 浅色渐变浸染）与 Dark（G1 深空玻璃舱）两套资源字典
-//   之间切换——两字典语义键同名异值，切字典即全窗换色（DynamicResource 跟随）。
-// 为什么这样做：主窗 + 日志悬浮窗全键化用语义 Brush 键（Brush.*），窗体
-//   XAML 零主题分支；弹窗维持浅色靠 Fresh.* 固定键（见 App.xaml 注释，
-//   第 2 期再让弹窗跟主题）。主题名落盘 config.ini [setting] Theme
-//   （Dark/Light，缺省 Light、非法回 Light——ParseTheme 纯函数可测）。
+//   之间切换——两字典语义键同名异值，切字典即全程序换色（DynamicResource 跟随）：
+//   主窗 + 日志悬浮窗走 Brush.* 主键板，各功能弹窗走 Brush.Fresh.* 弹窗键板
+//   （V0.0.27 起 Fresh.* 也收进两主题字典同名异值——"弹窗维持浅色"的旧口径废止）。
+// 为什么这样做：全键化后窗体 XAML 零主题分支；主题名落盘 config.ini
+//   [setting] Theme（Dark/Light，缺省 Light、非法回 Light——ParseTheme 纯函数可测）。
 //
 // 怎么改：新增主题 = Themes/ 下加同名键 ResourceDictionary + 这里登记 URI；
-//   键名勿改——主窗/LogWindow/XAML 触发器全部按键名取色（改键名要同步
-//   两字典 + 所有 DynamicResource 引用点）。
+//   键名勿改——主窗/弹窗/XAML 触发器全部按键名取色（改键名要同步两字典 +
+//   所有 DynamicResource 引用点）；Light/Dark 两字典的 x:Key 集合必须一致
+//   （ThemeDictionaryTests 文本级断言锁键不漂移）。
 //
 // 线程纪律：切主题必须在 UI 线程调（动 Application.Current.Resources）；
 //   ParseTheme 纯函数任意线程可调。

@@ -4,101 +4,122 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:CureStation.ViewModels"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MesPostConfigViewModel, IsDesignTimeCreatable=False}"
         Title="过账配置（单线 MES 上报）" Height="560" Width="720"
         WindowStartupLocation="CenterOwner"
+        WindowStyle="None" Background="{DynamicResource Brush.Fresh.WinBg}"
         Icon="Assets/app.ico" FontSize="12">
+    <shell:WindowChrome.WindowChrome>
+        <!-- 无边框自绘（V0.0.27 弹窗统一）：标题条命中拖动 + 边沿 6px 缩放 -->
+        <shell:WindowChrome CaptionHeight="34" GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False"
+                            ResizeBorderThickness="6"/>
+    </shell:WindowChrome.WindowChrome>
     <!--★★ 过账配置窗（P3.2 后半）：W68 终版未定 → 全部配置化，现场"点点鼠标"
          改完保存即生效（主窗热更新过账服务，不重启）。左列开关与口径 + 静态
-         参数；右列三个接口 URL + 说明。门禁：主窗 L4。-->
-    <Grid Margin="8">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
-        <Grid Grid.Row="0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-
-            <!-- 左列：开关与口径 + 静态参数 -->
-            <Border Grid.Column="0" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="过账开关与口径"/>
-                        <CheckBox IsChecked="{Binding EditEnabled, FallbackValue=False}"
-                                  Content="启用单线过账（关闭=只程控不过账）" Margin="0,6,0,0"/>
-                        <UniformGrid Columns="2" Margin="0,10,0,0">
-                            <TextBlock Text="过账工位（自动进/出站取哪侧工单）：" VerticalAlignment="Center"/>
-                            <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding SideOptions, FallbackValue={x:Null}}"
-                                      SelectedItem="{Binding EditSide}" Width="80" HorizontalAlignment="Left"/>
-                            <TextBlock Text="固化时间单位（API0027）：" VerticalAlignment="Center" Margin="0,8,0,0"/>
-                            <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding TimeUnitOptions, FallbackValue={x:Null}}"
-                                      SelectedIndex="{Binding EditTimeUnitIndex, FallbackValue=0}"
-                                      Width="220" HorizontalAlignment="Left" Margin="0,8,0,0"/>
-                            <TextBlock Text="进站上传时机（API0030 I）：" VerticalAlignment="Center" Margin="0,8,0,0"/>
-                            <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding InAtOptions, FallbackValue={x:Null}}"
-                                      SelectedIndex="{Binding EditInAtIndex, FallbackValue=0}"
-                                      Width="220" HorizontalAlignment="Left" Margin="0,8,0,0"/>
-                        </UniformGrid>
-                        <CheckBox IsChecked="{Binding EditPostAbortOut, FallbackValue=True}"
-                                  Content="计时中取件（强制出料）照常传出站" Margin="0,10,0,0"/>
-
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="双架工位映射（单架不用管）" Margin="0,14,0,0"/>
-                        <TextBlock Text="架号段:工位，分号分隔多段（例 11-20:L = 第二台固化架报 L 工位）；留空=全部用上面的过账工位。"
-                                   Foreground="#888" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,4"/>
-                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditRackSides}"
-                                 ToolTip="格式：架号段:工位，分号分隔。架号段支持 '11-20' 闭区间或单号 '11'。例：11-20:L"/>
-
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="静态参数（留空=用 MES 参数记忆）" Margin="0,14,0,0"/>
-                        <UniformGrid Columns="2" Margin="0,4,0,0">
-                            <TextBlock Text="机台编号(MAC_NO)：" VerticalAlignment="Center"/>
-                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditMacNo}"/>
-                            <TextBlock Text="机台编号-L工位(MAC_NO_L)：" VerticalAlignment="Center" Margin="0,6,0,0"
-                                       ToolTip="可选：L 工位专用机台号（双架映射到 L 时用）；留空=同 MAC_NO"/>
-                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditMacNoL}" Margin="0,6,0,0"/>
-                            <TextBlock Text="机台位置号(MAC_LOC_NO)：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditMacLocNo}" Margin="0,6,0,0"/>
-                            <TextBlock Text="机台位置号-L工位(MAC_LOC_NO_L)：" VerticalAlignment="Center" Margin="0,6,0,0"
-                                       ToolTip="可选：L 工位专用机台位置号；留空=同 MAC_LOC_NO"/>
-                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditMacLocNoL}" Margin="0,6,0,0"/>
-                            <TextBlock Text="厂别(PLANT)：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditPlant}" Margin="0,6,0,0"/>
-                            <TextBlock Text="参数编码(PRA_CODE)：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditPraCode}" Margin="0,6,0,0"/>
-                            <TextBlock Text="检测结果(CHECK_RESULT)：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditCheckResult}" Margin="0,6,0,0"/>
-                        </UniformGrid>
-                    </StackPanel>
-                </ScrollViewer>
+         参数；右列三个接口 URL + 说明。门禁：主窗 L4。
+         取色全走 Brush.Fresh.*；窗口骨架统一自绘标题条。-->
+    <Border BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1">
+        <DockPanel>
+            <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
+                <Grid>
+                    <TextBlock Style="{StaticResource WinTitleText}"
+                               Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=过账配置（单线 MES 上报）}"/>
+                    <Button Style="{StaticResource WinTitleClose}" Content="✕" HorizontalAlignment="Right"
+                            Click="OnCloseClick" ToolTip="关闭"/>
+                </Grid>
             </Border>
+            <Grid Margin="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-            <!-- 右列：接口 URL + 说明 -->
-            <Border Grid.Column="1" Style="{StaticResource FreshCardBorder}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="接口 URL（W68 终版到位后在此改）"/>
-                        <TextBlock Text="API0027（固化时间上传）：" Margin="0,8,0,2"/>
-                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditUrl27}"/>
-                        <TextBlock Text="API0030（进出站）：" Margin="0,10,0,2"/>
-                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditUrl30}"/>
-                        <TextBlock Text="API0032（物料上传）：" Margin="0,10,0,2"/>
-                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditUrl32}"/>
+                    <!-- 左列：开关与口径 + 静态参数 -->
+                    <Border Grid.Column="0" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="过账开关与口径"/>
+                                <CheckBox IsChecked="{Binding EditEnabled, FallbackValue=False}"
+                                          Content="启用单线过账（关闭=只程控不过账）" Margin="0,6,0,0"/>
+                                <UniformGrid Columns="2" Margin="0,10,0,0">
+                                    <TextBlock Text="过账工位（自动进/出站取哪侧工单）：" VerticalAlignment="Center"/>
+                                    <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding SideOptions, FallbackValue={x:Null}}"
+                                              SelectedItem="{Binding EditSide}" Width="80" HorizontalAlignment="Left"/>
+                                    <TextBlock Text="固化时间单位（API0027）：" VerticalAlignment="Center" Margin="0,8,0,0"/>
+                                    <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding TimeUnitOptions, FallbackValue={x:Null}}"
+                                              SelectedIndex="{Binding EditTimeUnitIndex, FallbackValue=0}"
+                                              Width="220" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                                    <TextBlock Text="进站上传时机（API0030 I）：" VerticalAlignment="Center" Margin="0,8,0,0"/>
+                                    <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding InAtOptions, FallbackValue={x:Null}}"
+                                              SelectedIndex="{Binding EditInAtIndex, FallbackValue=0}"
+                                              Width="220" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+                                </UniformGrid>
+                                <CheckBox IsChecked="{Binding EditPostAbortOut, FallbackValue=True}"
+                                          Content="计时中取件（强制出料）照常传出站" Margin="0,10,0,0"/>
 
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="口径说明" Margin="0,16,0,0"/>
-                        <TextBlock TextWrapping="Wrap" Foreground="#555"
-                                   Text="• 托盘到位=进站（ACTION=I），托盘离开=出站（先固化时间后出站）——与老项目『装载/卸载』命令字同义。&#x0a;• 出站被 MES 接受（STATUS=1）后，对应工位『已生产数量』自动 +1。&#x0a;• BC_NO 取工单『物料条码』（批次级过账）；板级产品 ID 上报走程序②整线网关。&#x0a;• 过账失败只记日志与顶栏状态，不弹框不重传（防重复过账，人工处理）。&#x0a;• 保存即生效（无需重启）；总开关关闭时不产生任何网络请求。"/>
-                    </StackPanel>
-                </ScrollViewer>
-            </Border>
-        </Grid>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="双架工位映射（单架不用管）" Margin="0,14,0,0"/>
+                                <TextBlock Text="架号段:工位，分号分隔多段（例 11-20:L = 第二台固化架报 L 工位）；留空=全部用上面的过账工位。"
+                                           Foreground="{DynamicResource Brush.Fresh.FgDim}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,4"/>
+                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditRackSides}"
+                                         ToolTip="格式：架号段:工位，分号分隔。架号段支持 '11-20' 闭区间或单号 '11'。例：11-20:L"/>
 
-        <!-- 底：保存 -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-            <Button Style="{StaticResource FreshButton}" Content="保存配置"
-                    Command="{Binding SaveCommand}" Width="160" Height="34"/>
-        </StackPanel>
-    </Grid>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="静态参数（留空=用 MES 参数记忆）" Margin="0,14,0,0"/>
+                                <UniformGrid Columns="2" Margin="0,4,0,0">
+                                    <TextBlock Text="机台编号(MAC_NO)：" VerticalAlignment="Center"/>
+                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditMacNo}"/>
+                                    <TextBlock Text="机台编号-L工位(MAC_NO_L)：" VerticalAlignment="Center" Margin="0,6,0,0"
+                                               ToolTip="可选：L 工位专用机台号（双架映射到 L 时用）；留空=同 MAC_NO"/>
+                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditMacNoL}" Margin="0,6,0,0"/>
+                                    <TextBlock Text="机台位置号(MAC_LOC_NO)：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditMacLocNo}" Margin="0,6,0,0"/>
+                                    <TextBlock Text="机台位置号-L工位(MAC_LOC_NO_L)：" VerticalAlignment="Center" Margin="0,6,0,0"
+                                               ToolTip="可选：L 工位专用机台位置号；留空=同 MAC_LOC_NO"/>
+                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditMacLocNoL}" Margin="0,6,0,0"/>
+                                    <TextBlock Text="厂别(PLANT)：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditPlant}" Margin="0,6,0,0"/>
+                                    <TextBlock Text="参数编码(PRA_CODE)：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditPraCode}" Margin="0,6,0,0"/>
+                                    <TextBlock Text="检测结果(CHECK_RESULT)：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditCheckResult}" Margin="0,6,0,0"/>
+                                </UniformGrid>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- 右列：接口 URL + 说明 -->
+                    <Border Grid.Column="1" Style="{StaticResource FreshCardBorder}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="接口 URL（W68 终版到位后在此改）"/>
+                                <TextBlock Text="API0027（固化时间上传）：" Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditUrl27}"/>
+                                <TextBlock Text="API0030（进出站）：" Margin="0,10,0,2"/>
+                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditUrl30}"/>
+                                <TextBlock Text="API0032（物料上传）：" Margin="0,10,0,2"/>
+                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditUrl32}"/>
+
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="口径说明" Margin="0,16,0,0"/>
+                                <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Brush.Fresh.FgDim}"
+                                           Text="• 托盘到位=进站（ACTION=I），托盘离开=出站（先固化时间后出站）——与老项目『装载/卸载』命令字同义。&#x0a;• 出站被 MES 接受（STATUS=1）后，对应工位『已生产数量』自动 +1。&#x0a;• BC_NO 取工单『物料条码』（批次级过账）；板级产品 ID 上报走程序②整线网关。&#x0a;• 过账失败只记日志与顶栏状态，不弹框不重传（防重复过账，人工处理）。&#x0a;• 保存即生效（无需重启）；总开关关闭时不产生任何网络请求。"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+
+                <!-- 底：保存 -->
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                    <Button Style="{StaticResource FreshButton}" Content="保存配置"
+                            Command="{Binding SaveCommand}" Width="160" Height="34"/>
+                </StackPanel>
+            </Grid>
+        </DockPanel>
+    </Border>
 </Window>

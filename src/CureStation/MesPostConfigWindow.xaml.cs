@@ -13,4 +13,7 @@ public partial class MesPostConfigWindow : Window
     {
         InitializeComponent();
     }
+
+    /// <summary>标题条 ✕（无边框自绘标配；保存走命令行链——✕ 只关窗不保存）。</summary>
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 }

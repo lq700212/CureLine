@@ -29,6 +29,9 @@ public partial class CuringPolicyWindow : Window
         InitializeComponent();
     }
 
+    /// <summary>标题条 ✕（无边框自绘标配；保存/激活走命令链——✕ 只关窗不保存）。</summary>
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
+
     // ---------- 滚轮缩放（以鼠标位置为锚点：缩放前后鼠标下的内容点不动） ----------
 
     private void OnCanvasPreviewMouseWheel(object sender, MouseWheelEventArgs e)
