@@ -1,11 +1,14 @@
 // =========================================================================
-// CuringDisplayTests：方案 D 展示层纯逻辑（核心数值不碰 UI 就能锁口径）
+// CuringDisplayTests：展示层纯逻辑（核心数值不碰 UI 就能锁口径）
 // ① SlotStatistics 五态计数 / ⚡剩余最短；② RackSlotViewModel.Kind 映射
-//   （状态机精确值 / hasTable=false 未配置）；③ 工单带纯映射 SummarizeWorkOrder。
+//   （状态机精确值 / hasTable=false 未配置）；③ 工单带纯映射 SummarizeWorkOrder；
+// ④ G 卡口径卡尾/层名（TrayFoot 三态 + LayerName）；⑤ 工单数拆分转换器。
 // =========================================================================
 
+using System.Globalization;
 using CureLine.Core.Comms;
 using CureLine.Core.Curing;
+using CureStation;
 using CureStation.ViewModels;
 using Xunit;
 
@@ -118,6 +121,48 @@ public class CuringDisplayTests
         Assert.Equal("RC-L9", rcL);
         Assert.Equal("99/40", qtyL);
         Assert.Equal(100, pctL);
+    }
+
+    // ---------- G 卡卡尾/层名（2026-10-29 一比一复刻口径） ----------
+
+    /// <summary>构造带托盘检测点的快照（其余点缺省 null，走"—"兜底）。</summary>
+    private static PointTableSnapshot SnapWithTray(int rack, int level, bool tray) =>
+        new(new Dictionary<IoPointKey, bool>
+        {
+            [new IoPointKey(true, IoPointRole.TrayDetect, rack, level)] = tray,
+        }, DateTimeOffset.Now);
+
+    [Fact(DisplayName = "TrayFoot/LayerName：托盘三态与层名映射")]
+    public void CardFoot_TraysAndLayerNames()
+    {
+        var trayOn = new RackSlotViewModel { Rack = 1, Level = 1 };
+        trayOn.Refresh(SnapWithTray(1, 1, true), true);
+        Assert.Equal("◈ 托盘在", trayOn.TrayFoot);
+        Assert.Equal("上层", trayOn.LayerName);
+
+        var trayOff = new RackSlotViewModel { Rack = 1, Level = 1 };
+        trayOff.Refresh(SnapWithTray(1, 1, false), true);
+        Assert.Equal("无托盘", trayOff.TrayFoot);
+
+        var noPoint = new RackSlotViewModel { Rack = 2, Level = 3 };
+        noPoint.Refresh(PointTableSnapshot.Empty, true);
+        Assert.Equal("—", noPoint.TrayFoot);
+        Assert.Equal("下层", noPoint.LayerName);
+
+        var mid = new RackSlotViewModel { Rack = 1, Level = 2 };
+        mid.Refresh(PointTableSnapshot.Empty, true);
+        Assert.Equal("中层", mid.LayerName);
+    }
+
+    [Fact(DisplayName = "WoQtySplitConverter：产出/总量拆分与兜底")]
+    public void WoQtySplit_ReadsBothHalvesOrPassThrough()
+    {
+        var conv = new WoQtySplitConverter();
+        // 参数 0=产出段 / 1=总量段；缺省参数同 0（XAML 只显式给）
+        Assert.Equal("37", conv.Convert("37/120", typeof(object), "0", CultureInfo.CurrentCulture));
+        Assert.Equal("120", conv.Convert("37/120", typeof(object), "1", CultureInfo.CurrentCulture));
+        Assert.Equal("0", conv.Convert("0/0", typeof(object), "0", CultureInfo.CurrentCulture)); // 空工单兜底 "0/0"→"0"
+        Assert.Equal("—", conv.Convert("—", typeof(object), "0", CultureInfo.CurrentCulture));   // 拆不动原样返回
     }
 
     [Fact(DisplayName = "SummarizeWorkOrder：预设为 0 → 0% (免除零)")]

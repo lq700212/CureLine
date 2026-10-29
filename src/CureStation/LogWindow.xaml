@@ -21,22 +21,23 @@
       - 全部取色走语义键（Brush.*）→ ThemeManager 切主题本窗自动跟换。
     -->
     <DockPanel>
-        <!-- 标题条：面板玻璃 + 主色竖条 -->
-        <Border DockPanel.Dock="Top" Background="{DynamicResource Brush.PanelGrad}"
-                BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="0,0,0,1" Padding="12,8">
+        <!-- 标题条（HTML lfhead 直译：渐变头 + 绿点 + 白字；G1 专题意底边共用顶栏底边键） -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource Brush.LfHeadGrad}"
+                BorderBrush="{DynamicResource Brush.TopbarBorder}" BorderThickness="0,0,0,1" Padding="12,8">
             <DockPanel>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Rectangle Width="4" Height="14" RadiusX="1" RadiusY="1" Fill="{DynamicResource Brush.Accent}"
-                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <!-- 绿点（HTML lfhead .dot ok 直译） -->
+                    <Ellipse Width="12" Height="12" Fill="{DynamicResource Brush.StateGreen}"
+                             VerticalAlignment="Center" Margin="0,0,8,0"/>
                     <TextBlock Text="操作日志 / 控制台" FontSize="14" FontWeight="Bold"
-                               Foreground="{DynamicResource Brush.FgStrong}" VerticalAlignment="Center"/>
+                               Foreground="{DynamicResource Brush.LfHeadFg}" VerticalAlignment="Center"/>
                     <TextBlock Text="· 状态快照" Margin="12,0,4,0"
-                               Foreground="{DynamicResource Brush.FgDim}" VerticalAlignment="Center"/>
+                               Foreground="{DynamicResource Brush.LfHeadSubFg}" VerticalAlignment="Center"/>
                     <TextBlock Text="{Binding GeneratedAtText, FallbackValue=—}"
-                               Foreground="{DynamicResource Brush.FgDim}" VerticalAlignment="Center"/>
+                               Foreground="{DynamicResource Brush.LfHeadSubFg}" VerticalAlignment="Center"/>
                 </StackPanel>
                 <TextBlock DockPanel.Dock="Right" Text="{Binding LogLines.Count, FallbackValue=0, StringFormat={}{0} 条}"
-                           Foreground="{DynamicResource Brush.FgDim}" VerticalAlignment="Center"/>
+                           Foreground="{DynamicResource Brush.LfHeadSubFg}" VerticalAlignment="Center"/>
             </DockPanel>
         </Border>
 

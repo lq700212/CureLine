@@ -2,6 +2,54 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.26（2026-10-29，主窗 G2/G1 对比稿一比一复刻）
+
+背景：V0.0.25 方案 D 的双主题是"意译色板"（键都有但视觉与设计稿对不上）。
+本轮按 `docs/UI设计_固化架显示区优化_对比稿.html` **一比一复刻**：Light=
+G2 浅色渐变浸染 / Dark=G1 深空玻璃舱，两主题截图对照 HTML 逐项迭代贴版。
+纯展示层改动，业务逻辑零改动（文案锚点 `SlotStateText`/`NextCloseText` 格式
+不动——有测试断言锁死）。
+
+- **主窗全量重写**（`MainWindow.xaml`，对齐 HTML `.g2-*/.g1-*` 直译）：
+  - 顶栏合一单条（全宽贴边 44px）：Light=品牌蓝渐变 / Dark=#101A2C 深蓝实底。
+    左=chip"固"+连接灯点+策略+连接（* 弹性列完整显示）+过账+操作员；右=功能
+    按钮组（登录/工单/权限/策略/过账配置/IO测试/点表/重新连接/退出/深色/
+    【日志】高亮 PrimaryGhost）。命令与门禁与旧两段顶栏完全一致；
+    GhostButton 圆角 14→4（HTML .btn 直译）。
+  - 仓位卡换 **G 卡三段式模板**（makeG 直译）：top=库位码+灯点 / mid=垂直居中
+    大数字（17px + "分·%"小字）或状态词 / foot=层名+托盘。**卡内无进度条**
+    （HTML G 卡无 bar，V0.0.25 的 4px 卡内进度条删除）；idle/gate 灯点=灰不发光
+    （HTML makeG：dot 只在 lampOn 才发光）；Done="✓ 放行"、Alarm="⚠ 占用"
+    用触发器字面量（不绑 VM）；Alarm 脉动从整卡改挂 mid 文本（Opacity
+    0.7↔1，1.5s）；G1 光斑（CardGlow*）与状态头带同为 Kind 触发器；卡投影
+    Fx.CardShadow（Alarm 切红光圈 Fx.CardShadowAlarm）。
+  - 统计胶囊行：StatPill 通用样式（18 圆角/padding 11,4），文案对齐 HTML 口径
+    （空闲/计时中/待门控/**待取件**（原"放行"）/**占用报警**（原"红灯"））+
+    ⚡剩余最短虚线框胶囊（Rectangle StrokeDashArray="3 2" 直译）。
+  - 工单双卡（HTML g2-wo/g1-wo 直译）：R/L 各"工位 · 单号"+过账角标
+    （PostingEnabled DataTrigger→"过账启用"绿 / 否则灰底"过账未启用"）+
+    6px 渐变进度条（R 蓝/L 紫；G1 加霓虹 glow `Fx.WoBarGlowR/L`，Light 同名键
+    x:Null=无光）+"已产出 N / 总"（新增 `WoQtySplitConverter` 拆分，VM 零改——
+    `SummarizeWorkOrder` 输出格式被测试断言锁死不动）。
+- **LogWindow 标题条**换 LfHead 系列（HTML lfhead 直译：渐变头+绿点+白字；
+  底边共用 TopbarBorder 键）。
+- **VM 三项小改**（`MainViewModel.cs`，废弃直接删·铁律 9）：删 CardState/
+  TrayText；加 TrayFoot（"◈ 托盘在"/"无托盘"/"—"）、LayerName（上层/中层/
+  下层）、PostingEnabled（工单卡角标，与 PostingText 同两处赋值点）。
+- **字典死键清除**：删 PanelGrad/PanelBg2（两字典）与 PanelBorder2（两字典）；
+  PanelBg/PanelBorder 仍被 LogWindow 使用保留。
+- **测试 +2 例（340 全绿，基线 338+2）**：TrayFoot 三态/LayerName 映射、
+  WoQtySplitConverter 拆分与兜底。
+- **已知取舍**（对比稿有但 WPF 贴不齐，主动放弃）：空闲"空 闲"字距
+  letter-spacing:3px 无 WPF 等价物，用字面空格占位；G1 卡 text-shadow 光晕
+  （XAML 文本投影成本高、增益小）放弃。
+- **冒烟踩坑沉淀**：PowerShell 5.1 `Set-Content -Encoding UTF8` 写 UTF-8 带
+  BOM，kernel32 读 ini 时 BOM 破坏首节名 → `[setting] Theme/Simulate` 全落
+  缺省（改 ini 必须无 BOM 写，`[System.IO.File]::WriteAllText` + UTF8Encoding
+  ($false)）。
+- **验证**：`dotnet build` 0 警告 0 错误；`dotnet test` 340/340 全绿；
+  GUI 冒烟双主题截图对照（Light=G2 / Dark=G1 均贴版，mock 点表自愈 60 卡）。
+
 ## V0.0.25（2026-10-29，程序①主窗方案 D 重画 + 双主题 + 日志悬浮窗）
 
 背景：程序①主窗沿用骨架期灰色网格，信息密度与观感落后于拍摄设备实景。

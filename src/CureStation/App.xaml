@@ -281,7 +281,7 @@
             </Style>
 
             <!-- ============ 主窗专用样式（色走语义键，随主题换皮） ============ -->
-            <!-- 幽灵按钮：主窗顶栏胶囊（Light=浅蓝药丸 / Dark=白玻璃胶囊） -->
+            <!-- 幽灵按钮：主窗顶栏胶囊（HTML .btn 直译 4px 直角小圆角；Light=半透明白玻璃 / Dark=深蓝板岩） -->
             <Style x:Key="GhostButton" TargetType="Button">
                 <Setter Property="Background" Value="{DynamicResource Brush.GhostBg}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.GhostBorder}"/>
@@ -289,13 +289,14 @@
                 <Setter Property="Padding" Value="10,4"/>
                 <Setter Property="BorderThickness" Value="1"/>
                 <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
                             <Border x:Name="Bd" Background="{TemplateBinding Background}"
                                     BorderBrush="{TemplateBinding BorderBrush}"
                                     BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="14" Padding="{TemplateBinding Padding}">
+                                    CornerRadius="4" Padding="{TemplateBinding Padding}">
                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
                                                   RecognizesAccessKey="True"/>
                             </Border>
@@ -314,6 +315,14 @@
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
+            </Style>
+            <!-- 主按钮态幽灵按钮（顶栏【日志】高亮，HTML .lfbtn 直译）：
+                 Light=白底蓝字 / Dark=蓝玻璃底 + 霓虹蓝字；悬停边框沿用 Ghost 分键随主题变 -->
+            <Style x:Key="PrimaryGhostButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                <Setter Property="Background" Value="{DynamicResource Brush.PrimaryGhostBg}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.PrimaryGhostBorder}"/>
+                <Setter Property="Foreground" Value="{DynamicResource Brush.PrimaryGhostFg}"/>
+                <Setter Property="FontWeight" Value="Bold"/>
             </Style>
             <!-- 细进度条（4px 圆角胶囊）：仓位卡计时 / 工单带产出共用。
                  Foreground 由使用处定（本样式统一给状态绿）；模板依赖 ProgressBar

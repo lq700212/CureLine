@@ -48,12 +48,13 @@ public sealed class RackSlotViewModel : ViewModelBase
         1 => "上层", 2 => "中层", _ => "下层",
     };
 
-    // 展示状态（bool 转中文文本 + 背景色，骨架期字符串化减少 XAML 转换器）
-    private string _trayText = "—";
-    public string TrayText
+    // 展示状态（bool 转中文文本，卡片尾部一行放"层名 + 托盘"）
+    /// <summary>卡片尾部托盘文案："◈ 托盘在"（有货）/ "无托盘"（空位）/ "—"(读不到)。</summary>
+    private string _trayFoot = "—";
+    public string TrayFoot
     {
-        get => _trayText;
-        private set => Set(ref _trayText, value);
+        get => _trayFoot;
+        private set => Set(ref _trayFoot, value);
     }
     private string _grillText = "—";
     public string GrillText
@@ -74,19 +75,10 @@ public sealed class RackSlotViewModel : ViewModelBase
         private set => Set(ref _slotStateText, value);
     }
 
-    /// <summary>卡片背景色键名（xaml 绑成 Brush，缺省=空闲灰）。红/黄/绿/空闲。</summary>
-    private string _cardState = "Idle";
-    public string CardState
-    {
-        get => _cardState;
-        private set => Set(ref _cardState, value);
-    }
-
-    // ---------- 卡片视觉状态（Kind，方案 D 新卡模板的状态口径，2026-10-29） ----------
-    // 六态键与主题字典 Brush.Tint*/Brush.Head*/Brush.SlotBorder* 的 XAML 触发器
-    // 同名（改键名要同步：这里 + 两字典 + MainWindow.xaml 触发器）。
-    // 与 CardState 分工：CardState=老"灯色三态"（保留，防破坏既有语义用例）；
-    //   Kind=新模板/统计条的六态业务口径（Alarm=红灯占用、Gate=待门控、Curing=计时）。
+    // ---------- 卡片视觉状态（Kind，新卡模板六态状态口径，2026-10-29） ----------
+    // 六态键与主题字典 Brush.Tint*/Brush.Head*/Brush.SlotBorder*/Brush.CardGlow*
+    // 的 XAML 触发器同名（改键名要同步：这里 + 两字典 + MainWindow.xaml 触发器）。
+    // Kind=新模板/统计条的六态业务口径（Alarm=红灯占用、Gate=待门控、Curing=计时）。
 
     /// <summary>空闲/待门控/计时中/放行/红灯占用/未配置（统计条与卡片触发器同源）。</summary>
     private string _kind = "Idle";
@@ -128,6 +120,10 @@ public sealed class RackSlotViewModel : ViewModelBase
     /// 否则显示状态字（灯色反推的"计时中"没有精确数值，硬显 0 反误导）。</summary>
     public bool HasDetail => TotalMin > 0;
 
+    /// <summary>层名（"上层/中层/下层"）——卡片尾部一行与 ToolTip 共用；
+    /// Rack/Level 构造后不变，计算属性无需 INPC。</summary>
+    public string LayerName => LevelName(Level);
+
     /// <summary>统一落 Kind/Remain/Total/Progress（保持不变量：Total=0 → Remain=0、Pct=0）。</summary>
     private void ApplyKind(string kind, int remainMinutes, int totalMinutes)
     {
@@ -161,7 +157,7 @@ public sealed class RackSlotViewModel : ViewModelBase
         var yellow = snapshot.Get(new(false, IoPointRole.LampYellow, Rack, Level));
         var green = snapshot.Get(new(false, IoPointRole.LampGreen, Rack, Level));
 
-        TrayText = tray == true ? "托盘在" : tray == false ? "托盘无" : "—";
+        TrayFoot = tray == true ? "◈ 托盘在" : tray == false ? "无托盘" : "—";
         GrillText = grillL == null && grillR == null ? "—"
             : $"L:{BoolText(grillL)} R:{BoolText(grillR)}";
         LampText = red == true ? "红灯" : yellow == true ? "黄灯"
@@ -172,13 +168,6 @@ public sealed class RackSlotViewModel : ViewModelBase
             { Phase: SlotPhase.Done } => "放行",
             { Phase: SlotPhase.WaitingGate } => "待门控",
             _ => mapState(tray, red, yellow, green),                 // 空闲走灯色反推
-        };
-        CardState = machineStatus switch
-        {
-            { Phase: SlotPhase.Curing } => "Yellow",
-            { Phase: SlotPhase.Done } => "Green",
-            _ => red == true ? "Red" : yellow == true ? "Yellow"
-                : green == true ? "Green" : "Idle",
         };
         // Kind（新口径）：状态机给精确状态的仓位以状态机为准（含剩余分钟）；
         // 状态机空闲/未涉足的仓位灯色反推——红=Alarm（占用）、黄=Curing（无精确
@@ -323,6 +312,14 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         private set => Set(ref _postingText, value);
     }
 
+    /// <summary>过账是否启用（工单卡角标 DataTrigger 出"过账启用/过账未启用"文案）。</summary>
+    private bool _postingEnabled;
+    public bool PostingEnabled
+    {
+        get => _postingEnabled;
+        private set => Set(ref _postingEnabled, value);
+    }
+
     // ---------- 顶部统计条（方案 D，2026-10-29；RefreshSlots 每拍聚合） ----------
     // 五态口径与卡片 Kind 同名（Idle/Gate/Curing/Done/Alarm），详见 SlotStatistics。
 
@@ -431,6 +428,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         PostingText = postOptions.Enabled
             ? $"过账：已启用（{CuringMesOptions.NormSide(postOptions.Side)} 工位）"
             : "过账：未启用";
+        PostingEnabled = postOptions.Enabled;
 
         // 启动装配：读点表 + 工艺策略（都自愈）→ 总线 Start + 状态机
         var config = LoadOrDefault();
@@ -726,6 +724,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             PostingText = options.Enabled
                 ? $"过账：已启用（{CuringMesOptions.NormSide(options.Side)} 工位）"
                 : "过账：未启用";
+            PostingEnabled = options.Enabled;
             _dialogs.ShowMessage("过账配置已保存并生效。", "保存成功");
         }
     }
