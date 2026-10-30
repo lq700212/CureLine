@@ -1,12 +1,13 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
-      Light 主题色板（G2 · 浅色渐变浸染，docs/UI设计_固化架显示区优化_对比稿.html #g/g2 直译）：
-      - 主基调：白卡 + 状态色"顶部 5px 实色渐变头带" + 状态色向白 58% 纵向浸染渐变 +
-        16px 大圆角 + 光圈式大投影（Fx.CardShadow DropShadow），品牌蓝渐变顶栏（#1E90FF→#3AA9F7）；
+      Light 主题色板（设计图三段式复刻，V0.0.35 起 2026-10-30 设计图口径）：
+      - 主基调：白卡（空闲=浅灰降权）+ 状态色描边（非空闲加厚 1.5px）+ 状态色向白 58% 纵向浸染
+        渐变 + 16px 大圆角 + 光圈式大投影（Fx.CardShadow DropShadow），
+        品牌蓝渐变顶栏（#1E90FF→#3AA9F7）；旧"5px 状态头带/灯点霓虹"已随设计图退役；
       - 键名与 Dark.xaml（G1 深空玻璃舱）完全同名异值——ThemeManager 切字典即换肤，
         主窗/日志悬浮窗全部 DynamicResource 取色，窗体 XAML 零主题分支；几何量
-        （圆角/点发光）用键值（Fn.CardRadius / Fx.DotGlow*）随主题分流；
+        （圆角/点发光）用键值（Fn.CardRadius）随主题分流；
       - 划红线：本字典只放语义键，不含 Fresh.*（弹窗固定浅色键收在 App.xaml 主字典，
         切主题不影响弹窗——拍板"其余弹窗维持浅色，第 2 期再跟主题"）；
       - 键名勿改：主窗/LogWindow/XAML 触发器全部按键名取色（改键名要同步两字典 +
@@ -64,9 +65,10 @@
     <SolidColorBrush x:Key="Brush.CardBorder" Color="#80BED2EB"/>
     <SolidColorBrush x:Key="Brush.CardBorderHover" Color="#8FC1EC"/>
 
-    <!-- 状态浸染底（HTML 卡内 linear-gradient(to bottom,状态染 #0%, 白 58%)+idle 未染） -->
+    <!-- 状态浸染底（HTML 卡内 linear-gradient(to bottom,状态染 #0%, 白 58%)）；
+         Idle 特例=浅灰纯底（设计图空闲卡浅灰降权，V0.0.35） -->
     <LinearGradientBrush x:Key="Brush.TintIdle" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#FFFFFF" Offset="0"/><GradientStop Color="#FFFFFF" Offset="0.58"/>
+        <GradientStop Color="#F5F7FA" Offset="0"/><GradientStop Color="#F5F7FA" Offset="1"/>
     </LinearGradientBrush>
     <LinearGradientBrush x:Key="Brush.TintGate" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#F0EAFB" Offset="0"/><GradientStop Color="#FFFFFF" Offset="0.58"/>
@@ -84,29 +86,10 @@
         <GradientStop Color="#E3F0FC" Offset="0"/><GradientStop Color="#FFFFFF" Offset="0.58"/>
     </LinearGradientBrush>
 
-    <!-- 卡顶 5px 状态渐变头带（HTML .g2-card::before 横向实色带） -->
-    <LinearGradientBrush x:Key="Brush.HeadIdle" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Color="#B7C6D6" Offset="0"/><GradientStop Color="#D3DEEA" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="Brush.HeadGate" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Color="#5E35B1" Offset="0"/><GradientStop Color="#9575CD" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="Brush.HeadCuring" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Color="#FFB300" Offset="0"/><GradientStop Color="#FFD54F" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="Brush.HeadDone" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Color="#2E9E5B" Offset="0"/><GradientStop Color="#66BB6A" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="Brush.HeadAlarm" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Color="#D32F2F" Offset="0"/><GradientStop Color="#EF5350" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="Brush.HeadNotConfigured" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Color="#3E9BE0" Offset="0"/><GradientStop Color="#7CC0F3" Offset="1"/>
-    </LinearGradientBrush>
-
-    <!-- 深色名称沿用：状态描边（G2 只有 alarm/curing/done 换边框，其余回默认 #E3E8EE 口径） -->
+    <!-- 状态描边（设计图口径，V0.0.35：idle/未配置=默认 #E3E8EE；gate 紫 / curing 黄 /
+         done 绿 / alarm 红，非空闲卡在模板层加厚 1.5px）/-->
     <SolidColorBrush x:Key="Brush.SlotBorderIdle" Color="#FFE3E8EE"/>
-    <SolidColorBrush x:Key="Brush.SlotBorderGate" Color="#FFE3E8EE"/>
+    <SolidColorBrush x:Key="Brush.SlotBorderGate" Color="#FFB39DDB"/>
     <SolidColorBrush x:Key="Brush.SlotBorderCuring" Color="#FFFFD54F"/>
     <SolidColorBrush x:Key="Brush.SlotBorderDone" Color="#FFA5D6A7"/>
     <SolidColorBrush x:Key="Brush.SlotBorderAlarm" Color="#FFEF9A9A"/>
@@ -120,13 +103,16 @@
     <SolidColorBrush x:Key="Brush.CardGlowAlarm" Color="#00FFFFFF"/>
     <SolidColorBrush x:Key="Brush.CardGlowNotConfigured" Color="#00FFFFFF"/>
 
-    <!-- ══════════ 卡内状态字/数字色（HTML .g2-num 五分支） ══════════ -->
-    <SolidColorBrush x:Key="Brush.NumCuring" Color="#17334F"/>   <!-- 计时大数字 -->
-    <SolidColorBrush x:Key="Brush.NumDone" Color="#1B7A38"/>     <!-- ✓ 放行 -->
+    <!-- ══════════ 卡内状态字/数字色（设计图口径，V0.0.35） ══════════ -->
+    <SolidColorBrush x:Key="Brush.NumCuring" Color="#F59E0B"/>   <!-- 计时大数字/词（设计图橙） -->
+    <SolidColorBrush x:Key="Brush.NumDone" Color="#1B7A38"/>     <!-- ✓ 已放行 -->
     <SolidColorBrush x:Key="Brush.NumGate" Color="#5E35B1"/>     <!-- 待门控 -->
     <SolidColorBrush x:Key="Brush.NumAlarm" Color="#C62828"/>    <!-- ⚠ 占用 -->
-    <SolidColorBrush x:Key="Brush.NumIdle" Color="#AEB9C4"/>     <!-- 空闲（淡灰间距字） -->
-    <SolidColorBrush x:Key="Brush.NumSmall" Color="#7A8CA0"/>    <!-- 数字右侧小字"分·%" -->
+    <SolidColorBrush x:Key="Brush.NumIdle" Color="#AEB9C4"/>     <!-- 空闲（淡灰：词/库位码/胶囊字兜底用） -->
+    <SolidColorBrush x:Key="Brush.NumSmall" Color="#7A8CA0"/>    <!-- 副文小字（共 X 分·已固化/请检查） -->
+
+    <!-- 状态胶囊 idle 底（卡顶 pill：亮态直接用 Brush.State*，空闲灰底单独一键） -->
+    <SolidColorBrush x:Key="Brush.PillIdleBg" Color="#FFEDF1F5"/>
 
     <!-- ══════════ 状态点色（三色灯语义；HTML .g2-dot 系） ══════════ -->
     <SolidColorBrush x:Key="Brush.StateIdle" Color="#C3CBD3"/>   <!-- 灭灯 -->
@@ -136,13 +122,8 @@
     <SolidColorBrush x:Key="Brush.StatePurple" Color="#7E57C2"/> <!-- 待门控强调（统计条点） -->
     <SolidColorBrush x:Key="Brush.StateBlue" Color="#3E9BE0"/>   <!-- 未配置点 -->
 
-    <!-- ══════════ 点发光 / 卡投影（HTML box-shadow 直译，双主题同名异值） ══════════ -->
-    <!-- 亮点 glow（HTML .g2-dot 0 0 6px rgba(状态,.6)；灭灯不挂） -->
-    <DropShadowEffect x:Key="Fx.DotGlowRed" Color="#D32F2F" BlurRadius="7" ShadowDepth="0" Opacity="0.6"/>
-    <DropShadowEffect x:Key="Fx.DotGlowYellow" Color="#F59E0B" BlurRadius="7" ShadowDepth="0" Opacity="0.6"/>
-    <DropShadowEffect x:Key="Fx.DotGlowGreen" Color="#43A047" BlurRadius="7" ShadowDepth="0" Opacity="0.6"/>
-    <DropShadowEffect x:Key="Fx.DotGlowPurple" Color="#7E57C2" BlurRadius="7" ShadowDepth="0" Opacity="0.6"/>
-    <DropShadowEffect x:Key="Fx.DotGlowBlue" Color="#3E9BE0" BlurRadius="7" ShadowDepth="0" Opacity="0.6"/>
+    <!-- ══════════ 卡投影（HTML box-shadow 直译，双主题同名异值） ══════════ -->
+    <!-- 亮点 glow 已随设计图退役（V0.0.35：灯点→状态胶囊，胶囊无 glow） -->
     <!-- 卡光圈式大投影（HTML .g2-card box-shadow:0 0 16px 3px rgba(170,195,220,.55)；alarm 卡换红光圈） -->
     <DropShadowEffect x:Key="Fx.CardShadow" Color="#AAC3DC" BlurRadius="14" ShadowDepth="0" Opacity="0.5"/>
     <DropShadowEffect x:Key="Fx.CardShadowAlarm" Color="#D32F2F" BlurRadius="14" ShadowDepth="0" Opacity="0.32"/>

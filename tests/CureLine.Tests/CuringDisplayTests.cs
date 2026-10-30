@@ -73,7 +73,19 @@ public class CuringDisplayTests
         Assert.True(slot.HasDetail);
         Assert.Equal(45, slot.RemainMin);
         Assert.Equal(120, slot.TotalMin);
-        Assert.Equal(63, slot.ProgressPct); // (120-45)/120=62.5% → 63
+        Assert.Equal(63, slot.ProgressPct);  // (120-45)/120=62.5% → 63
+        Assert.Equal(0.625, slot.ProgressRatio, 6); // 同源进度比（卡内进度条 ScaleTransform 直绑）
+    }
+
+    [Fact(DisplayName = "Kind：未计时（Total=0）→ Ratio/Pct 双零不变量")]
+    public void Kind_ZeroTotal_RatioAndPctClampedZero()
+    {
+        var slot = new RackSlotViewModel { Rack = 3, Level = 2 };
+        slot.Refresh(PointTableSnapshot.Empty, true, new SlotStatus(SlotPhase.Done, 60, 0));
+        Assert.Equal(0, slot.TotalMin);
+        Assert.Equal(0, slot.ProgressPct);
+        Assert.Equal(0.0, slot.ProgressRatio, 6);
+        Assert.False(slot.HasDetail);
     }
 
     [Fact(DisplayName = "Kind：放行/待门控/未配置")]

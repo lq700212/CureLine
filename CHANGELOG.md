@@ -2,6 +2,45 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.35（2026-10-30，主窗仓位卡设计图一比一复刻：胶囊+大数字+进度条，头带/灯点退役）
+
+背景：用户出最新设计图（B02 卡=白底黄描边+右上"计时中"胶囊+中部"47 分"大
+数字+副文"共 120 分 · 已固化 61%"+进度条+底部状态点），拍板主窗 30 张仓位卡
+一比一复刻（结构/字号/风格全对齐）；V0.0.26 的"头带+灯点"口径随之退役。
+
+- **卡片模板重写（`MainWindow.xaml` SlotCard）**：top=库位码 17px ExtraBold
+  （空闲/未配置灰降权）+ 右上六态状态胶囊（Curing/Gate/Done/Alarm/未配置=
+  `Brush.State*` 彩底白字，Idle=浅灰底灰字，顶替灯点）；mid=状态词 15px Bold
+  +副文 10.5px（Gate"光栅让空后计时"/Done"待取件"/Alarm"红灯 · 请检查"）
+  或大数字 26px ExtraBold"47 分"+副文 Run"共 120 分 · 已固化 61%"+ 6px 圆角
+  进度条（Grid 槽+Rectangle ScaleTransform.ScaleX 直绑 `ProgressRatio`，
+  轻量不走 ProgressBar 控件）；foot=7px 状态彩点（随 Kind 六态）+层名+
+  托盘（"◈ 托盘在"深色半粗，不再绿强调）；5px 头带 Border 与 Ellipse 灯点
+  整件删除；非空闲卡状态描边加厚 1.5（触发器 `BorderThickness`）；Alarm
+  呼吸脉冲动画转挂 mid 状态词（原口径保留）。
+- **VM 同源进度比（`MainViewModel.cs`）**：`RackSlotViewModel.ProgressRatio`
+  （double 0~1）与 `ProgressPct` 同在 `ApplyKind` 一处计算（不变量：
+  TotalMin=0 → Pct/Ratio 双零）——进度条 ScaleTransform 与副文百分比同源同拍。
+- **主题键板同步（Light/Dark 同名异值，改干净改彻底）**：删退役键
+  `Brush.Head*` 六键（头带）+ `Fx.DotGlow*` 五键（灯点发光，唯一消费者
+  已删除）；新增 `Brush.PillIdleBg`（胶囊空闲灰底）；Light 改值`TintIdle`→
+  #F5F7FA 浅灰空闲卡、`SlotBorderGate`→#B39DDB 紫描边、`NumCuring`→#F59E0B
+  设计图橙大数字；Dark 同删同加，`NumCuring` 保持霓虹浅白（G1 无设计图，
+  原拍板不动）只补说明注释。
+- **DocShot harness 修复升级（工具链）**：① `SilentGatewayDialogs` 补
+  V0.0.32 改名后的 `ShowGatewayConfig` 桩 + alias 去 PLC 化
+  （`GwPlcConfig`→`GwGatewayConfig`）；② 程序②资源装载重做——原
+  `Styles/FreshBlue.xaml` 已随 V0.0.20 删除（pack 404 → gw 段 StaticResource
+  全爆），改为 `run_docshot.ps1` 从两程序 App.xaml 摘段生成
+  `Cure/Gw.App.Resources.xaml` + 从程序集 pack 装主题键板，gw 段截图恢复；
+  ③ 新增高进度演示帧 `cs-main-curing.png`——Mock 演示计时卡恒"刚开跑"口径
+  （剩 119/进度 1%）拍不到续算填充，harness 反射停 500ms 刷→直改 rack1/L1
+  为"剩 47/共 120=61%"（设计图 B02 数）→拍帧→复跑刷新（统计条同拍重算，
+  下一拍恢复真实状态零污染）。
+- 测试：新增 `Kind_ZeroTotal_RatioAndPctClampedZero`（双零不变量），
+  `Kind_Curing_CarriesRemainAndProgress` 补 ProgressRatio 断言；全量
+  365/365 绿，0 警告 0 错误。
+
 ## V0.0.34（2026-10-30，IO 测试窗多机台下拉切换——一次 30 库位不再挤压）
 
 背景：双架（及以上）点表在 IO 通讯测试窗默认平铺全部架号的卡（RackCount=20 时

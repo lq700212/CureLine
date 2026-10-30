@@ -2,15 +2,42 @@
 
             
 
+            <!-- ============ 图标几何库（Geo.*，来源 galaxy 本地镜像） ============ -->
+            <!-- 全部取自 E:\Project\galaxy（uiverse-io/galaxy 本地镜像）按钮样例内嵌
+                 SVG 的 path d（24×24 stroke 线性风格，来源文件见每条注释）；配色不走
+                 固定值——按钮模板里 Path.Stroke 绑定 TemplateBinding Foreground，
+                 自动跟随各按钮样式的主题前景键（GhostFg/PrimaryGhostFg/FgStrong）。
+                 WPF Path 与 SVG path 语法兼容（含紧凑弧参数），原样搬 d。 -->
+            <Geometry x:Key="Geo.Login">M11.68 14.62 L14.24 12.06 L11.68 9.5 M4 12.06 H14.17 M12 4 C16.42 4 20 7 20 12 C20 17 16.42 20 12 20</Geometry>             <!-- galaxy/Buttons/catraco_blue-bulldog-58 -->
+            <Geometry x:Key="Geo.WorkOrder">M15.5 3 H5 A2 2 0 0 0 3 5 V19 A2 2 0 0 0 5 21 H19 A2 2 0 0 0 21 19 V8.5 L15.5 3 Z M15 3 v6 h6</Geometry>             <!-- galaxy/Buttons/0x3ther_heavy-dragon-56 -->
+            <Geometry x:Key="Geo.Permission">M12 5.9c1.16 0 2.1.94 2.1 2.1s-.94 2.1-2.1 2.1S9.9 9.16 9.9 8s.94-2.1 2.1-2.1m0 9c2.97 0 6.1 1.46 6.1 2.1v1.1H5.9V17c0-.64 3.13-2.1 6.1-2.1M12 4C9.79 4 8 5.79 8 8s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 9c-2.67 0-8 1.34-8 4v3h16v-3c0-2.66-5.33-4-8-4z</Geometry> <!-- galaxy/Buttons/Praashoo7_chilly-baboon-67 -->
+            <Geometry x:Key="Geo.Policy">M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0z</Geometry>                                                             <!-- galaxy/Buttons/EcheverriaJesus_hungry-dingo-62 -->
+            <Geometry x:Key="Geo.Posting">M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2 M7 9l5-5 5 5 M12 4v12</Geometry>                                              <!-- galaxy/Buttons/Itskrish01_chatty-lionfish-23 -->
+            <Geometry x:Key="Geo.IoTest">M11 15H6L13 1V9H18L11 23V15Z</Geometry>                                                                                  <!-- galaxy/Buttons/SelfMadeSystem_white-stingray-85 -->
+            <Geometry x:Key="Geo.PointTable">m3 7h17c.5523 0 1 .44772 1 1v11c0 .5523-.4477 1-1 1h-16c-.55228 0-1-.4477-1-1z m3-2.5c0-.27614.22386-.5.5-.5h6.29289c.13261 0 .25981.05268.35351.14645l2.8536 2.85355h-10z</Geometry> <!-- galaxy/Buttons/andrew-demchenk0_swift-octopus-68 -->
+            <Geometry x:Key="Geo.Reconnect">M8.288 14.212A5.25 5.25 0 1 1 17.25 10.5 M15.042 21.672 13.684 16.6l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672z</Geometry> <!-- galaxy/Buttons/seyed-mohsen-mousavi_weak-parrot-44 -->
+            <Geometry x:Key="Geo.Log">M5 7h14 M5 12h14 M5 17h14</Geometry>                                                                                        <!-- galaxy/Buttons/LeryLey_white-monkey-16 -->
+            <Geometry x:Key="Geo.Exit">M17 8l4 4m0 0l-4 4m4-4H3</Geometry>                                                                                        <!-- galaxy/Buttons/HecktorViegas_green-cow-45 -->
+            <Geometry x:Key="Geo.Save">m19 21H5c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2h11l5 5v11c0 1.1-.9 2-2 2z M7 3v5h8 M17 20v-7H7v7z</Geometry>                     <!-- galaxy/Buttons/ilkhoeri_chilly-sloth-36 -->
+            <Geometry x:Key="Geo.Check">M4.5 12.75l6 6 9-13.5</Geometry>                                                                                          <!-- galaxy/Buttons/Creatlydev_dull-chicken-81 -->
+            <Geometry x:Key="Geo.Trash">M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16</Geometry> <!-- galaxy/Buttons/seyed-mohsen-mousavi_warm-dingo-23 -->
+            <Geometry x:Key="Geo.Plus">M12 5v14 M5 12h14</Geometry>                                                                                               <!-- galaxy/Buttons/andrew-demchenk0_mighty-moose-66 -->
+            <Geometry x:Key="Geo.Eye">M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0z</Geometry>                                 <!-- galaxy/Buttons/barisdogansutcu_wet-otter-24 -->
+            <Geometry x:Key="Geo.Edit">M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z</Geometry>                                                         <!-- galaxy/Buttons/barisdogansutcu_lovely-walrus-42 -->
+            <Geometry x:Key="Geo.CloseX">M6 18L18 6M6 6l12 12</Geometry>                                                                                          <!-- galaxy/Buttons/Creatlydev_dull-chicken-81 -->
+
             <!-- ============ 主窗专用样式（色走语义键，随主题换皮） ============ -->
-            <!-- 幽灵按钮：主窗顶栏胶囊（HTML .btn 直译 4px 直角小圆角；Light=半透明白玻璃 / Dark=深蓝板岩） -->
+            <!-- 幽灵按钮：主窗顶栏胶囊（HTML .btn 直译 padding 5px 13px ≈ 27px 高）；
+                 VerticalAlignment=Center 必守——顶栏按钮组与 Height=44 的系统三钮同池
+                 （水平 StackPanel 子元素垂直默认 Stretch，不居中会被拉到 44 高"顶到顶"） -->
             <Style x:Key="GhostButton" TargetType="Button">
                 <Setter Property="Background" Value="{DynamicResource Brush.GhostBg}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.GhostBorder}"/>
                 <Setter Property="Foreground" Value="{DynamicResource Brush.GhostFg}"/>
-                <Setter Property="Padding" Value="10,4"/>
+                <Setter Property="Padding" Value="13,5"/>
                 <Setter Property="BorderThickness" Value="1"/>
                 <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
                 <Setter Property="VerticalContentAlignment" Value="Center"/>
                 <!-- 主窗无边框化（V0.0.28）后整个品牌顶栏都是 caption 拖动区，
                      顶栏里的按钮必须声明"chrome 可命中"否则点不到（样式级一次声明） -->
@@ -22,10 +49,24 @@
                                     BorderBrush="{TemplateBinding BorderBrush}"
                                     BorderThickness="{TemplateBinding BorderThickness}"
                                     CornerRadius="4" Padding="{TemplateBinding Padding}">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                  RecognizesAccessKey="True"/>
+                                <!-- 图标位（可选）：Tag 挂 Geo.* 几何即显示（Stroke 跟随按钮前景，
+                                     随主题/悬停联动），不挂 Tag 时由触发器折叠——向后兼容纯文字钮 -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                                            VerticalAlignment="Center">
+                                    <Path x:Name="Icon" Data="{TemplateBinding Tag}"
+                                          Width="13" Height="13" Stretch="Uniform"
+                                          Stroke="{TemplateBinding Foreground}" StrokeThickness="1.7"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round" Margin="0,0,5,0"
+                                          VerticalAlignment="Center"/>
+                                    <ContentPresenter VerticalAlignment="Center"
+                                                      RecognizesAccessKey="True"/>
+                                </StackPanel>
                             </Border>
                             <ControlTemplate.Triggers>
+                                <Trigger Property="Tag" Value="{x:Null}">
+                                    <Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/>
+                                </Trigger>
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.GhostHoverBg}"/>
                                     <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.GhostBorderHover}"/>
@@ -104,10 +145,24 @@
                                     BorderBrush="{TemplateBinding BorderBrush}"
                                     BorderThickness="{TemplateBinding BorderThickness}"
                                     CornerRadius="4" Padding="{TemplateBinding Padding}">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                  RecognizesAccessKey="True"/>
+                                <!-- 图标位（可选）：Tag 挂 Geo.* 几何即显示（Stroke 跟随前景键），
+                                     不挂 Tag 时折叠——与 GhostButton 同构，见其注释 -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                                            VerticalAlignment="Center">
+                                    <Path x:Name="Icon" Data="{TemplateBinding Tag}"
+                                          Width="13" Height="13" Stretch="Uniform"
+                                          Stroke="{TemplateBinding Foreground}" StrokeThickness="1.7"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round" Margin="0,0,5,0"
+                                          VerticalAlignment="Center"/>
+                                    <ContentPresenter VerticalAlignment="Center"
+                                                      RecognizesAccessKey="True"/>
+                                </StackPanel>
                             </Border>
                             <ControlTemplate.Triggers>
+                                <Trigger Property="Tag" Value="{x:Null}">
+                                    <Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/>
+                                </Trigger>
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Fresh.ButtonHoverBg}"/>
                                     <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Fresh.ButtonHoverBorder}"/>
@@ -219,7 +274,7 @@
                  设 VerticalAlignment=Center 会收缩内容宿主、裁掉文字下半截（实测教训） -->
             <Style x:Key="FreshInput" TargetType="TextBox">
                 <Setter Property="Height" Value="32"/>
-                <Setter Property="Padding" Value="8,0"/>
+                <Setter Property="Padding" Value="6,0,8,0"/>
                 <Setter Property="VerticalContentAlignment" Value="Center"/>
                 <Setter Property="Background" Value="{DynamicResource Brush.Fresh.InputBg}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Border}"/>
@@ -353,10 +408,14 @@
                     </Setter.Value>
                 </Setter>
             </Style>
-            <!-- 密码输入框：与 FreshInput 同款（PasswordBox 是独立控件需独立模板） -->
+            <!-- 密码输入框：与 FreshInput 同款（PasswordBox 是独立控件需独立模板）。
+                 Padding 左 3 非 6 是实测校准值：PasswordBox 内部渲染无 TextBoxView 的
+                 额外内缩，同抄 6 会让密码首字符比用户名编辑框文本（模板 Margin 8）
+                 靠右约 3 逻辑 px——登录窗"账号/密码文本左缘对齐" UI 契约（AGENTS.md），
+                 动此值须跑目检截图像素比对两框首字符左缘 -->
             <Style x:Key="FreshPwdInput" TargetType="PasswordBox">
                 <Setter Property="Height" Value="32"/>
-                <Setter Property="Padding" Value="8,0"/>
+                <Setter Property="Padding" Value="3,0,8,0"/>
                 <Setter Property="VerticalContentAlignment" Value="Center"/>
                 <Setter Property="Background" Value="{DynamicResource Brush.Fresh.InputBg}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Border}"/>
@@ -673,11 +732,16 @@
 
             <!-- ============ 弹窗自绘标题条（WindowStyle=None + WindowChrome 窗体公用） ============ -->
             <!-- 色复用主窗品牌键：HeaderGrad 渐变条（Light 蓝渐变 / Dark 深蓝实底）+ TopbarFg 字，
-                 底边 TopbarBorder——全程序一条品牌线。高 34（各窗 CaptionHeight 与其对齐）。 -->
+                 底边 TopbarBorder——全程序一条品牌线。高 34（各窗 CaptionHeight 与其对齐）。
+                 顶部圆角 10 与各弹窗外层圆角 Border 对齐（方角标题条会盖住外框圆角）。
+                 阴影资源 Fx.WinShadow：圆角透明窗的浮层投影（窗根 Grid 需留 Margin≈14 给阴影渲染）。 -->
+            <DropShadowEffect x:Key="Fx.WinShadow" Color="#000000" BlurRadius="24"
+                              ShadowDepth="2" Opacity="0.55" Direction="270"/>
             <Style x:Key="WinTitleBar" TargetType="Border">
                 <Setter Property="Background" Value="{DynamicResource Brush.HeaderGrad}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.TopbarBorder}"/>
                 <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                <Setter Property="CornerRadius" Value="10,10,0,0"/>
                 <Setter Property="Height" Value="34"/>
                 <Setter Property="Padding" Value="12,0"/>
             </Style>

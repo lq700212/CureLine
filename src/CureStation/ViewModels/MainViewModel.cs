@@ -76,7 +76,7 @@ public sealed class RackSlotViewModel : ViewModelBase
     }
 
     // ---------- 卡片视觉状态（Kind，新卡模板六态状态口径，2026-10-29） ----------
-    // 六态键与主题字典 Brush.Tint*/Brush.Head*/Brush.SlotBorder*/Brush.CardGlow*
+    // 六态键与主题字典 Brush.Tint*/Brush.SlotBorder*/Brush.CardGlow*
     // 的 XAML 触发器同名（改键名要同步：这里 + 两字典 + MainWindow.xaml 触发器）。
     // Kind=新模板/统计条的六态业务口径（Alarm=红灯占用、Gate=待门控、Curing=计时）。
 
@@ -109,11 +109,23 @@ public sealed class RackSlotViewModel : ViewModelBase
     }
 
     private int _progressPct;
-    /// <summary>进度百分比 0~100（(总-剩)/总；未计时=0）。</summary>
+    /// <summary>进度百分比 0~100（(总-剩)/总；未计时=0）——卡内副文"已固化 N%"用。</summary>
     public int ProgressPct
     {
         get => _progressPct;
         private set => Set(ref _progressPct, value);
+    }
+
+    private double _progressRatio;
+    /// <summary>
+    /// 进度比 0.0~1.0（卡内进度条 ScaleTransform.ScaleX 直绑：Rectangle 整宽
+    /// 压缩到该比例即填充段；比换算 ActualWidth×比例的转换器方案轻）。
+    /// 与 ProgressPct 同源同拍（ApplyKind 一处算），不变量同：TotalMin=0 → 0。
+    /// </summary>
+    public double ProgressRatio
+    {
+        get => _progressRatio;
+        private set => Set(ref _progressRatio, value);
     }
 
     /// <summary>有精确计时数据（状态机 Curing 且 TotalMin&gt;0）——卡内大数字+进度条只在它成立时展示，
@@ -124,12 +136,15 @@ public sealed class RackSlotViewModel : ViewModelBase
     /// Rack/Level 构造后不变，计算属性无需 INPC。</summary>
     public string LayerName => LevelName(Level);
 
-    /// <summary>统一落 Kind/Remain/Total/Progress（保持不变量：Total=0 → Remain=0、Pct=0）。</summary>
+    /// <summary>统一落 Kind/Remain/Total/Progress（保持不变量：Total=0 → Remain=0、Pct=0、Ratio=0）。</summary>
     private void ApplyKind(string kind, int remainMinutes, int totalMinutes)
     {
         Kind = kind;
         TotalMin = Math.Max(0, totalMinutes);
         RemainMin = TotalMin > 0 ? Math.Clamp(remainMinutes, 0, TotalMin) : 0;
+        ProgressRatio = TotalMin > 0
+            ? Math.Clamp((TotalMin - RemainMin) / (double)TotalMin, 0, 1)
+            : 0;
         ProgressPct = TotalMin > 0
             ? Math.Clamp((int)Math.Round(100.0 * (TotalMin - RemainMin) / TotalMin,
                 MidpointRounding.AwayFromZero), 0, 100)

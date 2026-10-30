@@ -15,46 +15,54 @@ Write-Host "=== [1/5] build solution ==="
 dotnet build "$root\CureLine.slnx" --nologo
 if ($LASTEXITCODE -ne 0) { throw "solution build failed" }
 
-Write-Host "=== [1.5] generate Cure resource dictionary (from source App.xaml) ==="
-$srcApp = "$root\src\CureStation\App.xaml"
-$genPath = Join-Path $PSScriptRoot 'Cure.App.Resources.xaml'
-$text = Get-Content $srcApp -Raw -Encoding UTF8
-$sHead = '<Application.Resources>'
-$sTail = '</Application.Resources>'
-$s = $text.IndexOf($sHead, [System.StringComparison]::Ordinal)
-$t = $text.IndexOf($sTail, [System.StringComparison]::Ordinal)
-if (($s -lt 0) -or ($t -le $s)) { throw "cannot locate Resources block in App.xaml" }
-$inner = $text.Substring($s + $sHead.Length, $t - ($s + $sHead.Length)).Trim()
-# App.Resources 结构为 <ResourceDictionary><RD.MergedDictionaries>…</RD>
-# （2026-10-29 弹窗跟主题起；旧脚本直接平铺 wrap 会两层嵌套 = 编译 MC3022）：
-# 1) 剥掉 inner 的外层 <ResourceDictionary> 壳——生成文件自带一层
-# 2) 删掉 MergedDictionaries 整段——内层相对 Source="Themes/Light.xaml" 在
-#    DocShot 组件里解析不到（字典编译进 harness 程序集），主题键板由
-#    DocShot.cs 直接从 CureStation 程序集 pack 加载，此节必须移除
-if ($inner.StartsWith('<ResourceDictionary')) {
-    $open = $inner.IndexOf('>')
-    $close = $inner.LastIndexOf('</ResourceDictionary>')
-    if ($open -ge 0 -and $close -gt $open) {
-        $inner = $inner.Substring($open + 1, $close - $open - 1)
-    }
-    $mStart = $inner.IndexOf('<ResourceDictionary.MergedDictionaries>')
-    if ($mStart -ge 0) {
-        $mEnd = $inner.IndexOf('</ResourceDictionary.MergedDictionaries>')
-        if ($mEnd -gt $mStart) {
-            $inner = $inner.Substring(0, $mStart) +
-                $inner.Substring($mEnd + '</ResourceDictionary.MergedDictionaries>'.Length)
+Write-Host "=== [1.5] generate resource dictionaries from both App.xaml ==="
+# 摘取两程序 App.xaml 的 <Application.Resources> 内段，各自生成一版"可 pack
+# 装载"的资源字典（run_docshot 前置步骤，DocShot 工程以 Page 收编后正常编译）。
+function New-AppResourcesDict {
+    param([string]$SrcApp, [string]$GenPath, [string]$Tag)
+    $text = Get-Content $SrcApp -Raw -Encoding UTF8
+    $sHead = '<Application.Resources>'
+    $sTail = '</Application.Resources>'
+    $s = $text.IndexOf($sHead, [System.StringComparison]::Ordinal)
+    $t = $text.IndexOf($sTail, [System.StringComparison]::Ordinal)
+    if (($s -lt 0) -or ($t -le $s)) { throw "cannot locate Resources block in $SrcApp" }
+    $inner = $text.Substring($s + $sHead.Length, $t - ($s + $sHead.Length)).Trim()
+    # App.Resources 结构为 <ResourceDictionary><RD.MergedDictionaries>…</RD>
+    # （2026-10-29 弹窗跟主题起；旧脚本直接平铺 wrap 会两层嵌套 = 编译 MC3022）：
+    # 1) 剥掉 inner 的外层 <ResourceDictionary> 壳——生成文件自带一层
+    # 2) 删掉 MergedDictionaries 整段——内层相对 Source="Themes/Light.xaml" 在
+    #    DocShot 组件里解析不到（字典编译进 harness 程序集），主题键板由
+    #    DocShot.cs 直接从程序集 pack 加载，此节必须移除
+    if ($inner.StartsWith('<ResourceDictionary')) {
+        $open = $inner.IndexOf('>')
+        $close = $inner.LastIndexOf('</ResourceDictionary>')
+        if ($open -ge 0 -and $close -gt $open) {
+            $inner = $inner.Substring($open + 1, $close - $open - 1)
+        }
+        $mStart = $inner.IndexOf('<ResourceDictionary.MergedDictionaries>')
+        if ($mStart -ge 0) {
+            $mEnd = $inner.IndexOf('</ResourceDictionary.MergedDictionaries>')
+            if ($mEnd -gt $mStart) {
+                $inner = $inner.Substring(0, $mStart) +
+                    $inner.Substring($mEnd + '</ResourceDictionary.MergedDictionaries>'.Length)
+            }
         }
     }
+    # 生成字典头照搬根节点的 xmlns:xxx 声明——App.xaml 内层样式引用前缀
+    # （如 shell:WindowChrome），漏声明 = 生成字典编译 MC3071；xmlns:x 已在头里手写，照搬时排除
+    $extraNs = [regex]::Matches($text, 'xmlns:(?!x=)[\w]+="[^"]*"') |
+        ForEach-Object { $_.Value } | Select-Object -Unique
+    $nsHead = if ($extraNs) { " " + ($extraNs -join ' ') } else { "" }
+    $dict = "<ResourceDictionary xmlns=`"http://schemas.microsoft.com/winfx/2006/xaml/presentation`" xmlns:x=`"http://schemas.microsoft.com/winfx/2006/xaml`"$nsHead>`n$inner`n</ResourceDictionary>"
+    Set-Content -Path $GenPath -Value $dict -Encoding UTF8
+    Write-Host "generated: $GenPath ($Tag)"
 }
-# 生成字典头照搬根节点的 xmlns:xxx 声明——App.xaml 内层样式引用前缀
-# （V0.0.27 无边框自绘 WinTitleClose 用 shell:WindowChrome.IsHitTestVisibleInChrome），
-# 漏声明 = 生成字典编译 MC3071；xmlns:x 已在头里手写，照搬时排除
-$extraNs = [regex]::Matches($text, 'xmlns:(?!x=)[\w]+="[^"]*"') |
-    ForEach-Object { $_.Value } | Select-Object -Unique
-$nsHead = if ($extraNs) { " " + ($extraNs -join ' ') } else { "" }
-$dict = "<ResourceDictionary xmlns=`"http://schemas.microsoft.com/winfx/2006/xaml/presentation`" xmlns:x=`"http://schemas.microsoft.com/winfx/2006/xaml`"$nsHead>`n$inner`n</ResourceDictionary>"
-Set-Content -Path $genPath -Value $dict -Encoding UTF8
-Write-Host "generated: $genPath"
+
+# 程序①：CureStation 主字典（源 App.xaml 摘段）
+New-AppResourcesDict "$root\src\CureStation\App.xaml" (Join-Path $PSScriptRoot 'Cure.App.Resources.xaml') 'CureStation'
+# 程序②：原 Styles/FreshBlue.xaml 已在 V0.0.20 随弹窗统一样式删除——runner 拼装
+# 该 pack 失效后 gw 段 StaticResource 全爆（Geo.* 缺键 FATAL）；改为同款摘取 App.xaml。
+New-AppResourcesDict "$root\src\CimGateway\App.xaml" (Join-Path $PSScriptRoot 'Gw.App.Resources.xaml') 'CimGateway'
 
 Write-Host "=== [2/5] build harness ==="
 dotnet build (Join-Path $PSScriptRoot 'DocShot.csproj') --nologo

@@ -3,11 +3,11 @@
     <!--
       Dark 主题色板（G1 · 深空玻璃舱，docs/UI设计_固化架显示区优化_对比稿.html #g/g1 直译）：
       - 主基调：#0E1626 深空底（左上径向冷光）+ rgba(白 5.5%) 玻璃卡 + 状态色浸染玻璃 +
-        状态色外描边 + 霓虹灯点/数字发光；报警卡整卡红光圈（Fx.CardShadowAlarm）；
-        卡顶无头带（Head* 全透明——G1 视觉只有"边框染+光斑"无横带）；
-      - 键名与 Light.xaml（G2 浅色渐变浸染）完全同名异值——ThemeManager 切字典即换肤，
+        状态色外描边 + 霓虹数字发光；报警卡整卡红光圈（Fx.CardShadowAlarm）；
+        卡无头带/无灯点（Brush.Head*/Fx.DotGlow* 已随设计图退役，V0.0.35 与 Light 同架构）；
+      - 键名与 Light.xaml（设计图三段式复刻）完全同名异值——ThemeManager 切字典即换肤,
         主窗/日志悬浮窗全部 DynamicResource 取色，窗体 XAML 零主题分支；几何量
-        （圆角/点发光）用键值（Fn.CardRadius / Fx.DotGlow*）随主题分流；
+        （圆角）用键值（Fn.CardRadius）随主题分流；
       - 划红线：本字典只放语义键，不含 Fresh.*（弹窗固定浅色键收在 App.xaml
         主字典，切主题不影响弹窗——拍板"其余弹窗维持浅色，第 2 期再统一"）；
       - 键名勿改：主窗/LogWindow/XAML 触发器全部按键名取色（改键名要同步两字典 +
@@ -70,26 +70,6 @@
     <SolidColorBrush x:Key="Brush.TintAlarm" Color="#21FF1744"/>
     <SolidColorBrush x:Key="Brush.TintNotConfigured" Color="#1956B4FF"/>
 
-    <!-- 卡顶 5px 状态头带（G1 无横带——全透明占位，键名与 Light 同名） -->
-    <LinearGradientBrush x:Key="Brush.HeadIdle" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Color="#00FFFFFF" Offset="0"/><GradientStop Color="#00FFFFFF" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="Brush.HeadGate" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Color="#00FFFFFF" Offset="0"/><GradientStop Color="#00FFFFFF" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="Brush.HeadCuring" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Color="#00FFFFFF" Offset="0"/><GradientStop Color="#00FFFFFF" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="Brush.HeadDone" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Color="#00FFFFFF" Offset="0"/><GradientStop Color="#00FFFFFF" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="Brush.HeadAlarm" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Color="#00FFFFFF" Offset="0"/><GradientStop Color="#00FFFFFF" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="Brush.HeadNotConfigured" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Color="#00FFFFFF" Offset="0"/><GradientStop Color="#00FFFFFF" Offset="1"/>
-    </LinearGradientBrush>
-
     <!-- 状态描边（HTML .g1-card 状态边 rgba；idle/gate 回默认玻璃边） -->
     <SolidColorBrush x:Key="Brush.SlotBorderIdle" Color="#2994B4E1"/>
     <SolidColorBrush x:Key="Brush.SlotBorderGate" Color="#2994B4E1"/>
@@ -131,6 +111,7 @@
     </RadialGradientBrush>
 
     <!-- ══════════ 卡内状态字/数字色（HTML .g1-num 五分支，霓虹口径） ══════════ -->
+    <!-- NumCuring 双主题异值：Light=设计图橙 #F59E0B / Dark=G1 霓虹浅白（G1 无设计图，保持原拍板） -->
     <SolidColorBrush x:Key="Brush.NumCuring" Color="#EAF3FF"/>
     <SolidColorBrush x:Key="Brush.NumDone" Color="#00E676"/>
     <SolidColorBrush x:Key="Brush.NumGate" Color="#B39DDB"/>
@@ -146,13 +127,11 @@
     <SolidColorBrush x:Key="Brush.StatePurple" Color="#7E57C2"/>
     <SolidColorBrush x:Key="Brush.StateBlue" Color="#56B4FF"/>
 
-    <!-- ══════════ 点发光 / 卡投影（HTML box-shadow 直译，双主题同名异值） ══════════ -->
-    <!-- 亮点 glow（HTML .g1-dot 0 0 8px 状态色实光；灭灯不挂） -->
-    <DropShadowEffect x:Key="Fx.DotGlowRed" Color="#FF1744" BlurRadius="9" ShadowDepth="0" Opacity="0.85"/>
-    <DropShadowEffect x:Key="Fx.DotGlowYellow" Color="#FFB300" BlurRadius="9" ShadowDepth="0" Opacity="0.85"/>
-    <DropShadowEffect x:Key="Fx.DotGlowGreen" Color="#00E676" BlurRadius="9" ShadowDepth="0" Opacity="0.85"/>
-    <DropShadowEffect x:Key="Fx.DotGlowPurple" Color="#B39DDB" BlurRadius="9" ShadowDepth="0" Opacity="0.7"/>
-    <DropShadowEffect x:Key="Fx.DotGlowBlue" Color="#4FC3F7" BlurRadius="9" ShadowDepth="0" Opacity="0.7"/>
+    <!-- 状态胶囊 idle 底（卡顶 pill，与 Light 同名异值：亮态直接用 Brush.State*） -->
+    <SolidColorBrush x:Key="Brush.PillIdleBg" Color="#14FFFFFF"/>
+
+    <!-- ══════════ 霓虹发光 / 卡投影（HTML box-shadow 直译，双主题同名异值） ══════════ -->
+    <!-- 灯点 glow 已随设计图退役（V0.0.35：灯点→状态胶囊） -->
     <!-- 卡投影（HTML .g1-card 0 3px 10px rgba(0,0,0,.35)；alarm 卡换红光圈 0 0 14px rgba(255,23,68,.28)） -->
     <DropShadowEffect x:Key="Fx.CardShadow" Color="#000000" BlurRadius="10" ShadowDepth="1" Opacity="0.38"/>
     <DropShadowEffect x:Key="Fx.CardShadowAlarm" Color="#FF1744" BlurRadius="14" ShadowDepth="1" Opacity="0.30"/>

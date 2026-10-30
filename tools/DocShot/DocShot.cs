@@ -68,7 +68,7 @@ using GwLog = CimGateway.MesLogWindow;
 using GwDebug = CimGateway.MesDebugWindow;
 using GwAlarm = CimGateway.MesAlarmWindow;
 using GwChangePwd = CimGateway.ChangePasswordWindow;
-using GwPlcConfig = CimGateway.PlcConfigWindow;
+using GwGatewayConfig = CimGateway.GatewayConfigWindow;
 using GwDialogs = CimGateway.ViewModels.IDialogService;
 using GwDialogImage = CimGateway.ViewModels.DialogImage;
 using GwMainVm = CimGateway.ViewModels.MainWindowViewModel;
@@ -206,6 +206,10 @@ public static class Program
         Pump(12000);
         ShotFrame(main, "cs-main-flow.png");   // 流转中（黄灯/绿灯/托盘混合）
 
+        // 高进度演示帧（cs-main-curing.png）：Mock 演示开计时常驻"刚开跑"口径
+        // （剩 119/进度 1%），拍不到断电续算的 61% 填充——harness 直改演（见方法注）。
+        InjectCuringFrame(main, "cs-main-curing.png");
+
         // ---------- 登录窗（登录面板 + 改密面板） ----------
         var lv = new CureLoginVm();
         lv.Password = "123456";                // R1 例外允许的"模拟打字"
@@ -273,16 +277,73 @@ public static class Program
         _ownerSource = null;
     }
 
+    /// <summary>
+    /// 主窗"高进度计时"演示帧（cs-main-curing.png）：Mock 演示的计时卡恒是
+    /// "真实边沿刚开跑"口径（剩 119 分/进度 1%），拍不到断电续算口径的高进度
+    /// 填充；而 500ms 刷会拿状态机实时剩余覆盖手工态。本段：反射停 500ms 刷
+    /// → 手工把 rack1/L1 刷成 Curing 剩 47/共 120（=61%，对齐设计图 B02 口径）
+    /// → 拍帧 → finally 复跑刷新（下一拍即被真实状态改写，对后段帧零污染）。
+    /// 反射 private 计时器仅 harness 演示用，不进生产代码。
+    /// </summary>
+    private static void InjectCuringFrame(CwMain main, string file)
+    {
+        System.Windows.Threading.DispatcherTimer? timer = null;
+        try
+        {
+            if (main.DataContext is CureMainVm vm)
+            {
+                timer = typeof(CureMainVm).GetField("_refreshTimer",
+                    System.Reflection.BindingFlags.NonPublic |
+                    System.Reflection.BindingFlags.Instance)?.GetValue(vm)
+                    as System.Windows.Threading.DispatcherTimer;
+                timer?.Stop();
+                // 手工快照：rack1/L1 托盘在架 + 黄灯亮（托盘副文/ToolTip 口径来源）
+                var snap = new PointTableSnapshot(new Dictionary<IoPointKey, bool>
+                {
+                    [new IoPointKey(true, IoPointRole.TrayDetect, 1, 1)] = true,
+                    [new IoPointKey(false, IoPointRole.LampYellow, 1, 1)] = true,
+                }, DateTimeOffset.Now);
+                vm.Slots.FirstOrDefault(s => s.Rack == 1 && s.Level == 1)
+                    ?.Refresh(snap, true, new SlotStatus(SlotPhase.Curing, 120, 47));
+                // 统计条（⚡剩余最短/五态计数）同拍重算——刷新停在注入拍，不手动
+                // 重算的话顶栏还挂着注入前数值，与卡内 47 分对不上（演示帧自治愈态）。
+                typeof(CureMainVm).GetMethod("RefreshStats",
+                    System.Reflection.BindingFlags.NonPublic |
+                    System.Reflection.BindingFlags.Instance)?.Invoke(vm, null);
+            }
+
+            Pump(120);
+            ShotFrame(main, file);
+        }
+        catch (Exception ex)
+        {
+            Log($"WARN 高进度演示帧失败（跳过）：{ex.Message}");
+        }
+        finally
+        {
+            timer?.Start();  // 复跑：下一拍 UI 即被真实状态改写
+        }
+    }
+
     // ───────────────────── 程序② CimGateway 截图 ─────────────────────
     private static void ShotGateway(Application app, string exeDir)
     {
-        // 资源换装（FreshBlue 是 CimGateway 程序集编译的样式包 + 全局转换器）
+        // 资源换装：从 CimGateway 源 App.xaml 摘段生成的 Gw.App.Resources.xaml
+        // （原 Styles/FreshBlue.xaml 已随 V0.0.20 弹窗统一样式删除，pack 必 404）
+        // + 主题键板（程序①同款手法：ThemeManager 实际装载用的就是组件内 Themes 字典）。
         try
         {
             app.Resources.MergedDictionaries.Clear();
             app.Resources.MergedDictionaries.Add(new ResourceDictionary
             {
-                Source = new Uri("pack://application:,,,/CimGateway;component/Styles/FreshBlue.xaml"),
+                Source = new Uri("pack://application:,,,/DocShot;component/Gw.App.Resources.xaml"),
+            });
+            var theme = Environment.GetEnvironmentVariable("DOCSHOT_THEME");
+            theme = string.IsNullOrWhiteSpace(theme) ? "Light" : theme.Trim();
+            app.Resources.MergedDictionaries.Add(new ResourceDictionary
+            {
+                Source = new Uri(
+                    $"pack://application:,,,/CimGateway;component/Themes/{theme}.xaml"),
             });
             app.Resources["BoolToVisibilityConverter"] = new System.Windows.Controls.BooleanToVisibilityConverter();
         }
@@ -343,7 +404,7 @@ public static class Program
 
         // ---------- MES 交互实时日志窗（-1 全部机台） ----------
         var log1 = new GwLog(-1);
-        Shot(log1, "gw-log-all.png", 900);
+        Shot(log1, "gw-log.png", 900);
 
         // ---------- MES 接口调试窗（API0027 表单 + JSON 预览） ----------
         var dbg = new GwDebug();
@@ -361,8 +422,8 @@ public static class Program
         Shot(cpw, "gw-changepwd.png", 800);
 
         // ---------- 网关设置窗（dev 专属——仅内部版，客户两版零出现） ----------
-        var cfgW = new GwPlcConfig();
-        Shot(cfgW, "gw-plcconfig.png", 1000);
+        var cfgW = new GwGatewayConfig();
+        Shot(cfgW, "gw-config.png", 1000);
 
         // 主窗不 Close（OnClosing 有"是否退出？"直弹 MessageBox，见 Main 收尾注释）
         main.Hide();
@@ -623,7 +684,7 @@ public static class Program
         public bool? ConfirmOrCancel(string message, string title) => true;
         public (bool Ok, LoginRole Role, string User) ShowLogin() => (false, LoginRole.None, "");
         public void ShowChangePassword(string currentUser, LoginRole role) { }
-        public bool ShowPlcConfig() => false;
+        public bool ShowGatewayConfig() => false;   // V0.0.32 网关窗改名（ShowPlcConfig→ShowGatewayConfig），桩跟进
         public void ShowAlarm(string message, string name) { }
         public void ShowImage(string imagePath) { }
         public void ShowMesLog(int station) { }

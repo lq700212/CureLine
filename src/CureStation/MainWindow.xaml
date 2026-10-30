@@ -41,9 +41,10 @@
         系列，单架 1 组无标题条；组内 10×3 UniformGrid 行优先）；
       - 工单双卡（行 3）：HTML .g2-wo/.g1-wo 直译——R/L 各"工位 · 单号"+过账角标 +
         渐变进度条（R=蓝/L=紫）+ "已产出 N / 总"（拆分由 WoQtySplitConverter，VM 零改）；
-      - 仓位卡 = G 卡三段式（top=库位码+灯点 / mid=垂直居中大数字"17 分·31%"或状态词 /
-        foot=层名+托盘），状态浸染底/描边/头带全靠主题字典 Kind 同名触发器换色；
-        Alarm 脉动挂 mid 文本（HTML pulseG1/G2），卡内无进度条（HTML G 卡无 bar）；
+      - 仓位卡 = 设计图三段式（top=库位码+状态胶囊 / mid=状态词+副文 或 大数字"47 分"+副文
+        "共 X 分·已固化 Y%"+进度条 / foot=状态点+层名+托盘）；状态浸染底/描边全靠主题字典
+        Kind 同名触发器换色（非空闲卡彩边加厚 1.5）；Alarm 脉动挂 mid 文本（HTML pulseG1/G2，
+        V0.0.25 对比稿手法保留）；灯点由状态胶囊顶替（V0.0.35 设计图复刻）。
       - 展示文本绑定一律 FallbackValue（设计时纪律）；运行态数据不设固定宽高
         （默认最大化 + 均分拉伸，V0.0.19 教训，勿加回固定 Width/Height）。
     -->
@@ -62,9 +63,10 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
-        <!-- 仓位卡模板（G 卡三段式，makeG 直译）：top=Code+灯点 / mid=大数字(17)或状态词(12)
-             / foot=层名+托盘；状态底 Tint*/描边 SlotBorder*/头带 Head*/光斑 CardGlow*
-             与 Kind 触发器同名分流；投影 Fx.CardShadow（Alarm 切 Fx.CardShadowAlarm） -->
+        <!-- 仓位卡模板（设计图三段式直译，2026-10-30）：top=Code+状态胶囊 / mid=状态词+副文
+             或 大数字(26)+副文"共 X 分·已固化 Y%"+进度条 / foot=状态点+层名+托盘；状态底
+             Tint*/描边 SlotBorder*/光斑 CardGlow* 与 Kind 触发器同名分流（非空闲卡边加厚
+             1.5），旧 5px 头带与灯点已随设计图退役；投影 Fx.CardShadow（Alarm 切红光圈） -->
         <DataTemplate x:Key="SlotCard">
             <Border CornerRadius="{DynamicResource Fn.CardRadius}" BorderThickness="1" Margin="3">
                 <Border.Style>
@@ -78,19 +80,24 @@
                             <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Gate">
                                 <Setter Property="Background" Value="{DynamicResource Brush.TintGate}"/>
                                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderGate}"/>
+                                <!-- 非空闲卡彩描边加厚（设计图：白底+2px 状态色边聚焦） -->
+                                <Setter Property="BorderThickness" Value="1.5"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing">
                                 <Setter Property="Background" Value="{DynamicResource Brush.TintCuring}"/>
                                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderCuring}"/>
+                                <Setter Property="BorderThickness" Value="1.5"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Done">
                                 <Setter Property="Background" Value="{DynamicResource Brush.TintDone}"/>
                                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderDone}"/>
+                                <Setter Property="BorderThickness" Value="1.5"/>
                             </DataTrigger>
-                            <!-- 红灯占用：浸染 + 红光圈投影（HTML alarm 卡换色阴影直译） -->
+                            <!-- 红灯占用：浸染 + 红光圈投影 + 厚彩边（HTML alarm 卡换色阴影直译） -->
                             <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
                                 <Setter Property="Background" Value="{DynamicResource Brush.TintAlarm}"/>
                                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderAlarm}"/>
+                                <Setter Property="BorderThickness" Value="1.5"/>
                                 <Setter Property="Effect" Value="{DynamicResource Fx.CardShadowAlarm}"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="NotConfigured">
@@ -131,41 +138,17 @@
                         </Border.Style>
                     </Border>
 
-                    <!-- ② 卡顶 5px 状态头带（G2 明显渐变带 / G1 全透明=无带，顶角随卡圆角） -->
-                    <Border Height="5" VerticalAlignment="Top" CornerRadius="14,14,0,0">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Background" Value="{DynamicResource Brush.HeadIdle}"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Gate">
-                                        <Setter Property="Background" Value="{DynamicResource Brush.HeadGate}"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing">
-                                        <Setter Property="Background" Value="{DynamicResource Brush.HeadCuring}"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Done">
-                                        <Setter Property="Background" Value="{DynamicResource Brush.HeadDone}"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
-                                        <Setter Property="Background" Value="{DynamicResource Brush.HeadAlarm}"/>
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="NotConfigured">
-                                        <Setter Property="Background" Value="{DynamicResource Brush.HeadNotConfigured}"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                    </Border>
+                    <!-- ② 卡顶状态头带已随设计图退役（V0.0.35）：胶囊+彩边承接状态语义，留白即层次 -->
 
-                    <!-- ③ 三段内容（HTML g1-card padding 7 9 6 / g2-card 8 10 7，统一 10,9,7） -->
-                    <Grid Margin="10,9,10,7">
+                    <!-- ③ 三段内容（设计图 padding ≈ 12 横 10 纵，卡高拉伸均分兜底） -->
+                    <Grid Margin="12,10,12,8">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <!-- top：库位码（Consolas 体感：等宽数字）+ 灯点（亮灯霓虹、灭灯灰） -->
+                        <!-- top：库位码（大字号，空闲/未配置灰降权）+ 状态胶囊（六态彩底，设计图顶替灯点） -->
                         <Grid Grid.Row="0" ToolTipService.ShowDuration="12000">
                             <Grid.ToolTip>
                                 <ToolTip>
@@ -180,44 +163,90 @@
                                     </StackPanel>
                                 </ToolTip>
                             </Grid.ToolTip>
-                            <TextBlock Text="{Binding Code, FallbackValue=A01}" FontSize="14.5" FontWeight="ExtraBold"
-                                       Foreground="{DynamicResource Brush.FgStrong}" VerticalAlignment="Center"/>
-                            <Ellipse Width="10" Height="10" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                <Ellipse.Style>
-                                    <Style TargetType="Ellipse">
-                                        <Setter Property="Fill" Value="{DynamicResource Brush.StateIdle}"/>
-                                        <!-- 灭灯（idle/gate）不挂 glow——HTML makeG：dot 只有 lampOn 才上色发光 -->
+                            <TextBlock Text="{Binding Code, FallbackValue=A01}" FontSize="17" FontWeight="ExtraBold"
+                                       VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{DynamicResource Brush.FgStrong}"/>
+                                        <!-- 空闲/未配置：库位码随卡降权（设计图 D04 灰码） -->
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing">
-                                                <Setter Property="Fill" Value="{DynamicResource Brush.StateYellow}"/>
-                                                <Setter Property="Effect" Value="{DynamicResource Fx.DotGlowYellow}"/>
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Done">
-                                                <Setter Property="Fill" Value="{DynamicResource Brush.StateGreen}"/>
-                                                <Setter Property="Effect" Value="{DynamicResource Fx.DotGlowGreen}"/>
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
-                                                <Setter Property="Fill" Value="{DynamicResource Brush.StateRed}"/>
-                                                <Setter Property="Effect" Value="{DynamicResource Fx.DotGlowRed}"/>
+                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Idle">
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush.NumIdle}"/>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="NotConfigured">
-                                                <Setter Property="Fill" Value="{DynamicResource Brush.StateBlue}"/>
-                                                <Setter Property="Effect" Value="{DynamicResource Fx.DotGlowBlue}"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush.NumIdle}"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </Ellipse.Style>
-                            </Ellipse>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <!-- 状态胶囊：全圆角小 pill，彩底白字（空闲=浅灰底灰字降档） -->
+                            <Border HorizontalAlignment="Right" VerticalAlignment="Center"
+                                    CornerRadius="10" Padding="9,2">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <!-- 底色缺省=空闲（灰），亮态走 Kind 触发器换状态色 -->
+                                        <Setter Property="Background" Value="{DynamicResource Brush.PillIdleBg}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing">
+                                                <Setter Property="Background" Value="{DynamicResource Brush.StateYellow}"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Gate">
+                                                <Setter Property="Background" Value="{DynamicResource Brush.StatePurple}"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Done">
+                                                <Setter Property="Background" Value="{DynamicResource Brush.StateGreen}"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
+                                                <Setter Property="Background" Value="{DynamicResource Brush.StateRed}"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="NotConfigured">
+                                                <Setter Property="Background" Value="{DynamicResource Brush.StateBlue}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock FontSize="10.5" FontWeight="SemiBold" Text="空闲">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <!-- 字色缺省=空闲灰；亮态白字（FgOnAccent 双主题同名） -->
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.FgDim}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing">
+                                                    <Setter Property="Text" Value="计时中"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.FgOnAccent}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Gate">
+                                                    <Setter Property="Text" Value="待门控"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.FgOnAccent}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Done">
+                                                    <Setter Property="Text" Value="放行"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.FgOnAccent}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
+                                                    <Setter Property="Text" Value="占用"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.FgOnAccent}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="NotConfigured">
+                                                    <Setter Property="Text" Value="未配置"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.FgOnAccent}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Border>
                         </Grid>
 
-                        <!-- mid：状态词视图（idle/gate/done/alarm/notconfig/灯色反推计时）与大数字视图
-                             （状态机精确计时）互斥；文本随 Kind 分支给字面量（对齐 HTML 文案），不绑 VM -->
+                        <!-- mid：状态词视图（idle/gate/done/alarm/notconfig/灯色反推计时，含副文案行）
+                             与大数字视图（状态机精确计时+进度条）互斥；文本随 Kind 分支给字面量
+                             （对齐设计图文案），不绑 VM -->
                         <Grid Grid.Row="1" VerticalAlignment="Center">
-                            <!-- 状态词视图 -->
-                            <TextBlock HorizontalAlignment="Left" FontSize="12" FontWeight="Bold"
-                                       Foreground="{DynamicResource Brush.NumIdle}" Text="空 闲">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
+                            <!-- 状态词视图：词 15px + 副文 10.5px（各态一句，设计图口径） -->
+                            <StackPanel HorizontalAlignment="Left" VerticalAlignment="Center">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
                                         <Setter Property="Visibility" Value="Visible"/>
                                         <!-- 大数字接管时隐藏（同格双视图：另一视图 Visible 才出） -->
                                         <Style.Triggers>
@@ -228,57 +257,86 @@
                                                 </MultiDataTrigger.Conditions>
                                                 <Setter Property="Visibility" Value="Collapsed"/>
                                             </MultiDataTrigger>
-                                            <!-- 文案/颜色分支（对齐 makeG 的 -num 词根：idle/gate/stat/warn/done） -->
-                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Gate">
-                                                <Setter Property="Text" Value="待门控"/>
-                                                <Setter Property="Foreground" Value="{DynamicResource Brush.NumGate}"/>
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Done">
-                                                <Setter Property="Text" Value="✓ 放行"/>
-                                                <Setter Property="Foreground" Value="{DynamicResource Brush.NumDone}"/>
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
-                                                <Setter Property="Text" Value="⚠ 占用"/>
-                                                <Setter Property="Foreground" Value="{DynamicResource Brush.NumAlarm}"/>
-                                                <!-- HTML pulseG1/G2：文本透明度脉动（只挂 Warn 文本），1.5s 折中 -->
-                                                <DataTrigger.EnterActions>
-                                                    <BeginStoryboard>
-                                                        <Storyboard>
-                                                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                                             From="0.7" To="1" AutoReverse="True"
-                                                                             RepeatBehavior="Forever" Duration="0:0:0:1.5"/>
-                                                        </Storyboard>
-                                                    </BeginStoryboard>
-                                                </DataTrigger.EnterActions>
-                                                <DataTrigger.ExitActions>
-                                                    <BeginStoryboard>
-                                                        <Storyboard>
-                                                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                                             To="1" Duration="0:0:0:0.001"/>
-                                                        </Storyboard>
-                                                    </BeginStoryboard>
-                                                </DataTrigger.ExitActions>
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="NotConfigured">
-                                                <Setter Property="Text" Value="未配置"/>
-                                                <Setter Property="Foreground" Value="{DynamicResource Brush.NumSmall}"/>
-                                                <Setter Property="FontWeight" Value="Bold"/>
-                                            </DataTrigger>
-                                            <!-- 灯色反推"计时中"（无精确值）文本视图接管 -->
-                                            <MultiDataTrigger>
-                                                <MultiDataTrigger.Conditions>
-                                                    <Condition Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing"/>
-                                                    <Condition Binding="{Binding HasDetail, FallbackValue=False}" Value="False"/>
-                                                </MultiDataTrigger.Conditions>
-                                                <Setter Property="Text" Value="计时中"/>
-                                                <Setter Property="Foreground" Value="{DynamicResource Brush.NumCuring}"/>
-                                            </MultiDataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                            <!-- 大数字视图：剩 47 分·31%（HTML 17px 数字 + 9px 小字基线对齐） -->
-                            <StackPanel Orientation="Horizontal">
+                                </StackPanel.Style>
+                                <!-- 状态词行（文案/颜色分支：idle/gate/stat/warn/done 同原口径） -->
+                                <TextBlock FontSize="15" FontWeight="Bold" Text="空 闲">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Gate">
+                                                    <Setter Property="Text" Value="待门控"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.NumGate}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Done">
+                                                    <Setter Property="Text" Value="✓ 已放行"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.NumDone}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
+                                                    <Setter Property="Text" Value="⚠ 占用"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.NumAlarm}"/>
+                                                    <!-- HTML pulseG1/G2：文本透明度脉动（只挂 Warn 文本），1.5s 折中 -->
+                                                    <DataTrigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                 From="0.7" To="1" AutoReverse="True"
+                                                                                 RepeatBehavior="Forever" Duration="0:0:0:1.5"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.EnterActions>
+                                                    <DataTrigger.ExitActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                                 To="1" Duration="0:0:0:0.001"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.ExitActions>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="NotConfigured">
+                                                    <Setter Property="Text" Value="未配置"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.NumSmall}"/>
+                                                </DataTrigger>
+                                                <!-- 灯色反推"计时中"（无精确值）文本视图接管 -->
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing"/>
+                                                        <Condition Binding="{Binding HasDetail, FallbackValue=False}" Value="False"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Text" Value="计时中"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.NumCuring}"/>
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <!-- 副文案行：Idle/未配置/反推计时无副文（数据缺省隐藏），三亮态各一句 -->
+                                <TextBlock FontSize="10.5" Margin="0,4,0,0" Visibility="Collapsed"
+                                           Foreground="{DynamicResource Brush.NumSmall}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Gate">
+                                                    <Setter Property="Text" Value="光栅让空后计时"/>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Done">
+                                                    <Setter Property="Text" Value="待取件"/>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
+                                                    <Setter Property="Text" Value="红灯 · 请检查"/>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                            <!-- 大数字视图：47 分 + 共 120 分·已固化 61% + 进度条（设计图三行左对齐） -->
+                            <StackPanel>
                                 <StackPanel.Style>
                                     <Style TargetType="StackPanel">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -293,26 +351,73 @@
                                         </Style.Triggers>
                                     </Style>
                                 </StackPanel.Style>
-                                <TextBlock Text="{Binding RemainMin, FallbackValue=0}" FontSize="17" FontWeight="ExtraBold"
-                                           Foreground="{DynamicResource Brush.NumCuring}" VerticalAlignment="Bottom"/>
-                                <TextBlock Text="{Binding ProgressPct, FallbackValue=0, StringFormat=分·{0}%}" FontSize="9"
-                                           FontWeight="Medium" Foreground="{DynamicResource Brush.NumSmall}"
-                                           VerticalAlignment="Bottom" Margin="3,0,0,1"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding RemainMin, FallbackValue=0}" FontSize="26" FontWeight="ExtraBold"
+                                               Foreground="{DynamicResource Brush.NumCuring}" VerticalAlignment="Bottom"/>
+                                    <TextBlock Text="分" FontSize="11" FontWeight="Medium"
+                                               Foreground="{DynamicResource Brush.NumCuring}"
+                                               VerticalAlignment="Bottom" Margin="4,0,0,3"/>
+                                </StackPanel>
+                                <TextBlock FontSize="10.5" Margin="0,3,0,0"
+                                           Foreground="{DynamicResource Brush.NumSmall}">
+                                    <Run Text="共 "/><Run Text="{Binding TotalMin, Mode=OneWay, FallbackValue=0}"/>
+                                    <Run Text=" 分 · 已固化 "/><Run Text="{Binding ProgressPct, Mode=OneWay, FallbackValue=0}"/>
+                                    <Run Text="%"/>
+                                </TextBlock>
+                                <!-- 进度条：6px 圆角槽 + 状态黄填充（Rectangle 整宽 ScaleTransform 压缩，
+                                     比 ActualWidth 换算轻；VM ProgressRatio 0~1 直绑） -->
+                                <Grid Height="6" Margin="0,9,0,0">
+                                    <Border CornerRadius="3" Background="{DynamicResource Brush.BarTrack}"/>
+                                    <Rectangle Fill="{DynamicResource Brush.StateYellow}" RadiusX="3" RadiusY="3"
+                                               RenderTransformOrigin="0,0.5">
+                                        <Rectangle.RenderTransform>
+                                            <ScaleTransform ScaleX="{Binding ProgressRatio, Mode=OneWay, FallbackValue=0}"/>
+                                        </Rectangle.RenderTransform>
+                                    </Rectangle>
+                                </Grid>
                             </StackPanel>
                         </Grid>
 
-                        <!-- foot：层名（左） + 托盘（右，有货=绿色加粗） -->
+                        <!-- foot：状态彩点（随 Kind 六态，设计图口径）+ 层名（左） + 托盘（右，有货=深色半粗） -->
                         <Grid Grid.Row="2">
-                            <TextBlock Text="{Binding LayerName, FallbackValue=上层}" FontSize="10"
-                                       Foreground="{DynamicResource Brush.FgDim}" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse Width="7" Height="7" VerticalAlignment="Center">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{DynamicResource Brush.StateIdle}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing">
+                                                    <Setter Property="Fill" Value="{DynamicResource Brush.StateYellow}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Gate">
+                                                    <Setter Property="Fill" Value="{DynamicResource Brush.StatePurple}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Done">
+                                                    <Setter Property="Fill" Value="{DynamicResource Brush.StateGreen}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
+                                                    <Setter Property="Fill" Value="{DynamicResource Brush.StateRed}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="NotConfigured">
+                                                    <Setter Property="Fill" Value="{DynamicResource Brush.StateBlue}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock Text="{Binding LayerName, FallbackValue=上层}" FontSize="10"
+                                           Foreground="{DynamicResource Brush.FgDim}"
+                                           VerticalAlignment="Center" Margin="5,0,0,0"/>
+                            </StackPanel>
                             <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10"
                                        Text="{Binding TrayFoot, FallbackValue=—}"
                                        Foreground="{DynamicResource Brush.FgDim}">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Style.Triggers>
+                                            <!-- 有货托盘：深色半粗（设计图 D 卡"托盘在"黑粗，不再用绿强调） -->
                                             <DataTrigger Binding="{Binding TrayFoot, FallbackValue=—}" Value="◈ 托盘在">
-                                                <Setter Property="Foreground" Value="{DynamicResource Brush.NumDone}"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush.FgStrong}"/>
                                                 <Setter Property="FontWeight" Value="SemiBold"/>
                                             </DataTrigger>
                                         </Style.Triggers>

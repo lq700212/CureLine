@@ -44,8 +44,9 @@
     <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
   </ItemGroup>
 
-  <!-- 程序①资源字典（run_docshot.ps1 在 build 前自动由源 App.xaml 生成，
-       编译进本程序集——pack URI 加载。.xaml 文件由 SDK 默认 glob 收编为
-       Page，无需显式 Page Include，显式加会 NETSDK1022 重复项） -->
+  <!-- 两程序资源字典（run_docshot.ps1 在 build 前自动由各自源 App.xaml 摘段生成：
+        Cure.App.Resources.xaml / Gw.App.Resources.xaml，编译进本程序集——pack URI
+        加载。.xaml 文件由 SDK 默认 glob 收编为 Page，无需显式 Page Include，
+        显式加会 NETSDK1022 重复项） -->
 
 </Project>
