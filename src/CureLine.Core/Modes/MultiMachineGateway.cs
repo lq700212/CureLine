@@ -1,7 +1,7 @@
 // =========================================================================
 // MultiMachineGateway：多机通用 MES 网关（复刻自多机版 Form1.vb ScanPLC1 后半）
 //
-// 干什么：每台 PLC 独立后台线程死循环（200ms）：查 6 个触发字→命中一个→
+// 干什么：每台机台独立后台线程死循环（200ms）：查 6 个触发字→命中一个→
 //   触发复 0→后台 Task 读 JSON→按接口校验→POST MES→回写 STATUS/MSG/DATA→
 //   完成=1→触发复 0。一次扫描只处理一个触发（防多 API 并发冲突，老项目原注）。
 //
@@ -17,7 +17,7 @@
 //
 // 补齐说明（相对老项目的残缺）：
 // ① 老项目 HslCommunication 无工程引用、靠 bin 残留 DLL——新项目走子模块
-//    libs 正式引用 + IPlcClient 抽象，真机/模拟可换；
+//    libs 正式引用 + IStationClient 抽象，真机/模拟可换；
 // ② Form2/Form6 是无人 new 的死窗体——新项目不复刻两份重复窗体，改为
 //    单一主窗 + 机台视图筛选（全部/单机台），8 机面板是同一 UserControl；
 // ③ D22xx 旧业务全注释——不复刻注释代码，只保留通用网关（当前实际行为）。
@@ -33,7 +33,7 @@ namespace CureLine.Core.Modes;
 public class StationGateway : IDisposable
 {
     private readonly int _stationId;
-    private readonly IPlcClient _plc;
+    private readonly IStationClient _station;
     private Thread? _thread;
     private volatile bool _running;
     private bool _disposed;
@@ -47,29 +47,29 @@ public class StationGateway : IDisposable
     /// <summary>MES 报警（UI 弹报警窗）。</summary>
     public event Action<string, string>? AlarmRaised;
 
-    /// <param name="plcFactory">按机台号建 IPlcClient（真机按 ASCII 分支，模拟直接 new）。</param>
-    public StationGateway(int stationId, Func<int, IPlcClient> plcFactory)
+    /// <param name="stationFactory">按机台号建 IStationClient（真机 Modbus，模拟直接 new）。</param>
+    public StationGateway(int stationId, Func<int, IStationClient> stationFactory)
     {
         _stationId = stationId;
-        _plc = plcFactory(stationId);
+        _station = stationFactory(stationId);
     }
 
     /// <summary>
-    /// 连接本机台（老项目 Button1_Click 单台分支；PLCuse!=1 由 Manager 跳过）。
-    /// IP/端口来自配置（PLC配置窗可改，改后点"连接设备"重连生效）。
+    /// 连接本机台（老项目 Button1_Click 单台分支；StationUse!=1 由 Manager 跳过）。
+    /// IP/端口来自配置（网关配置窗可改，改后点"连接设备"重连生效）。
     /// </summary>
     public bool Connect(out string message)
     {
-        _plc.Disconnect();
-        string ip = AppConfig.PlcIps[_stationId];
+        _station.Disconnect();
+        string ip = AppConfig.StationIps[_stationId];
         int port = AppConfig.StationPorts[_stationId];
-        if (_plc.Connect(ip, port))
+        if (_station.Connect(ip, port))
         {
-            message = $"{LanguageService.Tr("连接PLC成功")},{ip}";
+            message = $"{LanguageService.Tr("连接机台成功")},{ip}";
             StationLog?.Invoke(_stationId, message);
             return true;
         }
-        message = $"{LanguageService.Tr("连接PLC失败")},{ip}";
+        message = $"{LanguageService.Tr("连接机台失败")},{ip}";
         StationLog?.Invoke(_stationId, message);
         return false;
     }
@@ -86,7 +86,7 @@ public class StationGateway : IDisposable
     public void Stop()
     {
         _running = false;
-        _plc.Disconnect();
+        _station.Disconnect();
     }
 
     private void Loop()
@@ -128,14 +128,14 @@ public class StationGateway : IDisposable
             string trg = MesConfig.GetTrigger(MesConfig.ApiCodes[i]);
             if (string.IsNullOrEmpty(trg))
                 continue;
-            var (ok, v) = _plc.ReadInt16(trg);
+            var (ok, v) = _station.ReadInt16(trg);
             if (ok && v == 1)
             {
                 activeApi = MesConfig.ApiCodes[i];
                 activeTrg = trg;
                 activeUrl = MesConfig.GetUrl(activeApi);
                 activeIndex = i;
-                _plc.WriteInt16(trg, 0); // 清触发
+                _station.WriteInt16(trg, 0); // 清触发
                 break;
             }
         }
@@ -151,12 +151,12 @@ public class StationGateway : IDisposable
     internal void HandleApi(
         string apiCode, string trgAddr, string url, MesConfig.ApiAddressSet addrs)
     {
-        MesLogger.WriteLog("PLC Trigger",
-            $"检测到 MES 触发, PLC ID: {_stationId}, API: {apiCode}", _stationId);
+        MesLogger.WriteLog("Station Trigger",
+            $"检测到 MES 触发, 机台 ID: {_stationId}, API: {apiCode}", _stationId);
 
-        var (ok, raw) = _plc.ReadString(addrs.PlcData, (ushort)MesConfig.DataLength);
+        var (ok, raw) = _station.ReadString(addrs.StationData, (ushort)MesConfig.DataLength);
         string json = ok ? (raw ?? string.Empty).Replace("\0", string.Empty).Trim() : string.Empty;
-        MesLogger.WriteLog("PLC Read Data", $"API: {apiCode}, JSON: {json}", _stationId);
+        MesLogger.WriteLog("Read Data", $"API: {apiCode}, JSON: {json}", _stationId);
 
         bool parsed = ValidateJson(apiCode, json);
         if (!parsed)
@@ -198,8 +198,8 @@ public class StationGateway : IDisposable
                     data = " ";
             }
 
-            _plc.WriteString(addrs.MesStatus, status, Math.Max(status.Length, 1));
-            _plc.WriteString(addrs.MesMsg, msg, Math.Max(msg.Length, 1));
+            _station.WriteString(addrs.MesStatus, status, Math.Max(status.Length, 1));
+            _station.WriteString(addrs.MesMsg, msg, Math.Max(msg.Length, 1));
 
             if (apiCode == "API0030" && !string.IsNullOrWhiteSpace(data))
             {
@@ -211,7 +211,7 @@ public class StationGateway : IDisposable
                 }
                 else
                 {
-                    _plc.WriteString(addrs.MesData, data, Math.Max(data.Length, 1));
+                    _station.WriteString(addrs.MesData, data, Math.Max(data.Length, 1));
                 }
             }
             else if (apiCode == "API0031" && !string.IsNullOrWhiteSpace(data))
@@ -224,16 +224,16 @@ public class StationGateway : IDisposable
                 }
                 else
                 {
-                    _plc.WriteString(addrs.MesData, data, Math.Max(data.Length, 1));
+                    _station.WriteString(addrs.MesData, data, Math.Max(data.Length, 1));
                 }
             }
             else
             {
-                _plc.WriteString(addrs.MesData, data, Math.Max(data.Length, 1));
+                _station.WriteString(addrs.MesData, data, Math.Max(data.Length, 1));
             }
 
-            _plc.WriteInt16(trgAddr, 0);
-            _plc.WriteInt16(addrs.MesComplete, 1);
+            _station.WriteInt16(trgAddr, 0);
+            _station.WriteInt16(addrs.MesComplete, 1);
 
             if (status == "1")
             {
@@ -289,18 +289,18 @@ public class StationGateway : IDisposable
     /// <summary>
     /// DATA 三段写（DATA/+off1/+off2；偏移可配 [MES] DataSegmentOffsets，缺省
     /// 30/60=老项目口径，AppConfig.Load 保证恒有合法值）。分段地址算法老项目原样：
-    /// 有R用R否则D，数字+偏移，无补零。空值写 " " 占位（防空串写 PLC 报错，
+    /// 有R用R否则D，数字+偏移，无补零。空值写 " " 占位（防空串写机台报错，
     /// 老项目 IIf 原注）。
     /// </summary>
     internal void WriteDataSegment(string baseAddr, string? v0, string? v1, string? v2)
     {
         int off1 = MesConfig.DataSegmentOffsets.Length > 0 ? MesConfig.DataSegmentOffsets[0] : 30;
         int off2 = MesConfig.DataSegmentOffsets.Length > 1 ? MesConfig.DataSegmentOffsets[1] : 60;
-        _plc.WriteString(baseAddr, string.IsNullOrEmpty(v0) ? " " : v0,
+        _station.WriteString(baseAddr, string.IsNullOrEmpty(v0) ? " " : v0,
             Math.Max(v0?.Length ?? 0, 1));
-        _plc.WriteString(ShiftAddr(baseAddr, off1), string.IsNullOrEmpty(v1) ? " " : v1,
+        _station.WriteString(ShiftAddr(baseAddr, off1), string.IsNullOrEmpty(v1) ? " " : v1,
             Math.Max(v1?.Length ?? 0, 1));
-        _plc.WriteString(ShiftAddr(baseAddr, off2), string.IsNullOrEmpty(v2) ? " " : v2,
+        _station.WriteString(ShiftAddr(baseAddr, off2), string.IsNullOrEmpty(v2) ? " " : v2,
             Math.Max(v2?.Length ?? 0, 1));
     }
 
@@ -321,11 +321,11 @@ public class StationGateway : IDisposable
     /// <summary>异常回写（老项目 writeFail lambda 原样：STATUS=2/MSG=NG/DATA=" "/完成=1/触发复0）。</summary>
     internal void WriteFail(string logMsg, string trgAddr, MesConfig.ApiAddressSet addrs, string respEcho)
     {
-        _plc.WriteString(addrs.MesStatus, "2", 1);
-        _plc.WriteString(addrs.MesMsg, "NG", 2);
-        _plc.WriteString(addrs.MesData, " ", 1);
-        _plc.WriteInt16(addrs.MesComplete, 1);
-        _plc.WriteInt16(trgAddr, 0);
+        _station.WriteString(addrs.MesStatus, "2", 1);
+        _station.WriteString(addrs.MesMsg, "NG", 2);
+        _station.WriteString(addrs.MesData, " ", 1);
+        _station.WriteInt16(addrs.MesComplete, 1);
+        _station.WriteInt16(trgAddr, 0);
         MesLogger.WriteLog("Send FAIL", $"{logMsg} | {respEcho}", _stationId);
         StationLog?.Invoke(_stationId, logMsg);
     }
@@ -336,7 +336,7 @@ public class StationGateway : IDisposable
             return;
         _disposed = true;
         Stop();
-        _plc.Dispose();
+        _station.Dispose();
     }
 }
 
@@ -344,7 +344,7 @@ public class StationGateway : IDisposable
 public class MultiMachineManager : IDisposable
 {
     private readonly List<StationGateway> _stations = new();
-    private readonly Func<int, IPlcClient> _factory;
+    private readonly Func<int, IStationClient> _factory;
     private bool _disposed;
 
     public IReadOnlyList<StationGateway> Stations => _stations;
@@ -356,25 +356,25 @@ public class MultiMachineManager : IDisposable
     /// <summary>某机台连接失败（UI 将其心跳灯置红，老项目 LabelPLClive=Red 语义）。</summary>
     public event Action<int>? StationBroken;
 
-    public MultiMachineManager(Func<int, IPlcClient> plcFactory)
+    public MultiMachineManager(Func<int, IStationClient> plcFactory)
     {
         _factory = plcFactory;
     }
 
     /// <summary>
-    /// 连接全部启用的机台并起线程（老项目 Button1_Click：PLCuse=1 才连，
-    /// 否则记"已配置为不连接本工站PLC"）。返回 (成功数, 跳过数)。
+    /// 连接全部启用的机台并起线程（老项目 Button1_Click：StationUse=1 才连，
+    /// 否则记"已配置为不连接本工站"）。返回 (成功数, 跳过数)。
     /// 约定：Stations 只收"连上且线程已起"的网关；连失败的当场释放、不进列表
-    /// （语义清晰 + 不占 PLC 客户端到 Manager.Dispose）。
+    /// （语义清晰 + 不占机台客户端到 Manager.Dispose）。
     /// </summary>
     public (int Ok, int Skipped) ConnectAll()
     {
         int ok = 0, skipped = 0;
         for (int i = 0; i < 8; i++)
         {
-            if (AppConfig.PlcUse[i] != "1")
+            if (AppConfig.StationUse[i] != "1")
             {
-                StationLog?.Invoke(i, LanguageService.Tr("已配置为不连接本工站PLC"));
+                StationLog?.Invoke(i, LanguageService.Tr("已配置为不连接本工站"));
                 skipped++;
                 continue;
             }

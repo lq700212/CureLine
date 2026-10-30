@@ -79,15 +79,15 @@ public class ViewModelTests : IDisposable
         };
         using var vm = new MainWindowViewModel(fake);
         // 未登录点 PLC 设置：提示登录，不开配置窗不重启
-        vm.ShowPlcCommand.Execute(null);
+        vm.ShowGatewayCommand.Execute(null);
         Assert.Contains(fake.Calls, c => c.StartsWith("Msg:"));
-        Assert.DoesNotContain("PlcConfig", fake.Calls);
+        Assert.DoesNotContain("GatewayConfig", fake.Calls);
         // 登录后：开配置窗 + 重启
         vm.LoginCommand.Execute(null);
         Assert.Equal($"dev ({LanguageService.Tr("切换/退出")})", vm.LoginHeader);
-        Assert.True(vm.PlcVisible);
-        vm.ShowPlcCommand.Execute(null);
-        Assert.Contains("PlcConfig", fake.Calls);
+        Assert.True(vm.GatewayVisible);
+        vm.ShowGatewayCommand.Execute(null);
+        Assert.Contains("GatewayConfig", fake.Calls);
         Assert.Contains("Restart", fake.Calls);
     }
 
@@ -103,11 +103,11 @@ public class ViewModelTests : IDisposable
         using var vm = new MainWindowViewModel(fake);
         vm.LoginCommand.Execute(null);
         Assert.Contains("admin", vm.LoginHeader);
-        Assert.False(vm.PlcVisible);
+        Assert.False(vm.GatewayVisible);
         // 再点登录 → 确认退出（Yes）→ 清态
         vm.LoginCommand.Execute(null);
         Assert.Equal(LanguageService.Tr("登录"), vm.LoginHeader);
-        Assert.False(vm.PlcVisible);
+        Assert.False(vm.GatewayVisible);
     }
 
     [Fact(DisplayName = "改密码VM两次不一致拦成功提示")]

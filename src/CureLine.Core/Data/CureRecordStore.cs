@@ -1,9 +1,9 @@
 // =========================================================================
 // CureRecordStore：固化库位记录（复刻自老项目 Module1.IDRecord + Form1.UpdateStats）
 //
-// 表 PLCtable(Time, 库位ID, 产品ID, Mark)：
+// 表 cure_record(Time, 库位ID, 产品ID, Mark)：
 // ① 装载时 delete+insert（同库位覆盖，老项目 IDRecord 语义）；
-// ② 卸载/强制出料时 delete；③ 资料获取时 select 回写 PLC。
+// ② 卸载/强制出料时 delete；③ 资料获取时 select 回写机台。
 // 统计 UpdateStats 拆成两半：LoadStatsRows 搬数据（DB相关），
 // ComputeStats 纯算（可单元测试，见 CureStatsTests）。
 //
@@ -44,10 +44,10 @@ public class CureRecordStore
     /// </summary>
     public void SaveRecord(string binId, string productIds, string mark)
     {
-        _db.ExecuteNonQuery("delete from PLCtable where 库位ID=@id",
+        _db.ExecuteNonQuery("delete from cure_record where 库位ID=@id",
             new Dictionary<string, object?> { ["id"] = binId });
         _db.ExecuteNonQuery(
-            "insert into PLCtable (Time,库位ID,产品ID,Mark) values (@Time,@库位ID,@产品ID,@Mark)",
+            "insert into cure_record (Time,库位ID,产品ID,Mark) values (@Time,@库位ID,@产品ID,@Mark)",
             new Dictionary<string, object?>
             {
                 ["Time"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
@@ -59,17 +59,17 @@ public class CureRecordStore
 
     /// <summary>出库删记录（卸载/强制出料）。返回受影响行数。</summary>
     public int DeleteRecord(string binId) =>
-        _db.ExecuteNonQuery("delete from PLCtable where 库位ID=@id",
+        _db.ExecuteNonQuery("delete from cure_record where 库位ID=@id",
             new Dictionary<string, object?> { ["id"] = binId });
 
     /// <summary>按库位查（资料获取）。无数据返回 null。</summary>
     public DataRow? GetByBinId(string binId) =>
-        _db.ExecuteDataRow("select * from PLCtable where 库位ID=@id",
+        _db.ExecuteDataRow("select * from cure_record where 库位ID=@id",
             new Dictionary<string, object?> { ["id"] = binId });
 
     /// <summary>统计用全量行（Time,产品ID）。</summary>
     public DataTable LoadStatsRows() =>
-        _db.ExecuteDataTable("SELECT Time,产品ID FROM PLCtable", null);
+        _db.ExecuteDataTable("SELECT Time,产品ID FROM cure_record", null);
 
     /// <summary>
     /// 纯统计（老项目 UpdateStats 内核，提出来可测）。

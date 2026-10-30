@@ -45,9 +45,9 @@ public class FakeDialogService : IDialogService
     public void ShowChangePassword(string currentUser, LoginRole role) =>
         Calls.Add($"ChangePwd:{currentUser}:{role}");
 
-    public bool ShowPlcConfig()
+    public bool ShowGatewayConfig()
     {
-        Calls.Add("PlcConfig");
+        Calls.Add("GatewayConfig");
         return PlcResult;
     }
 

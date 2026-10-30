@@ -1,12 +1,12 @@
 // =========================================================================
-// PlcConfigViewModel：PLC 配置窗两页的状态 + 命令（MVVM）。
+// GatewayConfigViewModel：网关配置窗两页的状态 + 命令（MVVM）。
 //
 // 绑什么：多机 8 行 / 接口 6 组×7 行 + 测试结果 + 静态文本 +
 //   测试/恢复/保存取消命令。单机页与协议下拉已随三菱链路删除（P2.1：
 //   真机底座统一 Modbus TCP，无二进制/ASCII 分叉，协议键不再存在）。
 // 语义与原来逐字一致：测试拿表单值直测（不用先保存）；保存先校验，
 //   错当场拦（经 IDialogService 弹）；落盘后 AppConfig.Load 刷新内存，
-//   置 PlcChanged 由主窗重启。
+//   置 ConfigChanged 由主窗重启。
 // "恢复缺省"语义原样保留：多机=ini 存盘值（撤销本次未保存修改）。
 // 异步测试跑后台（铁律），回来经 UiInvoke 更新；按钮灰态经 Testing 属性。
 // =========================================================================
@@ -68,6 +68,16 @@ public class StationRowViewModel : ViewModelBase
     public int Id { get; }
 
     public string TitleText => $"{Id + 1}号{LanguageService.Tr("启用")}";
+
+    private string _name = "";
+
+    /// <summary>机台名（V0.0.32 配置化）：加载时已回填当前生效名（ini 非空用 ini，
+    /// 空回落缺省名）——面板/日志文件名/视图下拉三处同源，改名保存重启即生效。</summary>
+    public string Name
+    {
+        get => _name;
+        set => Set(ref _name, value ?? "");
+    }
 
     public bool Enabled
     {
@@ -134,22 +144,23 @@ public class ApiSectionViewModel : ViewModelBase
     }
 }
 
-public class PlcConfigViewModel : ViewModelBase
+public class GatewayConfigViewModel : ViewModelBase
 {
     private readonly IDialogService _dialogs;
     private readonly bool _useSim;
 
-    public PlcConfigViewModel(IDialogService? dialogs = null)
+    public GatewayConfigViewModel(IDialogService? dialogs = null)
     {
         _dialogs = dialogs ?? DialogService.Instance;
         _useSim = IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Simulate", "0") == "1";
-        // ---- 多机页（IP 键跳号沿用 + 新键 PLCPorts，见 PlcConfig.cs）----
-        StationPlcConfig[] stations = PlcConfigStore.LoadStations(AppPaths.ConfigIni);
+        // ---- 多机页（IP 键跳号沿用 + 新键 StationPorts，见 GatewayConfig.cs）----
+        StationConfig[] stations = StationConfigStore.LoadStations(AppPaths.ConfigIni);
         for (int i = 0; i < 8; i++)
         {
             Stations.Add(new StationRowViewModel(i)
             {
                 Enabled = stations[i].Enabled,
+                Name = stations[i].Name,
                 Ip = stations[i].Ip,
                 PortText = stations[i].Port.ToString(),
             });
@@ -166,7 +177,7 @@ public class PlcConfigViewModel : ViewModelBase
             int idx = Array.IndexOf(MesConfig.ApiCodes, api);
             var set = MesConfig.ApiAddresses[idx];
             sec.Rows.Add(new ConfigTextRow($"url:{api}", "URL", MesConfig.GetUrl(api), 340));
-            sec.Rows.Add(new ConfigTextRow($"dat:{api}", "数据地址", set.PlcData));
+            sec.Rows.Add(new ConfigTextRow($"dat:{api}", "数据地址", set.StationData));
             sec.Rows.Add(new ConfigTextRow($"msg:{api}", "MSG地址", set.MesMsg));
             sec.Rows.Add(new ConfigTextRow($"data:{api}", "DATA地址", set.MesData));
             sec.Rows.Add(new ConfigTextRow($"st:{api}", "状态地址", set.MesStatus));
@@ -187,7 +198,7 @@ public class PlcConfigViewModel : ViewModelBase
     }
 
     /// <summary>本次保存是否改了配置（主窗据此决定是否自动重启）。</summary>
-    public bool PlcChanged { get; private set; }
+    public bool ConfigChanged { get; private set; }
 
     public event Action<bool?>? RequestClose;
 
@@ -266,23 +277,25 @@ public class PlcConfigViewModel : ViewModelBase
     private void RestoreStationsFromIni()
     {
         // 语义原样：恢复到 ini 存盘值（撤销本次未保存修改），不是出厂缺省。
-        StationPlcConfig[] cs = PlcConfigStore.LoadStations(AppPaths.ConfigIni);
+        StationConfig[] cs = StationConfigStore.LoadStations(AppPaths.ConfigIni);
         for (int i = 0; i < 8; i++)
         {
             Stations[i].Enabled = cs[i].Enabled;
+            Stations[i].Name = cs[i].Name;
             Stations[i].Ip = cs[i].Ip;
             Stations[i].PortText = cs[i].Port.ToString();
         }
     }
 
-    private StationPlcConfig[] GatherStations()
+    private StationConfig[] GatherStations()
     {
-        var cs = new StationPlcConfig[8];
+        var cs = new StationConfig[8];
         for (int i = 0; i < 8; i++)
         {
-            cs[i] = new StationPlcConfig
+            cs[i] = new StationConfig
             {
                 Enabled = Stations[i].Enabled,
+                Name = Stations[i].Name,
                 Ip = Stations[i].Ip,
                 Port = ParseInt(Stations[i].PortText),
             };
@@ -306,16 +319,16 @@ public class PlcConfigViewModel : ViewModelBase
         return MesConfig.TriggerApi0027;
     }
 
-    private async Task TestOneStationAsync(int id, StationPlcConfig[] cs, string trg)
+    private async Task TestOneStationAsync(int id, StationConfig[] cs, string trg)
     {
         StationRowViewModel row = Stations[id];
         row.Testing = true;
         TestAllStationsCommand.RaiseCanExecuteChanged();
         try
         {
-            var (ok, msg, _) = await PlcConnectionTester.TestAsync(
+            var (ok, msg, _) = await StationConnectionTester.TestAsync(
                 () => new ModbusStationClient(), cs[id].Ip.Trim(), cs[id].Port,
-                PlcConfigValidator.NormAddr(trg)).ConfigureAwait(false);
+                StationConfigValidator.NormAddr(trg)).ConfigureAwait(false);
             UiInvoke(() =>
             {
                 row.ResultText = ok ? Tr("连接成功") : Tr("连接失败");
@@ -337,13 +350,13 @@ public class PlcConfigViewModel : ViewModelBase
 
     private async Task TestStationAsync(int id)
     {
-        StationPlcConfig[] cs = GatherStations();
+        StationConfig[] cs = GatherStations();
         await TestOneStationAsync(id, cs, Trigger0027()).ConfigureAwait(false);
     }
 
     private async Task TestAllStationsAsync()
     {
-        StationPlcConfig[] cs = GatherStations();
+        StationConfig[] cs = GatherStations();
         string trg = Trigger0027();
         foreach (StationRowViewModel row in Stations)
             row.Testing = true;
@@ -376,8 +389,8 @@ public class PlcConfigViewModel : ViewModelBase
 
     private void Save()
     {
-        StationPlcConfig[] stations = GatherStations();
-        var errs = PlcConfigValidator.ValidateStations(stations);
+        StationConfig[] stations = GatherStations();
+        var errs = StationConfigValidator.ValidateStations(stations);
         errs.AddRange(ValidateApi());
 
         if (errs.Count > 0)
@@ -390,10 +403,10 @@ public class PlcConfigViewModel : ViewModelBase
         }
 
         string ini = AppPaths.ConfigIni;
-        PlcConfigStore.SaveStations(ini, stations);
+        StationConfigStore.SaveStations(ini, stations);
         SaveApiSection(ini);
         AppConfig.Load(); // 刷新内存（重启后会再读一次，此处保证本进程内一致）
-        PlcChanged = true;
+        ConfigChanged = true;
         RequestClose?.Invoke(true);
     }
 
@@ -435,9 +448,9 @@ public class PlcConfigViewModel : ViewModelBase
                          (u.Scheme != Uri.UriSchemeHttp && u.Scheme != Uri.UriSchemeHttps)))
                         errs.Add(($"{api} URL", "IP地址无效"));
                 }
-                else if (!PlcConfigValidator.IsPlcAddress(r.Value))
+                else if (!StationConfigValidator.IsStationAddress(r.Value))
                 {
-                    errs.Add(($"{api} {r.LabelKey.Split(':')[0]}", "PLC地址格式须为D/R+数字"));
+                    errs.Add(($"{api} {r.LabelKey.Split(':')[0]}", "寄存器地址格式须为R/D+数字"));
                 }
             }
         }
@@ -466,17 +479,17 @@ public class PlcConfigViewModel : ViewModelBase
         {
             IniFile.Write(ini, "MES", urlKeys[i], ApiValue($"url:{names[i]}").Trim());
             IniFile.Write(ini, "MES", trgKeys[i],
-                PlcConfigValidator.NormAddr(ApiValue($"trg:{names[i]}")));
-            IniFile.Write(ini, "MES", $"{names[i]}PLCDataAddr",
-                PlcConfigValidator.NormAddr(ApiValue($"dat:{names[i]}")));
+                StationConfigValidator.NormAddr(ApiValue($"trg:{names[i]}")));
+            IniFile.Write(ini, "MES", $"{names[i]}StationDataAddr",
+                StationConfigValidator.NormAddr(ApiValue($"dat:{names[i]}")));
             IniFile.Write(ini, "MES", $"{names[i]}MESMSGAddr",
-                PlcConfigValidator.NormAddr(ApiValue($"msg:{names[i]}")));
+                StationConfigValidator.NormAddr(ApiValue($"msg:{names[i]}")));
             IniFile.Write(ini, "MES", $"{names[i]}MESDataAddr",
-                PlcConfigValidator.NormAddr(ApiValue($"data:{names[i]}")));
+                StationConfigValidator.NormAddr(ApiValue($"data:{names[i]}")));
             IniFile.Write(ini, "MES", $"{names[i]}MESSTATUSAddr",
-                PlcConfigValidator.NormAddr(ApiValue($"st:{names[i]}")));
+                StationConfigValidator.NormAddr(ApiValue($"st:{names[i]}")));
             IniFile.Write(ini, "MES", $"{names[i]}MESCompleteAddr",
-                PlcConfigValidator.NormAddr(ApiValue($"done:{names[i]}")));
+                StationConfigValidator.NormAddr(ApiValue($"done:{names[i]}")));
         }
         IniFile.Write(ini, "MES", "DataLength", DataLengthText.Trim());
         // 分段偏移/扫描周期（V0.0.22）：校验已拦非法，此处原样落盘；

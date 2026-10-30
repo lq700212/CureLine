@@ -68,10 +68,10 @@ public sealed class DialogService : IDialogService
         Prep(new ChangePasswordWindow(currentUser, role)).ShowDialog();
     }
 
-    public bool ShowPlcConfig()
+    public bool ShowGatewayConfig()
     {
-        var w = Prep(new PlcConfigWindow());
-        return w.ShowDialog() == true && w.ViewModel.PlcChanged;
+        var w = Prep(new GatewayConfigWindow());
+        return w.ShowDialog() == true && w.ViewModel.ConfigChanged;
     }
 
     public void ShowAlarm(string message, string name) =>

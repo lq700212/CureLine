@@ -17,7 +17,7 @@ public static class AppPaths
     public static string ConfigDir => Path.Combine(BaseDir, "config");
     public static string ConfigIni => Path.Combine(ConfigDir, "config.ini");
     public static string MesParamsJson => Path.Combine(ConfigDir, "mes_params.json");
-    public static string DatabaseFile => Path.Combine(BaseDir, "DataBase", "PLCdatabase.db3");
+    public static string DatabaseFile => Path.Combine(BaseDir, "DataBase", "CureLine.db3");
     public static string LogDir => Path.Combine(BaseDir, "log");
     public static string MesLogDir => Path.Combine(BaseDir, "Logs", "MESLOG");
 

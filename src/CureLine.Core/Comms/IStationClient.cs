@@ -1,18 +1,18 @@
 // =========================================================================
-// IPlcClient：PLC 读写抽象（新项目引入，kaleidoscope 范式在本土落地）
+// IStationClient：机台寄存器读写抽象（kaleidoscope 范式在本土落地）
 //
 // 为什么抽象：① 老项目直捏 MelsecMcNet，换 ASCII 协议要改三处（A版现状）；
 //   ② "先做模拟联调"——业务代码对接口编程，真机/模拟一键切换；
 //   ③ 单元测试可注入模拟实现，全流程可测。
 // 返回值用 (Ok, Value)：复刻老项目 OperateResult.IsSuccess/Content 语义——
 //   失败时 Value 取 default，调用方必须判 Ok（老项目判 Content null 对应）。
-// 地址：品牌语法字符串（三菱 "D30001"/"R13000"，与老项目一致）。
+// 地址：品牌语法字符串（"R13000"=Modbus 保持寄存器口径，"D30001"为老三菱遗产兼容）。
 // 线程：实现类内部保证线程安全；业务轮询在后台线程跑（UI 线程禁网络 IO）。
 // =========================================================================
 
 namespace CureLine.Core.Comms;
 
-public interface IPlcClient : IDisposable
+public interface IStationClient : IDisposable
 {
     bool IsConnected { get; }
     string IpAddress { get; }

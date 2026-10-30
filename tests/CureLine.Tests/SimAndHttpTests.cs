@@ -1,7 +1,7 @@
 // =========================================================================
-// 模拟 PLC 与 HTTP 直测：SimulatedPlcClient 语义 + MesHttpClient 成功/失败
+// 模拟 PLC 与 HTTP 直测：SimulatedStationClient 语义 + MesHttpClient 成功/失败
 //
-// SimulatedPlcClient 是全部业务测试的地基，先把它自己锁死：
+// SimulatedStationClient 是全部业务测试的地基，先把它自己锁死：
 // ① ip 为空/"fail" 连不上；② 断线后读写失败；③ 字区/串区独立；
 // ④ WriteString 按 length 截断；⑤ 未预置读出 0/空串（不抛）。
 // MesHttpClient：200→true；500→false 但错误体保留（老项目取错误流语义）；
@@ -23,7 +23,7 @@ public class SimAndHttpTests : IDisposable
     [Fact(DisplayName = "模拟器空ip与fail连不上")]
     public void Sim_BadIp_ConnectFails()
     {
-        using var sim = new SimulatedPlcClient();
+        using var sim = new SimulatedStationClient();
         Assert.False(sim.Connect("", 6060));
         Assert.False(sim.Connect("fail", 6060));
         Assert.False(sim.IsConnected);
@@ -32,7 +32,7 @@ public class SimAndHttpTests : IDisposable
     [Fact(DisplayName = "模拟器断线后读写失败")]
     public void Sim_Disconnected_RwFails()
     {
-        using var sim = new SimulatedPlcClient();
+        using var sim = new SimulatedStationClient();
         sim.Connect("127.0.0.1", 6060);
         sim.Disconnect();
         Assert.False(sim.ReadInt16("D1").Ok);
@@ -43,7 +43,7 @@ public class SimAndHttpTests : IDisposable
     [Fact(DisplayName = "模拟器字串区独立读写")]
     public void Sim_Word_String_Independent()
     {
-        using var sim = new SimulatedPlcClient();
+        using var sim = new SimulatedStationClient();
         sim.Connect("127.0.0.1", 6060);
         sim.PresetWord("D30001", 7);
         sim.PresetString("D30001", "text");
@@ -56,7 +56,7 @@ public class SimAndHttpTests : IDisposable
     [Fact(DisplayName = "模拟器写串按长截断")]
     public void Sim_WriteString_Truncates()
     {
-        using var sim = new SimulatedPlcClient();
+        using var sim = new SimulatedStationClient();
         sim.Connect("127.0.0.1", 6060);
         sim.WriteString("R17001", "ABCDEFG", 3);
         Assert.Equal("ABC", sim.PeekString("R17001"));
@@ -65,7 +65,7 @@ public class SimAndHttpTests : IDisposable
     [Fact(DisplayName = "模拟器未预置读零空不抛")]
     public void Sim_Unset_ReadsZeroEmpty()
     {
-        using var sim = new SimulatedPlcClient();
+        using var sim = new SimulatedStationClient();
         sim.Connect("127.0.0.1", 6060);
         Assert.Equal(0, sim.ReadInt16("D99999").Value);
         Assert.Equal("", sim.ReadString("D99999", 10).Value);

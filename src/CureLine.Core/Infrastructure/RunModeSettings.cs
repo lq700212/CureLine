@@ -10,7 +10,7 @@
 //   - 登录验谁走 UserAccountStore（SQLite users 表 + PBKDF2，本类只做
 //     菜单 gating 用的 IsDev/IsLoggedIn；各档能点什么由 WPF 菜单定）。
 //     预置两档：admin（普通管理：可建快捷方式）、dev（最高权限：另含
-//     PLC 配置入口）；用户名常量留这里，密码以任何形式都不进本类。
+//     网关配置入口）；用户名常量留这里，密码以任何形式都不进本类。
 //   - 记住密码跟随账号：每个账号各记各的 DPAPI 密文（RememberToken_<账号>），
 //     另存 SavedUser=最后一次登录名（供登录窗预填）；ini 里永无明文密码。
 // =========================================================================
@@ -30,10 +30,10 @@ public static class RunModeSettings
     /// <summary>普通管理账号名（密码存 users 表 PBKDF2 哈希，不在此类）。</summary>
     public const string AdminUser = "admin";
 
-    /// <summary>最高权限账号名（能看到设置下全部选项，含 PLC 配置）。</summary>
+    /// <summary>最高权限账号名（能看到设置下全部选项，含网关配置）。</summary>
     public const string DevUser = "dev";
 
-    /// <summary>是否最高权限（含 dev 的菜单项：PLC 配置等，凭此放行）。</summary>
+    /// <summary>是否最高权限（含 dev 的菜单项：网关配置等，凭此放行）。</summary>
     public static bool IsDev(LoginRole role) => role == LoginRole.Dev;
 
     /// <summary>是否已登录（快捷方式等 admin 可用项，凭此放行）。</summary>

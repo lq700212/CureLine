@@ -1,11 +1,11 @@
 // =========================================================================
-// ModbusStationClient：多机网关 Modbus TCP 通道（IPlcClient 的 Modbus 实现，
+// ModbusStationClient：多机网关 Modbus TCP 通道（IStationClient 的 Modbus 实现，
 // Phase 2 删三菱后的统一真机底座）
 //
-// 干什么：对外维持 IPlcClient 品牌语法（"R13001"/"D30001"），对内包装子模块
+// 干什么：对外维持 IStationClient 品牌语法（"R13001"/"D30001"），对内包装子模块
 //   kaleidoscope 的 ModbusTcpMasterClient（BeginConnect 手动超时/锁串行化/
 //   断连标记释放坏 socket/重连节流自愈全套现成），零自造轮子。
-//   StationGateway/MultiMachineManager 面向 IPlcClient 抽象编程，换底层
+//   StationGateway/MultiMachineManager 面向 IStationClient 抽象编程，换底层
 //   业务语义零改动（见 MultiMachineGateway 类头注释）。
 //
 // 地址语义（与网关 ShiftAddr 同款策略，改前必看 MesConfig 触发地址是 R 系）：
@@ -46,7 +46,7 @@ using Kaleidoscope.Services;
 
 namespace CureLine.Core.Comms;
 
-public sealed class ModbusStationClient : IPlcClient
+public sealed class ModbusStationClient : IStationClient
 {
     /// <summary>断线重连节流间隔（铁律 3：5s，与原 Melsec 版同款节奏）。</summary>
     public const int ReconnectIntervalMs = 5000;
@@ -130,7 +130,7 @@ public sealed class ModbusStationClient : IPlcClient
 
     /// <summary>
     /// 读 int32 数组（每值 2 寄存器、低 16 位在低地址——与模拟器
-    /// SimulatedPlcClient 的 BlockCopy 内存序语义一致）。接口对称保留：
+    /// SimulatedStationClient 的 BlockCopy 内存序语义一致）。接口对称保留：
     /// 多机网关不用（只有旧单机固化时间用过），P3 单线过账再决定是否真用。
     /// </summary>
     public (bool Ok, int[]? Values) ReadInt32(string address, ushort length)

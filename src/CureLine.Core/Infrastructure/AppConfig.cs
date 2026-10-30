@@ -1,8 +1,8 @@
 // =========================================================================
 // AppConfig：启动配置加载（多机网关口径，集中一处）
 //
-// 多机：PLCuse 开关串 / PLCIP2..10 跳号 IP / PLCPorts 端口串 / 存图目录 /
-//   6 URL + 6 触发地址 + DataLength + 6 组地址束（xxxPLCDataAddr/MESMSGAddr/
+// 多机：StationUse 开关串 / StationIp1..10 跳号 IP / StationPorts 端口串 / 存图目录 /
+//   6 URL + 6 触发地址 + DataLength + 6 组地址束（xxxStationDataAddr/MESMSGAddr/
 //   MESDataAddr/MESSTATUSAddr/MESCompleteAddr，缺省 R 系，见 MultiMachineGateway
 //   注释）。
 // Phase 2 说明（P2.1）：单机模式已随三菱链路整链删除——RunMode 枚举 /
@@ -17,26 +17,46 @@ namespace CureLine.Core.Infrastructure;
 
 public static class AppConfig
 {
-    public static string[] PlcUse { get; private set; } =
+    public static string[] StationUse { get; private set; } =
         new[] { "1", "1", "1", "1", "1", "1", "1", "1" };
 
-    /// <summary>8 台 PLC IP（键 PLCIP2/3/4/5/6/7/9/10，老项目跳号命名原样）。</summary>
-    public static string[] PlcIps { get; private set; } = new string[8];
+    /// <summary>8 台机台 IP（键 [setting] StationIp1..8 连续命名，V0.0.32 中性化重命名）。</summary>
+    public static string[] StationIps { get; private set; } = new string[8];
 
-    /// <summary>8 台端口（新键 [setting] PLCPorts，缺省全 6060；现场按 Modbus 从站改）。</summary>
+    /// <summary>8 台端口（新键 [setting] StationPorts，缺省全 6060；现场按 Modbus 从站改）。</summary>
     public static int[] StationPorts { get; private set; } =
         new[] { 6060, 6060, 6060, 6060, 6060, 6060, 6060, 6060 };
 
     /// <summary>
+    /// 8 台设备名缺省（老项目 Designer 原样）。V0.0.32 配置化：ini [StationNames]
+    /// 节键 1..8 可覆盖（换产线/换客户机台名不再改代码）；缺键/空值逐台回落本缺省
+    /// （ini 自愈语义）。 MesLogger.StationNames 委托本属性——机台面板名/视图筛选
+    /// 下拉/MES 日志文件名三处同源。
+    /// </summary>
+    public static readonly string[] DefaultStationNames =
+    {
+        "橡胶装配PCB设备", "外壳穿线半自动机构", "焊锡_2D检测_涂胶半自动机构",
+        "外壳组件保压机构", "外壳组件点胶_打标二维码设备", "点胶固化收料机",
+        "测试线体-激光-基板焊接_打标_贴圆片体机", "测试线体-光效测试压力测试设备",
+    };
+
+    /// <summary>
+    /// 8 台设备名（当前生效值；Load 从 [StationNames] 读入，缺省=上表）。
+    /// setter 为 public 仅供 TestScope 快照恢复；产品代码只有 AppConfig.Load 应写。
+    /// </summary>
+    public static string[] StationNames { get; set; } =
+        (string[])DefaultStationNames.Clone();
+
+    /// <summary>
     /// 网关触发扫描周期 ms（键 [setting] ScanIntervalMs，缺省 200=老项目口径；
-    /// V0.0.22 配置化，钳制 50~5000——下限防空转打爆 PLC，上限防触发响应过钝）。
+    /// V0.0.22 配置化，钳制 50~5000——下限防空转打爆机台，上限防触发响应过钝）。
     /// 网关循环每次 Sleep 读本值，配置窗保存即热生效（无需重连）。
     /// setter 为 public 仅供 TestScope 快照恢复（与 MesConfig.DataLength 同风格）；
     /// 产品代码只有 AppConfig.Load 应写本值。
     /// </summary>
     public static int ScanIntervalMs { get; set; } = 200;
 
-    private static readonly string[] IpKeys = PlcConfigStore.IpKeys;
+    private static readonly string[] IpKeys = StationConfigStore.IpKeys;
 
     private static readonly string[] DefaultUrls =
     {
@@ -51,7 +71,7 @@ public static class AppConfig
     private static readonly string[] DefaultTriggers =
         { "R13000", "R16000", "R17000", "R18000", "R19000", "R12000" };
 
-    private static readonly string[] DefaultPlcData =
+    private static readonly string[] DefaultStationData =
         { "R13001", "R16001", "R17001", "R18001", "R19001", "R12001" };
     private static readonly string[] DefaultMsgs =
         { "R13810", "R16810", "R17810", "R18810", "R19810", "R12810" };
@@ -76,13 +96,14 @@ public static class AppConfig
             IniFile.ReadStr(ini, "setting", "StringByteOrder", "BigEndian")
                 .Equals("SwapBytes", StringComparison.OrdinalIgnoreCase);
 
-        // 多机 8 台走 PlcConfigStore（自愈缺省，见 PlcConfig.cs）：启用开关/IP/端口一并带出。
-        StationPlcConfig[] stations = PlcConfigStore.LoadStations(ini);
+        // 多机 8 台走 StationConfigStore（自愈缺省，见 GatewayConfig.cs）：启用开关/IP/端口/机台名一并带出。
+        StationConfig[] stations = StationConfigStore.LoadStations(ini);
         for (int i = 0; i < 8; i++)
         {
-            PlcUse[i] = stations[i].Enabled ? "1" : "0";
-            PlcIps[i] = stations[i].Ip;
+            StationUse[i] = stations[i].Enabled ? "1" : "0";
+            StationIps[i] = stations[i].Ip;
             StationPorts[i] = stations[i].Port;
+            StationNames[i] = stations[i].Name;
         }
 
         MesConfig.UrlApi0027 = IniFile.ReadStr(ini, "MES", "Url_API0027", DefaultUrls[0]);
@@ -145,7 +166,7 @@ public static class AppConfig
         for (int i = 0; i < 6; i++)
         {
             var set = MesConfig.ApiAddresses[i];
-            set.PlcData = IniFile.ReadStr(ini, "MES", $"{names[i]}PLCDataAddr", DefaultPlcData[i]);
+            set.StationData = IniFile.ReadStr(ini, "MES", $"{names[i]}StationDataAddr", DefaultStationData[i]);
             set.MesMsg = IniFile.ReadStr(ini, "MES", $"{names[i]}MESMSGAddr", DefaultMsgs[i]);
             set.MesData = IniFile.ReadStr(ini, "MES", $"{names[i]}MESDataAddr", DefaultDatas[i]);
             set.MesStatus = IniFile.ReadStr(ini, "MES", $"{names[i]}MESSTATUSAddr", DefaultStatuses[i]);

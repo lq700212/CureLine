@@ -8,7 +8,7 @@
 // 为什么自建表而不复用主程序 users 表：两程序分机部署（拆分设计），
 //   账号是各程序私有资产——主程序 admin/dev 管网关配置，程序①四级管
 //   现场操作；与 IDialogService"不下沉"同理。密码哈希复用 PasswordHasher
-//   （PBKDF2 同款锁芯），表与 PLCtable 同库（备份拷一个 db3 全带走）。
+//   （PBKDF2 同款锁芯），表与 cure_record 同库（备份拷一个 db3 全带走）。
 // 怎么改：
 //   - 表结构只加列不改列（username 主键 / level / pwd_hash / salt /
 //     iterations / updated_at）；level 存 "Level1".."Level4" 文本。

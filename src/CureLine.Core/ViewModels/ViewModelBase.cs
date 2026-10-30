@@ -1,7 +1,7 @@
 // =========================================================================
 // ViewModelBase：全部 ViewModel 的基类（MVVM 的 V 与 VM 粘合剂）
 //
-// 干什么：INotifyPropertyChanged + 跨线程封送。后台线程（PLC 节拍/网关）
+// 干什么：INotifyPropertyChanged + 跨线程封送。后台线程（机台轮询/网关）
 //   改 VM 属性时，通知自动 Post 回 UI 线程，界面不跨线程崩。
 // 为什么捕获 SynchronizationContext：VM 构造在 UI 线程（窗体 new 时），
 //   此时 Current 就是 UI 上下文；后台线程调 Set 时 Post 回去。

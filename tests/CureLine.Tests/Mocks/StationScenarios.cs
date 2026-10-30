@@ -1,5 +1,5 @@
 // =========================================================================
-// PlcScenarios：可复用的网关 mock 数据（一处改，全用例生效）
+// StationScenarios：可复用的网关 mock 数据（一处改，全用例生效）
 //
 // 6 个接口的标准 JSON（字段按 MesModels 对齐 W68 文档），拿来就能
 // PresetString 进 R 区触发全链路。
@@ -12,7 +12,7 @@ using CureLine.Core.Mes;
 
 namespace CureLine.Tests.Mocks;
 
-public static class PlcScenarios
+public static class StationScenarios
 {
     // ================= 网关 6 接口标准 JSON =================
 

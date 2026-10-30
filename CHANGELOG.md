@@ -2,6 +2,76 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.33（2026-10-30，六份培训手册随 V0.0.31/32 改版同步：新图 + 新界面口径）
+
+背景：V0.0.31（程序②双主题/无边框/按钮组）与 V0.0.32（去 PLC 命名 + 机台名
+配置化）改变了界面与配置口径，原培训手册的截图与描述已过期。
+
+- **截图全面重拍（18 张，docs/images/）**：程序① 12 张（主窗浅色/深色/双主题
+  对照、登录窗、改密面板、工单窗、权限窗、策略窗、过账配置窗、IO 测试窗、
+  点表窗、日志悬浮窗）；程序② 6 张（主窗、登录窗、日志窗、调试窗、改密窗
+  admin 态、网关配置窗 dev 态）。全部走"演示模式 + 真实状态机"实拍
+  （Mock 演示数据驱动，非 P 图）；改密窗改用 **admin 登录态**拍摄（顶栏无
+  "网关设置"钮），供客户两版使用。
+- **六份手册更新**：`固化程控_操作员/客户技术工艺/内部手册.md` +
+  `整线网关_操作员/客户技术工艺/内部手册.md`——
+  ① 图片引用全部换新图（旧名 cs-main-idle/cs-main-flow/cs-workorder-l1/l3/
+  gw-plcconfig 等已废）；
+  ② 程序② 顶栏描述由"菜单 设置▼"改为按钮组口径（连接设备/日志/调试/修改
+  密码/快捷方式/English/登录/深色）；程序① 补【演示：开·关】与【深色·浅色】
+  按钮说明（操作员版明确"产线不许开演示"）；
+  ③ 程序② 内部手册配置键名中性化（`StationUse`/`StationIp1..8`/`StationPorts`/
+  `API00xxStationDataAddr`/`CureLine.db3`/`cure_record`）+ 机台名 `[StationNames]`
+  配置化说明；客户版补"机台名/主题可配置"两段；
+  ④ 权限红线复查：客户/操作员四份零出现"网关配置/网关设置/dev/开发者面板"
+  （check_docs 禁词门禁全绿）。
+- **核验工具更新**：`tools/DocShot/check_config.py` 常量表换新图集
+  （IMG_WHITE 18 张、DEV_ONLY_IMGS 收敛为 gw-config.png、REQUIRED_IMGS 按新图
+  重排）；`check_docs.py --pdf` ALL PASS（6 份 md + 6 份 PDF >50KB 配对）。
+
+## V0.0.32（2026-10-30，机台名配置化 + 全项目去 PLC 命名中性化）
+
+背景：审视扫描发现最后一个"换产线要改代码"的硬编码——8 台机台名写死在
+`MesLogger.StationNames`；用户同时拍板"项目没有 PLC，不要考虑兼容老项目，
+改就改干净彻底（数据库 db 文件可直接删）"。
+
+- **机台名配置化（`[StationNames]` 节键 1..8）**：缺键/空值逐台回落缺省名
+  （`AppConfig.DefaultStationNames`=老项目 Designer 原样，ini 自愈语义）；
+  `MesLogger.StationNames` 改为委托 `AppConfig.StationNames`——机台面板名/
+  主窗视图筛选下拉/MES 日志文件名三处同源；网关配置窗"机台连接"页每行新增
+  **机台名输入框**（加载即回填当前生效名，改名保存重启生效）；校验拦"非空 +
+  ≤50 字 + 无文件名非法字符"（机台名会当日志文件名用）。
+- **全项目去 PLC 命名中性化（用户拍板：本项目与机台通讯，无 PLC）**：
+  - 文件/类型：`IPlcClient`→`IStationClient`、`SimulatedPlcClient`→
+    `SimulatedStationClient`、`PlcConnectionTester`→`StationConnectionTester`、
+    `PlcConfig.cs`→`StationConfig.cs`（`PlcConfigStore`→`StationConfigStore`、
+    `PlcConfigValidator`→`StationConfigValidator`、`StationPlcConfig`→`StationConfig`）、
+    `PlcConfigViewModel`→`GatewayConfigViewModel`、`PlcConfigWindow.*`→
+    `GatewayConfigWindow.*`（与界面标题"网关配置"对齐）、`ShowPlcConfig`→
+    `ShowGatewayConfig`、`PlcVisible/PlcEnabled`→`GatewayVisible/GatewayEnabled`、
+    `BtnPlcText`→`BtnGatewayText`、`PlcChanged`→`ConfigChanged`、
+    `IsPlcAddress`→`IsStationAddress`、`ApiAddressSet.PlcData`→`StationData`、
+    `AppConfig.PlcUse/PlcIps`→`StationUse/StationIps`。
+  - ini 键名：`PLCuse`→`StationUse`、`PLCIP2..7,9,10` 跳号键→**`StationIp1..8`
+    连续键**（"多机键名跳号勿整理"的历史包袱随之解除，用户拍板覆盖）、
+    `PLCPorts`→`StationPorts`、`API00xxPLCDataAddr`→`API00xxStationDataAddr`。
+  - 数据库：`PLCdatabase.db3`→`CureLine.db3`、表 `PLCtable`→`cure_record`
+    （EnsureDatabase 自建，项目未上线无兼容包袱，现场删旧 db 即可）。
+  - 文案/词条：界面错误文案"PLC地址格式须为D/R+数字"→"寄存器地址格式须为
+    R/D+数字"；日志标题"PLC Trigger/PLC Read Data"→"Station Trigger/Read Data"；
+    LanguageService 删除无消费方的 6 条老词条（"连接PLC/PLC心跳/PLC地址:
+    /手动从PLC读取/单机PLC/连接PLC时发生异常"——单机链路遗产），带消费方的
+    4 条改中性键并同步英译；注释按语境改"机台/寄存器"。
+  - **保留例外**（非本项目命名）：kaleidoscope 子模块外部 API
+    （`PlcMasterConfig`/`PlcAddress`/`MultiBrandPlcConfig`——子模块零改动红线）；
+    密码学字面量（PBKDF2 Pepper 与 DPAPI 附加熵含旧项目名 "PlcMesBridge"，
+    改动会使既有哈希/密文全部失效）；VB 老项目控件/函数专名
+    （`PLC_ReadData`/`ScanPLC1`/`LabelPLClive`——复刻溯源标识）。
+- **测试**：新增 6 例（机台名缺省回填/保存往返/AppConfig 带出且 MesLogger
+  同源/名字校验/配置窗改名保存落盘/非法名拦保存）；适配键名与词条改动的
+  既有断言；357→363 全绿。模拟模式 GUI 冒烟通过（配置窗机台名框回填、
+  面板/下拉同源）。
+
 ## V0.0.31（2026-10-30，程序② CimGateway UI 对齐程序①：无边框自绘 + 双主题 + 全弹窗换肤）
 
 背景：用户要求程序②界面与 CureStation 风格保持一致，深浅双主题都要有，

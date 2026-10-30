@@ -1,4 +1,4 @@
-<Window x:Class="CimGateway.PlcConfigWindow"
+<Window x:Class="CimGateway.GatewayConfigWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -6,7 +6,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:vm="clr-namespace:CimGateway.ViewModels"
         mc:Ignorable="d"
-        d:DataContext="{d:DesignInstance Type=vm:PlcConfigViewModel, IsDesignTimeCreatable=False}"
+        d:DataContext="{d:DesignInstance Type=vm:GatewayConfigViewModel, IsDesignTimeCreatable=False}"
         Icon="Assets/app.ico"
         Title="{Binding TitleText, FallbackValue='网关配置'}" Width="660" Height="580"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
@@ -18,7 +18,7 @@
                             UseAeroCaptionButtons="False"
                             ResizeBorderThickness="0"/>
     </shell:WindowChrome.WindowChrome>
-    <!--PLC 配置窗（MVVM：两页走 PlcConfigViewModel，本文件纯绑定）。
+    <!--网关配置窗（MVVM：两页走 GatewayConfigViewModel，本文件纯绑定）。
         单机页与协议下拉已随三菱链路删除（P2.1：真机统一 Modbus TCP）。
         行内测试按钮经 RelativeSource 找父 VM 命令（DataTemplate 内 DataContext
         是行 VM，命令在父 VM，这是标准写法）。测试结果字色走语义名触发器
@@ -66,11 +66,17 @@
                                             <DataTemplate>
                                                 <StackPanel Orientation="Horizontal" Margin="0,4">
                                                     <CheckBox Content="{Binding TitleText}"
-                                                              IsChecked="{Binding Enabled}" Width="90"
+                                                              IsChecked="{Binding Enabled}" Width="70"
                                                               VerticalContentAlignment="Center"/>
+                                                    <!-- 机台名（V0.0.32 配置化）：面板/日志文件名/视图下拉同源，
+                                                         保存重启生效；缺省已回填当前生效名 -->
+                                                    <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                                             Style="{StaticResource FreshInput}"
+                                                             Width="170" Margin="0,0,4,0"
+                                                             ToolTip="机台名（面板标题/日志文件名/视图下拉共用，保存重启生效）"/>
                                                     <TextBox Text="{Binding Ip, UpdateSourceTrigger=PropertyChanged}"
                                                              Style="{StaticResource FreshInput}"
-                                                             Width="130" Margin="4,0,0,0"/>
+                                                             Width="120" Margin="4,0,0,0"/>
                                                     <TextBox Text="{Binding PortText, UpdateSourceTrigger=PropertyChanged}"
                                                              Style="{StaticResource FreshInput}"
                                                              Width="60" Margin="4,0,0,0"/>

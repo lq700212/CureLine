@@ -1,7 +1,7 @@
 // =========================================================================
 // SqliteHelper：SQLite 唯一出入口（复刻自老项目 SQLiteHalperObj.vb）
 //
-// 干什么：对 DataBase\PLCdatabase.db3 的全部读写经此走，短连接（每次 Using）。
+// 干什么：对 DataBase\CureLine.db3 的全部读写经此走，短连接（每次 Using）。
 // 为什么短连接：老项目多线程（Timer 轮询 + Task 后台上传）共用一个 SQLiteBlood
 //   实例，SQLite 写锁是文件级的，短连接 + 30s 超时是最省心的并发策略。
 // 怎么改：业务层只调 ExecuteDataTable / ExecuteNonQuery / ExecuteScalar；
@@ -26,7 +26,7 @@ public class SqliteHelper
     }
 
     public SqliteHelper() : this(Path.Combine(
-        Directory.GetCurrentDirectory(), "DataBase", "PLCdatabase.db3"))
+        Directory.GetCurrentDirectory(), "DataBase", "CureLine.db3"))
     {
     }
 
@@ -158,7 +158,7 @@ public class SqliteHelper
     }
 
     /// <summary>
-    /// 建库：确保目录 + PLCtable 表存在。老项目靠现场预置 db3 文件，
+    /// 建库：确保目录 + cure_record 表存在。老项目靠现场预置 db3 文件，
     /// 新项目启动时自建（与 INI 自愈同一思想），现场删库也不怕。
     /// 表结构 1:1：Time / 库位ID / 产品ID / Mark。
     /// </summary>
@@ -168,7 +168,7 @@ public class SqliteHelper
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
         ExecuteNonQuery(
-            "CREATE TABLE IF NOT EXISTS PLCtable (" +
+            "CREATE TABLE IF NOT EXISTS cure_record (" +
             "Time TEXT, 库位ID TEXT, 产品ID TEXT, Mark TEXT)", null);
     }
 }

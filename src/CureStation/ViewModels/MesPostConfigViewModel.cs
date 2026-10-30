@@ -5,7 +5,7 @@
 //   中途取件口径/静态参数（MAC_NO 等）/三个接口 URL。保存落 config.ini
 //   （[CuringMes] 节 + [MES] Url 三键），主窗据此热更新过账服务（不重启）。
 // 为什么界面化：W68 终版未定 → 现场联调"点点鼠标"改配置，代码零改动
-//   （用户口径）；与 PLC 配置窗同款"编辑面板+保存"模式与 XAML 纪律。
+//   （用户口径）；与网关配置窗同款"编辑面板+保存"模式与 XAML 纪律。
 // 门禁：窗入口 L4（主窗 Gate）；URL 属接口配置与点表同级。
 // 怎么改：新增配置项 = CuringMesOptions 加属性 + Load/Save + 本 VM 三处
 //   （字段/Sync/Flush）+ XAML 加控件；键名勿改（现场已按样例部署）。
@@ -129,7 +129,7 @@ public sealed class MesPostConfigViewModel : ViewModelBase
             CheckResult = EditCheckResult.Trim(),
         };
 
-        // URL 校验：非空须合法 http/https（照 PLC 配置窗同款口径）
+        // URL 校验：非空须合法 http/https（照网关配置窗同款口径）
         var urlErrors = new List<(string Name, string Url)>
         {
             ("API0027 URL", EditUrl27.Trim()),

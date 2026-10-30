@@ -29,7 +29,7 @@ public class LanguageCoverageTests : IDisposable
             string[] keys =
             {
                 "物料装载", "物料卸载", "强制出料", "资料获取", "物料状态",
-                "连接PLC", "连接设备", "PLC心跳", "CIM通信网关", "是否退出?",
+                "连接机台成功", "连接设备", "CIM通信网关", "是否退出?",
                 "设置", "登录", "用户名", "密码", "确定", "取消", "保存",
                 "运行模式", "单机固化收料", "多机通用网关",
                 "创建桌面快捷方式", "桌面快捷方式已创建", "桌面快捷方式已存在",
@@ -50,9 +50,9 @@ public class LanguageCoverageTests : IDisposable
                 "库内总物料:", "静置已完成:", "正在静置:", "明日可完成:",
                 "产品号", "产品ID",
                 "运行状态", "统计信息",
-                // PLC 配置窗（V0.0.4 新增，漏一个切英文就蹦中文）
-                "网关配置", "单机PLC", "机台连接", "接口地址",
-                "IP地址", "端口", "启用", "协议", "二进制",
+                // 网关配置窗（漏一个切英文就蹦中文）
+                "网关配置", "机台连接", "接口地址",
+                "IP地址", "端口", "启用",
                 "命令字", "完成位", "心跳地址", "固化时间地址",
                 "进入时间地址", "PC时间地址", "库位地址", "库位长度",
                 "产品前缀", "产品起始", "产品步长", "产品个数",
@@ -65,7 +65,7 @@ public class LanguageCoverageTests : IDisposable
                 "触发地址", "数据地址", "MSG地址", "DATA地址",
                 "状态地址", "完成地址", "数据长度",
                 "已保存，重启软件后生效",
-                "IP地址无效", "端口范围1-65535", "PLC地址格式须为D/R+数字",
+                "IP地址无效", "端口范围1-65535", "寄存器地址格式须为R/D+数字",
                 "不能为空", "长度范围1-1000",
                 "范围0-99999", "范围1-10000", "范围1-1000",
             };
@@ -75,7 +75,8 @@ public class LanguageCoverageTests : IDisposable
                 Assert.False(string.IsNullOrWhiteSpace(en), $"空翻译: {k}");
                 Assert.NotEqual(k, en); // 中文模式原样返回，英文必须变
             }
-            foreach (string name in MesLogger.StationNames)
+            // 出厂缺省机台名有英文对照；现场自定义名（[StationNames]）允许回退原文
+            foreach (string name in AppConfig.DefaultStationNames)
                 Assert.NotEqual(name, LanguageService.Tr(name));
         }
         finally

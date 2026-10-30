@@ -7,7 +7,7 @@
 // Model 层不动：MultiMachineManager / LocalLogService 照用（事件在后台
 //   线程触发，VM 经 UiInvoke 更新）。
 // 节拍说明（相对老项目的现代化改动，铁律：UI 线程禁网络 IO）：
-//   老项目 Timer 跑 UI 线程（160 次 PLC 读 + 同步 POST 冻界面）；
+//   老项目 Timer 跑 UI 线程（160 次机台读 + 同步 POST 冻界面）；
 //   新项目各机台网关线程跑后台（StationGateway 自带线程），VM 只收事件。
 // 关窗：View.OnClosing 调 OnClosing（确认经服务；重启中跳过确认，
 //   否则确认框卡住旧进程造成双开）；Dispose 释放网关组。
@@ -74,7 +74,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         ConnectMultiCommand = new RelayCommand(ConnectMulti, () => ConnectEnabled);
         ShowLogCommand = new RelayCommand(() => _dialogs.ShowMesLog(-1));
         ShowDebugCommand = new RelayCommand(() => _dialogs.ShowMesDebug());
-        ShowPlcCommand = new RelayCommand(ShowPlc);
+        ShowGatewayCommand = new RelayCommand(ShowGateway);
         ShowChangePwdCommand = new RelayCommand(ShowChangePwd);
         ShowShortcutCommand = new RelayCommand(ShowShortcut);
         SwitchLanguageCommand = new RelayCommand(SwitchLanguage);
@@ -100,17 +100,17 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     /// 点击仍是 LoginLogout 同链：已登录再点弹确认退出/切账号）。</summary>
     public string BtnLoginText => _role == LoginRole.None ? Tr("登录") : _loginUser;
 
-    /// <summary>PLC设置项显隐（仅 dev 可见，XAML 经转换器绑 Visibility）。</summary>
-    public bool PlcVisible => _role == LoginRole.Dev;
+    /// <summary>网关设置钮显隐（仅 dev 可见，XAML 经转换器绑 Visibility）。</summary>
+    public bool GatewayVisible => _role == LoginRole.Dev;
 
-    public bool PlcEnabled => _role == LoginRole.Dev;
+    public bool GatewayEnabled => _role == LoginRole.Dev;
     public bool SettingsItemEnabled => RunModeSettings.IsLoggedIn(_role);
 
     public string TitleText => Tr("CIM通信网关");
     public string ViewLabel => Tr("视图:");
     public string BtnLogText => Tr("日志");
     public string BtnDebugText => Tr("调试");
-    public string BtnPlcText => Tr("网关设置");
+    public string BtnGatewayText => Tr("网关设置");
     public string BtnChangePwdText => Tr("修改密码");
     public string BtnShortcutText => Tr("快捷方式");
     public string BtnLangText =>
@@ -118,7 +118,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
     public RelayCommand ShowLogCommand { get; }
     public RelayCommand ShowDebugCommand { get; }
-    public RelayCommand ShowPlcCommand { get; }
+    public RelayCommand ShowGatewayCommand { get; }
     public RelayCommand ShowChangePwdCommand { get; }
     public RelayCommand ShowShortcutCommand { get; }
     public RelayCommand SwitchLanguageCommand { get; }
@@ -169,8 +169,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     {
         Raise(nameof(LoginHeader));
         Raise(nameof(BtnLoginText));
-        Raise(nameof(PlcVisible));
-        Raise(nameof(PlcEnabled));
+        Raise(nameof(GatewayVisible));
+        Raise(nameof(GatewayEnabled));
         Raise(nameof(SettingsItemEnabled));
     }
 
@@ -212,7 +212,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         return false;
     }
 
-    private void ShowPlc()
+    private void ShowGateway()
     {
         if (!RequireLogin())
             return;
@@ -222,7 +222,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                 DialogImage.Warning);
             return;
         }
-        if (_dialogs.ShowPlcConfig())
+        if (_dialogs.ShowGatewayConfig())
             RestartApp();
     }
 
@@ -323,7 +323,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     private void InitMulti()
     {
         _multi = new MultiMachineManager(id =>
-            _useSim ? new SimulatedPlcClient()
+            _useSim ? new SimulatedStationClient()
                     : new ModbusStationClient());
         _multi.StationLog += (id, m) => LocalLog(m, id);
         _multi.Heartbeat += (id, on) => UiInvoke(() =>

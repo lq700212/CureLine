@@ -39,8 +39,8 @@ public interface IDialogService
     /// <summary>修改密码窗（需当前登录人 + 角色，dev 可代改）。</summary>
     void ShowChangePassword(string currentUser, LoginRole role);
 
-    /// <summary>PLC 配置窗。返回 true 表示保存了配置（调用方重启）。</summary>
-    bool ShowPlcConfig();
+    /// <summary>网关配置窗。返回 true 表示保存了配置（调用方重启）。</summary>
+    bool ShowGatewayConfig();
 
     /// <summary>报警窗（非模态置顶，直接 Show）。</summary>
     void ShowAlarm(string message, string name);

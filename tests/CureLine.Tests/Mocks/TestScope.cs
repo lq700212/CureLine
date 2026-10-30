@@ -2,7 +2,7 @@
 // TestScope：静态全局快照/恢复 + 临时目录（一处改，全用例隔离生效）
 //
 // 为什么需要：Core 大量静态全局（MesConfig 6 URL+地址束、MesParamStore 16 字段、
-// LanguageService、AppConfig.PlcUse/PlcIps、AppPaths.BaseDir），
+// LanguageService、AppConfig.StationUse/StationIps、AppPaths.BaseDir），
 // 用例改了不恢复就会污染下一个（全工程已串行，见 AssemblyInfo，
 // 但执行顺序仍不保证，顺序一变就飘红——必须每个用例自清）。
 //
@@ -32,6 +32,7 @@ public sealed class TestScope : IDisposable
     private readonly string[] _plcUse = new string[8];
     private readonly string?[] _plcIps = new string?[8];
     private readonly int[] _stationPorts = new int[8];
+    private readonly string[] _stationNames = new string[8]; // V0.0.32 机台名静态
     private bool _disposed;
 
     /// <summary>本用例专属临时目录（ini/db/日志全放这里）。</summary>
@@ -49,7 +50,7 @@ public sealed class TestScope : IDisposable
         for (int i = 0; i < 6; i++)
         {
             var s = MesConfig.ApiAddresses[i];
-            _addrSets[i, 0] = s.PlcData; _addrSets[i, 1] = s.MesMsg;
+            _addrSets[i, 0] = s.StationData; _addrSets[i, 1] = s.MesMsg;
             _addrSets[i, 2] = s.MesData; _addrSets[i, 3] = s.MesStatus;
             _addrSets[i, 4] = s.MesComplete;
         }
@@ -60,9 +61,10 @@ public sealed class TestScope : IDisposable
             _params[field] = MesParamStore.Get(field);
         _lang = LanguageService.CurrentLanguage;
         _baseDir = AppPaths.BaseDir;
-        Array.Copy(AppConfig.PlcUse, _plcUse, 8);
-        Array.Copy(AppConfig.PlcIps, _plcIps, 8);
+        Array.Copy(AppConfig.StationUse, _plcUse, 8);
+        Array.Copy(AppConfig.StationIps, _plcIps, 8);
         Array.Copy(AppConfig.StationPorts, _stationPorts, 8);
+        Array.Copy(AppConfig.StationNames, _stationNames, 8);
 
         // ---- 隔离：落盘全部重定向到临时目录 ----
         TempDir = Path.Combine(Path.GetTempPath(),
@@ -93,7 +95,7 @@ public sealed class TestScope : IDisposable
         for (int i = 0; i < 6; i++)
         {
             var s = MesConfig.ApiAddresses[i];
-            s.PlcData = _addrSets[i, 0]; s.MesMsg = _addrSets[i, 1];
+            s.StationData = _addrSets[i, 0]; s.MesMsg = _addrSets[i, 1];
             s.MesData = _addrSets[i, 2]; s.MesStatus = _addrSets[i, 3];
             s.MesComplete = _addrSets[i, 4];
         }
@@ -103,13 +105,14 @@ public sealed class TestScope : IDisposable
         foreach (var kv in _params)
             MesParamStore.Set(kv.Key, kv.Value);
         LanguageService.CurrentLanguage = _lang;
-        AppConfig.PlcUse[0] = _plcUse[0]; AppConfig.PlcUse[1] = _plcUse[1];
-        AppConfig.PlcUse[2] = _plcUse[2]; AppConfig.PlcUse[3] = _plcUse[3];
-        AppConfig.PlcUse[4] = _plcUse[4]; AppConfig.PlcUse[5] = _plcUse[5];
-        AppConfig.PlcUse[6] = _plcUse[6]; AppConfig.PlcUse[7] = _plcUse[7];
+        AppConfig.StationUse[0] = _plcUse[0]; AppConfig.StationUse[1] = _plcUse[1];
+        AppConfig.StationUse[2] = _plcUse[2]; AppConfig.StationUse[3] = _plcUse[3];
+        AppConfig.StationUse[4] = _plcUse[4]; AppConfig.StationUse[5] = _plcUse[5];
+        AppConfig.StationUse[6] = _plcUse[6]; AppConfig.StationUse[7] = _plcUse[7];
         for (int i = 0; i < 8; i++)
-            AppConfig.PlcIps[i] = _plcIps[i]!;
+            AppConfig.StationIps[i] = _plcIps[i]!;
         Array.Copy(_stationPorts, AppConfig.StationPorts, 8);
+        Array.Copy(_stationNames, AppConfig.StationNames, 8);
         AppPaths.BaseDir = _baseDir;
         MesLogger.ClearForTests();
         try { Directory.Delete(TempDir, true); } catch { }

@@ -83,9 +83,9 @@ public class InfrastructureTests : IDisposable
     public void Lang_Tr_Switch()
     {
         LanguageService.CurrentLanguage = "CH";
-        Assert.Equal("连接PLC", LanguageService.Tr("连接PLC"));
+        Assert.Equal("连接机台成功", LanguageService.Tr("连接机台成功"));
         LanguageService.CurrentLanguage = "EN";
-        Assert.Equal("Connect PLC", LanguageService.Tr("连接PLC"));
+        Assert.Equal("Connect Station Success", LanguageService.Tr("连接机台成功"));
         Assert.Equal("未知词条原文", LanguageService.Tr("未知词条原文")); // 回退原文
         LanguageService.CurrentLanguage = "CH";
     }

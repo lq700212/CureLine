@@ -5,7 +5,7 @@
 // ① API0031 DATA 拆三段（BC_NO/+30 CHECK_RESULT/+60 REMARK）；
 // ② HTTP 500 → WriteFail（STATUS=2/MSG=NG）；③ URL 未配 → WriteFail；
 // ④ STATUS/MSG 空 → " " 占位；⑤ 双触发同时置1 → 一次只处理第一个；
-// ⑥ ValidateJson 全 6 接口正/反例（用 PlcScenarios 标准报文）。
+// ⑥ ValidateJson 全 6 接口正/反例（用 StationScenarios 标准报文）。
 // 桩 MES + 内存 PLC（TestScope 隔离全局），不碰真机真网。
 // =========================================================================
 
@@ -20,12 +20,12 @@ namespace CureLine.Tests;
 public class GatewayExtendedTests : IDisposable
 {
     private readonly TestScope _scope;
-    private readonly SimulatedPlcClient _plc;
+    private readonly SimulatedStationClient _plc;
 
     public GatewayExtendedTests()
     {
         _scope = new TestScope();
-        _plc = new SimulatedPlcClient();
+        _plc = new SimulatedStationClient();
         _plc.Connect("127.0.0.1", 6060);
 
         // 6 触发 + 6 地址束全部显式配置（不依赖全局残留）。
@@ -43,12 +43,12 @@ public class GatewayExtendedTests : IDisposable
             s.MesData = datas[i];
             s.MesComplete = datas[i].Replace("900", "800");
         }
-        MesConfig.ApiAddresses[0].PlcData = "R13001";
-        MesConfig.ApiAddresses[1].PlcData = "R16001";
-        MesConfig.ApiAddresses[2].PlcData = "R17001";
-        MesConfig.ApiAddresses[3].PlcData = "R18001";
-        MesConfig.ApiAddresses[4].PlcData = "R19001";
-        MesConfig.ApiAddresses[5].PlcData = "R12001";
+        MesConfig.ApiAddresses[0].StationData = "R13001";
+        MesConfig.ApiAddresses[1].StationData = "R16001";
+        MesConfig.ApiAddresses[2].StationData = "R17001";
+        MesConfig.ApiAddresses[3].StationData = "R18001";
+        MesConfig.ApiAddresses[4].StationData = "R19001";
+        MesConfig.ApiAddresses[5].StationData = "R12001";
         MesConfig.DataLength = 799;
         MesConfig.DataSegmentOffsets = new[] { 30, 60 }; // 防其它用例改偏移的静态残留
     }
@@ -72,9 +72,9 @@ public class GatewayExtendedTests : IDisposable
     public void Data31_Split3()
     {
         using var mes = new MesStubServer();
-        mes.EnqueueOk(dataJson: PlcScenarios.Data31("B1", "1", "rm31"));
+        mes.EnqueueOk(dataJson: StationScenarios.Data31("B1", "1", "rm31"));
         MesConfig.UrlApi0031 = mes.Url;
-        _plc.PresetString("R18001", PlcScenarios.Api0031Json());
+        _plc.PresetString("R18001", StationScenarios.Api0031Json());
         _plc.PresetWord("R18000", 1);
 
         using var gw = Gw();
@@ -93,7 +93,7 @@ public class GatewayExtendedTests : IDisposable
         using var mes = new MesStubServer();
         mes.EnqueueHttpError();
         MesConfig.UrlApi0030 = mes.Url;
-        _plc.PresetString("R17001", PlcScenarios.Api0030Json());
+        _plc.PresetString("R17001", StationScenarios.Api0030Json());
         _plc.PresetWord("R17000", 1);
 
         using var gw = Gw();
@@ -110,7 +110,7 @@ public class GatewayExtendedTests : IDisposable
     public void EmptyUrl_WriteFail()
     {
         MesConfig.UrlApi0032 = "";
-        _plc.PresetString("R19001", PlcScenarios.Api0032Json());
+        _plc.PresetString("R19001", StationScenarios.Api0032Json());
         _plc.PresetWord("R19000", 1);
 
         using var gw = Gw();
@@ -126,7 +126,7 @@ public class GatewayExtendedTests : IDisposable
         using var mes = new MesStubServer();
         mes.Enqueue(200, "{\"STATUS\":\"\",\"MSG\":\"\",\"DATA\":null}");
         MesConfig.UrlApi0030 = mes.Url;
-        _plc.PresetString("R17001", PlcScenarios.Api0030Json());
+        _plc.PresetString("R17001", StationScenarios.Api0030Json());
         _plc.PresetWord("R17000", 1);
 
         using var gw = Gw();
@@ -142,9 +142,9 @@ public class GatewayExtendedTests : IDisposable
     public void TwoTriggers_HandlesFirstOnly()
     {
         MesConfig.UrlApi0027 = ""; // 首个走 WriteFail（快，不碰网）
-        _plc.PresetString("R13001", PlcScenarios.Api0027Json());
+        _plc.PresetString("R13001", StationScenarios.Api0027Json());
         _plc.PresetWord("R13000", 1);
-        _plc.PresetString("R17001", PlcScenarios.Api0030Json());
+        _plc.PresetString("R17001", StationScenarios.Api0030Json());
         _plc.PresetWord("R17000", 1);
 
         using var gw = Gw();
@@ -169,16 +169,16 @@ public class GatewayExtendedTests : IDisposable
     [Fact(DisplayName = "ValidateJson全接口正反例")]
     public void ValidateJson_AllApis()
     {
-        Assert.True(StationGateway.ValidateJson("API0027", PlcScenarios.Api0027Json()));
-        Assert.True(StationGateway.ValidateJson("API0028", PlcScenarios.Api0028Json()));
-        Assert.True(StationGateway.ValidateJson("API0030", PlcScenarios.Api0030Json()));
-        Assert.True(StationGateway.ValidateJson("API0031", PlcScenarios.Api0031Json()));
-        Assert.True(StationGateway.ValidateJson("API0032", PlcScenarios.Api0032Json()));
-        Assert.True(StationGateway.ValidateJson("API0033", PlcScenarios.Api0033Json()));
+        Assert.True(StationGateway.ValidateJson("API0027", StationScenarios.Api0027Json()));
+        Assert.True(StationGateway.ValidateJson("API0028", StationScenarios.Api0028Json()));
+        Assert.True(StationGateway.ValidateJson("API0030", StationScenarios.Api0030Json()));
+        Assert.True(StationGateway.ValidateJson("API0031", StationScenarios.Api0031Json()));
+        Assert.True(StationGateway.ValidateJson("API0032", StationScenarios.Api0032Json()));
+        Assert.True(StationGateway.ValidateJson("API0033", StationScenarios.Api0033Json()));
         // 错配：数组送对象接口 / 对象送数组接口
-        Assert.False(StationGateway.ValidateJson("API0027", PlcScenarios.Api0030Json()));
-        Assert.False(StationGateway.ValidateJson("API0030", PlcScenarios.Api0027Json()));
-        Assert.False(StationGateway.ValidateJson("API0033", PlcScenarios.Api0032Json()));
+        Assert.False(StationGateway.ValidateJson("API0027", StationScenarios.Api0030Json()));
+        Assert.False(StationGateway.ValidateJson("API0030", StationScenarios.Api0027Json()));
+        Assert.False(StationGateway.ValidateJson("API0033", StationScenarios.Api0032Json()));
         Assert.False(StationGateway.ValidateJson("API0031", "{bad"));
     }
 
@@ -226,9 +226,9 @@ public class GatewayExtendedTests : IDisposable
     [Fact(DisplayName = "失败网关不进Stations且已释放")]
     public void ConnectAll_Fail_NotInStations()
     {
-        for (int i = 1; i < 8; i++) AppConfig.PlcUse[i] = "0";
-        AppConfig.PlcIps[0] = "fail";
-        using var mgr = new MultiMachineManager(_ => new SimulatedPlcClient());
+        for (int i = 1; i < 8; i++) AppConfig.StationUse[i] = "0";
+        AppConfig.StationIps[0] = "fail";
+        using var mgr = new MultiMachineManager(_ => new SimulatedStationClient());
         int broken = -1;
         mgr.StationBroken += id => broken = id;
         var (ok, skipped) = mgr.ConnectAll();

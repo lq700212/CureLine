@@ -24,7 +24,7 @@ public static class MesConfig
     public static string TriggerApi0032 { get; set; } = "";
     public static string TriggerApi0033 { get; set; } = "";
 
-    /// <summary>PLC 里 JSON 报文最大字长（老项目 DataLength=799）。</summary>
+    /// <summary>机台寄存器里 JSON 报文最大字长（老项目 DataLength=799）。</summary>
     public static int DataLength { get; set; } = 799;
 
     /// <summary>
@@ -35,12 +35,12 @@ public static class MesConfig
     public static int[] DataSegmentOffsets { get; set; } = { 30, 60 };
 
     /// <summary>
-    /// 单个接口的 PLC 地址束（复刻自老项目 Addressinfo.vb 的 5 字段）。
-    /// plcData=PLC 准备好的 JSON；status/msg/data=MES 返回回写；complete=完成标志。
+    /// 单个接口的机台寄存器地址束（复刻自老项目 Addressinfo.vb 的 5 字段）。
+    /// StationData=机台准备好的 JSON；status/msg/data=MES 返回回写；complete=完成标志。
     /// </summary>
     public class ApiAddressSet
     {
-        public string PlcData { get; set; } = "";
+        public string StationData { get; set; } = "";
         public string MesMsg { get; set; } = "";
         public string MesData { get; set; } = "";
         public string MesStatus { get; set; } = "";

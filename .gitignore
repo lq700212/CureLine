@@ -49,3 +49,7 @@ tools/DocShot/runner/
 
 # UI 目检临时产物（截图/自动化脚本）
 ui-check/
+
+# Python 缓存（tools/DocShot 核验脚本运行产生）
+__pycache__/
+*.pyc

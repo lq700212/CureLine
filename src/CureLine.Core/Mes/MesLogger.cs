@@ -33,13 +33,13 @@ public static class MesLogger
     /// </summary>
     public static event Action<string, int>? LogAdded;
 
-    /// <summary>8 台设备名（老项目 Designer 原样，GenLogName/分文件共用）。</summary>
-    public static readonly string[] StationNames =
-    {
-        "橡胶装配PCB设备", "外壳穿线半自动机构", "焊锡_2D检测_涂胶半自动机构",
-        "外壳组件保压机构", "外壳组件点胶_打标二维码设备", "点胶固化收料机",
-        "测试线体-激光-基板焊接_打标_贴圆片体机", "测试线体-光效测试压力测试设备",
-    };
+    /// <summary>
+    /// 8 台设备名（V0.0.32 起走配置：AppConfig.Load 从 ini [StationNames] 节读入，
+    /// 缺键/空值回落 AppConfig.DefaultStationNames=老项目 Designer 原样）。
+    /// 换产线/换客户在网关配置窗"机台连接"页直接改名保存即可，不再需要改代码。
+    /// 消费方：机台面板名/主窗视图筛选下拉/GenLogName 日志文件名，三处同源。
+    /// </summary>
+    public static string[] StationNames => AppConfig.StationNames;
 
     /// <summary>机台日志名（复刻自多机版 MESLogger.GenLogName）。</summary>
     public static string GenLogName(int stationId) =>

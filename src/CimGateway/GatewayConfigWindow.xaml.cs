@@ -5,16 +5,16 @@ using CureLine.ViewModels;
 namespace CimGateway;
 
 /// <summary>
-/// PLC 配置窗（MVVM 的 View：只设 DataContext + 响应关窗请求）。
-/// 结果由 ViewModel.PlcChanged 带出（DialogService.ShowPlcConfig 读它）。
+/// 网关配置窗（MVVM 的 View：只设 DataContext + 响应关窗请求）。
+/// 结果由 ViewModel.ConfigChanged 带出（DialogService.ShowGatewayConfig 读它）。
 /// </summary>
-public partial class PlcConfigWindow : Window
+public partial class GatewayConfigWindow : Window
 {
-    public PlcConfigViewModel ViewModel { get; }
+    public GatewayConfigViewModel ViewModel { get; }
 
-    public PlcConfigWindow()
+    public GatewayConfigWindow()
     {
-        ViewModel = new PlcConfigViewModel();
+        ViewModel = new GatewayConfigViewModel();
         DataContext = ViewModel;
         InitializeComponent();
         ViewModel.RequestClose += result =>

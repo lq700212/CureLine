@@ -1,8 +1,8 @@
 // =========================================================================
-// SimulatedPlcClient：内存模拟 PLC（IPlcClient 模拟版，先做模拟联调的关键件）
+// SimulatedStationClient：内存模拟机台（IStationClient 模拟版，先做模拟联调的关键件）
 //
-// 干什么：用两个字典模拟 PLC 地址区——字区（short[]，D/R/其它一视同仁按名存）
-//   与字符串区，语义锁定 IPlcClient 契约（含 WriteString 按 length 截断补齐）；
+// 干什么：用两个字典模拟机台寄存器区——字区（short[]，R/D/其它一视同仁按名存）
+//   与字符串区，语义锁定 IStationClient 契约（含 WriteString 按 length 截断补齐）；
 //   真机实现走 Modbus TCP（见 ModbusStationClient.cs，P2 删三菱后的统一底座）。
 // 为什么：① 无真机跑通 UI + 业务全流程；② 单元测试注入，网关触发/装载/
 //   回写全部可测；③ 联调脚本化：测试可预置 R13001=1 等触发业务。
@@ -12,7 +12,7 @@
 
 namespace CureLine.Core.Comms;
 
-public sealed class SimulatedPlcClient : IPlcClient
+public sealed class SimulatedStationClient : IStationClient
 {
     private readonly object _lock = new();
     private readonly Dictionary<string, short[]> _words = new(StringComparer.OrdinalIgnoreCase);

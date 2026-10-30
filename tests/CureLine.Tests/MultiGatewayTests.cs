@@ -14,7 +14,7 @@ namespace CureLine.Tests;
 
 public class MultiGatewayTests : IDisposable
 {
-    private readonly SimulatedPlcClient _plc = new();
+    private readonly SimulatedStationClient _plc = new();
     private readonly HttpListener _mes = new();
     private readonly string _url;
     private string _nextResp = "{\"STATUS\":\"1\",\"MSG\":\"ok\",\"DATA\":null}";
@@ -31,7 +31,7 @@ public class MultiGatewayTests : IDisposable
 
         MesConfig.UrlApi0030 = _url;
         MesConfig.TriggerApi0030 = "R17000";
-        MesConfig.ApiAddresses[2].PlcData = "R17001";
+        MesConfig.ApiAddresses[2].StationData = "R17001";
         MesConfig.ApiAddresses[2].MesStatus = "R17801";
         MesConfig.ApiAddresses[2].MesMsg = "R17810";
         MesConfig.ApiAddresses[2].MesData = "R17900";

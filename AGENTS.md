@@ -20,7 +20,7 @@
   过账，原名 PlcMesBridge，V0.0.21 改名定名）+ `Tests` xUnit，见 `CureLine.slnx`；
   两程序可分机部署，拆分设计见 `docs/重构设计_20261028.md`）
 - 通讯子模块 **`extern/kaleidoscope`**（git submodule，net472，零改动直接引用，
-  详见"子模块"节）；PLC 协议用其 `libs/HslCommunication.dll`（12.6.0，公司已购，
+  详见"子模块"节）；机台 Modbus 通讯用其 `libs/HslCommunication.dll`（12.6.0，公司已购，
   不从 NuGet 另引）；授权复用子模块 `HslAuthorization`（`hsl.dat`，见"机密红线"）
 - SQLite 用 NuGet **官方 `System.Data.SQLite.Core` 1.0.119**（注意：NuGet 上另有
   非官方 `System.Data.SQLite` 2.x 包，禁止引用）；JSON 用 `Newtonsoft.Json` 13.x
@@ -58,7 +58,7 @@
   家族（`IoPointTable`/`IoPointTableStore`/`IoBus`/连通测试）+ `CureStation`
   程序①骨架（30 仓位主窗 + 点表配置窗 + 自愈 + Mock）+ 测试 156 全绿。
 - **P2 程序②改造（进行中，P2.1 已完成）**：P2.1=删三菱整链（`MelsecPlcClient`/
-  `SingleMachineCoordinator`/单机视图与"运行模式"菜单/PLC 配置窗单机页——
+  `SingleMachineCoordinator`/单机视图与"运行模式"菜单/配置窗单机页——
   用户拍板"物理搬运即可"，git 历史可找回）+ 真机底座统一 Modbus TCP
   （`ModbusStationClient`，地址/打包/分帧集中一处）+ 配置模型收敛
   （删 `RunMode`/`[SinglePLC]`/`PLCAscii`）。**P2.2 待做**：6 接口迁移与
@@ -88,13 +88,13 @@
 
 1. **文件编码 UTF-8**。写文件用 write 工具；终端 GBK 显示是假象，
    判定中文内容只用严格 UTF-8 解码读，禁止肉眼判码。
-2. **UI 线程禁做网络 IO**：PLC/DB/HTTP 全在后台线程（多机 `StationGateway`
+2. **UI 线程禁做网络 IO**：机台通讯/DB/HTTP 全在后台线程（多机 `StationGateway`
    自带线程、程序①总线后台轮询）；TCP 连接必须带超时；事件在工作线程触发，
    UI 订阅方必须 `Dispatcher.Invoke` 回 UI 线程。
 3. **读写失败即断连标记 + 节流重连**：真机底座 `ModbusStationClient` 包装
    子模块 `ModbusTcpMasterClient`（断连标记/关坏 socket/5s 节流全在其内部）；
    IO 总线 `ModbusPointTableBus` 同款（未连 5s 节流重连）。勿引入
-   "按 PLC 轮询周期估时"逻辑。
+   "按轮询周期估时"逻辑。
 4. **日志只记边沿**：连上/断开/触发/成功/NG 记，连续失败中间静默，防刷屏。
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
@@ -109,7 +109,7 @@
 9. **改干净改彻底（2026-10-29 用户拍板：项目未上线，无兼容历史包袱）**：
    废弃的键/样式/字段/属性/接口一律**直接删除**，禁止留"兼容旧引用"的占位、
    空资源、过渡注释或双套并存口径；勿再以"防破坏既有行为/老项目口径"为由
-   保留内部历史包袱。边界：**外部契约不属此列**——MES 报文口径、PLC 寄存器
+   保留内部历史包袱。边界：**外部契约不属此列**——MES 报文口径、机台寄存器
    语义、点表键名、配置节名等现场约定（"已知坑"小节列明的）仍须遵守。
 
 ## 代码约定
@@ -137,7 +137,7 @@
   的根因）；数值绑定（如 UniformGrid 列数）同样给 FallbackValue。
   改完关掉重开设计器看一眼，预览≈运行才算完（教训见 CHANGELOG V0.0.11）。
 - 业务逻辑进 `Core`（可测）；新增业务分支必须先补 `Tests` 用例
-  （模拟 PLC + 本地 HttpListener 桩 MES，基建现成）；新增 VM 编排补
+  （模拟机台 + 本地 HttpListener 桩 MES，基建现成）；新增 VM 编排补
   `ViewModelTests` 用例（Fake 服务 + TestScope 隔离）。
 
 ## UI 资源来源（各类 UI 资源，2026-10-29 用户拍板）
@@ -171,7 +171,7 @@
 | `src/CimGateway/ViewModels/` | 主程序各窗 VM（`IDialogService` 基建 + 各窗 VM，主窗 VM 含视图筛选/门禁 + 主题切换） |
 | `src/CimGateway/MesDebugWindow.*` | 调试窗：5 接口表单 + API0033 扩展 + 预览上传 |
 | `src/CimGateway/MesLogWindow.*` | 日志窗（-1 全部机台 / >=0 分机台，关窗退订；清空钮=危险色） |
-| `src/CimGateway/PlcConfigWindow.*` | 网关配置窗（机台连接/接口地址两页 + 测试连接 + 保存热生效，逻辑在 Core；单机页已删；界面名已去 PLC 化——主窗"CIM通信网关"/菜单"网关设置"，V0.0.22 补丁）；V0.0.31 Tab 隐式主题样式 + 测试结果字色走语义名（VM "Ok"/"Err" → View 触发器映射 AlertOkFg/AlertErrFg） |
+| `src/CimGateway/GatewayConfigWindow.*` | 网关配置窗（机台连接/接口地址两页 + 测试连接 + 保存热生效，逻辑在 Core；单机页已删；V0.0.32 类名去 PLC 化 `PlcConfigWindow`→`GatewayConfigWindow`，VM 同改 `GatewayConfigViewModel`）；V0.0.31 Tab 隐式主题样式 + 测试结果字色走语义名（VM "Ok"/"Err" → View 触发器映射 AlertOkFg/AlertErrFg）；V0.0.32 机台连接页每行含机台名框（[StationNames] 配置化） |
 | `src/CimGateway/MesAlarmWindow.*` / `ImageWindow.*` | 报警窗 / 图片查看 |
 | **程序② UI 键板** | `App.xaml`（GhostButton/Fresh 弹窗样式族/TabControl+TabItem 隐式主题/WinTitleBar/WinSysBtn + Geo.* 图标，色全 DynamicResource 走 Themes 字典）；全部弹窗统一圆角自绘骨架（WindowStyle=None + WindowChrome + Fx.WinShadow + WinTitleBar 品牌标题条，可缩放窗 ResizeBorderThickness=6）；原 `Styles/FreshBlue.xaml` 已删 |
 | **Core 共享（固化工艺家族，P3.1 新增）** | |
@@ -199,11 +199,11 @@
 | **Core 共享（业务既有）** | |
 | `src/CureLine.Core/Services/LocalLogService.cs` | 本机操作日志落盘（截 50 字写文件，全量上界面） |
 | `src/CureLine.Core/Modes/MultiMachineGateway.cs` | 多机网关：触发→JSON→POST→回写 + Manager（Modbus 底座已接，业务零改动） |
-| `src/CureLine.Core/Comms/ModbusStationClient.cs` | **真机底座（P2 新增）**：`IPlcClient` 的 Modbus TCP 实现——地址="剥 R/D 取数字"=协议地址、字符串 2 字节/寄存器 big-endian、分帧 125/123，三语义集中一处 |
-| `src/CureLine.Core/Comms/`（PLC 侧） | `IPlcClient` + 真机 `ModbusStationClient` + 模拟 `SimulatedPlcClient` + 连通测试 `PlcConnectionTester`（三菱 `MelsecPlcClient` 已删） |
+| `src/CureLine.Core/Comms/ModbusStationClient.cs` | **真机底座（P2 新增）**：`IStationClient` 的 Modbus TCP 实现——地址="剥 R/D 取数字"=协议地址、字符串 2 字节/寄存器 big-endian、分帧 125/123，三语义集中一处 |
+| `src/CureLine.Core/Comms/`（机台侧） | `IStationClient` + 真机 `ModbusStationClient` + 模拟 `SimulatedStationClient` + 连通测试 `StationConnectionTester`（V0.0.32 去 PLC 化命名，三菱客户端已删；kaleidoscope 外部类型 PlcMasterConfig 等保留原名） |
 | `src/CureLine.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段） |
-| `src/CureLine.Core/Data/CureRecordStore.cs` | `PLCtable` CRUD + `ComputeStats` 纯统计 |
-| `src/CureLine.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/PLC 配置模型与校验 |
+| `src/CureLine.Core/Data/CureRecordStore.cs` | `cure_record` 表 CRUD（V0.0.32 由 PLCtable 改名，项目未上线无兼容包袱）+ `ComputeStats` 纯统计 |
+| `src/CureLine.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/机台连接配置（`StationConfig.cs`：StationConfigStore/Validator） |
 | `tests/CureLine.Tests/` | 315 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
 | `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
 
@@ -230,7 +230,7 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   失败回写 STATUS=2/MSG=NG。MES 侧约定，勿改。
 - 统计"明日"只比 `Day` 数（跨月有误差）、L/R 只看第 4 字符——老项目口径，
   保持一致，修了就是行为分叉。
-- 多机键名跳号（`PLCIP2..7,9,10` 对应 0..7 号机）历史沿用，勿"整理"。
+- ~~多机键名跳号（PLCIP2..7,9,10）~~ **V0.0.32 已解除**（用户拍板项目无 PLC、未上线无兼容包袱）：ini 键中性化连续命名 `StationUse`/`StationIp1..8`/`StationPorts`，数据库 `CureLine.db3`（原 PLCdatabase.db3）、表 `cure_record`（原 PLCtable）；现场删旧 db/ini 旧键无害（自愈缺省）。
 - **Modbus 底座三语义（P2.1 起生效，全在 `ModbusStationClient` 一处）**：
   ① 地址="剥 R/D 前缀取数字"=Modbus 协议地址（0x0000 起保持寄存器），
   残缺/超 65535 拒收走失败链，绝不误写寄存器 0——**待真机联调确认
@@ -330,7 +330,7 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   离开=出站链（先 API0027 外层数组后 API0030 O）、出站被接受（STATUS=1）
   →已生产+1（0027 失败只报警不挡累计）；② **只发真实边沿**——重启对齐
   （AlignFromSnapshot）不发三事件，防 MES 重复过账；③ 失败只记日志+顶栏
-  状态，**不弹窗不重传**（老项目写 PLC 报警位+弹窗，差异已登记）；④ 门槛
+  状态，**不弹窗不重传**（老项目写机台报警位+弹窗，差异已登记）；④ 门槛
   双保险=开关开+URL 非空，关时不产生网络请求；⑤ **锁内事件红线**：状态机
   三事件在 _sync 锁内触发，处理器禁止同步回调状态机公共方法（重入死锁），
   只做轻量投递；⑥ 物料上传（API0032）按**按钮工位**取槽（不走全局配置

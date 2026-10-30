@@ -3,7 +3,7 @@
 //
 // 干什么：登录验谁 + 改密码 + dev 代改，是"真正安全"替换明文密码的核心。
 // 为什么放 SQLite：项目已有 System.Data.SQLite.Core 官方包 + SqliteHelper
-//   唯一出入口，users 表与 PLCtable 同库（现场只拷一个 db3 就全带走，
+//   唯一出入口，users 表与 cure_record 同库（现场只拷一个 db3 就全带走，
 //   备份/恢复无新增文件）；全部参数化，遵守 SQL 参数化铁律。
 // 怎么改：
 //   - 表结构只加列不改列（username 主键 / role / pwd_hash / salt /

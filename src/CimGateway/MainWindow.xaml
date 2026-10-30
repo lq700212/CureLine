@@ -81,11 +81,11 @@
                             Content="{Binding BtnDebugText, FallbackValue='调试'}"
                             Command="{Binding ShowDebugCommand}" Margin="0,0,6,0"
                             ToolTip="MES 接口调试界面（5 接口表单 + 预览上传）"/>
-                    <!-- 网关设置：仅 dev 可见（PlcVisible，与旧菜单项显隐一致） -->
+                    <!-- 网关设置：仅 dev 可见（GatewayVisible，与旧菜单项显隐一致） -->
                     <Button Tag="{StaticResource Geo.Config}" Style="{StaticResource GhostButton}"
-                            Content="{Binding BtnPlcText, FallbackValue='网关设置'}"
-                            Command="{Binding ShowPlcCommand}" Margin="0,0,6,0"
-                            Visibility="{Binding PlcVisible,
+                            Content="{Binding BtnGatewayText, FallbackValue='网关设置'}"
+                            Command="{Binding ShowGatewayCommand}" Margin="0,0,6,0"
+                            Visibility="{Binding GatewayVisible,
                                         Converter={StaticResource BoolToVisibilityConverter}}"
                             ToolTip="机台连接 / 接口地址配置（dev，保存后重启生效）"/>
                     <!-- 修改密码 / 快捷方式：登录后可用（SettingsItemEnabled，与旧菜单一致） -->

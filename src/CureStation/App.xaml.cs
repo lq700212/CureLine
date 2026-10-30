@@ -27,7 +27,7 @@ public partial class App : Application
         Directory.CreateDirectory(AppPaths.ConfigDir);
         Directory.CreateDirectory(AppPaths.LogDir);
 
-        // 数据库与账号（P3.2）：建表（PLCtable/users 兜底）+ 播种四级操作员的
+        // 数据库与账号（P3.2）：建表（cure_record/users 兜底）+ 播种四级操作员的
         // 初始管理员（空表才播；初始密码只在此一处，上线前必须在权限管理改掉）。
         new SqliteHelper(AppPaths.DatabaseFile).EnsureDatabase();
         OperatorStore.Default.EnsureSeeded("123456");
