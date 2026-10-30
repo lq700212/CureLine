@@ -336,15 +336,23 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   IsPreset 字段反序列化 false=全按自定义，兼容零迁移；④ 保存链=先改副本：
   BuildDraftFromEditor 产草稿→**草稿替换选中项进库校验**→过了才
   ApplyDraftToSelected+落盘（改名撞车不污染原对象，对齐 AgingTestSystem
-  大扫荡教训）；⑤ 可视化画布（**V0.0.43 起是主编辑区，"点格子直接改"**）：
+  大扫荡教训）；⑤ 可视化画布（**V0.0.43 起是主编辑区，"点格子直接改"；
+  V0.0.44 起策略编辑面板与每仓位覆盖行表整体删除**——职能全被画布+浮层
+  替代，四项参数（名/全局/门控/断电续算）收一行参数条、每层覆盖折叠进
+  左列，`AddSlotRow/RemoveSlotRow/SelectedSlotRow` 链已删勿加回，
+  `SlotRows` 集合保留=画布写值的数据模型；**清除覆盖=ClearSelectionOverride
+  （删行恢复跟随层/全局，设了能删闭环）**；**格子定尺寸 64×58 +
+  ItemsControl 定宽 PreviewGridWidth=列数×68（VM 属性）——尺寸不随窗口/
+  文字浮动，想调改 Border Width/Height 与 68 步进配套改）**：
   SlotPreviewItems=RackCount×LevelCount 格（与主窗网格同源，DialogService
   从点表算最大架/层传入，下限 10×3），编辑任一时长 RebuildPreview 实时反映；
   格色三态：普通=时长四档（绿<60/黄/橙/红≥180）、**特殊=主题蓝 Accent**
   （IsSpecial 按 SlotMinutes 覆盖字典**存在性真识别**，非数值推断——覆盖值
   恰好等于层/全局时仍算特殊）、选中=FgStrong 描边（与特殊蓝并存）。
-  画布交互：**左键单击=选格浮层输时长、左键拖框=框选（Ctrl 叠加）、
-  Ctrl+单击=加选/减选、点空白/Esc=清选择、中键拖动=平移（左键已让给
-  选择）、滚轮缩放、双击空白复位（格子上双击不复位）、右键适应图像**。
+  画布交互：**左键单击=选格浮层输时长、左键拖框=框选（橡皮筋透明只描边、
+  Ctrl 叠加）、Ctrl+单击=加选/减选、点空白/Esc=清选择、中键拖动=平移
+  （左键已让给选择）、滚轮缩放、双击空白复位（格子上双击不复位）、
+  右键适应图像**。
   选择真源=VM `_selectedKeys` 键集合（格子对象每次 RebuildPreview 全新
   重建引用，选中态按键恢复——勿依赖 item.IsSelected 自身）；浮层应用=
   `ApplySelectionCommand` 逐格写 SlotRows（有则改无则增）→ 行通知自动

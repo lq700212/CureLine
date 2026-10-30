@@ -1,10 +1,10 @@
 // =========================================================================
-// CuringPolicyViewModel：工艺策略窗编排（预置库/自定义/套用/激活/保存/可视化预览）
+// CuringPolicyViewModel：工艺策略窗编排（预置库/自定义/套用/激活/保存/画布直改）
 //
-// 干什么：策略列表（增删选）+ 编辑面板（名称/全局时长/光栅门控/每层覆盖
-//   4 框/每仓位覆盖行表）+ 仓位时长可视化预览（可拖动/缩放画布的数据侧）+
-//   「激活并生效」/「仅保存」/「套用为自定义策略」。三级覆盖口径见
-//   CuringPolicy 顶注释（仓位 > 层 > 全局）。
+// 干什么：策略列表（增删选）+ 参数条（名称/全局时长/光栅门控/断电续算，
+//   V0.0.44 起"每仓位覆盖行表"已删——画布取代其全部职能）+ 仓位时长画布
+//   （主编辑区：点格子/框选直接设时长，见下）+ 「激活并生效」/「仅保存」/
+//   「套用为自定义策略」。三级覆盖口径见 CuringPolicy 顶注释（仓位 > 层 > 全局）。
 // 预置/自定义口径（V0.0.20，对齐 AgingTestSystem 配方管理的"模板+即改即落"）：
 //   预置策略（IsPreset=true，出厂模板）——可选中查看/编辑参数、可【套用为
 //   自定义策略】（把编辑内容写入"自定义"策略并激活）；不能直接保存/激活/
@@ -103,6 +103,13 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     /// <summary>预览画布的层数（与主窗同源：点表最大层号，下限 3）。</summary>
     public int LevelCount { get; }
 
+    /// <summary>
+    /// 画布格子区定宽（列数 × 单格 68 = 64 格宽 + 左右 Margin 4）：格子尺寸锁定
+    /// 不随窗口宽度/架号文字浮动（V0.0.44 用户定调默认饱满大小），想更大滚轮
+    /// 缩放；架数变化按列数线性加宽（双架 20 列也放得下，画布自身可滚动区外）。
+    /// </summary>
+    public double PreviewGridWidth => RackCount * 68.0;
+
     /// <summary>可视化预览格子（RackCount×LevelCount 个，RebuildPreview 重建引用）。</summary>
     public IReadOnlyList<SlotPreviewItem> SlotPreviewItems { get; private set; } = [];
 
@@ -122,13 +129,6 @@ public sealed class CuringPolicyViewModel : ViewModelBase
 
     /// <summary>选中项是否预置策略（XAML 按钮/提示切换的开关；无选中=false）。</summary>
     public bool SelectedIsPreset => SelectedPolicy?.IsPreset ?? false;
-
-    private SlotMinuteRow? _selectedSlotRow;
-    public SlotMinuteRow? SelectedSlotRow
-    {
-        get => _selectedSlotRow;
-        set => Set(ref _selectedSlotRow, value);
-    }
 
     // ---------- 编辑区（选中策略回显；保存前构建草稿回写） ----------
 
@@ -258,6 +258,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         Raise(nameof(SelectionSummaryText));
         SelectionMinutesText = "";   // 新选择清输入（防上一批残值误应用）
         ApplySelectionCommand.RaiseCanExecuteChanged();
+        ClearSelectionOverrideCommand.RaiseCanExecuteChanged();
     }
 
     /// <summary>只恢复格子 IsSelected（RebuildPreview 重建引用后调；不动输入/通知）。</summary>
@@ -304,16 +305,37 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         SelectionMinutesText = "";
     }
 
+    /// <summary>
+    /// 浮层【清除】：删掉选中格的 SlotMinutes 覆盖行（画布取代覆盖表后的"恢复
+    /// 跟随层/全局"出口——设了能删，闭环）。无覆盖行的格子静默跳过；行删除的
+    /// 集合通知自动重建预览（蓝格回四档色、右值回层/全局）。
+    /// </summary>
+    private void ClearSelectionOverride()
+    {
+        if (_selectedKeys.Count == 0)
+            return;
+        foreach (var key in _selectedKeys)
+        {
+            var parts = key.Split('-');
+            int rack = int.Parse(parts[0]), level = int.Parse(parts[1]);
+            var row = SlotRows.FirstOrDefault(r =>
+                int.TryParse((r.Rack ?? "").Trim(), out var rr) && rr == rack &&
+                int.TryParse((r.Level ?? "").Trim(), out var ll) && ll == level);
+            if (row != null)
+                SlotRows.Remove(row);
+        }
+        SelectionMinutesText = "";
+    }
+
     // ---------- 命令 ----------
 
     public RelayCommand AddPolicyCommand { get; }
     public RelayCommand RemovePolicyCommand { get; }
-    public RelayCommand AddSlotRowCommand { get; }
-    public RelayCommand RemoveSlotRowCommand { get; }
     public RelayCommand SaveCommand { get; }
     public RelayCommand ActivateCommand { get; }
     public RelayCommand ApplyToCustomCommand { get; }
     public RelayCommand ApplySelectionCommand { get; }
+    public RelayCommand ClearSelectionOverrideCommand { get; }
 
     /// <summary>保存/激活/套用成功后置 true（DialogService 据此返回 true，主窗刷新策略）。</summary>
     public bool CloseDialog { get; private set; }
@@ -327,12 +349,11 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         LevelCount = Math.Max(CureLine.Core.Curing.SlotLocationCode.Levels, levelCount);
         AddPolicyCommand = new RelayCommand(AddPolicy);
         RemovePolicyCommand = new RelayCommand(RemovePolicy, () => SelectedPolicy != null);
-        AddSlotRowCommand = new RelayCommand(AddSlotRow);
-        RemoveSlotRowCommand = new RelayCommand(RemoveSlotRow, () => SelectedSlotRow != null);
         SaveCommand = new RelayCommand(Save);
         ActivateCommand = new RelayCommand(Activate, () => SelectedPolicy != null);
         ApplyToCustomCommand = new RelayCommand(ApplyToCustom, () => SelectedPolicy != null);
         ApplySelectionCommand = new RelayCommand(ApplySelection, () => HasSelection);
+        ClearSelectionOverrideCommand = new RelayCommand(ClearSelectionOverride, () => HasSelection);
 
         // 仓位覆盖行增删/行内编辑都影响预览：集合变化时对新增行挂 INPC 重建；
         // 行属性变化（Add/Remove 后集合通知 + 行内字段通知）统一走 RebuildPreview。
@@ -409,7 +430,6 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         EditPersistMinutes = false;
         EditLevel1Min = EditLevel2Min = EditLevel3Min = EditLevel4Min = "";
         SlotRows.Clear();
-        SelectedSlotRow = null;
     }
 
     /// <summary>
@@ -530,23 +550,6 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         SelectedPolicy = null;
         Policies.Remove(p);
         SelectedPolicy = Policies.FirstOrDefault();
-    }
-
-    private void AddSlotRow()
-    {
-        SlotRows.Add(new SlotMinuteRow());
-        SelectedSlotRow = SlotRows.LastOrDefault();
-    }
-
-    private void RemoveSlotRow()
-    {
-        if (SelectedSlotRow == null)
-            return;
-        int index = SlotRows.IndexOf(SelectedSlotRow);
-        SlotRows.Remove(SelectedSlotRow);
-        SelectedSlotRow = SlotRows.Count > 0
-            ? SlotRows[Math.Clamp(index, 0, SlotRows.Count - 1)]
-            : null;
     }
 
     private void Save() => SaveCore(activate: false);

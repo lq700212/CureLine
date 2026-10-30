@@ -402,10 +402,12 @@ public class CureStationViewModelTests
         vm.EditGlobalMinutes = "90";
         vm.EditLevel2Min = "45";
         vm.EditPersistMinutes = true;   // 断电续算勾选 → 落盘往返
-        vm.AddSlotRowCommand.Execute(null);
-        vm.SlotRows[0].Rack = "3";
-        vm.SlotRows[0].Level = "2";
-        vm.SlotRows[0].Minutes = "20";
+        vm.SlotRows.Add(new CureStation.ViewModels.SlotMinuteRow
+        {
+            Rack = "3",
+            Level = "2",
+            Minutes = "20",
+        });
         vm.SaveCommand.Execute(null);
 
         Assert.True(vm.CloseDialog);
@@ -497,10 +499,12 @@ public class CureStationViewModelTests
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
         // 已有手填行 3-2=20（画布应用应更新它而不是加重复行）
-        vm.AddSlotRowCommand.Execute(null);
-        vm.SlotRows[0].Rack = "3";
-        vm.SlotRows[0].Level = "2";
-        vm.SlotRows[0].Minutes = "20";
+        vm.SlotRows.Add(new CureStation.ViewModels.SlotMinuteRow
+        {
+            Rack = "3",
+            Level = "2",
+            Minutes = "20",
+        });
         int rowsBefore = vm.SlotRows.Count;
 
         // 框选两格（3-2 已有行 / 7-1 无行）批量应用 60
@@ -590,15 +594,41 @@ public class CureStationViewModelTests
         // 全局 45；再给 5-1 单独配 45（覆盖值=全局值）——真识别按覆盖字典判，
         // 5-1 仍是特殊格（蓝色），未配覆盖的 3-1（同为 45 分）不是
         vm.EditGlobalMinutes = "45";
-        vm.AddSlotRowCommand.Execute(null);
-        vm.SlotRows[0].Rack = "5";
-        vm.SlotRows[0].Level = "1";
-        vm.SlotRows[0].Minutes = "45";
+        vm.SlotRows.Add(new CureStation.ViewModels.SlotMinuteRow
+        {
+            Rack = "5",
+            Level = "1",
+            Minutes = "45",
+        });
 
         Assert.Equal(45, Cell(vm, 5, 1).Minutes);
         Assert.True(Cell(vm, 5, 1).IsSpecial);
         Assert.Equal(45, Cell(vm, 3, 1).Minutes);
         Assert.False(Cell(vm, 3, 1).IsSpecial);
+    }
+
+    [Fact]
+    public void PolicyVm_ClearSelectionOverride_RestoresFollowLevel()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        vm.EditLevel2Min = "90";   // 层覆盖 90（跟随目标）
+        // 画布设 3-2=45（特殊格）
+        vm.ReplaceSelection(new[] { Cell(vm, 3, 2) });
+        vm.SelectionMinutesText = "45";
+        vm.ApplySelectionCommand.Execute(null);
+        Assert.True(Cell(vm, 3, 2).IsSpecial);
+        Assert.Single(vm.SlotRows);
+
+        // 浮层【清除】→ 覆盖行删除，格子回层覆盖 90（非特殊）
+        vm.ClearSelectionOverrideCommand.Execute(null);
+        Assert.Empty(vm.SlotRows);
+        Assert.False(Cell(vm, 3, 2).IsSpecial);
+        Assert.Equal(90, Cell(vm, 3, 2).Minutes);
+        Assert.True(vm.HasSelection);   // 选择保持（可继续操作），输入已清
+        Assert.Equal("", vm.SelectionMinutesText);
     }
 
     [Fact]
@@ -1647,10 +1677,12 @@ public class CureStationViewModelTests
         Assert.All(vm.SlotPreviewItems.Where(i => i.Level == 2), i => Assert.Equal(30, i.Minutes));
 
         // 仓位覆盖：3-2=45 只动一格
-        vm.AddSlotRowCommand.Execute(null);
-        vm.SlotRows[0].Rack = "3";
-        vm.SlotRows[0].Level = "2";
-        vm.SlotRows[0].Minutes = "45";
+        vm.SlotRows.Add(new CureStation.ViewModels.SlotMinuteRow
+        {
+            Rack = "3",
+            Level = "2",
+            Minutes = "45",
+        });
         Assert.Equal(45, vm.SlotPreviewItems.First(i => i.Rack == 3 && i.Level == 2).Minutes);
         Assert.All(vm.SlotPreviewItems.Where(i => i.Level == 2 && i.Rack != 3), i => Assert.Equal(30, i.Minutes));
 
@@ -1661,7 +1693,7 @@ public class CureStationViewModelTests
         Assert.Equal(45, vm.SlotPreviewItems.First(i => i.Rack == 3 && i.Level == 2).Minutes);
 
         // 清空仓位行 → 该格回落层/全局
-        vm.RemoveSlotRowCommand.Execute(null);
+        vm.SlotRows.Clear();
         Assert.Equal(120, vm.SlotPreviewItems.First(i => i.Rack == 3 && i.Level == 2).Minutes);
     }
 

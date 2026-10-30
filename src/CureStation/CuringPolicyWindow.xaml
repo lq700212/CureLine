@@ -8,8 +8,8 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:CuringPolicyViewModel, IsDesignTimeCreatable=False}"
         Title="工艺策略（固化时长 / 光栅门控）"
-        Height="840" Width="1280"
-        WindowStartupLocation="CenterScreen" MinWidth="1080" MinHeight="740"
+        Height="760" Width="1280"
+        WindowStartupLocation="CenterScreen" MinWidth="1080" MinHeight="660"
         PreviewKeyDown="OnWindowPreviewKeyDown"
         WindowStyle="None" Background="Transparent" AllowsTransparency="True"
         Foreground="{DynamicResource Brush.Fresh.FgMid}"
@@ -26,13 +26,15 @@
                             ResizeBorderThickness="6"/>
     </shell:WindowChrome.WindowChrome>
     <!--★★ 工艺策略窗（对齐 AgingTestSystem 配方管理"模板+即改即落"+ 本项目 Fresh 风）：
-         左：策略库（预置策略带【预置】标记，激活一个生效）；
-         中：编辑面板（名称/全局时长/光栅门控/断电续算；每层覆盖收折叠区——
-         V0.0.43 用户拍板"输入框太多显复杂"）；右：每仓位覆盖行表（核对/精修/删行）；
-         下：仓位时长画布（主编辑区，傻瓜式）——左键单击选格直接浮层输时长、
-         左键拖框批量选（Ctrl 叠加）、中键平移、滚轮缩放、双击空白复位、右键
-         适应图像、Esc 清选择；普通格=时长四档色（绿/黄/橙/红），特殊格
-         （SlotMinutes 配了独立覆盖，VM 真识别）=主题蓝；选中=FgStrong 描边。
+         V0.0.44 布局重排（用户拍板：画布能直接改后，原"策略编辑面板+每仓位覆盖表"
+         两个区域整体删除）——
+         左：策略库（预置策略带【预置】标记，激活一个生效）+ 每层覆盖折叠（高级）；
+         右上：参数条（策略名/全局时长/光栅门控/断电续算，长说明收 ToolTip）；
+         右主：仓位时长画布（全宽，主编辑区，傻瓜式）——左键单击选格直接浮层输
+         时长、左键拖框批量选（橡皮筋透明只描边，Ctrl 叠加）、Ctrl+单击加选/减选、
+         中键平移、滚轮缩放、双击空白复位、右键适应图像、Esc 清选择；普通格=
+         时长四档色（绿/黄/橙/红），特殊格（SlotMinutes 配了独立覆盖，VM 真识别）
+         =主题蓝；选中=FgStrong 描边；浮层【清除】删覆盖恢复跟随层/全局。
          底部按钮：预置选中→【套用为自定义策略】；自定义选中→【激活并生效】【仅保存】。
          预置策略不能直接保存/激活/删除（激活只认自定义——出厂模板保证可回溯）。
          取色全走 Brush.Fresh.*（Tier* 四键双主题同名异值：Light=原稿浅色块、
@@ -53,19 +55,13 @@
                 </Grid>
             </Border>
             <Grid Margin="8">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="320"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="240"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="330"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- 左列：策略库 -->
-                <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
+                <!-- 左列：策略库 + 每层覆盖（折叠） -->
+                <Border Grid.Column="0" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}"
                                    Text="策略库（激活一个生效）"/>
@@ -73,6 +69,45 @@
                                 Content="＋ 添加策略" Command="{Binding AddPolicyCommand}" Margin="0,8"/>
                         <Button Tag="{StaticResource Geo.Trash}" DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
                                 Content="－ 删除选中策略" Command="{Binding RemovePolicyCommand}" Margin="0,0,0,8"/>
+                        <!-- 每层覆盖（V0.0.44 收进左列折叠区）：整层同时长推荐画布拖选
+                             整行批量设置（写仓位覆盖与层覆盖解析等效）；精确配层才展开 -->
+                        <Expander DockPanel.Dock="Bottom" Margin="0,8,0,2"
+                                  Header="每层覆盖（分钟，空=用全局）">
+                            <StackPanel Margin="0,6,0,0">
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="78"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="上层(层1)：" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1" Style="{StaticResource FreshInput}" Text="{Binding EditLevel1Min}"/>
+                                </Grid>
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="78"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="中层(层2)：" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1" Style="{StaticResource FreshInput}" Text="{Binding EditLevel2Min}"/>
+                                </Grid>
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="78"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="下层(层3)：" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1" Style="{StaticResource FreshInput}" Text="{Binding EditLevel3Min}"/>
+                                </Grid>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="78"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="层4(预留)：" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1" Style="{StaticResource FreshInput}" Text="{Binding EditLevel4Min}"/>
+                                </Grid>
+                            </StackPanel>
+                        </Expander>
                         <ListBox ItemsSource="{Binding Policies, FallbackValue={x:Null}}"
                                  SelectedItem="{Binding SelectedPolicy}">
                             <ListBox.ItemTemplate>
@@ -101,327 +136,277 @@
                     </DockPanel>
                 </Border>
 
-                <!-- 中列：编辑面板 -->
-                <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="策略编辑（选中项）"/>
-                            <!-- 预置策略提示条：出厂模板语义（改完请套用为自定义） -->
-                            <Border Background="{DynamicResource Brush.Fresh.WarnBg}" BorderBrush="{DynamicResource Brush.Fresh.WarnBorder}" BorderThickness="1"
-                                    CornerRadius="4" Padding="10,6" Margin="0,6,0,0">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding SelectedIsPreset, FallbackValue=False}" Value="True">
-                                                <Setter Property="Visibility" Value="Visible"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <TextBlock Foreground="{DynamicResource Brush.Fresh.WarnFg}" TextWrapping="Wrap"
-                                           Text="这是出厂预置模板：可以查看和修改参数，但保存请点【套用为自定义策略】（预置本身不能激活/删除）。"/>
-                            </Border>
-                            <UniformGrid Columns="2" Margin="0,8,0,0">
-                                <TextBlock Text="策略名：" VerticalAlignment="Center"/>
-                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditName, FallbackValue=标准固化}"/>
-                                <TextBlock Text="全局时长（分钟）：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditGlobalMinutes, FallbackValue=120}" Margin="0,6,0,0"/>
-                            </UniformGrid>
+                <!-- 右列：参数条 + 画布（主编辑区）+ 底部按钮 -->
+                <DockPanel Grid.Column="1">
+                    <!-- 参数条（V0.0.44 精简：原"策略编辑"面板只剩这四项，一行横排；
+                         长说明收 ToolTip 不占版面） -->
+                    <Border DockPanel.Dock="Top" Style="{StaticResource FreshCardBorder}" Padding="10,8" Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="策略名：" VerticalAlignment="Center"/>
+                            <TextBox Style="{StaticResource FreshInput}" Width="150"
+                                     Text="{Binding EditName, FallbackValue=标准固化}"
+                                     ToolTip="策略名（库内唯一；改名后激活/保存按新名生效）"/>
+                            <TextBlock Text="　全局时长：" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                            <TextBox Style="{StaticResource FreshInput}" Width="72"
+                                     Text="{Binding EditGlobalMinutes, FallbackValue=120}"
+                                     ToolTip="全局固化时长（分钟）——所有仓位的打底值，被每层/每仓位覆盖"/>
+                            <TextBlock Text="分" VerticalAlignment="Center" Margin="4,0,0,0"/>
                             <CheckBox IsChecked="{Binding EditGrillGate, FallbackValue=False}"
-                                      Content="光栅门控（左右光栅都灭才开计时，防人手在架内就计时）"
-                                      Margin="0,10,0,0"/>
-                            <TextBlock Text="未勾选时托盘到位即开计时；没绑光栅的仓位门控自动放行。"
-                                       Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                      Content="光栅门控" Margin="18,0,0,0"
+                                      ToolTip="开=左右光栅都灭且托盘在架才开计时（防人手在架内就计时）；关（缺省）=托盘到位即开计时，没绑光栅的仓位门控自动放行。"/>
                             <CheckBox IsChecked="{Binding EditPersistMinutes, FallbackValue=False}"
-                                      Content="断电续算（计时状态落盘，重启后接着算而不是重计）"
-                                      Margin="0,10,0,0"/>
-                            <TextBlock Text="勾选后进行中仓位随状态变化写入 config/curingstate.json，断电期间的时间计入固化时长；未勾选（缺省）断电重启后重新计时，宁可重计也不放行没固化够的货。"
-                                       Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                            <Separator Margin="0,10"/>
-                            <!-- 每层覆盖收折叠区（V0.0.43 用户拍板"输入框太多显复杂"）：
-                                 整层同时长推荐画布拖选该行批量设置（写仓位覆盖，解析等效）；
-                                 精确配层才展开这里 -->
-                            <Expander Header="每层覆盖（分钟，空=用全局——整层同时长推荐画布拖选整行设置）"
-                                      Margin="0,4,0,0">
-                                <UniformGrid Columns="2" Margin="0,6,0,0">
-                                    <TextBlock Text="上层（层1）：" VerticalAlignment="Center"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditLevel1Min}"/>
-                                    <TextBlock Text="中层（层2）：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditLevel2Min}" Margin="0,6,0,0"/>
-                                    <TextBlock Text="下层（层3）：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditLevel3Min}" Margin="0,6,0,0"/>
-                                    <TextBlock Text="层4（预留）：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditLevel4Min}" Margin="0,6,0,0"/>
-                                </UniformGrid>
-                            </Expander>
+                                      Content="断电续算" Margin="14,0,0,0"
+                                      ToolTip="开=进行中仓位随状态变化写 config/curingstate.json，断电期间时间计入固化时长（重启按记录续算）；关（缺省）=断电重启后重新计时，宁可重计也不放行没固化够的货。"/>
                         </StackPanel>
-                    </ScrollViewer>
-                </Border>
-
-                <!-- 右列：每仓位覆盖 -->
-                <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource FreshCardBorder}">
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}"
-                                   Text="每仓位覆盖（分钟，可空）"/>
-                        <TextBlock DockPanel.Dock="Top" Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="0,2,0,6" TextWrapping="Wrap"
-                                   Text="主入口=下方画布点格子直接设（蓝色格=已单独设置）；本表做核对与精修（删行=恢复跟随层/全局）。"/>
-                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-                            <Button Tag="{StaticResource Geo.Plus}" Style="{StaticResource FreshButton}" Content="＋ 添加行"
-                                    Command="{Binding AddSlotRowCommand}" Margin="0,0,8,0"/>
-                            <Button Tag="{StaticResource Geo.Trash}" Style="{StaticResource FreshButton}" Content="－ 删除选中行"
-                                    Command="{Binding RemoveSlotRowCommand}"/>
-                        </StackPanel>
-                        <DataGrid ItemsSource="{Binding SlotRows, FallbackValue={x:Null}}"
-                                  SelectedItem="{Binding SelectedSlotRow}"
-                                  AutoGenerateColumns="False" CanUserAddRows="False">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="架号" Binding="{Binding Rack}" Width="*"/>
-                                <DataGridTextColumn Header="层号" Binding="{Binding Level}" Width="*"/>
-                                <DataGridTextColumn Header="时长(分)" Binding="{Binding Minutes}" Width="*"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </DockPanel>
-                </Border>
-
-                <!-- 下条：仓位时长可视化画布（拖动平移 + 滚轮缩放 + 双击复位，交互在 xaml.cs） -->
-                <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,8,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="210"/>
-                    </Grid.ColumnDefinitions>
-                    <Border x:Name="CanvasHost" Grid.Column="0" Background="{DynamicResource Brush.Fresh.CanvasBg}"
-                            BorderBrush="{DynamicResource Brush.Fresh.PanelBorder}" BorderThickness="1" CornerRadius="4"
-                            ClipToBounds="True"
-                            MouseLeftButtonDown="OnCanvasMouseLeftButtonDown"
-                            MouseDown="OnCanvasMouseDown"
-                            MouseUp="OnCanvasMouseUp"
-                            MouseMove="OnCanvasMouseMove"
-                            MouseLeftButtonUp="OnCanvasMouseLeftButtonUp"
-                            MouseLeave="OnCanvasMouseLeave"
-                            PreviewMouseWheel="OnCanvasPreviewMouseWheel">
-                        <Border.ContextMenu>
-                            <!-- 右键菜单：适应图像=显示恢复至窗口打开时的原始大小（与双击复位同效） -->
-                            <ContextMenu>
-                                <MenuItem Header="适应图像" ToolTip="恢复至窗口打开时的原始大小"
-                                          Click="OnFitImageClick"/>
-                            </ContextMenu>
-                        </Border.ContextMenu>
-                        <!-- 三层：CanvasContent（随缩放平移变换）→ OverlayCanvas（框选矩形，
-                             host 坐标系不随变换，IsHitTestVisible=False 纯视觉）→ QuickEdit
-                             （点选浮层：host 坐标系随选区定位，可交互——点浮层自己不吃清选择） -->
-                        <Grid>
-                            <Grid x:Name="CanvasContent" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Grid.RenderTransform>
-                                    <TransformGroup>
-                                        <ScaleTransform x:Name="CanvasScale"/>
-                                        <TranslateTransform x:Name="CanvasTranslate"/>
-                                    </TransformGroup>
-                                </Grid.RenderTransform>
-                                <ItemsControl x:Name="PreviewItems" ItemsSource="{Binding SlotPreviewItems, FallbackValue={x:Null}}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <!-- 行优先铺格（VM 已按 层外架内 生成，与主窗仓位网格同布局） -->
-                                        <UniformGrid Columns="{Binding DataContext.RackCount,
-                                            RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=10}"
-                                            Rows="{Binding DataContext.LevelCount,
-                                            RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=3}"/>
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <!-- 格子三态色：普通=时长四档底色；特殊（单独设过覆盖，
-                                             VM 真识别）=主题蓝；选中=FgStrong 描边（底色不变）。
-                                             BorderThickness 恒 2（透明占位）防选中跳版 -->
-                                        <Border Margin="2" CornerRadius="4" BorderThickness="2"
-                                                Cursor="Hand"
-                                                ToolTip="{Binding Tip, FallbackValue=架1 层1：固化 120 分钟}">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="Background" Value="{DynamicResource Brush.Fresh.TierGreen}"/>
-                                                    <Setter Property="BorderBrush" Value="Transparent"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Tier, FallbackValue=Yellow}" Value="Yellow">
-                                                            <Setter Property="Background" Value="{DynamicResource Brush.Fresh.TierYellow}"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Tier, FallbackValue=Yellow}" Value="Orange">
-                                                            <Setter Property="Background" Value="{DynamicResource Brush.Fresh.TierOrange}"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Tier, FallbackValue=Yellow}" Value="Red">
-                                                            <Setter Property="Background" Value="{DynamicResource Brush.Fresh.TierRed}"/>
-                                                        </DataTrigger>
-                                                        <!-- 特殊仓位（单独设过时长）：主题蓝盖过四档色 -->
-                                                        <DataTrigger Binding="{Binding IsSpecial, FallbackValue=False}" Value="True">
-                                                            <Setter Property="Background" Value="{DynamicResource Brush.Fresh.Accent}"/>
-                                                        </DataTrigger>
-                                                        <!-- 悬停淡描边（可点暗示） -->
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.AccentBorder}"/>
-                                                        </Trigger>
-                                                        <!-- 选中描边（后声明优先级最高，盖过悬停） -->
-                                                        <DataTrigger Binding="{Binding IsSelected, FallbackValue=False}" Value="True">
-                                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.FgStrong}"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
-                                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                                <TextBlock Text="{Binding MinutesText, FallbackValue=120}"
-                                                           FontSize="14" FontWeight="Bold"
-                                                           HorizontalAlignment="Center">
-                                                    <!-- 字色：普通=TierFg；特殊（蓝底）=OnAccent。
-                                                         触发器在元素 Style 上才能盖缺省 Setter（本地值不行） -->
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.TierFg}"/>
+                    </Border>
+                    <!-- 底部按钮：预置→套用为自定义；自定义→激活/仅保存（两组按选中项互斥显示） -->
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right"
+                                Margin="0,8,0,0">
+                        <!-- 预置策略专用出口：套用为自定义（缺省隐藏——设计器与缺省态显示激活/保存） -->
+                        <Button Tag="{StaticResource Geo.Check}" Content="套用为自定义策略（保存并激活）"
+                                Command="{Binding ApplyToCustomCommand}" Width="280" Height="36" Margin="0,0,8,0">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource FreshPrimaryButton}">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedIsPreset, FallbackValue=False}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Tag="{StaticResource Geo.Check}" Content="激活并生效（保存 + 启用选中策略）"
+                                Command="{Binding ActivateCommand}" Width="280" Height="36" Margin="0,0,8,0">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource FreshButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedIsPreset, FallbackValue=False}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Content="仅保存" Command="{Binding SaveCommand}" Width="140" Height="36">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource FreshButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedIsPreset, FallbackValue=False}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                    <!-- 仓位时长画布（主编辑区）：交互（点选/框选/平移/缩放）在 xaml.cs -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="210"/>
+                        </Grid.ColumnDefinitions>
+                        <Border x:Name="CanvasHost" Grid.Column="0" Background="{DynamicResource Brush.Fresh.CanvasBg}"
+                                BorderBrush="{DynamicResource Brush.Fresh.PanelBorder}" BorderThickness="1" CornerRadius="4"
+                                ClipToBounds="True"
+                                MouseLeftButtonDown="OnCanvasMouseLeftButtonDown"
+                                MouseDown="OnCanvasMouseDown"
+                                MouseUp="OnCanvasMouseUp"
+                                MouseMove="OnCanvasMouseMove"
+                                MouseLeftButtonUp="OnCanvasMouseLeftButtonUp"
+                                MouseLeave="OnCanvasMouseLeave"
+                                PreviewMouseWheel="OnCanvasPreviewMouseWheel">
+                            <Border.ContextMenu>
+                                <!-- 右键菜单：适应图像=显示恢复至窗口打开时的原始大小（与双击复位同效） -->
+                                <ContextMenu>
+                                    <MenuItem Header="适应图像" ToolTip="恢复至窗口打开时的原始大小"
+                                              Click="OnFitImageClick"/>
+                                </ContextMenu>
+                            </Border.ContextMenu>
+                            <!-- 三层：CanvasContent（随缩放平移变换）→ OverlayCanvas（框选矩形，
+                                 host 坐标系不随变换，IsHitTestVisible=False 纯视觉）→ QuickEdit
+                                 （点选浮层：host 坐标系随选区定位，可交互——点浮层自己不吃清选择） -->
+                            <Grid>
+                                <Grid x:Name="CanvasContent" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Grid.RenderTransform>
+                                        <TransformGroup>
+                                            <ScaleTransform x:Name="CanvasScale"/>
+                                            <TranslateTransform x:Name="CanvasTranslate"/>
+                                        </TransformGroup>
+                                    </Grid.RenderTransform>
+                                    <ItemsControl x:Name="PreviewItems"
+                                                  ItemsSource="{Binding SlotPreviewItems, FallbackValue={x:Null}}"
+                                                  Width="{Binding PreviewGridWidth, FallbackValue=680}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <!-- 行优先铺格（VM 已按 层外架内 生成，与主窗仓位网格同布局）。
+                                                     ItemsControl 定宽=VM PreviewGridWidth（列数×68）——
+                                                     格子尺寸锁定不随窗口/文字浮动（V0.0.44 用户定调） -->
+                                                <UniformGrid Columns="{Binding DataContext.RackCount,
+                                                    RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=10}"
+                                                    Rows="{Binding DataContext.LevelCount,
+                                                    RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=3}"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <!-- 格子三态色：普通=时长四档底色；特殊（单独设过覆盖，
+                                                     VM 真识别）=主题蓝；选中=FgStrong 描边（底色不变）。
+                                                     BorderThickness 恒 2（透明占位）防选中跳版；
+                                                     尺寸锁定 64×58（定宽画布配套，想调改此处+
+                                                     VM PreviewGridWidth 的 68 步进） -->
+                                                <Border Margin="2" Width="64" Height="58" CornerRadius="4" BorderThickness="2"
+                                                        Cursor="Hand"
+                                                        ToolTip="{Binding Tip, FallbackValue=架1 层1：固化 120 分钟}">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="{DynamicResource Brush.Fresh.TierGreen}"/>
+                                                            <Setter Property="BorderBrush" Value="Transparent"/>
                                                             <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Tier, FallbackValue=Yellow}" Value="Yellow">
+                                                                    <Setter Property="Background" Value="{DynamicResource Brush.Fresh.TierYellow}"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Tier, FallbackValue=Yellow}" Value="Orange">
+                                                                    <Setter Property="Background" Value="{DynamicResource Brush.Fresh.TierOrange}"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Tier, FallbackValue=Yellow}" Value="Red">
+                                                                    <Setter Property="Background" Value="{DynamicResource Brush.Fresh.TierRed}"/>
+                                                                </DataTrigger>
+                                                                <!-- 特殊仓位（单独设过时长）：主题蓝盖过四档色 -->
                                                                 <DataTrigger Binding="{Binding IsSpecial, FallbackValue=False}" Value="True">
-                                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.OnAccent}"/>
+                                                                    <Setter Property="Background" Value="{DynamicResource Brush.Fresh.Accent}"/>
+                                                                </DataTrigger>
+                                                                <!-- 悬停淡描边（可点暗示） -->
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.AccentBorder}"/>
+                                                                </Trigger>
+                                                                <!-- 选中描边（后声明优先级最高，盖过悬停） -->
+                                                                <DataTrigger Binding="{Binding IsSelected, FallbackValue=False}" Value="True">
+                                                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.FgStrong}"/>
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                                <TextBlock Text="{Binding PositionText, FallbackValue=架1-层1}"
-                                                           FontSize="9" HorizontalAlignment="Center">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.TierFgSub}"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsSpecial, FallbackValue=False}" Value="True">
-                                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.OnAccent}"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </Grid>
-                            <!-- 框选橡皮筋（纯视觉，host 坐标系不随变换；IsHitTestVisible=False
-                                 不挡格子命中与浮层鼠标） -->
-                            <Canvas x:Name="OverlayCanvas" IsHitTestVisible="False">
-                                <Border x:Name="RubberBand" Visibility="Collapsed"
-                                        Background="{DynamicResource Brush.Fresh.ButtonHoverBg}"
-                                        BorderBrush="{DynamicResource Brush.Fresh.AccentBorder}"
-                                        BorderThickness="1" CornerRadius="2"/>
-                            </Canvas>
-                            <!-- 点选浮层（傻瓜式核心：单击/框选后在选区旁浮出，直接输时长
-                                 回车应用——不需要旁边常驻编辑框）。显隐绑 HasSelection；
-                                 定位由 xaml.cs 算选区包围盒（host 坐标系），随缩放/平移重定位 -->
-                            <Border x:Name="QuickEdit" Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"
-                                    HorizontalAlignment="Left" VerticalAlignment="Top"
-                                    Background="{DynamicResource Brush.Fresh.CardBg}"
-                                    BorderBrush="{DynamicResource Brush.Fresh.AccentBorder}" BorderThickness="1.5"
-                                    CornerRadius="6" Padding="10,8"
-                                    MouseLeftButtonDown="OnQuickEditMouseDown"
-                                    IsVisibleChanged="OnQuickEditVisibleChanged"
-                                    Effect="{StaticResource Fx.WinShadow}">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding SelectionSummaryText, FallbackValue=架3-层2 · 当前 45 分}"
-                                               FontSize="11" Foreground="{DynamicResource Brush.Fresh.FgMid}"/>
-                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                                        <TextBox x:Name="QuickEditBox" Style="{StaticResource FreshInput}" Width="88"
-                                                 Text="{Binding SelectionMinutesText, UpdateSourceTrigger=PropertyChanged}"
-                                                 KeyDown="OnQuickEditKeyDown"
-                                                 ToolTip="分钟数（≥1），回车应用"/>
-                                        <TextBlock Text="分" VerticalAlignment="Center" Margin="6,0,8,0"/>
-                                        <Button Style="{StaticResource FreshPrimaryButton}" Content="应用"
-                                                Width="64" Command="{Binding ApplySelectionCommand}"
-                                                Click="OnQuickEditApply"/>
+                                                    </Border.Style>
+                                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                        <TextBlock Text="{Binding MinutesText, FallbackValue=120}"
+                                                                   FontSize="14" FontWeight="Bold"
+                                                                   HorizontalAlignment="Center">
+                                                            <!-- 字色：普通=TierFg；特殊（蓝底）=OnAccent。
+                                                                 触发器在元素 Style 上才能盖缺省 Setter（本地值不行） -->
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.TierFg}"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsSpecial, FallbackValue=False}" Value="True">
+                                                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.OnAccent}"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                        <TextBlock Text="{Binding PositionText, FallbackValue=架1-层1}"
+                                                                   FontSize="9" HorizontalAlignment="Center">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.TierFgSub}"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsSpecial, FallbackValue=False}" Value="True">
+                                                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.OnAccent}"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Grid>
+                                <!-- 框选橡皮筋（V0.0.44 改透明框：只留主题蓝描边不糊格子；
+                                     host 坐标系不随变换；IsHitTestVisible=False 不挡命中与浮层） -->
+                                <Canvas x:Name="OverlayCanvas" IsHitTestVisible="False">
+                                    <Border x:Name="RubberBand" Visibility="Collapsed"
+                                            Background="Transparent"
+                                            BorderBrush="{DynamicResource Brush.Fresh.Accent}"
+                                            BorderThickness="1.5" CornerRadius="2"/>
+                                </Canvas>
+                                <!-- 点选浮层（傻瓜式核心：单击/框选后在选区旁浮出，直接输时长
+                                     回车应用——不需要旁边常驻编辑框）。显隐绑 HasSelection；
+                                     定位由 xaml.cs 算选区包围盒（host 坐标系），随缩放/平移重定位；
+                                     【清除】删该批覆盖恢复跟随层/全局（设了能删，闭环） -->
+                                <Border x:Name="QuickEdit" Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"
+                                        HorizontalAlignment="Left" VerticalAlignment="Top"
+                                        Background="{DynamicResource Brush.Fresh.CardBg}"
+                                        BorderBrush="{DynamicResource Brush.Fresh.AccentBorder}" BorderThickness="1.5"
+                                        CornerRadius="6" Padding="10,8"
+                                        MouseLeftButtonDown="OnQuickEditMouseDown"
+                                        IsVisibleChanged="OnQuickEditVisibleChanged"
+                                        Effect="{StaticResource Fx.WinShadow}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding SelectionSummaryText, FallbackValue=架3-层2 · 当前 45 分}"
+                                                   FontSize="11" Foreground="{DynamicResource Brush.Fresh.FgMid}"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                            <TextBox x:Name="QuickEditBox" Style="{StaticResource FreshInput}" Width="88"
+                                                     Text="{Binding SelectionMinutesText, UpdateSourceTrigger=PropertyChanged}"
+                                                     KeyDown="OnQuickEditKeyDown"
+                                                     ToolTip="分钟数（≥1），回车应用"/>
+                                            <TextBlock Text="分" VerticalAlignment="Center" Margin="6,0,8,0"/>
+                                            <Button Style="{StaticResource FreshPrimaryButton}" Content="应用"
+                                                    Width="56" Command="{Binding ApplySelectionCommand}"
+                                                    Click="OnQuickEditApply"/>
+                                            <Button Style="{StaticResource FreshButton}" Content="清除" Margin="8,0,0,0"
+                                                    Width="56" Command="{Binding ClearSelectionOverrideCommand}"
+                                                    ToolTip="删除该批仓位的单独设置，恢复跟随层/全局"/>
+                                        </StackPanel>
                                     </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Border>
+                        <!-- 图例与操作说明（画布=主编辑区口径） -->
+                        <Border Grid.Column="1" Background="{DynamicResource Brush.Fresh.CardBg}" BorderBrush="{DynamicResource Brush.Fresh.PanelBorder}" BorderThickness="1"
+                                CornerRadius="4" Margin="8,0,0,0" Padding="10,8">
+                            <StackPanel>
+                                <TextBlock Text="仓位时长画布" FontWeight="Bold" Foreground="{DynamicResource Brush.Fresh.FgStrong}"/>
+                                <TextBlock Text="点格子直接改时长（仓位＞层＞全局）" FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}"
+                                           Margin="0,2,0,8" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,2">
+                                    <Rectangle Width="18" Height="12" Fill="{DynamicResource Brush.Fresh.Accent}" RadiusX="2" RadiusY="2"
+                                               VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock Text="特殊仓位（单独设过）" VerticalAlignment="Center"/>
                                 </StackPanel>
-                            </Border>
-                        </Grid>
-                    </Border>
-                    <!-- 图例与操作说明（画布=主编辑区口径） -->
-                    <Border Grid.Column="1" Background="{DynamicResource Brush.Fresh.CardBg}" BorderBrush="{DynamicResource Brush.Fresh.PanelBorder}" BorderThickness="1"
-                            CornerRadius="4" Margin="8,0,0,0" Padding="10,8">
-                        <StackPanel>
-                            <TextBlock Text="仓位时长画布" FontWeight="Bold" Foreground="{DynamicResource Brush.Fresh.FgStrong}"/>
-                            <TextBlock Text="点格子直接改时长（仓位＞层＞全局）" FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}"
-                                       Margin="0,2,0,8" TextWrapping="Wrap"/>
-                            <StackPanel Orientation="Horizontal" Margin="0,2">
-                                <Rectangle Width="18" Height="12" Fill="{DynamicResource Brush.Fresh.Accent}" RadiusX="2" RadiusY="2"
-                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Text="特殊仓位（单独设过）" VerticalAlignment="Center"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,2">
+                                    <Rectangle Width="18" Height="12" Fill="{DynamicResource Brush.Fresh.TierGreen}" RadiusX="2" RadiusY="2"
+                                               VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock Text="跟随层/全局：&lt; 60 分钟" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,2">
+                                    <Rectangle Width="18" Height="12" Fill="{DynamicResource Brush.Fresh.TierYellow}" RadiusX="2" RadiusY="2"
+                                               VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock Text="跟随层/全局：60 ~ 119 分钟" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,2">
+                                    <Rectangle Width="18" Height="12" Fill="{DynamicResource Brush.Fresh.TierOrange}" RadiusX="2" RadiusY="2"
+                                               VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock Text="跟随层/全局：120 ~ 179 分钟" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,2">
+                                    <Rectangle Width="18" Height="12" Fill="{DynamicResource Brush.Fresh.TierRed}" RadiusX="2" RadiusY="2"
+                                               VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock Text="跟随层/全局：≥ 180 分钟" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <Separator Margin="0,8"/>
+                                <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="左键单击：选格子，直接输时长"/>
+                                <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="左键拖框：批量选格（Ctrl 叠加）" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="Ctrl+单击：加选 / 减选" Margin="0,2,0,0"/>
+                                <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="中键拖动：平移画布" Margin="0,2,0,0"/>
+                                <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="滚轮：放大 / 缩放" Margin="0,2,0,0"/>
+                                <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="双击空白：复位视图" Margin="0,2,0,0"/>
+                                <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="Esc：清除选择　右键：适应图像" TextWrapping="Wrap" Margin="0,2,0,0"/>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,2">
-                                <Rectangle Width="18" Height="12" Fill="{DynamicResource Brush.Fresh.TierGreen}" RadiusX="2" RadiusY="2"
-                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Text="跟随层/全局：&lt; 60 分钟" VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,2">
-                                <Rectangle Width="18" Height="12" Fill="{DynamicResource Brush.Fresh.TierYellow}" RadiusX="2" RadiusY="2"
-                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Text="跟随层/全局：60 ~ 119 分钟" VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,2">
-                                <Rectangle Width="18" Height="12" Fill="{DynamicResource Brush.Fresh.TierOrange}" RadiusX="2" RadiusY="2"
-                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Text="跟随层/全局：120 ~ 179 分钟" VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,2">
-                                <Rectangle Width="18" Height="12" Fill="{DynamicResource Brush.Fresh.TierRed}" RadiusX="2" RadiusY="2"
-                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Text="跟随层/全局：≥ 180 分钟" VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <Separator Margin="0,8"/>
-                            <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="左键单击：选格子，直接输时长"/>
-                            <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="左键拖框：批量选格（Ctrl 叠加）" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                            <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="Ctrl+单击：加选 / 减选" Margin="0,2,0,0"/>
-                            <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="中键拖动：平移画布" Margin="0,2,0,0"/>
-                            <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="滚轮：放大 / 缩放" Margin="0,2,0,0"/>
-                            <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="双击空白：复位视图" Margin="0,2,0,0"/>
-                            <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="Esc：清除选择　右键：适应图像" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                        </StackPanel>
-                    </Border>
-                </Grid>
-
-                <!-- 底部按钮：预置→套用为自定义；自定义→激活/仅保存（两组按选中项互斥显示） -->
-                <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
-                            Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-                    <!-- 预置策略专用出口：套用为自定义（缺省隐藏——设计器与缺省态显示激活/保存） -->
-                    <Button Tag="{StaticResource Geo.Check}" Content="套用为自定义策略（保存并激活）"
-                            Command="{Binding ApplyToCustomCommand}" Width="280" Height="36" Margin="0,0,8,0">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource FreshPrimaryButton}">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding SelectedIsPreset, FallbackValue=False}" Value="True">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                    <Button Tag="{StaticResource Geo.Check}" Content="激活并生效（保存 + 启用选中策略）"
-                            Command="{Binding ActivateCommand}" Width="280" Height="36" Margin="0,0,8,0">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource FreshButton}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding SelectedIsPreset, FallbackValue=False}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                    <Button Content="仅保存" Command="{Binding SaveCommand}" Width="140" Height="36">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource FreshButton}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding SelectedIsPreset, FallbackValue=False}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                </StackPanel>
+                        </Border>
+                    </Grid>
+                </DockPanel>
             </Grid>
         </DockPanel>
     </Border>
