@@ -2,7 +2,9 @@
 // IoTestViewModel：IO 耦合器通讯测试窗编排（点表驱动，项目通用）
 //
 // 干什么：现场接线验证——按点表把全部 DI/DO 通道铺成仓位卡网格（与主窗
-//   仓位布局同源），DI 只读指示灯（快照轮询刷新）、DO 点击灯钮（写单点，
+//   仓位布局同源；多机台=双架及以上点表时顶部下拉框选"当前测哪台固化架"，
+//   一次只显示一台机台的 30 个库位——每行固定 10 库位，避免 60 卡挤一行
+//   看不清），DI 只读指示灯（快照轮询刷新）、DO 点击灯钮（写单点，
 //   真机走总线 RMW 不误伤同寄存器其它通道）；外加 读取状态/全部关闭/
 //   一键遍历（500ms 跑马灯逐路点亮，快速验通断）。
 // 为什么"通用"：通道清单完全来自 config/pointtable.json（本就界面可配、
@@ -101,7 +103,9 @@ public sealed class IoTestSlotVm
     {
         Rack = rack;
         Level = level;
-        Title = $"架{rack}-层{level}";
+        // 卡标题=库位编码-层名（主窗同款口径：EncodeInRack 按架内站号换算，每台架
+        // 各自一套 A01~J12——切到 2 号机台时第一张卡仍是 A01，与现场库位标签对齐）
+        Title = $"{CureLine.Core.Curing.SlotLocationCode.EncodeInRack(rack, level)}-{LevelName(level)}";
     }
 
     public int Rack { get; }
@@ -109,6 +113,11 @@ public sealed class IoTestSlotVm
     public string Title { get; }
     public ObservableCollection<IoTestPointVm> Inputs { get; } = new();
     public ObservableCollection<IoTestPointVm> Outputs { get; } = new();
+
+    private static string LevelName(int level) => level switch
+    {
+        1 => "上层", 2 => "中层", _ => "下层",
+    };
 }
 
 public sealed class IoTestViewModel : ViewModelBase
@@ -125,8 +134,49 @@ public sealed class IoTestViewModel : ViewModelBase
     private CancellationTokenSource? _sweepCts;
     private Task? _sweepTask;
 
+    /// <summary>
+    /// 当前机台的仓位卡（固定 30 张：每行 10 库位 × LevelCount 层）——多机台时
+    /// 随顶部下拉框切换重建（卡是 <see cref="_allSlots"/> 同批实例，切换零重建）；
+    /// 单机台场景即全部卡，与旧版等价。
+    /// </summary>
     public ObservableCollection<IoTestSlotVm> Slots { get; } = new();
     public ObservableCollection<string> LogLines { get; } = new();
+
+    // ---------- 多机台选择（双架及以上一次只看一台，界面固定 30 库位） ----------
+
+    /// <summary>
+    /// 全部仓位卡（按全局架号铺满，与主窗平铺集合同口径）——先建完全量再按
+    /// 机台段摘 30 张进 Slots，切换只是换引用，不重新解析点表/建卡。
+    /// </summary>
+    private readonly Dictionary<(int Rack, int Level), IoTestSlotVm> _allSlots = new();
+
+    /// <summary>有绑定点的机台段序号（全局架号每 10 站一台架：1~10=1号、11~20=2号…）。</summary>
+    private readonly List<int> _rackGroups = new();
+
+    /// <summary>机台下拉选项（"1号固化架"/"2号固化架"…）——只列有绑定点的机台段，
+    /// rackStart=11 的单机台点表不会冒出空荡荡的"1号固化架"选项。</summary>
+    public ObservableCollection<string> Machines { get; } = new();
+
+    /// <summary>
+    /// 当前选中的机台（0 起对应 <see cref="Machines"/> 下标；XAML ComboBox 的
+    /// SelectedIndex 绑定）。变化即重建显示卡。
+    /// </summary>
+    private int _selectedMachineOrdinal;
+    public int SelectedMachineOrdinal
+    {
+        get => _selectedMachineOrdinal;
+        set
+        {
+            if (Set(ref _selectedMachineOrdinal, value))
+                RebuildVisibleSlots();
+        }
+    }
+
+    /// <summary>单机台（仅 1 台）隐藏下拉框——视觉与旧版完全一致（同主窗"组数>1 才显标题条"）。</summary>
+    public bool IsMachinePickerVisible => Machines.Count > 1;
+
+    /// <summary>显示列数：每行固定 10 库位（机台边界=行边界，与主窗分组列数同源）。</summary>
+    public int Columns => CureLine.Core.Curing.SlotLocationCode.RacksPerRow;
 
     /// <summary>预览网格尺寸（与主窗仓位网格同源：点表最大架/层号，垫底 10×3）。</summary>
     public int RackCount { get; }
@@ -199,8 +249,20 @@ public sealed class IoTestViewModel : ViewModelBase
             // 卡内补空占位保持三格齐整（输入/输出各至少 3 格，视觉对齐）
             while (slot.Inputs.Count < 3) slot.Inputs.Add(IoTestPointVm.Placeholder());
             while (slot.Outputs.Count < 3) slot.Outputs.Add(IoTestPointVm.Placeholder());
-            Slots.Add(slot);
+            _allSlots[(rack, level)] = slot;
         }
+
+        // 机台下拉（多机台=双架及以上）：全局架号每 10 站一台固化架，只按"有点位
+        // 绑定"的机台段出选项（rackStart=11 的单机台点表对应"2号固化架"，不会
+        // 冒出空档的"1号固化架"）；一个绑定架都没有（空表）按 1 号机台兜底铺占位卡。
+        _rackGroups.AddRange(bySlot.Keys
+            .Select(b => CureLine.Core.Curing.SlotLocationCode.RackGroupOf(b.Rack))
+            .Distinct().OrderBy(g => g));
+        if (_rackGroups.Count == 0)
+            _rackGroups.Add(1);
+        foreach (int g in _rackGroups)
+            Machines.Add($"{g}号固化架");
+        RebuildVisibleSlots(first: true);   // 按初始选中（第一台机台上屏，随后随下拉切换）
 
         RefreshCommand = new RelayCommand(PollOnce);
         AllOffCommand = new RelayCommand(AllOff);
@@ -231,6 +293,28 @@ public sealed class IoTestViewModel : ViewModelBase
         StopSweep();
         _bus.Error -= OnBusError;
         _bus.ConnectionChanged -= OnBusConnectionChanged;
+    }
+
+    /// <summary>
+    /// 按选中机台重建当前显示卡（固定 30 张：每行 10 库位整行铺，先层后架行优先——
+    /// 与 UniformGrid RacksPerRow×LevelCount 的铺格顺序同契）。卡全量已建
+    /// （_allSlots），切换只是把一个机台段（每 10 个全局架号一台）的卡引用装回；
+    /// 段内缺架（点表自由配）时网格右下留空，属"点表没配"的责任区非显示缺陷。
+    /// </summary>
+    /// <param name="first">开窗初始填充：不记切换日志（开窗已有一句开场白）。</param>
+    private void RebuildVisibleSlots(bool first = false)
+    {
+        Slots.Clear();
+        int ordinal = Math.Max(0, Math.Min(_selectedMachineOrdinal, _rackGroups.Count - 1));
+        int group = _rackGroups[ordinal];
+        int start = (group - 1) * CureLine.Core.Curing.SlotLocationCode.RacksPerRow + 1;
+        int end = group * CureLine.Core.Curing.SlotLocationCode.RacksPerRow;
+        for (int level = 1; level <= LevelCount; level++)
+        for (int rack = start; rack <= end; rack++)
+            if (_allSlots.TryGetValue((rack, level), out var slot))
+                Slots.Add(slot);
+        if (!first)
+            AddLog($"[机台] 切换到 {Machines[ordinal]}（全局架 {start}~{end}，每行 10 库位）。");
     }
 
     private void OnBusError(object? sender, string e) =>

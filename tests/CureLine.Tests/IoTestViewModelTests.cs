@@ -39,10 +39,13 @@ public class IoTestViewModelTests
         var bus = new ScriptedPointBus();
         var vm = new CureStation.ViewModels.IoTestViewModel(bus, DefaultConfig());
 
-        // 网格与主窗同源：10×3=30 卡
+        // 网格与主窗同源：当前机台固定 30 卡（10 库位/行 × 3 层）；单机台（10 架
+        // 全绑）下拉框只有"1号固化架"一项 → 隐藏选择器，视觉与旧版等价
         Assert.Equal(10, vm.RackCount);
         Assert.Equal(3, vm.LevelCount);
         Assert.Equal(30, vm.Slots.Count);
+        Assert.Single(vm.Machines);
+        Assert.False(vm.IsMachinePickerVisible);
 
         // 每仓位：DI 3 路（左/右光栅、托盘）+ DO 3 路（红/黄/绿），全绑定非占位
         var slot = vm.Slots.First(s => s.Rack == 1 && s.Level == 1);
@@ -53,11 +56,50 @@ public class IoTestViewModelTests
         Assert.All(slot.Inputs, p => Assert.True(p.IsInput));
         Assert.All(slot.Outputs, p => Assert.True(p.IsOutput));
 
-        // 双架点表：架数跟点表走（通用化口径——rackStart=11 生成架 11~20，最大架号 20）
+        // 双架点表（rackStart=11 生成架 11~20）：显示仍是当前机台的 30 卡（每行
+        // 固定 10 库位），机台选项只列"有绑定"的段——只出"2号固化架"一项
         var config2 = IoPointTableStore.BuildDefaultTemplate("测试2", "127.0.0.2", 10, 3, rackStart: 11);
         var vm2 = new CureStation.ViewModels.IoTestViewModel(bus, config2);
         Assert.Equal(20, vm2.RackCount);
-        Assert.Equal(60, vm2.Slots.Count);
+        Assert.Equal(30, vm2.Slots.Count);
+        Assert.All(vm2.Slots, s => Assert.InRange(s.Rack, 11, 20));
+        Assert.Equal(new[] { "2号固化架" }, vm2.Machines);
+        Assert.False(vm2.IsMachinePickerVisible);
+
+        // 卡标题=库位编码-层名（架内站号口径，与主窗同源：架 11 层 1 → A01-上层）
+        Assert.Equal("A01-上层", vm2.Slots[0].Title);
+    }
+
+    [Fact]
+    public void IoTestVm_MachinePicker_SwitchesSlots()
+    {
+        // 双架点表：架 1~10（第一台耦合器）+ 架 11~20（第二台，rackStart=11）
+        var config = DefaultConfig();
+        var second = IoPointTableStore.BuildDefaultTemplate("测试2", "127.0.0.2", 10, 3, rackStart: 11);
+        config.Devices.Add(second.Devices[0]);
+        var bus = new ScriptedPointBus();
+        var vm = new CureStation.ViewModels.IoTestViewModel(bus, config);
+
+        // 下拉两个选项（只列有绑定的机台段），默认选中第一项=1 号固化架
+        Assert.Equal(new[] { "1号固化架", "2号固化架" }, vm.Machines);
+        Assert.True(vm.IsMachinePickerVisible);
+        Assert.Equal(0, vm.SelectedMachineOrdinal);
+        Assert.All(vm.Slots, s => Assert.InRange(s.Rack, 1, 10));
+
+        // 切到 2 号机台：显示架 11~20 的 30 卡，库位编码按架内站号重新起算
+        vm.SelectedMachineOrdinal = 1;
+        Assert.Equal(30, vm.Slots.Count);
+        Assert.All(vm.Slots, s => Assert.InRange(s.Rack, 11, 20));
+        Assert.Equal("A01-上层", vm.Slots[0].Title);
+        // 行优先契约：第一行=层 1 的 10 架（先层后架，与主窗一致）
+        Assert.Equal(Enumerable.Range(11, 10).ToArray(),
+            vm.Slots.Take(10).Select(s => s.Rack).ToArray());
+        Assert.Contains(vm.LogLines, l => l.Contains("[机台] 切换到 2号固化架"));
+
+        // 切回 1 号：回架 1~10
+        vm.SelectedMachineOrdinal = 0;
+        Assert.Equal(30, vm.Slots.Count);
+        Assert.All(vm.Slots, s => Assert.InRange(s.Rack, 1, 10));
     }
 
     [Fact]

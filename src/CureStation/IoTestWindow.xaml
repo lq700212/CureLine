@@ -19,6 +19,9 @@
                             UseAeroCaptionButtons="False"
                             ResizeBorderThickness="6"/>
     </shell:WindowChrome.WindowChrome>
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </Window.Resources>
     <!--★★ IO 通讯测试窗（移植 AgingTestSystem 通讯测试思路 + 本项目点表通用化）：
          通道清单完全来自 config/pointtable.json（界面可配）——换项目/换耦合器
          零代码，改点表即适配。仓位卡网格与主窗同源布局；DI 只读灯（快照轮询
@@ -69,6 +72,15 @@
                             </Ellipse>
                             <TextBlock Text="{Binding ConnectionText, FallbackValue=未启动}"
                                        VerticalAlignment="Center" Foreground="{DynamicResource Brush.Fresh.FgMid}"/>
+                            <!-- 机台选择（多机台=双架及以上才显示）：一次只测一台固化架，
+                                 界面固定 30 库位（每行 10 个，主窗同款行优先）；单机台隐藏，
+                                 视觉与旧版一致 -->
+                            <ComboBox ItemsSource="{Binding Machines, FallbackValue={x:Null}}"
+                                      SelectedIndex="{Binding SelectedMachineOrdinal}"
+                                      Style="{StaticResource FreshCombo}" Width="120" Height="28"
+                                      Margin="14,0,0,0" VerticalAlignment="Center"
+                                      Visibility="{Binding IsMachinePickerVisible, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"
+                                      ToolTip="多机台（双架及以上）时选择当前测试哪台固化架；一次显示一台机台的 30 个库位"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
                             <Button Tag="{StaticResource Geo.Eye}" Style="{StaticResource FreshButton}" Content="读取状态"
@@ -102,7 +114,8 @@
                     </DockPanel>
                 </Border>
 
-                <!-- 中区：仓位卡网格（与主窗同布局；行优先铺格） -->
+                <!-- 中区：仓位卡网格（与主窗同布局；行优先铺格；多机台随顶部下拉
+                     切换当前机台，一次只显示 30 库位=每行固定 10 个） -->
                 <Border Grid.Row="1" Background="{DynamicResource Brush.Fresh.CardBg}"
                         BorderBrush="{DynamicResource Brush.Fresh.PanelBorder}" BorderThickness="1"
                         CornerRadius="4" Padding="6">
@@ -111,7 +124,7 @@
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <UniformGrid
-                                        Columns="{Binding DataContext.RackCount, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=10}"
+                                        Columns="{Binding DataContext.Columns, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=10}"
                                         Rows="{Binding DataContext.LevelCount, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=3}"/>
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
