@@ -300,8 +300,12 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   是 UI 契约，动输入框内边距须放大截图核对——`FreshPwdInput` Padding 左 3
   是实机像素定标值（PasswordBox 内部渲染无 TextBoxView 内缩，同抄
   FreshInput 的 6 会让密码首字符偏右约 3 逻辑 px，V0.0.30 校准）；
-  顶栏连接文本不截断（* 弹性列
-  完整显示，TextTrimming+ToolTip 兜底），勿再引入按长度截断。
+  顶栏连接**短词+悬停全文**两段口径（V0.0.37 推翻"全文不截断"——用户
+  目检拍板顶栏抓重点，长文堆栏面挤爆还截不完整）："ConnectionText"=短词
+  （`DeriveConnectionShort` 派生：起停/配置/演示态原样，连通="已连接"，
+  部分台在线保"N/M 台已连"，全断/一目连接错误的全文="未连接"）；
+  `ConnectionDetailText`=详情全文（总线摘要/设备错误串）只走悬停
+  ToolTip——错误长文永远不写回顶栏文本，勿再回滚全文字口径。
 - **策略预置/套用语义（V0.0.20 三轮起，全在 `CuringPolicy.IsPreset` +
   `CuringPolicyViewModel`）**：① 预置策略（IsPreset=true，出厂模板）可选中
   查看/编辑，但保存/激活/删除一律 VM 层拦下——唯一出口【套用为自定义策略】
@@ -314,8 +318,9 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   大扫荡教训）；⑤ 可视化画布：SlotPreviewItems=RackCount×LevelCount 格
   （与主窗网格同源，DialogService 从点表算最大架/层传入，下限 10×3），
   编辑任一时长 RebuildPreview 实时反映；分档四色（绿<60/黄/橙/红≥180）
-  在 XAML DataTrigger；拖动/滚轮缩放/双击复位在 View 层 RenderTransform
-  （CuringPolicyWindow.xaml.cs），业务零耦合。
+  在 XAML DataTrigger；画布交互在 View 层 RenderTransform（CuringPolicyWindow.xaml.cs），业务零耦合
+  （V0.0.37：左键/中键拖动、滚轮缩放、双击复位、右键【适应图像】——
+  拖动键记 `_dragButton`，只有放下"当前拖的键"才结束）。
 - **IO 通讯测试窗语义（V0.0.20 三轮，全在 `IoTestViewModel`）**：① 通道
   清单完全来自点表（Role≠Reserved、架层>0），仓位卡补占位保持三格齐整
   （Exists=false 不响应点击）——**换项目零代码**，勿写死通道表；② 共享

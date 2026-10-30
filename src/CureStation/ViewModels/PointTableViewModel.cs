@@ -53,9 +53,17 @@ public sealed class PointTableViewModel : ViewModelBase
     private readonly IDialogService _dialogs;
     private bool _closed;
 
-    /// <summary>角色下拉的数据源（控件下拉框绑定；工厂方法算不能在 XAML 里 new）。</summary>
-    public static IoPointRole[] RoleOptions { get; } =
-        Enum.GetValues<IoPointRole>();
+    /// <summary>
+    /// 角色下拉数据源：Text=中文文案（与左侧表格"角色"列同一来源
+    /// IoPointRoleInfo.ToText，两处永远同口径），Value=英文枚举——下拉只改
+    /// 显示改存储，EditRole/ApplyBinding/落盘 JSON 全链仍是英文枚举名。
+    /// </summary>
+    public sealed record RoleOption(IoPointRole Value, string Text);
+
+    public static IReadOnlyList<RoleOption> RoleOptions { get; } =
+        Enum.GetValues<IoPointRole>()
+            .Select(r => new RoleOption(r, IoPointRoleInfo.ToText(r)))
+            .ToArray();
 
     public ObservableCollection<IoCouplerDevice> Devices { get; } = new();
 

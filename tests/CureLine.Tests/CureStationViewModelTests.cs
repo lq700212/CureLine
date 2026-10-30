@@ -268,6 +268,36 @@ public class CureStationViewModelTests
         Assert.Equal(row.Raw.FunctionName, vm.EditFunction);
     }
 
+    [Fact]
+    public void PointTableVm_RoleOptions_TextIsChineseButValueStaysEnum()
+    {
+        // 角色下拉显示中文化（V0.0.37）：Text=中文文案与左侧表格"角色"列同一来源
+        // IoPointRoleInfo.ToText（两处永远同口径）；Value=英文枚举——落盘 JSON /
+        // 校验 / 业务键全链不改，只改显示
+        var options = CureStation.ViewModels.PointTableViewModel.RoleOptions;
+        Assert.Equal(Enum.GetValues<IoPointRole>().Length, options.Count);
+        Assert.All(options, o => Assert.Equal(IoPointRoleInfo.ToText(o.Value), o.Text));
+        for (int i = 0; i < options.Count; i++)
+            Assert.Equal((IoPointRole)i, options[i].Value);
+    }
+
+    [Fact(DisplayName = "顶栏连接短词：起停/配置/演示/连通/部分台/错误详情六态抓重点")]
+    public void MainVm_DeriveConnectionShort_CoversKeyStates()
+    {
+        string Short(bool c, string s) =>
+            CureStation.ViewModels.MainViewModel.DeriveConnectionShort(c, s);
+        Assert.Equal("未启动", Short(false, "未启动"));
+        Assert.Equal("已停止", Short(false, "已停止"));
+        Assert.Equal("未配置设备", Short(false, "未配置设备"));
+        Assert.StartsWith("演示模式", Short(true, "演示模式（2 台配置）"));
+        Assert.Equal("已连接", Short(true, "1/1 台已连"));
+        Assert.Equal("已连接", Short(true, "A线OP30固化架IO耦合器 192.168.1.20:502"));
+        Assert.Equal("2/3 台已连", Short(false, "2/3 台已连"));     // 部分台在线——进度口径有信息量
+        Assert.Equal("未连接", Short(false, "0/1 台已连"));         // 全断与灯点红色同拍
+        Assert.Equal("未连接",
+            Short(false, "A线OP30固化架IO耦合器 192.168.1.20:502 连接超时（3000ms），请检查 IP/端口"));
+    }
+
     // ---------- 工艺策略 VM（P3.1 状态机配套） ----------
 
     [Fact]

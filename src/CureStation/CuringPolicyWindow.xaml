@@ -182,10 +182,19 @@
                             BorderBrush="{DynamicResource Brush.Fresh.PanelBorder}" BorderThickness="1" CornerRadius="4"
                             ClipToBounds="True"
                             MouseLeftButtonDown="OnCanvasMouseLeftButtonDown"
+                            MouseDown="OnCanvasMouseDown"
+                            MouseUp="OnCanvasMouseUp"
                             MouseMove="OnCanvasMouseMove"
                             MouseLeftButtonUp="OnCanvasMouseLeftButtonUp"
                             MouseLeave="OnCanvasMouseLeave"
                             PreviewMouseWheel="OnCanvasPreviewMouseWheel">
+                        <Border.ContextMenu>
+                            <!-- 右键菜单：适应图像=显示恢复至窗口打开时的原始大小（与双击复位同效） -->
+                            <ContextMenu>
+                                <MenuItem Header="适应图像" ToolTip="恢复至窗口打开时的原始大小"
+                                          Click="OnFitImageClick"/>
+                            </ContextMenu>
+                        </Border.ContextMenu>
                         <Grid x:Name="CanvasContent" HorizontalAlignment="Center" VerticalAlignment="Center">
                             <Grid.RenderTransform>
                                 <TransformGroup>
@@ -265,8 +274,9 @@
                             </StackPanel>
                             <Separator Margin="0,8"/>
                             <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="滚轮：放大 / 缩放"/>
-                            <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="拖动：平移画布" Margin="0,2,0,0"/>
+                            <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="左键 / 中键拖动：平移画布" TextWrapping="Wrap" Margin="0,2,0,0"/>
                             <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="双击：复位视图" Margin="0,2,0,0"/>
+                            <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="右键：适应图像（还原大小）" TextWrapping="Wrap" Margin="0,2,0,0"/>
                         </StackPanel>
                     </Border>
                 </Grid>

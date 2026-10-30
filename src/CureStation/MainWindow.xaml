@@ -439,9 +439,10 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- ① 品牌顶栏（行 0 全宽贴边）：结构对齐对比稿 G1 顶栏（dot+策略+连接 在左、
+        <!-- ① 品牌顶栏（行 0 全宽贴边）：结构对齐对比稿 G1 顶栏（dot+连接+策略 在左、
              按钮组靠右、退出居末）——功能按钮为设计稿之后的真实功能超集（过账配置/
              IO测试/点表/重新连接/深色），系统三钮为无边框窗必需（稿为网页无此项）。
+             V0.0.37 连接状态抓重点显示：栏面只出短词，设备/IP/错误详情悬停展开；
              过账/操作员两段状态文本稿中亦无，弱化色阶放按钮组前，不抢按钮区。 -->
         <Border Grid.Row="0" Height="44" Padding="14,0"
                 Background="{DynamicResource Brush.HeaderGrad}"
@@ -449,13 +450,17 @@
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <!-- 连接灯点（绿=已连）+ 策略（HTML topbar：dot + 策略文本） -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- 连接灯点（绿=已连）+ 连接短词（V0.0.37 抓重点显示：只出"已连接/
+                     未连接/台数进度/演示态"短词；设备名、IP:端口、超时详情一律悬停
+                     ToolTip 展开——原来错误全文直接怼栏面，把顶栏挤爆还截不完整） -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                            ToolTip="{Binding ConnectionDetailText, FallbackValue=未启动}">
                     <Ellipse Width="12" Height="12" VerticalAlignment="Center">
                         <Ellipse.Style>
                             <Style TargetType="Ellipse">
@@ -468,25 +473,23 @@
                             </Style>
                         </Ellipse.Style>
                     </Ellipse>
-                    <TextBlock Text="{Binding PolicyText, FallbackValue=策略：—}" Margin="10,0,0,0"
+                    <TextBlock Text="{Binding ConnectionText, FallbackValue=未启动}" Margin="10,0,0,0"
                                VerticalAlignment="Center" Foreground="{DynamicResource Brush.TopbarFg}"/>
                 </StackPanel>
-                <!-- 连接状态 * 弹性列：文本完整显示（窄窗口省略号兜底，悬停看全文） -->
-                <TextBlock Grid.Column="1" Text="{Binding ConnectionText, FallbackValue=未启动}"
-                           Margin="12,0,0,0" VerticalAlignment="Center"
-                           Foreground="{DynamicResource Brush.HeaderSubFg}"
-                           TextTrimming="CharacterEllipsis"
-                           ToolTip="{Binding ConnectionText, FallbackValue=未启动}"/>
-                <!-- 过账/操作员状态（功能状态文本，弱化色阶放按钮组前） -->
-                <TextBlock Grid.Column="2" Text="{Binding PostingText, FallbackValue=过账：—}"
-                           Margin="0,0,12,0" VerticalAlignment="Center"
+                <!-- 激活策略（短词；连排后与右段统一 18px 左间距防粘连） -->
+                <TextBlock Grid.Column="1" Text="{Binding PolicyText, FallbackValue=策略：—}" Margin="18,0,0,0"
+                           VerticalAlignment="Center" Foreground="{DynamicResource Brush.HeaderSubFg}"/>
+                <!-- 中间 * 空列留空不摆元素：弹性撑开，把右侧状态与按钮组推到窗尾 -->
+                <!-- 过账/操作员状态（功能状态文本，弱化色阶放按钮组前；连排补左间距） -->
+                <TextBlock Grid.Column="3" Text="{Binding PostingText, FallbackValue=过账：—}"
+                           Margin="18,0,12,0" VerticalAlignment="Center"
                            Foreground="{DynamicResource Brush.HeaderSubFg}"/>
-                <TextBlock Grid.Column="3" Text="{Binding OperatorText, FallbackValue=未登录}"
-                           Margin="0,0,10,0" VerticalAlignment="Center"
+                <TextBlock Grid.Column="4" Text="{Binding OperatorText, FallbackValue=未登录}"
+                           Margin="18,0,10,0" VerticalAlignment="Center"
                            Foreground="{DynamicResource Brush.TopbarFg}"/>
                 <!-- 功能按钮组：与旧运行条同序同门禁（VM 命令/未登录灰显不变）；
                      相对顺序对齐对比稿（登录/工单/权限/策略 在前，日志高亮居末段、退出收尾） -->
-                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Tag="{StaticResource Geo.Login}" Style="{StaticResource GhostButton}" Content="登录"
                             Command="{Binding LoginCommand}" Margin="0,0,6,0"/>
                     <Button Tag="{StaticResource Geo.WorkOrder}" Style="{StaticResource GhostButton}" Content="工单"

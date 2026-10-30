@@ -180,8 +180,11 @@
                                 <CheckBox IsChecked="{Binding EditIsInput, FallbackValue=True}"
                                           Content="输入点" VerticalAlignment="Center"/>
                                 <TextBlock Text="角色：" VerticalAlignment="Center"/>
+                                <!-- 角色下拉：显示走中文（DisplayMemberPath=Text），值走英文枚举
+                                     （SelectedValuePath=Value → EditRole），与左侧表格角色列同源 -->
                                 <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding RoleOptions, FallbackValue={x:Null}}"
-                                          SelectedItem="{Binding EditRole}"/>
+                                          DisplayMemberPath="Text" SelectedValuePath="Value"
+                                          SelectedValue="{Binding EditRole}"/>
                                 <TextBlock Text="架号：" VerticalAlignment="Center"/>
                                 <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditRack, FallbackValue=0}"/>
                                 <TextBlock Text="层号：" VerticalAlignment="Center"/>

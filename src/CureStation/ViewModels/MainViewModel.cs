@@ -283,11 +283,55 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         private set => Set(ref _levelCount, value);
     }
 
+    // 顶栏连接文本两段口径（V0.0.37 改造，用户目检"顶栏太挤还显示不完整"）：
+    //   ConnectionText = 短词（抓重点：已连接/未连接/台数进度/演示态）——直接显示；
+    //   ConnectionDetailText = 详情全文（总线摘要或错误串如"XX:连接超时（3000ms），
+    //   请检查 IP/端口"）——顶栏悬停 ToolTip 展示，长文不再怼上顶栏栏面。
     private string _connectionText = "未启动";
     public string ConnectionText
     {
         get => _connectionText;
         private set => Set(ref _connectionText, value);
+    }
+
+    private string _connectionDetailText = "未启动";
+    public string ConnectionDetailText
+    {
+        get => _connectionDetailText;
+        private set => Set(ref _connectionDetailText, value);
+    }
+
+    /// <summary>
+    /// 顶栏连接短词派生（纯函数，可测试）。规则：
+    /// ① 起停/配置态自成短词原样显示；② 演示模式语义独立（文本已短）；
+    /// ③ 连通→"已连接"；④ 断开但仍有部分台在线（"1/2 台已连"收尾）保留台数进度，
+    ///    全断（"0/N 台已连"）或任意错误串出"未连接"——与灯点红绿同拍呼应。
+    /// </summary>
+    public static string DeriveConnectionShort(bool connected, string summary)
+    {
+        if (string.IsNullOrEmpty(summary) || summary is "未启动" or "已停止" or "未配置设备")
+            return summary;
+        if (summary.StartsWith("演示模式"))
+            return summary;
+        if (connected)
+            return "已连接";
+        // 台数进度概要形如 "N/M 台已连"（以"台已连"收尾才认——错误详情里也可能
+        // 出现 '/'，如"请检查 IP/端口"，不能借 '/')
+        if (summary.EndsWith("台已连"))
+        {
+            int slash = summary.IndexOf('/');
+            if (slash > 0 && summary[..slash] != "0")
+                return summary;      // 部分台在线（如 1/2 台已连）——进度口径更有信息量
+        }
+        return "未连接";
+    }
+
+    /// <summary>顶栏连接两段文本一次同步（灯点 + 短词 + 详情全文，三处同拍）。</summary>
+    private void SetConnectionTexts(bool connected, string summary)
+    {
+        IsConnected = connected;
+        ConnectionText = DeriveConnectionShort(connected, summary);
+        ConnectionDetailText = summary;
     }
 
     private bool _isConnected;
@@ -568,13 +612,16 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             if (config == null || config.Devices.Count == 0)
             {
                 ConnectionText = "未配置设备";
+                ConnectionDetailText = "未配置设备";
                 return;
             }
             var validation = PointTableValidator.Validate(config);
             if (!validation.Ok)
             {
                 // 点表坏了照样起（模拟模式兜底），现场在配置窗修正
-                ConnectionText = "点表有误（见点表配置窗）";
+                string errors = string.Join("；", validation.Errors);
+                ConnectionText = "点表有误";
+                ConnectionDetailText = errors;
                 _dialogs.ShowMessage(string.Join("\r\n", validation.Errors), "点表校验失败");
                 return;
             }
@@ -601,19 +648,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                     return;
                 if (connected)
                     _machine?.AlignFromSnapshot();
-                UiInvoke(() =>
-                {
-                    IsConnected = connected;
-                    ConnectionText = bus.ConnectionSummary;
-                });
+                UiInvoke(() => SetConnectionTexts(connected, bus.ConnectionSummary));
             };
             bus.Error += (s, msg) => UiInvoke(() =>
             {
                 if (ReferenceEquals(s, _bus))
-                    ConnectionText = msg;
+                    ConnectionDetailText = msg;   // 详情全文进悬停；顶栏短词只跟连通态
             });
-            // 顶栏连接状态列是 * 弹性宽（不挤右侧按钮），错误文本不截断完整显示；
-            // 极窄窗口由 XAML TextTrimming 省略号兜底 + ToolTip 悬停看全文。
+            // 顶栏连接段只显短词（V0.0.37：连接超时/异常详情一律悬停 Tooltip 展开，
+            // 栏面不再被"连接超时（3000ms），请检查…"这类长文挤爆）。
 
             // 状态机：首次创建（带总线），重连只换通道（Attach，流程状态不丢）。
             // 顺序刻意"先建/换妥新通道、再停旧总线"——状态机中途不会摸到已释放对象。
@@ -636,8 +679,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             var oldBus = _bus;
             _bus = bus;
             oldBus?.Dispose();
-            IsConnected = _bus.IsConnected;
-            ConnectionText = _bus.ConnectionSummary;
+            SetConnectionTexts(_bus.IsConnected, _bus.ConnectionSummary);
         }
     }
 
@@ -881,7 +923,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         var rows = new List<SystemStatusRow>
         {
             new("连接状态", IsConnected ? "已连接" : "未连接"),
-            new("总线", string.IsNullOrWhiteSpace(ConnectionText) ? "—" : ConnectionText),
+            new("连接详情", string.IsNullOrWhiteSpace(ConnectionDetailText) ? "—" : ConnectionDetailText),
             new("激活策略", _policyBook?.ResolveActive()?.Name ?? "无"),
             new("过账", PostingText),
             new("登录", OperatorText),
