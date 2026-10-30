@@ -336,12 +336,21 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   IsPreset 字段反序列化 false=全按自定义，兼容零迁移；④ 保存链=先改副本：
   BuildDraftFromEditor 产草稿→**草稿替换选中项进库校验**→过了才
   ApplyDraftToSelected+落盘（改名撞车不污染原对象，对齐 AgingTestSystem
-  大扫荡教训）；⑤ 可视化画布：SlotPreviewItems=RackCount×LevelCount 格
-  （与主窗网格同源，DialogService 从点表算最大架/层传入，下限 10×3），
-  编辑任一时长 RebuildPreview 实时反映；分档四色（绿<60/黄/橙/红≥180）
-  在 XAML DataTrigger；画布交互在 View 层 RenderTransform（CuringPolicyWindow.xaml.cs），业务零耦合
-  （V0.0.37：左键/中键拖动、滚轮缩放、双击复位、右键【适应图像】——
-  拖动键记 `_dragButton`，只有放下"当前拖的键"才结束）。
+  大扫荡教训）；⑤ 可视化画布（**V0.0.43 起是主编辑区，"点格子直接改"**）：
+  SlotPreviewItems=RackCount×LevelCount 格（与主窗网格同源，DialogService
+  从点表算最大架/层传入，下限 10×3），编辑任一时长 RebuildPreview 实时反映；
+  格色三态：普通=时长四档（绿<60/黄/橙/红≥180）、**特殊=主题蓝 Accent**
+  （IsSpecial 按 SlotMinutes 覆盖字典**存在性真识别**，非数值推断——覆盖值
+  恰好等于层/全局时仍算特殊）、选中=FgStrong 描边（与特殊蓝并存）。
+  画布交互：**左键单击=选格浮层输时长、左键拖框=框选（Ctrl 叠加）、
+  Ctrl+单击=加选/减选、点空白/Esc=清选择、中键拖动=平移（左键已让给
+  选择）、滚轮缩放、双击空白复位（格子上双击不复位）、右键适应图像**。
+  选择真源=VM `_selectedKeys` 键集合（格子对象每次 RebuildPreview 全新
+  重建引用，选中态按键恢复——勿依赖 item.IsSelected 自身）；浮层应用=
+  `ApplySelectionCommand` 逐格写 SlotRows（有则改无则增）→ 行通知自动
+  重建；浮层焦点必须 `Dispatcher.BeginInvoke`（鼠标 up 内同步 Focus 被
+  WPF 点击聚焦覆盖）。缩放/平移/命中矩形在 View 层（TransformToVisual
+  宽高乘 scale），业务零耦合（CuringPolicyWindow.xaml.cs）。
 - **IO 通讯测试窗语义（V0.0.20 三轮，全在 `IoTestViewModel`）**：① 通道
   清单完全来自点表（Role≠Reserved、架层>0），仓位卡补占位保持三格齐整
   （Exists=false 不响应点击）——**换项目零代码**，勿写死通道表；② 共享
@@ -374,7 +383,11 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   防把唯一工单引到空 L 槽）、工单窗只显 Side 侧一套面板且文案全去 R/L
   字样（**视图↔槽映射恒定** R↔Right/L↔Left，Sync/Flush 不判开关——隐藏
   侧数据原样往返）、顶栏过账文本不带工位字样；1=老双架双面板口径全量
-  回归（映射+Mac*_L+R/L 两枚上传钮）。过账配置窗勾选（L4）。
+  回归（映射+Mac*_L+R/L 两枚上传钮）。过账配置窗勾选（L4）；
+  ⑪ **"过账工位"下拉仅双工位勾选时显示**（V0.0.42，用户拍板：单工位常显
+  R/L 选择易误会要配双工位）——隐藏但 `EditSide` 照常 Sync/Flush，ini
+  `[CuringMes] Side` 缺省 R 原样往返、`SideOfRack` 语义不变，勿把该属性
+  当死代码删。
 
 ## 文档同步（每次任务收尾自查）
 

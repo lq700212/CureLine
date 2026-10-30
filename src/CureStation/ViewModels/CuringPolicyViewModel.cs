@@ -15,10 +15,16 @@
 //   草稿（BuildDraftFromEditor，数字解析失败进 errors），校验通过才把草稿
 //   拷入选中对象（先改副本防脏：校验失败原对象不受污染，对齐
 //   AgingTestSystem 大扫荡教训）。可视化预览也吃草稿——编辑参数实时反映。
-// 可视化预览：SlotPreviewItems = RackCount×LevelCount 个格子（与主窗仓位
-//   网格同源布局），每格显示该仓位解析时长 + 时长分档色（绿/黄/橙/红）；
-//   编辑区任一时长字段或仓位行变化即重建。缩放/平移交互在 View 层
-//   （RenderTransform 属 View 关切，见 CuringPolicyWindow.xaml.cs）。
+// 可视化画布（主编辑区，2026-10-31 用户拍板"点格子直接改"）：
+//   SlotPreviewItems = RackCount×LevelCount 个格子（与主窗仓位网格同源布局），
+//   每格显示该仓位解析时长 + 颜色——普通格=时长四档色（绿/黄/橙/红），
+//   特殊格（SlotMinutes 配了独立覆盖，真识别查字典非数值推断）=主题蓝
+//   Brush.Fresh.Accent 一眼区分；编辑区任一时长字段或仓位行变化即重建。
+//   画布点选/框选：选择真源 _selectedKeys（键集合），View 层翻译鼠标
+//   （单击/Ctrl单击/拖框→Replace/Toggle/Add/ClearSelection），浮层输入
+//   SelectionMinutesText 回车应用=ApplySelectionCommand（逐格写覆盖行）；
+//   缩放/平移交互仍在 View 层（RenderTransform 属 View 关切，
+//   见 CuringPolicyWindow.xaml.cs）。
 // 怎么改：新增策略字段 = CuringPolicy 加属性 + 编辑区加控件 + BuildDraft
 //   /ApplyDraft 两处同步 + Validator 加规则；预览分档改 PreviewTiers。
 // =========================================================================
@@ -44,16 +50,23 @@ public sealed class SlotMinuteRow : ViewModelBase
 /// <summary>
 /// 可视化预览格子（策略窗画布一项）：Rack×Level 位置 + 解析时长文本 +
 /// 分档色键（XAML DataTrigger 按 Tier 上色，色值不进 VM）。Tip 悬停全文。
+/// IsSelected（INPC）=画布点选/框选态——真源在 VM 的 _selectedKeys 键集合，
+/// 格子对象每次 RebuildPreview 全新重建，选中态由 VM 按键恢复，勿只依赖本属性。
+/// IsSpecial=该仓位在 SlotMinutes 配了独立覆盖（画布蓝色标识，与四档时长色区分）。
 /// </summary>
-public sealed class SlotPreviewItem
+public sealed class SlotPreviewItem : ViewModelBase
 {
-    public SlotPreviewItem(int rack, int level, int minutes)
+    private bool _isSelected;
+    public bool IsSelected { get => _isSelected; set => Set(ref _isSelected, value); }
+
+    public SlotPreviewItem(int rack, int level, int minutes, bool isSpecial = false)
     {
         Rack = rack;
         Level = level;
         Minutes = minutes;
+        IsSpecial = isSpecial;
         Tier = minutes >= 180 ? "Red" : minutes >= 120 ? "Orange" : minutes >= 60 ? "Yellow" : "Green";
-        Tip = $"架{rack} 层{level}：固化 {minutes} 分钟";
+        Tip = $"架{rack} 层{level}：固化 {minutes} 分钟" + (isSpecial ? "（特殊仓位：单独设置过）" : "");
     }
 
     public int Rack { get; }
@@ -64,6 +77,11 @@ public sealed class SlotPreviewItem
     public string PositionText => $"架{Rack}-层{Level}";
     /// <summary>时长分档色键：Green(&lt;60)/Yellow(60~119)/Orange(120~179)/Red(≥180)。</summary>
     public string Tier { get; }
+    /// <summary>
+    /// 是否特殊仓位（SlotMinutes 配了独立覆盖）。真识别=查覆盖字典存在性，
+    /// 不靠"时长与层/全局不同"推断——覆盖值恰好等于层/全局时仍算特殊（可识别回删）。
+    /// </summary>
+    public bool IsSpecial { get; }
     public string Tip { get; }
 }
 
@@ -155,6 +173,137 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         set { if (Set(ref _editLevel4Min, value)) RebuildPreview(); }
     }
 
+    // ---------- 画布点选编辑（2026-10-31 用户拍板：点格子直接改时长，少摆输入框） ----------
+    //
+    // 选择真源 = _selectedKeys（"架-层"键集合）：格子对象每次 RebuildPreview 全新
+    // 重建引用，选中态由按键恢复（SyncSelectionFlags）；View 层只做鼠标→格子翻译
+    // （命中/框选/Ctrl 叠加），选择与写值全在 VM（可测）。浮层输入（SelectionMinutesText）
+    // 回车/应用 = ApplySelectionCommand：逐格写 SlotRows（有则改无则增）→ 行通知自动
+    // 重建预览（数字/四档色/特殊蓝即刷）。预置策略走同一编辑区草稿，套用为自定义时落库。
+
+    private readonly HashSet<string> _selectedKeys = new();
+
+    /// <summary>有选中格子（浮层显隐开关）。</summary>
+    public bool HasSelection => _selectedKeys.Count > 0;
+
+    /// <summary>浮层标题：单格 = "架X-层Y · 当前 N 分"；多格 = "架X-层Y、架X-层Z 等 N 格"。</summary>
+    public string SelectionSummaryText
+    {
+        get
+        {
+            if (_selectedKeys.Count == 0)
+                return "未选择";
+            if (_selectedKeys.Count == 1)
+            {
+                var key = _selectedKeys.First();
+                var it = SlotPreviewItems.FirstOrDefault(x => $"{x.Rack}-{x.Level}" == key);
+                return it == null ? key : $"架{it.Rack}-层{it.Level} · 当前 {it.Minutes} 分";
+            }
+            var names = SlotPreviewItems
+                .Where(x => _selectedKeys.Contains($"{x.Rack}-{x.Level}"))
+                .Select(x => $"架{x.Rack}-层{x.Level}").Take(2).ToList();
+            return string.Join("、", names) + $" 等 {_selectedKeys.Count} 格";
+        }
+    }
+
+    private string _selectionMinutesText = "";
+    /// <summary>浮层时长输入（应用后清空，便于连改下一批）。</summary>
+    public string SelectionMinutesText
+    {
+        get => _selectionMinutesText;
+        set => Set(ref _selectionMinutesText, value);
+    }
+
+    private static string KeyOf(SlotPreviewItem it) => $"{it.Rack}-{it.Level}";
+
+    /// <summary>替换选择（单击/框选——View 层命中后调）。</summary>
+    public void ReplaceSelection(IEnumerable<SlotPreviewItem> items)
+    {
+        _selectedKeys.Clear();
+        foreach (var it in items)
+            _selectedKeys.Add(KeyOf(it));
+        SyncSelection();
+    }
+
+    /// <summary>加选（Ctrl+框选：在既有选择上并集）。</summary>
+    public void AddSelection(IEnumerable<SlotPreviewItem> items)
+    {
+        foreach (var it in items)
+            _selectedKeys.Add(KeyOf(it));
+        SyncSelection();
+    }
+
+    /// <summary>单击加选/减选一格（Ctrl+单击）。</summary>
+    public void ToggleItem(SlotPreviewItem item)
+    {
+        if (!_selectedKeys.Remove(KeyOf(item)))
+            _selectedKeys.Add(KeyOf(item));
+        SyncSelection();
+    }
+
+    /// <summary>清空选择（点空白 / Esc）。</summary>
+    public void ClearSelection()
+    {
+        if (_selectedKeys.Count == 0)
+            return;
+        _selectedKeys.Clear();
+        SyncSelection();
+    }
+
+    /// <summary>选择变化：恢复格子高亮 + 通知浮层标题/显隐 + 清输入。</summary>
+    private void SyncSelection()
+    {
+        SyncSelectionFlags();
+        Raise(nameof(HasSelection));
+        Raise(nameof(SelectionSummaryText));
+        SelectionMinutesText = "";   // 新选择清输入（防上一批残值误应用）
+        ApplySelectionCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>只恢复格子 IsSelected（RebuildPreview 重建引用后调；不动输入/通知）。</summary>
+    private void SyncSelectionFlags()
+    {
+        foreach (var it in SlotPreviewItems)
+            it.IsSelected = _selectedKeys.Contains($"{it.Rack}-{it.Level}");
+    }
+
+    /// <summary>
+    /// 浮层【应用】：把输入时长写到全部选中格的 SlotRows 覆盖行（有则改无则增，
+    /// 行匹配宽松化——表里手填可能带空格；写入用规范数字文本）。空输入静默忽略
+    /// （浮层保持打开，误触回车不弹框）；非数字/≤0 弹框拦。
+    /// </summary>
+    private void ApplySelection()
+    {
+        if (_selectedKeys.Count == 0)
+            return;
+        var text = (SelectionMinutesText ?? "").Trim();
+        if (text.Length == 0)
+            return;
+        if (!int.TryParse(text, out var minutes) || minutes < 1)
+        {
+            _dialogs.ShowMessage("固化时长需为 ≥1 的整数分钟。", "设置时长");
+            return;
+        }
+        foreach (var key in _selectedKeys)
+        {
+            var parts = key.Split('-');
+            int rack = int.Parse(parts[0]), level = int.Parse(parts[1]);
+            var row = SlotRows.FirstOrDefault(r =>
+                int.TryParse((r.Rack ?? "").Trim(), out var rr) && rr == rack &&
+                int.TryParse((r.Level ?? "").Trim(), out var ll) && ll == level);
+            if (row != null)
+                row.Minutes = minutes.ToString();
+            else
+                SlotRows.Add(new SlotMinuteRow
+                {
+                    Rack = rack.ToString(),
+                    Level = level.ToString(),
+                    Minutes = minutes.ToString(),
+                });
+        }
+        SelectionMinutesText = "";
+    }
+
     // ---------- 命令 ----------
 
     public RelayCommand AddPolicyCommand { get; }
@@ -164,6 +313,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     public RelayCommand SaveCommand { get; }
     public RelayCommand ActivateCommand { get; }
     public RelayCommand ApplyToCustomCommand { get; }
+    public RelayCommand ApplySelectionCommand { get; }
 
     /// <summary>保存/激活/套用成功后置 true（DialogService 据此返回 true，主窗刷新策略）。</summary>
     public bool CloseDialog { get; private set; }
@@ -182,6 +332,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         SaveCommand = new RelayCommand(Save);
         ActivateCommand = new RelayCommand(Activate, () => SelectedPolicy != null);
         ApplyToCustomCommand = new RelayCommand(ApplyToCustom, () => SelectedPolicy != null);
+        ApplySelectionCommand = new RelayCommand(ApplySelection, () => HasSelection);
 
         // 仓位覆盖行增删/行内编辑都影响预览：集合变化时对新增行挂 INPC 重建；
         // 行属性变化（Add/Remove 后集合通知 + 行内字段通知）统一走 RebuildPreview。
@@ -335,6 +486,8 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     /// <summary>
     /// 重建预览格子（RackCount×LevelCount，行优先与主窗一致）。吃编辑区草稿：
     /// 编辑全局/每层/仓位任一时长即实时反映（数字错时按原值兜底照画）。
+    /// 特殊格识别=查草稿 SlotMinutes 覆盖字典存在性（真识别，非时长数值推断）；
+    /// 重建后按键恢复选中态（格子对象全新，IsSelected 归 false 必须补）。
     /// </summary>
     private void RebuildPreview()
     {
@@ -343,9 +496,15 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         var items = new List<SlotPreviewItem>(RackCount * LevelCount);
         for (int level = 1; level <= LevelCount; level++)
         for (int rack = 1; rack <= RackCount; rack++)
-            items.Add(new SlotPreviewItem(rack, level, draft.ResolveMinutes(rack, level)));
+        {
+            var key = CuringPolicy.SlotKey(rack, level);
+            items.Add(new SlotPreviewItem(rack, level, draft.ResolveMinutes(rack, level),
+                draft.SlotMinutes.ContainsKey(key)));
+        }
         SlotPreviewItems = items;
         Raise(nameof(SlotPreviewItems));
+        SyncSelectionFlags();
+        Raise(nameof(SelectionSummaryText));   // 重建后单格标题的"当前 N 分"可能已变
     }
 
     // ---------- 命令实现 ----------

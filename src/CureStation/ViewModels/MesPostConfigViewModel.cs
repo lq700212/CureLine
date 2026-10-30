@@ -47,6 +47,9 @@ public sealed class MesPostConfigViewModel : ViewModelBase
     private bool _editDualSide;
     public bool EditDualSide { get => _editDualSide; set => Set(ref _editDualSide, value); }
 
+    // 过账工位（仅双工位模式勾选时在界面显示，2026-10-31 用户拍板）：单工位下
+    // 控件隐藏但本属性照常 Sync/Flush——ini [CuringMes] Side 的现值原样往返，
+    // 手工改 ini 配 L 侧也不会被保存冲掉；SideOfRack 单工位恒回它，语义不变。
     private string _editSide = "R";
     public string EditSide { get => _editSide; set => Set(ref _editSide, value ?? "R"); }
 

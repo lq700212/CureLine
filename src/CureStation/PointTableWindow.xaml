@@ -8,7 +8,7 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:PointTableViewModel, IsDesignTimeCreatable=False}"
         Title="IO 点表配置（点点鼠标，无需改代码）"
-        Height="780" Width="1120"
+        Height="880" Width="1400" MinHeight="720" MinWidth="1200"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None" Background="Transparent" AllowsTransparency="True"
         Foreground="{DynamicResource Brush.Fresh.FgMid}"
@@ -21,10 +21,11 @@
                             ResizeBorderThickness="6"/>
     </shell:WindowChrome.WindowChrome>
     <!--★★ 点表配置窗（现场人员的配置主场）：
-         左：设备列表 + 批量生成机台耦合器（10 台现场口径一键配完）+ 单台缺省模板；
-         右上：绑定网格（顶部显示当前设备归属）；右下：选中行编辑面板 +
-         测试连接/测试全部（不存盘直测，结果列表逐台定位）。
-         底部：保存（校验不过不落盘）。
+         左：设备列表 + 设备编辑/高级参数 + 批量生成机台耦合器（10 台现场口径
+         一键配完）+ 单台缺省模板（下半部包 ScrollViewer，小窗只滚动不裁剪）；
+         中：绑定网格（占满剩余高度，顶部显示当前设备归属）；
+         右：选中行编辑面板 + 测试连接/测试全部（不存盘直测，结果列表逐台定位）+
+         保存（校验不过不落盘）。
          取色全走 Brush.Fresh.*；Expander/ListBox/DataGrid 走 App.xaml 主题化样式。-->
     <!-- 圆角弹窗骨架（全弹窗统一）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow 浮层投影，
          根 Grid Margin=14 给阴影渲染留白 -->
@@ -49,7 +50,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="290"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="270"/>
+                    <ColumnDefinition Width="380"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- 左列：设备管理 + 缺省模板 -->
@@ -74,91 +75,101 @@
                         </ListBox>
                         <Button Tag="{StaticResource Geo.Trash}" DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
                                 Content="－ 删除选中设备" Command="{Binding RemoveDeviceCommand}" Margin="0,0,0,10"/>
-                        <StackPanel DockPanel.Dock="Bottom">
-                            <TextBlock Style="{StaticResource SectionTitle}"
-                                       Text="一键缺省模板"/>
-                            <TextBlock Text="按 IO 表布局生成全部绑定（IP/起始架号/架数/层数）"
-                                       Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="0,2,0,6" TextWrapping="Wrap"/>
-                            <UniformGrid Columns="2">
-                                <TextBlock Text="IP：" VerticalAlignment="Center"/>
-                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding TemplateIp, FallbackValue=192.168.1.20}"/>
-                                <TextBlock Text="起始架号：" VerticalAlignment="Center"
-                                           ToolTip="全局架号从几号起编（单架=1；双架第二台耦合器填 11，生成架 11~20）"/>
-                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding TemplateRackStart, FallbackValue=1}"/>
-                                <TextBlock Text="架数：" VerticalAlignment="Center"/>
-                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding TemplateRacks, FallbackValue=10}"/>
-                                <TextBlock Text="每架层数：" VerticalAlignment="Center"/>
-                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding TemplateLevels, FallbackValue=3}"/>
-                            </UniformGrid>
-                            <TextBlock Text="双架：第二台设备起始架号填 11（架号全局唯一，撞号保存时会被拦）。"
-                                       Foreground="{DynamicResource Brush.Fresh.FgDim}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                            <Button Style="{StaticResource FreshButton}" Margin="0,8"
-                                    Content="生成缺省模板（覆盖当前设备绑定）"
-                                    Command="{Binding GenerateTemplateCommand}"/>
-                        </StackPanel>
-                        <!-- 批量生成机台耦合器（V0.0.41 现场口径）：10 列 × 3 层、
-                             每列 1 台 GFNB——缺省参数即现场现值（IP .20~.29 已预填），
-                             点一下覆盖重建 10 台，逐台改 IP/名字即可保存 -->
-                        <StackPanel DockPanel.Dock="Bottom">
-                            <TextBlock Style="{StaticResource SectionTitle}"
-                                       Text="批量生成机台耦合器（推荐）"/>
-                            <TextBlock Text="一台机台 N 列 × 3 层 = N 台耦合器，一台管一列（每台 1 架 3 层）；IP 从首址按步长递增预填"
-                                       Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="0,2,0,6" TextWrapping="Wrap"/>
-                            <UniformGrid Columns="2">
-                                <TextBlock Text="台数（列数）：" VerticalAlignment="Center"/>
-                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding BatchCountText, FallbackValue=10}"/>
-                                <TextBlock Text="IP 首址：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding BatchIpFirstText, FallbackValue=192.168.1.20}" Margin="0,6,0,0"/>
-                                <TextBlock Text="IP 递增步长：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding BatchIpStepText, FallbackValue=1}" Margin="0,6,0,0"/>
-                            </UniformGrid>
-                            <Button Style="{StaticResource FreshButton}" Margin="0,8"
-                                    Content="批量生成（覆盖全部设备，IP 预填现值）"
-                                    Command="{Binding GenerateMachineCommand}"/>
-                        </StackPanel>
-                        <!-- 设备级编辑（选中设备回显） -->
-                        <UniformGrid Columns="2" Margin="0,0,0,8">
-                            <TextBlock Text="设备名：" VerticalAlignment="Center"/>
-                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding DeviceName, FallbackValue=IO耦合器1}"/>
-                            <TextBlock Text="IP：" VerticalAlignment="Center"/>
-                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding DeviceIp, FallbackValue=192.168.1.20}"/>
-                        </UniformGrid>
-                        <!-- 设备高级参数（V0.0.20 全 UI 化，此前只能手编 pointtable.json）：
-                             地址段/端口/轮询/取反——真机联调"点点鼠标"校准，缺省即缺省模板口径 -->
-                        <Expander Header="设备高级参数（端口/地址段/轮询/取反，缺省不用动）"
-                                  Margin="0,0,0,8">
-                            <StackPanel Margin="0,4,0,0">
-                                <UniformGrid Columns="2">
-                                    <TextBlock Text="端口：" VerticalAlignment="Center" ToolTip="Modbus TCP 端口，缺省 502"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDevicePort, FallbackValue=502}"/>
-                                    <TextBlock Text="从站号(UnitId)：" VerticalAlignment="Center" Margin="0,6,0,0"
-                                               ToolTip="Modbus 从站地址，缺省 1"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDeviceUnitId, FallbackValue=1}" Margin="0,6,0,0"/>
-                                    <TextBlock Text="DI 起始地址：" VerticalAlignment="Center" Margin="0,6,0,0"
-                                               ToolTip="输入(DI)寄存器首地址，支持 0x 十六进制或十进制；缺省 0x1000=4096"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDeviceDiStart, FallbackValue=0x1000}" Margin="0,6,0,0"/>
-                                    <TextBlock Text="DO 起始地址：" VerticalAlignment="Center" Margin="0,6,0,0"
-                                               ToolTip="输出(DO)保持寄存器首地址；缺省 0x1010=4112"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDeviceDoStart, FallbackValue=0x1010}" Margin="0,6,0,0"/>
-                                    <TextBlock Text="块跨度(寄存器)：" VerticalAlignment="Center" Margin="0,6,0,0"
-                                               ToolTip="相邻两块（架）的地址间隔；缺省 0x20=32。地址=起始+(块号-1)×跨度"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDeviceStride, FallbackValue=0x20}" Margin="0,6,0,0"/>
-                                    <TextBlock Text="每块点数：" VerticalAlignment="Center" Margin="0,6,0,0"
-                                               ToolTip="每块占用寄存器位数（1~16），缺省 16"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDevicePointsPerBlock, FallbackValue=16}" Margin="0,6,0,0"/>
-                                    <TextBlock Text="超时(ms)：" VerticalAlignment="Center" Margin="0,6,0,0"
-                                               ToolTip="TCP 连接/读写超时，缺省 3000"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDeviceTimeoutMs, FallbackValue=3000}" Margin="0,6,0,0"/>
-                                    <TextBlock Text="轮询周期(ms)：" VerticalAlignment="Center" Margin="0,6,0,0"
-                                               ToolTip="IO 扫描周期，最小 50，缺省 250"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDevicePollIntervalMs, FallbackValue=250}" Margin="0,6,0,0"/>
+                        <!-- 其余内容进滚动区（2026-10-31 目检修）：此前设备编辑区/高级参数
+                             是 DockPanel 填充区、两个模板区钉在 Bottom，栏内高度不足时
+                             填充区被整个挤出可视区（设备名/IP 与高级参数看不见）。
+                             改为纵向 StackPanel 全量排列——窗口再小也只滚动不裁剪。
+                             动线=选设备→改名/调参→批量生成→单台模板 -->
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="0,0,2,0">
+                                <!-- 设备级编辑（选中设备回显） -->
+                                <UniformGrid Columns="2" Margin="0,0,0,8">
+                                    <TextBlock Text="设备名：" VerticalAlignment="Center"/>
+                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding DeviceName, FallbackValue=IO耦合器1}"/>
+                                    <TextBlock Text="IP：" VerticalAlignment="Center"/>
+                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding DeviceIp, FallbackValue=192.168.1.20}"/>
                                 </UniformGrid>
-                                <CheckBox IsChecked="{Binding EditDeviceInvertInputs, FallbackValue=False}"
-                                          Content="输入取反（现场 DI 高电平=灭时勾）" Margin="0,8,0,0"/>
-                                <CheckBox IsChecked="{Binding EditDeviceInvertOutputs, FallbackValue=False}"
-                                          Content="输出取反（现场 DO 低电平=亮时勾）" Margin="0,4,0,0"/>
+                                <!-- 设备高级参数（V0.0.20 全 UI 化，此前只能手编 pointtable.json）：
+                                     地址段/端口/轮询/取反——真机联调"点点鼠标"校准，缺省即缺省模板口径 -->
+                                <Expander Header="设备高级参数（端口/地址段/轮询/取反，缺省不用动）"
+                                          Margin="0,0,0,8">
+                                    <StackPanel Margin="0,4,0,0">
+                                        <UniformGrid Columns="2">
+                                            <TextBlock Text="端口：" VerticalAlignment="Center" ToolTip="Modbus TCP 端口，缺省 502"/>
+                                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDevicePort, FallbackValue=502}"/>
+                                            <TextBlock Text="从站号(UnitId)：" VerticalAlignment="Center" Margin="0,6,0,0"
+                                                       ToolTip="Modbus 从站地址，缺省 1"/>
+                                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDeviceUnitId, FallbackValue=1}" Margin="0,6,0,0"/>
+                                            <TextBlock Text="DI 起始地址：" VerticalAlignment="Center" Margin="0,6,0,0"
+                                                       ToolTip="输入(DI)寄存器首地址，支持 0x 十六进制或十进制；缺省 0x1000=4096"/>
+                                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDeviceDiStart, FallbackValue=0x1000}" Margin="0,6,0,0"/>
+                                            <TextBlock Text="DO 起始地址：" VerticalAlignment="Center" Margin="0,6,0,0"
+                                                       ToolTip="输出(DO)保持寄存器首地址；缺省 0x1010=4112"/>
+                                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDeviceDoStart, FallbackValue=0x1010}" Margin="0,6,0,0"/>
+                                            <TextBlock Text="块跨度(寄存器)：" VerticalAlignment="Center" Margin="0,6,0,0"
+                                                       ToolTip="相邻两块（架）的地址间隔；缺省 0x20=32。地址=起始+(块号-1)×跨度"/>
+                                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDeviceStride, FallbackValue=0x20}" Margin="0,6,0,0"/>
+                                            <TextBlock Text="每块点数：" VerticalAlignment="Center" Margin="0,6,0,0"
+                                                       ToolTip="每块占用寄存器位数（1~16），缺省 16"/>
+                                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDevicePointsPerBlock, FallbackValue=16}" Margin="0,6,0,0"/>
+                                            <TextBlock Text="超时(ms)：" VerticalAlignment="Center" Margin="0,6,0,0"
+                                                       ToolTip="TCP 连接/读写超时，缺省 3000"/>
+                                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDeviceTimeoutMs, FallbackValue=3000}" Margin="0,6,0,0"/>
+                                            <TextBlock Text="轮询周期(ms)：" VerticalAlignment="Center" Margin="0,6,0,0"
+                                                       ToolTip="IO 扫描周期，最小 50，缺省 250"/>
+                                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditDevicePollIntervalMs, FallbackValue=250}" Margin="0,6,0,0"/>
+                                        </UniformGrid>
+                                        <CheckBox IsChecked="{Binding EditDeviceInvertInputs, FallbackValue=False}"
+                                                  Content="输入取反（现场 DI 高电平=灭时勾）" Margin="0,8,0,0"/>
+                                        <CheckBox IsChecked="{Binding EditDeviceInvertOutputs, FallbackValue=False}"
+                                                  Content="输出取反（现场 DO 低电平=亮时勾）" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                </Expander>
+                                <!-- 批量生成机台耦合器（V0.0.41 现场口径）：10 列 × 3 层、
+                                     每列 1 台 GFNB——缺省参数即现场现值（IP .20~.29 已预填），
+                                     点一下覆盖重建 10 台，逐台改 IP/名字即可保存 -->
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitle}"
+                                               Text="批量生成机台耦合器（推荐）"/>
+                                    <TextBlock Text="一台机台 N 列 × 3 层 = N 台耦合器，一台管一列（每台 1 架 3 层）；IP 从首址按步长递增预填"
+                                               Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="0,2,0,6" TextWrapping="Wrap"/>
+                                    <UniformGrid Columns="2">
+                                        <TextBlock Text="台数（列数）：" VerticalAlignment="Center"/>
+                                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding BatchCountText, FallbackValue=10}"/>
+                                        <TextBlock Text="IP 首址：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding BatchIpFirstText, FallbackValue=192.168.1.20}" Margin="0,6,0,0"/>
+                                        <TextBlock Text="IP 递增步长：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding BatchIpStepText, FallbackValue=1}" Margin="0,6,0,0"/>
+                                    </UniformGrid>
+                                    <Button Style="{StaticResource FreshButton}" Margin="0,8"
+                                            Content="批量生成（覆盖全部设备，IP 预填现值）"
+                                            Command="{Binding GenerateMachineCommand}"/>
+                                </StackPanel>
+                                <!-- 一键缺省模板（单台微调）：双架部署第二台耦合器用 -->
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitle}"
+                                               Text="一键缺省模板"/>
+                                    <TextBlock Text="按 IO 表布局生成全部绑定（IP/起始架号/架数/层数）"
+                                               Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="0,2,0,6" TextWrapping="Wrap"/>
+                                    <UniformGrid Columns="2">
+                                        <TextBlock Text="IP：" VerticalAlignment="Center"/>
+                                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding TemplateIp, FallbackValue=192.168.1.20}"/>
+                                        <TextBlock Text="起始架号：" VerticalAlignment="Center"
+                                                   ToolTip="全局架号从几号起编（单架=1；双架第二台耦合器填 11，生成架 11~20）"/>
+                                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding TemplateRackStart, FallbackValue=1}"/>
+                                        <TextBlock Text="架数：" VerticalAlignment="Center"/>
+                                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding TemplateRacks, FallbackValue=10}"/>
+                                        <TextBlock Text="每架层数：" VerticalAlignment="Center"/>
+                                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding TemplateLevels, FallbackValue=3}"/>
+                                    </UniformGrid>
+                                    <TextBlock Text="双架：第二台设备起始架号填 11（架号全局唯一，撞号保存时会被拦）。"
+                                               Foreground="{DynamicResource Brush.Fresh.FgDim}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    <Button Style="{StaticResource FreshButton}" Margin="0,8,0,2"
+                                            Content="生成缺省模板（覆盖当前设备绑定）"
+                                            Command="{Binding GenerateTemplateCommand}"/>
+                                </StackPanel>
                             </StackPanel>
-                        </Expander>
+                        </ScrollViewer>
                     </DockPanel>
                 </Border>
 
@@ -171,19 +182,23 @@
                              这屏绑定属于哪台设备一眼定位（名称/IP 随左栏选中联动） -->
                         <TextBlock DockPanel.Dock="Top" Text="{Binding CurrentDeviceText, FallbackValue=当前设备：—}"
                                    Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="0,0,0,4"/>
-                        <DataGrid DockPanel.Dock="Top" ItemsSource="{Binding Bindings, FallbackValue={x:Null}}"
-                                  SelectedItem="{Binding SelectedBinding}" Height="420" Margin="0,8,0,0">
+                        <!-- 绑定网格：DockPanel 末位填充元素——占满中栏剩余高度（不再
+                             钉死 420），窗口加高后 18 行绑定一屏看全（2026-10-31 用户
+                             反馈"表格显示完整"）；HeadersVisibility=Column 去行头省宽 -->
+                        <DataGrid ItemsSource="{Binding Bindings, FallbackValue={x:Null}}"
+                                  SelectedItem="{Binding SelectedBinding}"
+                                  HeadersVisibility="Column" Margin="0,8,0,0">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="方向" Binding="{Binding DirectionText, FallbackValue=输入}"
                                                     Width="56" IsReadOnly="True"/>
                                 <DataGridTextColumn Header="块" Binding="{Binding BlockText, FallbackValue=1}"
                                                     Width="44" IsReadOnly="True"/>
                                 <DataGridTextColumn Header="点号" Binding="{Binding BitText, FallbackValue=0(X0)}"
-                                                    Width="96" IsReadOnly="True"/>
+                                                    Width="100" IsReadOnly="True"/>
                                 <DataGridTextColumn Header="角色" Binding="{Binding RoleText, FallbackValue=预留}"
-                                                    Width="120" IsReadOnly="True"/>
+                                                    Width="130" IsReadOnly="True"/>
                                 <DataGridTextColumn Header="仓位" Binding="{Binding SlotText, FallbackValue=—}"
-                                                    Width="72" IsReadOnly="True"/>
+                                                    Width="76" IsReadOnly="True"/>
                                 <DataGridTextColumn Header="功能名" Binding="{Binding Raw.FunctionName}"
                                                     Width="*" IsReadOnly="True"/>
                             </DataGrid.Columns>
@@ -239,13 +254,22 @@
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}" Text="测试结果（最近 50 条）"/>
                             <DataGrid DockPanel.Dock="Top" ItemsSource="{Binding TestResults, FallbackValue={x:Null}}"
-                                      Height="170" Margin="0,8,0,0" IsReadOnly="True">
+                                      Height="190" Margin="0,8,0,0" IsReadOnly="True"
+                                      HeadersVisibility="Column">
+                                <!-- 列宽合计 276 ≤ 右栏可用 358（旧版 300>250 被裁，"结果"列
+                                     只剩半字）；消息长文悬停展开（顶栏"短词+悬停全文"同款口径） -->
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="时间" Binding="{Binding TimeText, FallbackValue=00:00:00}" Width="64"/>
+                                    <DataGridTextColumn Header="时间" Binding="{Binding TimeText, FallbackValue=00:00:00}" Width="52"/>
                                     <DataGridTextColumn Header="设备" Binding="{Binding DeviceName, FallbackValue=IO耦合器1}" Width="88"/>
-                                    <DataGridTextColumn Header="IP" Binding="{Binding Ip, FallbackValue=192.168.1.20}" Width="100"/>
-                                    <DataGridTextColumn Header="结果" Binding="{Binding ResultText, FallbackValue=OK}" Width="48"/>
-                                    <DataGridTextColumn Header="消息" Binding="{Binding Message}" Width="*"/>
+                                    <DataGridTextColumn Header="IP" Binding="{Binding Ip, FallbackValue=192.168.1.20}" Width="96"/>
+                                    <DataGridTextColumn Header="结果" Binding="{Binding ResultText, FallbackValue=OK}" Width="40"/>
+                                    <DataGridTextColumn Header="消息" Binding="{Binding Message, FallbackValue=''}" Width="*">
+                                        <DataGridTextColumn.ElementStyle>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="ToolTip" Value="{Binding Message, FallbackValue=''}"/>
+                                            </Style>
+                                        </DataGridTextColumn.ElementStyle>
+                                    </DataGridTextColumn>
                                 </DataGrid.Columns>
                             </DataGrid>
                         </DockPanel>

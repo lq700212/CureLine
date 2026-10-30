@@ -454,6 +454,153 @@ public class CureStationViewModelTests
         Assert.Equal(7, loaded.Policies.Count);
     }
 
+    // ---------- 画布点选编辑（V0.0.43：点格子直接改时长 + 特殊格蓝色识别） ----------
+
+    /// <summary>按架/层取画布格子（测试辅助）。</summary>
+    private static CureStation.ViewModels.SlotPreviewItem Cell(
+        CureStation.ViewModels.CuringPolicyViewModel vm, int rack, int level) =>
+        vm.SlotPreviewItems.First(x => x.Rack == rack && x.Level == level);
+
+    [Fact]
+    public void PolicyVm_CanvasSelectSingleAndApply_WritesSlotRow()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+
+        // 单击 3-2 → 浮层数据就绪 → 输 45 应用
+        vm.ReplaceSelection(new[] { Cell(vm, 3, 2) });
+        Assert.True(vm.HasSelection);
+        Assert.True(Cell(vm, 3, 2).IsSelected);
+        Assert.Contains("架3-层2", vm.SelectionSummaryText);
+        vm.SelectionMinutesText = "45";
+        vm.ApplySelectionCommand.Execute(null);
+
+        var row = Assert.Single(vm.SlotRows.Where(r => r.Rack == "3" && r.Level == "2"));
+        Assert.Equal("45", row.Minutes);
+        // 行通知自动重建：格子时长/特殊标识即刷（45 分 + 单独设置过）
+        var cell = Cell(vm, 3, 2);
+        Assert.Equal(45, cell.Minutes);
+        Assert.True(cell.IsSpecial);
+        Assert.Contains("特殊仓位", cell.Tip);
+        // 选择保持（连续改不丢），输入已清空
+        Assert.True(vm.HasSelection);
+        Assert.Equal("", vm.SelectionMinutesText);
+    }
+
+    [Fact]
+    public void PolicyVm_CanvasApplyMulti_UpdatesExistingRow()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        // 已有手填行 3-2=20（画布应用应更新它而不是加重复行）
+        vm.AddSlotRowCommand.Execute(null);
+        vm.SlotRows[0].Rack = "3";
+        vm.SlotRows[0].Level = "2";
+        vm.SlotRows[0].Minutes = "20";
+        int rowsBefore = vm.SlotRows.Count;
+
+        // 框选两格（3-2 已有行 / 7-1 无行）批量应用 60
+        vm.ReplaceSelection(new[] { Cell(vm, 3, 2), Cell(vm, 7, 1) });
+        Assert.Contains("等 2 格", vm.SelectionSummaryText);
+        vm.SelectionMinutesText = "60";
+        vm.ApplySelectionCommand.Execute(null);
+
+        Assert.Equal("60", vm.SlotRows.First(r => r.Rack == "3" && r.Level == "2").Minutes);
+        Assert.Single(vm.SlotRows.Where(r => r.Rack == "3" && r.Level == "2"));   // 无重复行
+        Assert.Single(vm.SlotRows.Where(r => r.Rack == "7" && r.Level == "1"));   // 新增一行
+        Assert.Equal(rowsBefore + 1, vm.SlotRows.Count);
+        Assert.Equal(60, Cell(vm, 7, 1).Minutes);
+        Assert.True(Cell(vm, 7, 1).IsSpecial);
+    }
+
+    [Fact]
+    public void PolicyVm_CanvasApplyInvalidInput_ShowsMessageAndBlocks()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        vm.ReplaceSelection(new[] { Cell(vm, 1, 1) });
+
+        vm.SelectionMinutesText = "abc";
+        vm.ApplySelectionCommand.Execute(null);
+        Assert.Contains(fake.Calls, c => c.Contains("≥1"));
+        Assert.Empty(vm.SlotRows);
+
+        vm.SelectionMinutesText = "0";
+        vm.ApplySelectionCommand.Execute(null);
+        Assert.Contains(fake.Calls, c => c.Contains("≥1"));
+        Assert.Empty(vm.SlotRows);
+
+        // 空输入静默忽略（误触回车不弹框）
+        vm.SelectionMinutesText = "";
+        vm.ApplySelectionCommand.Execute(null);
+        Assert.Empty(vm.SlotRows);
+        Assert.False(vm.CloseDialog);
+    }
+
+    [Fact]
+    public void PolicyVm_CanvasToggleAndClear_ManagesSelection()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+
+        // Ctrl+单击两次：第一次加选、第二次减选（回到无选择）
+        vm.ToggleItem(Cell(vm, 2, 1));
+        Assert.True(vm.HasSelection);
+        vm.ToggleItem(Cell(vm, 2, 1));
+        Assert.False(vm.HasSelection);
+
+        // 选择 → 点空白/清空：高亮全清
+        vm.ReplaceSelection(new[] { Cell(vm, 1, 1), Cell(vm, 2, 2), Cell(vm, 3, 3) });
+        Assert.True(vm.HasSelection);
+        vm.ClearSelection();
+        Assert.False(vm.HasSelection);
+        Assert.All(vm.SlotPreviewItems, x => Assert.False(x.IsSelected));
+    }
+
+    [Fact]
+    public void PolicyVm_RebuildPreview_RestoresSelection()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        vm.ReplaceSelection(new[] { Cell(vm, 4, 2) });
+
+        // 改编辑区任一字段触发 RebuildPreview（格子对象全新重建）——选中态按键恢复
+        vm.EditGlobalMinutes = "100";
+        Assert.True(vm.HasSelection);
+        Assert.True(Cell(vm, 4, 2).IsSelected);
+    }
+
+    [Fact]
+    public void PolicyVm_IsSpecial_TrueOnlyForOverrideSlots_EvenWhenEqual()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        // 全局 45；再给 5-1 单独配 45（覆盖值=全局值）——真识别按覆盖字典判，
+        // 5-1 仍是特殊格（蓝色），未配覆盖的 3-1（同为 45 分）不是
+        vm.EditGlobalMinutes = "45";
+        vm.AddSlotRowCommand.Execute(null);
+        vm.SlotRows[0].Rack = "5";
+        vm.SlotRows[0].Level = "1";
+        vm.SlotRows[0].Minutes = "45";
+
+        Assert.Equal(45, Cell(vm, 5, 1).Minutes);
+        Assert.True(Cell(vm, 5, 1).IsSpecial);
+        Assert.Equal(45, Cell(vm, 3, 1).Minutes);
+        Assert.False(Cell(vm, 3, 1).IsSpecial);
+    }
+
     [Fact]
     public void MainVm_Simulate_ShowsActivePolicyText()
     {

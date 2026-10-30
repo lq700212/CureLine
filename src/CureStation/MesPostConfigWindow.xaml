@@ -24,8 +24,8 @@
     </shell:WindowChrome.WindowChrome>
     <!--★★ 过账配置窗（P3.2 后半）：W68 终版未定 → 全部配置化，现场"点点鼠标"
          改完保存即生效（主窗热更新过账服务，不重启）。左列开关与口径（含
-         双工位开关——单工位时架号映射/L 专用参数整块隐藏）+ 静态参数；
-         右列三个接口 URL + 说明。门禁：主窗 L4。
+         双工位开关——单工位时过账工位选择/架号映射/L 专用参数整块隐藏）+
+         静态参数；右列三个接口 URL + 说明。门禁：主窗 L4。
          取色全走 Brush.Fresh.*；窗口骨架统一自绘标题条。-->
     <!-- 圆角弹窗骨架（全弹窗统一）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow 浮层投影，
          根 Grid Margin=14 给阴影渲染留白 -->
@@ -64,12 +64,18 @@
                                 <CheckBox IsChecked="{Binding EditDualSide, FallbackValue=False}"
                                           Content="双工位模式（工单窗 R/L 双面板分开记账；现场单工位保持不勾）"
                                           Margin="0,10,0,0"/>
-                                <!-- 纵排（标签一行+控件一行）：两列式列宽装不下长标签，
-                                     会把 220 宽下拉挤溢到右列形成重叠（V0.0.37 修，
-                                     与"固化时间单位"纵排同因同治） -->
-                                <TextBlock Text="过账工位（自动进/出站取哪侧工单）：" Margin="0,10,0,0"/>
-                                <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding SideOptions, FallbackValue={x:Null}}"
-                                          SelectedItem="{Binding EditSide}" Width="120" HorizontalAlignment="Left" Margin="0,3,0,0"/>
+                                <!-- 过账工位（仅双工位模式显示，2026-10-31 用户拍板）：单工位
+                                     现场只有一套工位，常显 R/L 选择器会让人误以为要配双工位；
+                                     隐藏后 Side 值仍随配置往返（ini [CuringMes] Side 缺省 R
+                                     照常生效，VM 逻辑零改动） -->
+                                <StackPanel Visibility="{Binding EditDualSide, Converter={StaticResource BoolToVis}, FallbackValue=Visible}">
+                                    <!-- 纵排（标签一行+控件一行）：两列式列宽装不下长标签，
+                                         会把 220 宽下拉挤溢到右列形成重叠（V0.0.37 修，
+                                         与"固化时间单位"纵排同因同治） -->
+                                    <TextBlock Text="过账工位（自动进/出站取哪侧工单）：" Margin="0,10,0,0"/>
+                                    <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding SideOptions, FallbackValue={x:Null}}"
+                                              SelectedItem="{Binding EditSide}" Width="120" HorizontalAlignment="Left" Margin="0,3,0,0"/>
+                                </StackPanel>
                                 <!-- 固化时间单位单独纵排（标签一行+下拉一行）：两列式列宽 ~164 装不下
                                      最宽选项"Seconds（秒，老项目口径）"（自然宽 ~206）——定宽 220 与 Auto
                                      都被列宽钳住尾部截断（V0.0.28 修）；独占整卡宽后 Auto 自然舒展 -->
@@ -135,7 +141,7 @@
 
                                 <TextBlock Style="{StaticResource SectionTitle}" Text="口径说明" Margin="0,16,0,0"/>
                                 <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Brush.Fresh.FgDim}"
-                                           Text="• 托盘到位=进站（ACTION=I），托盘离开=出站（先固化时间后出站）——与老项目『装载/卸载』命令字同义。&#x0a;• 双工位开关关（缺省，单工位）=全部按『过账工位』报本侧；勾开才有 R/L 两套工单与架号映射。&#x0a;• 出站被 MES 接受（STATUS=1）后，对应工位『已生产数量』自动 +1。&#x0a;• BC_NO 取工单『物料条码』（批次级过账）；板级产品 ID 上报走程序②整线网关。&#x0a;• 过账失败只记日志与顶栏状态，不弹框不重传（防重复过账，人工处理）。&#x0a;• 保存即生效（无需重启）；总开关关闭时不产生任何网络请求。"/>
+                                           Text="• 托盘到位=进站（ACTION=I），托盘离开=出站（先固化时间后出站）——与老项目『装载/卸载』命令字同义。&#x0a;• 双工位开关关（缺省，单工位）=按固定工位上报（config.ini [CuringMes] Side，缺省 R）；勾开后才出现『过账工位』选择与 R/L 架号映射。&#x0a;• 出站被 MES 接受（STATUS=1）后，对应工位『已生产数量』自动 +1。&#x0a;• BC_NO 取工单『物料条码』（批次级过账）；板级产品 ID 上报走程序②整线网关。&#x0a;• 过账失败只记日志与顶栏状态，不弹框不重传（防重复过账，人工处理）。&#x0a;• 保存即生效（无需重启）；总开关关闭时不产生任何网络请求。"/>
                             </StackPanel>
                         </ScrollViewer>
                     </Border>
