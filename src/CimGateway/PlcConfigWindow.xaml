@@ -3,121 +3,168 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:vm="clr-namespace:CimGateway.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:PlcConfigViewModel, IsDesignTimeCreatable=False}"
         Icon="Assets/app.ico"
-        Title="{Binding TitleText, FallbackValue='网关配置'}" Width="640" Height="560"
-        WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+        Title="{Binding TitleText, FallbackValue='网关配置'}" Width="660" Height="580"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        WindowStyle="None" Background="Transparent" AllowsTransparency="True" FontSize="13"
+        Foreground="{DynamicResource Brush.Fresh.FgMid}">
+    <shell:WindowChrome.WindowChrome>
+        <!-- 无边框自绘（弹窗统一骨架，对齐程序①口径） -->
+        <shell:WindowChrome CaptionHeight="34" GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False"
+                            ResizeBorderThickness="0"/>
+    </shell:WindowChrome.WindowChrome>
     <!--PLC 配置窗（MVVM：两页走 PlcConfigViewModel，本文件纯绑定）。
         单机页与协议下拉已随三菱链路删除（P2.1：真机统一 Modbus TCP）。
         行内测试按钮经 RelativeSource 找父 VM 命令（DataTemplate 内 DataContext
-        是行 VM，命令在父 VM，这是标准写法）。
+        是行 VM，命令在父 VM，这是标准写法）。测试结果字色走语义名触发器
+        （"Ok"/"Err"→主题 AlertOkFg/AlertErrFg，深浅主题跟随）。
+        取色全走 Brush.Fresh.*；TabControl/TabItem 隐式主题样式在 App.xaml。
         设计时 DataContext 为空，展示文本取 FallbackValue 占位（仅预览，运行时走真值）。-->
-    <DockPanel Margin="16,12">
-        <Border Style="{StaticResource FreshHintBorder}" DockPanel.Dock="Top" Margin="0,0,0,8">
-            <Label Content="{Binding HintText, FallbackValue='测试用表单值直测保存后重启生效'}"
-                   Foreground="{StaticResource FreshPrimaryDeepBrush}"/>
+    <Grid Margin="14">
+        <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+                BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+                Effect="{StaticResource Fx.WinShadow}">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
+                    <Grid>
+                        <TextBlock Style="{StaticResource WinTitleText}"
+                                   Text="{Binding TitleText, FallbackValue=网关配置}"/>
+                        <Button Style="{StaticResource WinTitleClose}" Content="✕"
+                                HorizontalAlignment="Right"
+                                Click="OnCloseClick" ToolTip="关闭（Esc）"/>
+                    </Grid>
+                </Border>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                            DockPanel.Dock="Bottom" Margin="0,12,0,16">
+                    <Button Content="{Binding SaveText, FallbackValue='保存并重启'}" Width="120" Height="32"
+                            Margin="0,0,8,0" Command="{Binding SaveCommand}" IsDefault="True"
+                            Style="{StaticResource FreshPrimaryButton}"/>
+                    <Button Content="{Binding CancelText, FallbackValue='取消'}" Width="100" Height="32"
+                            Command="{Binding CancelCommand}" IsCancel="True"
+                            Style="{StaticResource FreshButton}"/>
+                </StackPanel>
+
+                <DockPanel Margin="20,12,20,0">
+                    <Border Style="{StaticResource FreshHintBorder}" DockPanel.Dock="Top" Margin="0,0,0,10">
+                        <TextBlock Text="{Binding HintText, FallbackValue='测试用表单值直测保存后重启生效'}"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource Brush.Fresh.FgStrong}"/>
+                    </Border>
+                    <TabControl>
+                        <!--多机页-->
+                        <TabItem Header="{Binding TabMultiText, FallbackValue='机台连接'}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel Margin="4">
+                                    <ItemsControl ItemsSource="{Binding Stations}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" Margin="0,4">
+                                                    <CheckBox Content="{Binding TitleText}"
+                                                              IsChecked="{Binding Enabled}" Width="90"
+                                                              VerticalContentAlignment="Center"/>
+                                                    <TextBox Text="{Binding Ip, UpdateSourceTrigger=PropertyChanged}"
+                                                             Style="{StaticResource FreshInput}"
+                                                             Width="130" Margin="4,0,0,0"/>
+                                                    <TextBox Text="{Binding PortText, UpdateSourceTrigger=PropertyChanged}"
+                                                             Style="{StaticResource FreshInput}"
+                                                             Width="60" Margin="4,0,0,0"/>
+                                                    <Button Content="{Binding DataContext.TestText, FallbackValue='测试连接',
+                                                                        RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            Style="{StaticResource FreshButton}"
+                                                            Height="32" Margin="6,0,0,0"
+                                                            Command="{Binding DataContext.TestStationCommand,
+                                                                        RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding Id}"/>
+                                                    <!-- 测试结果字色：语义名→主题键映射（缺省中性字色） -->
+                                                    <Label Content="{Binding ResultText}" Width="120"
+                                                           VerticalContentAlignment="Center"
+                                                           ToolTip="{Binding ResultTip}">
+                                                        <Label.Style>
+                                                            <Style TargetType="Label">
+                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.FgMid}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding ResultForeground, FallbackValue=—}" Value="Ok">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.AlertOkFg}"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding ResultForeground, FallbackValue=—}" Value="Err">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.AlertErrFg}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Label.Style>
+                                                    </Label>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <StackPanel Orientation="Horizontal" Margin="0,10,0,4">
+                                        <Label Content="{Binding ScanIntervalLabel, FallbackValue='扫描周期ms'}"
+                                               VerticalContentAlignment="Center"
+                                               ToolTip="每台机台触发字轮询间隔（50~5000，缺省 200）；保存即热生效，无需重连"/>
+                                        <TextBox Text="{Binding ScanIntervalText, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource FreshInput}"
+                                                 Width="60" Margin="4,0,16,0"/>
+                                        <Button Content="{Binding TestAllText, FallbackValue='全部测试'}" Height="32"
+                                                Command="{Binding TestAllStationsCommand}"
+                                                Style="{StaticResource FreshButton}"/>
+                                        <Button Content="{Binding RestoreText, FallbackValue='恢复缺省'}" Height="32"
+                                                Margin="8,0,0,0" Command="{Binding RestoreStationsCommand}"
+                                                Style="{StaticResource FreshButton}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
+                        <!--接口地址页-->
+                        <TabItem Header="{Binding TabApiText, FallbackValue='接口地址'}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel Margin="4">
+                                    <StackPanel Orientation="Horizontal" Margin="0,4">
+                                        <Label Content="{Binding DataLengthLabel, FallbackValue='数据长度'}" Width="110"
+                                               VerticalContentAlignment="Center"/>
+                                        <TextBox Text="{Binding DataLengthText, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource FreshInput}" Width="80"/>
+                                        <Label Content="{Binding DataSegmentOffsetsLabel, FallbackValue='分段偏移'}" Width="110"
+                                               Margin="16,0,0,0" VerticalContentAlignment="Center"
+                                               ToolTip="API0030/0031 返回 DATA 三段拆写偏移，逗号分隔两段（缺省 30,60）"/>
+                                        <TextBox Text="{Binding DataSegmentOffsetsText, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource FreshInput}" Width="80"/>
+                                    </StackPanel>
+                                    <ItemsControl ItemsSource="{Binding ApiSections}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding ApiCode}" FontWeight="Bold" Margin="0,10,0,2"
+                                                               Style="{StaticResource SectionTitle}"
+                                                               Foreground="{DynamicResource Brush.Fresh.Accent}"/>
+                                                    <ItemsControl ItemsSource="{Binding Rows}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <StackPanel Orientation="Horizontal" Margin="0,4">
+                                                                    <Label Content="{Binding Caption}" Width="110"
+                                                                           VerticalContentAlignment="Center"/>
+                                                                    <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+                                                                             Style="{StaticResource FreshInput}"
+                                                                             Width="{Binding BoxWidth}"/>
+                                                                </StackPanel>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
+                    </TabControl>
+                </DockPanel>
+            </DockPanel>
         </Border>
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
-                    DockPanel.Dock="Bottom" Margin="0,8,0,0">
-            <Button Content="{Binding SaveText, FallbackValue='保存并重启'}" Width="120" Height="36"
-                    Margin="4" Command="{Binding SaveCommand}" IsDefault="True"/>
-            <Button Content="{Binding CancelText, FallbackValue='取消'}" Width="100" Height="36"
-                    Margin="4" Command="{Binding CancelCommand}" IsCancel="True"
-                    Style="{StaticResource FreshCancelButton}"/>
-        </StackPanel>
-        <TabControl>
-            <!--多机页-->
-            <TabItem Header="{Binding TabMultiText, FallbackValue='机台连接'}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="8">
-                        <ItemsControl ItemsSource="{Binding Stations}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" Margin="0,3">
-                                        <CheckBox Content="{Binding TitleText}"
-                                                  IsChecked="{Binding Enabled}" Width="90"
-                                                  VerticalContentAlignment="Center"/>
-                                        <TextBox Text="{Binding Ip, UpdateSourceTrigger=PropertyChanged}"
-                                                 Width="130" Height="28"
-                                                 VerticalContentAlignment="Center"
-                                                 Margin="4,0,0,0"/>
-                                        <TextBox Text="{Binding PortText, UpdateSourceTrigger=PropertyChanged}"
-                                                 Width="60" Height="28"
-                                                 VerticalContentAlignment="Center"
-                                                 Margin="4,0,0,0"/>
-                                        <Button Content="{Binding DataContext.TestText, FallbackValue='测试连接',
-                                                    RelativeSource={RelativeSource AncestorType=Window}}"
-                                                Width="70" Height="28" Margin="4,0,0,0"
-                                                Command="{Binding DataContext.TestStationCommand,
-                                                    RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding Id}"/>
-                                        <Label Content="{Binding ResultText}"
-                                               Foreground="{Binding ResultForeground}"
-                                               ToolTip="{Binding ResultTip}"
-                                               Width="120" VerticalContentAlignment="Center"/>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                            <Label Content="{Binding ScanIntervalLabel, FallbackValue='扫描周期ms'}"
-                                   VerticalContentAlignment="Center"
-                                   ToolTip="每台机台触发字轮询间隔（50~5000，缺省 200）；保存即热生效，无需重连"/>
-                            <TextBox Text="{Binding ScanIntervalText, UpdateSourceTrigger=PropertyChanged}"
-                                     Width="60" Height="28" VerticalContentAlignment="Center"
-                                     Margin="4,0,16,0"/>
-                            <Button Content="{Binding TestAllText, FallbackValue='全部测试'}" Width="100" Height="30"
-                                    Command="{Binding TestAllStationsCommand}"/>
-                            <Button Content="{Binding RestoreText, FallbackValue='恢复缺省'}" Width="100" Height="30"
-                                    Margin="8,0,0,0" Command="{Binding RestoreStationsCommand}"
-                                    Style="{StaticResource FreshCancelButton}"/>
-                        </StackPanel>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-            <!--接口地址页-->
-            <TabItem Header="{Binding TabApiText, FallbackValue='接口地址'}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="8">
-                        <StackPanel Orientation="Horizontal" Margin="0,3">
-                            <Label Content="{Binding DataLengthLabel, FallbackValue='数据长度'}" Width="110"
-                                   VerticalContentAlignment="Center"/>
-                            <TextBox Text="{Binding DataLengthText, UpdateSourceTrigger=PropertyChanged}"
-                                     Width="80" Height="28" VerticalContentAlignment="Center"/>
-                            <Label Content="{Binding DataSegmentOffsetsLabel, FallbackValue='分段偏移'}" Width="110"
-                                   Margin="16,0,0,0" VerticalContentAlignment="Center"
-                                   ToolTip="API0030/0031 返回 DATA 三段拆写偏移，逗号分隔两段（缺省 30,60）"/>
-                            <TextBox Text="{Binding DataSegmentOffsetsText, UpdateSourceTrigger=PropertyChanged}"
-                                     Width="80" Height="28" VerticalContentAlignment="Center"/>
-                        </StackPanel>
-                        <ItemsControl ItemsSource="{Binding ApiSections}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel>
-                                        <Label Content="{Binding ApiCode}" FontWeight="Bold"
-                                               Foreground="#1565C0" Margin="0,8,0,0"/>
-                                        <ItemsControl ItemsSource="{Binding Rows}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <StackPanel Orientation="Horizontal" Margin="0,3">
-                                                        <Label Content="{Binding Caption}" Width="110"
-                                                               VerticalContentAlignment="Center"/>
-                                                        <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
-                                                                 Width="{Binding BoxWidth}" Height="28"
-                                                                 VerticalContentAlignment="Center"/>
-                                                    </StackPanel>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-        </TabControl>
-    </DockPanel>
+    </Grid>
 </Window>

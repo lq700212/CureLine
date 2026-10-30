@@ -3,56 +3,135 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:ctrl="clr-namespace:CimGateway.Controls"
         xmlns:vm="clr-namespace:CimGateway.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MainWindowViewModel, IsDesignTimeCreatable=False}"
         Icon="Assets/app.ico"
-        Title="{Binding TitleText, FallbackValue='CIM通信网关'}" WindowState="Maximized" Width="1230" Height="640">
+        Title="{Binding TitleText, FallbackValue='CIM通信网关'}" Width="1230" Height="640"
+        MinWidth="960" MinHeight="480"
+        WindowState="Maximized"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        FontSize="13"
+        Background="{DynamicResource Brush.WindowBg}"
+        Foreground="{DynamicResource Brush.FgMid}">
+    <!-- 无边框自绘（对齐程序① V0.0.28 口径）：OS 标题栏白条移除，品牌顶栏
+         即标题条——CaptionHeight=44 整条命中拖动/双击最大化还原；
+         ResizeBorderThickness=6 还原态边沿拉伸；GlassFrameThickness=0 关 DWM
+         玻璃边（最大化溢出断症在 code-behind ApplyRootMargin 垫回）。 -->
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="44" GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False"
+                            ResizeBorderThickness="6"/>
+    </shell:WindowChrome.WindowChrome>
     <!--主窗（MVVM：状态走 MainWindowViewModel，本文件纯绑定）。
         多机视图 = 多机版 Form1（单机视图与"运行模式"已随单机链路删除，P2.1）。
-        菜单门禁走 VM（admin/dev/未登录）；视图筛选下拉 = Form2/Form6"只看某几台"。
+        品牌顶栏按钮组 = 原 OS 菜单栏直迁（菜单"设置"下拉拆为三枚独立按钮，门禁
+        不变：网关设置 dev 可见、修改密码/快捷方式登录后可用）；主题切换钮写回
+        config.ini [setting] Theme。机台卡片 8 实例 + 视图筛选下拉（Form2/Form6
+        "只看某几台"）。
         设计时说明：设计器里 DataContext 为空，绑定全部失败取 FallbackValue
         显示占位文案（运行时 VM 注入后显示真值）。-->
-    <Grid>
+    <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        <!--顶菜单栏-->
-        <DockPanel Grid.Row="0" Background="{StaticResource FreshTopBarBrush}">
-            <Menu DockPanel.Dock="Left" VerticalAlignment="Center"
-                  FontFamily="微软雅黑" FontSize="14" Background="Transparent">
-                <MenuItem Header="{Binding MiLogText, FallbackValue='MES 交互实时日志'}" Command="{Binding ShowLogCommand}"
-                          Style="{StaticResource FreshMenuButton}"/>
-                <MenuItem Header="{Binding MiDebugText, FallbackValue='MES 接口调试界面'}" Command="{Binding ShowDebugCommand}"
-                          Style="{StaticResource FreshMenuButton}"/>
-                <!--注意：子项在 Popup 独立视觉树里，RelativeSource 找不到 Window；
-                    DataContext 走逻辑树继承（与父菜单同 VM），直接绑 VM 属性。-->
-                <MenuItem Header="{Binding MiSettingsText, FallbackValue='设置'}"
-                          Style="{StaticResource FreshMenuDropButton}">
-                    <MenuItem Header="{Binding MiPlcText, FallbackValue='网关设置'}"
-                              Command="{Binding ShowPlcCommand}"
-                              Visibility="{Binding PlcVisible,
+
+        <!-- ① 品牌顶栏（行 0 全宽贴边，即标题条）：左=chip"CIM"+标题+时钟；
+             右=功能按钮组（门禁与旧菜单完全一致）+ 系统三钮（无边框窗必需）。 -->
+        <Border Grid.Row="0" Height="44" Padding="14,0"
+                Background="{DynamicResource Brush.HeaderGrad}"
+                BorderBrush="{DynamicResource Brush.TopbarBorder}" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <!-- 标题区：chip"CIM" + 标题 + 时钟（HTML topbar 左段直译） -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="{DynamicResource Brush.HeaderChipBg}"
+                            CornerRadius="4" Padding="7,3" Margin="0,0,10,0">
+                        <TextBlock Text="CIM" FontWeight="ExtraBold" FontSize="12.5"
+                                   Foreground="{DynamicResource Brush.TopbarFg}"/>
+                    </Border>
+                    <TextBlock Text="{Binding TitleText, FallbackValue='CIM通信网关'}"
+                               FontSize="14.5" FontWeight="SemiBold" VerticalAlignment="Center"
+                               Foreground="{DynamicResource Brush.TopbarFg}"/>
+                    <TextBlock Text="{Binding ClockText, FallbackValue='2026-09-23 12:00:00'}"
+                               Margin="14,0,0,0" VerticalAlignment="Center" FontSize="12"
+                               Foreground="{DynamicResource Brush.HeaderSubFg}"/>
+                </StackPanel>
+                <!-- 功能按钮组：与旧菜单同序同门禁（VM 命令/显隐/灰显不变）；
+                     系统三钮收尾（最小化/最大化还原/关闭，无边框窗顶替 OS 按钮职责） -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Tag="{StaticResource Geo.Reconnect}" Style="{StaticResource GhostButton}"
+                            Content="{Binding ConnectText, FallbackValue='连接设备'}"
+                            IsEnabled="{Binding ConnectEnabled}"
+                            Command="{Binding ConnectMultiCommand}" Margin="0,0,6,0"
+                            ToolTip="连接全部机台（逐台后台建连，不冻界面）"/>
+                    <Button Tag="{StaticResource Geo.Log}" Style="{StaticResource GhostButton}"
+                            Content="{Binding BtnLogText, FallbackValue='日志'}"
+                            Command="{Binding ShowLogCommand}" Margin="0,0,6,0"
+                            ToolTip="MES 交互实时日志（全部机台 / 分机台）"/>
+                    <Button Tag="{StaticResource Geo.Debug}" Style="{StaticResource GhostButton}"
+                            Content="{Binding BtnDebugText, FallbackValue='调试'}"
+                            Command="{Binding ShowDebugCommand}" Margin="0,0,6,0"
+                            ToolTip="MES 接口调试界面（5 接口表单 + 预览上传）"/>
+                    <!-- 网关设置：仅 dev 可见（PlcVisible，与旧菜单项显隐一致） -->
+                    <Button Tag="{StaticResource Geo.Config}" Style="{StaticResource GhostButton}"
+                            Content="{Binding BtnPlcText, FallbackValue='网关设置'}"
+                            Command="{Binding ShowPlcCommand}" Margin="0,0,6,0"
+                            Visibility="{Binding PlcVisible,
                                         Converter={StaticResource BoolToVisibilityConverter}}"
-                              Style="{StaticResource FreshMenuSubItem}"/>
-                    <MenuItem Header="{Binding MiChangePwdText, FallbackValue='修改密码'}"
-                              Command="{Binding ShowChangePwdCommand}"
-                              IsEnabled="{Binding SettingsItemEnabled}"
-                              Style="{StaticResource FreshMenuSubItem}"/>
-                    <MenuItem Header="{Binding MiShortcutText, FallbackValue='创建桌面快捷方式'}"
-                              Command="{Binding ShowShortcutCommand}"
-                              IsEnabled="{Binding SettingsItemEnabled}"
-                              Style="{StaticResource FreshMenuSubItem}"/>
-                </MenuItem>
-                <MenuItem Header="{Binding MiLangText, FallbackValue='English'}" Command="{Binding SwitchLanguageCommand}"
-                          Style="{StaticResource FreshMenuButton}"/>
-                <MenuItem Header="{Binding LoginHeader, FallbackValue='登录'}" Command="{Binding LoginCommand}"
-                          Style="{StaticResource FreshMenuButton}"/>
-            </Menu>
-            <Label DockPanel.Dock="Right" Content="{Binding ClockText, FallbackValue='2026-09-23 12:00:00'}"
-                   VerticalAlignment="Center" Margin="0,0,12,0"/>
-        </DockPanel>
+                            ToolTip="机台连接 / 接口地址配置（dev，保存后重启生效）"/>
+                    <!-- 修改密码 / 快捷方式：登录后可用（SettingsItemEnabled，与旧菜单一致） -->
+                    <Button Tag="{StaticResource Geo.Edit}" Style="{StaticResource GhostButton}"
+                            Content="{Binding BtnChangePwdText, FallbackValue='修改密码'}"
+                            Command="{Binding ShowChangePwdCommand}"
+                            IsEnabled="{Binding SettingsItemEnabled}" Margin="0,0,6,0"/>
+                    <Button Tag="{StaticResource Geo.Link}" Style="{StaticResource GhostButton}"
+                            Content="{Binding BtnShortcutText, FallbackValue='快捷方式'}"
+                            Command="{Binding ShowShortcutCommand}"
+                            IsEnabled="{Binding SettingsItemEnabled}" Margin="0,0,6,0"
+                            ToolTip="创建桌面快捷方式"/>
+                    <Button Style="{StaticResource GhostButton}"
+                            Content="{Binding BtnLangText, FallbackValue='English'}"
+                            Command="{Binding SwitchLanguageCommand}" Margin="0,0,6,0"/>
+                    <Button Tag="{StaticResource Geo.Login}" Style="{StaticResource GhostButton}"
+                            Content="{Binding BtnLoginText, FallbackValue='登录'}"
+                            Command="{Binding LoginCommand}" Margin="0,0,6,0"
+                            ToolTip="登录 / 已登录再点=退出或切换账号"/>
+                    <Button Style="{StaticResource GhostButton}"
+                            Content="{Binding ToggleThemeText, FallbackValue=深色}" Margin="0,0,6,0"
+                            Command="{Binding ToggleThemeCommand}"
+                            ToolTip="切换 浅色(G2)/深色(G1) 主题，写回 config.ini [setting] Theme"/>
+                    <!-- 系统三钮：最小化 / 最大化还原（□↔❐ 随 WindowState 切换）/ 关闭
+                         （关闭走 OnClosing 确认链，与标题栏 ✕ 同口径） -->
+                    <Button Style="{StaticResource WinSysBtn}" Content="─" Margin="4,0,0,0"
+                            Click="OnMinClick" ToolTip="最小化"/>
+                    <Button Style="{StaticResource WinSysBtn}" Click="OnMaxClick" ToolTip="最大化 / 还原">
+                        <TextBlock>
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="□"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Path=WindowState, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=Maximized}"
+                                                     Value="Maximized">
+                                            <Setter Property="Text" Value="❐"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Button>
+                    <Button Style="{StaticResource WinSysClose}" Content="✕" Click="OnCloseClick" ToolTip="关闭"/>
+                </StackPanel>
+            </Grid>
+        </Border>
 
         <!-- ================= 多机视图 ================= -->
         <Grid Grid.Row="1">
@@ -60,20 +139,20 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="6,4"
-                        VerticalAlignment="Center" Background="{StaticResource FreshTopBarBrush}">
-                <Button Content="{Binding ConnectText, FallbackValue='连接设备'}" IsEnabled="{Binding ConnectEnabled}"
-                        Command="{Binding ConnectMultiCommand}"
-                        Width="110" Height="32" Margin="4,2" VerticalAlignment="Center"/>
-                <Label Content="视图:" VerticalAlignment="Center" Margin="12,0,2,0"/>
+            <!-- 筛选条：视图下拉（只看某几台）+ 扫描周期（卡片上方轻量一行） -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10,8,10,0"
+                        VerticalAlignment="Center">
+                <Label Content="{Binding DataContext.ViewLabel, FallbackValue='视图:',
+                            RelativeSource={RelativeSource AncestorType=Window}}"
+                       VerticalAlignment="Center"/>
                 <ComboBox ItemsSource="{Binding ViewOptions}"
                           SelectedIndex="{Binding SelectedViewIndex}"
-                          Width="220" Height="30" VerticalAlignment="Center"
-                          VerticalContentAlignment="Center"/>
-                <Label Content="{Binding ScanCycleText, FallbackValue='扫描周期: -- ms'}" Margin="16,0"
+                          Style="{StaticResource FreshCombo}"
+                          Width="220" Margin="6,0,0,0"/>
+                <Label Content="{Binding ScanCycleText, FallbackValue='扫描周期: -- ms'}" Margin="16,0,0,0"
                        VerticalAlignment="Center"/>
             </StackPanel>
-            <ItemsControl Grid.Row="1" ItemsSource="{Binding Stations}" Margin="4">
+            <ItemsControl Grid.Row="1" ItemsSource="{Binding Stations}" Margin="6,8">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <UniformGrid Columns="{Binding DataContext.GridColumns, FallbackValue=4,

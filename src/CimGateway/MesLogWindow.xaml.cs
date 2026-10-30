@@ -28,6 +28,9 @@ public partial class MesLogWindow : Window
             BoxLogs.ScrollIntoView(BoxLogs.Items[^1]);
     }
 
+    /// <summary>标题条关闭钮（OnClosed 照常 Dispose VM 退订实时流）。</summary>
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
+
     protected override void OnClosed(EventArgs e)
     {
         ViewModel.Dispose();

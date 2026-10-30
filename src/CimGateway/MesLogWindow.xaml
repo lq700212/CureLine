@@ -3,29 +3,60 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:vm="clr-namespace:CimGateway.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MesLogViewModel, IsDesignTimeCreatable=False}"
         Icon="Assets/app.ico"
         Title="{Binding TitleText, FallbackValue='MES 交互实时日志'}" Width="784" Height="561" Topmost="True"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen" MinWidth="480" MinHeight="320"
+        WindowStyle="None" Background="Transparent" AllowsTransparency="True" FontSize="13"
+        Foreground="{DynamicResource Brush.Fresh.FgMid}">
+    <shell:WindowChrome.WindowChrome>
+        <!-- 无边框自绘（弹窗统一骨架）：本窗可缩放——ResizeBorderThickness=6；
+             Topmost 置顶语义保留（老项目口径） -->
+        <shell:WindowChrome CaptionHeight="34" GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False"
+                            ResizeBorderThickness="6"/>
+    </shell:WindowChrome.WindowChrome>
     <!--日志窗（MVVM：行集合走 MesLogViewModel，本文件纯绑定）。
         滚动到底部是纯视图行为，View 订阅集合变化调 ScrollIntoView。
+        日志流 ListBox 走 App.xaml 隐式主题样式（CardBg 融底 + 胶囊滚动条，
+        深浅主题跟随）；清空=破坏性操作走危险色钮。
         设计时 DataContext 为空，按钮文本取 FallbackValue 占位（仅预览，运行时走真值）。-->
-    <DockPanel Margin="8">
-        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
-                    HorizontalAlignment="Right" Margin="0,6,0,0">
-            <Button Content="{Binding ClearText, FallbackValue='清空当前显示'}" Width="120" Height="30"
-                    Margin="0,0,8,0" Command="{Binding ClearCommand}"/>
-            <Button Content="{Binding LangText, FallbackValue='English'}" Width="80" Height="30"
-                    Command="{Binding SwitchLanguageCommand}"/>
-        </StackPanel>
-        <ListBox x:Name="BoxLogs" FontSize="12" ItemsSource="{Binding Lines}">
-            <ListBox.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <VirtualizingStackPanel/>
-                </ItemsPanelTemplate>
-            </ListBox.ItemsPanel>
-        </ListBox>
-    </DockPanel>
+    <Grid Margin="14">
+        <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+                BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+                Effect="{StaticResource Fx.WinShadow}">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
+                    <Grid>
+                        <TextBlock Style="{StaticResource WinTitleText}"
+                                   Text="{Binding TitleText, FallbackValue='MES 交互实时日志'}"/>
+                        <Button Style="{StaticResource WinTitleClose}" Content="✕"
+                                HorizontalAlignment="Right"
+                                Click="OnCloseClick" ToolTip="关闭"/>
+                    </Grid>
+                </Border>
+
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                            HorizontalAlignment="Right" Margin="0,10,16,14">
+                    <Button Content="{Binding ClearText, FallbackValue='清空当前显示'}" Height="32"
+                            Margin="0,0,8,0" Command="{Binding ClearCommand}"
+                            Style="{StaticResource FreshDangerButton}"/>
+                    <Button Content="{Binding LangText, FallbackValue='English'}" Height="32"
+                            Command="{Binding SwitchLanguageCommand}"
+                            Style="{StaticResource FreshButton}"/>
+                </StackPanel>
+                <ListBox x:Name="BoxLogs" FontSize="12" ItemsSource="{Binding Lines}"
+                         Margin="16,12,16,0">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel/>
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                </ListBox>
+            </DockPanel>
+        </Border>
+    </Grid>
 </Window>

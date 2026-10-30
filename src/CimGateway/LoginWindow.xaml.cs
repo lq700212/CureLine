@@ -46,4 +46,7 @@ public partial class LoginWindow : Window
             && box.Password != ViewModel.Password)
             ViewModel.Password = box.Password;
     }
+
+    /// <summary>标题条关闭钮：不设 DialogResult（等价取消，ShowLogin 判 ok=false）。</summary>
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 }

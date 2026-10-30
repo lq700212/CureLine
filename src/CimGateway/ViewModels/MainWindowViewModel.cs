@@ -14,6 +14,7 @@
 // =========================================================================
 
 using CureLine.ViewModels;
+using CimGateway.Themes;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -78,6 +79,10 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         ShowShortcutCommand = new RelayCommand(ShowShortcut);
         SwitchLanguageCommand = new RelayCommand(SwitchLanguage);
         LoginCommand = new RelayCommand(LoginLogout);
+        ToggleThemeCommand = new RelayCommand(ToggleTheme);
+        // 主题按钮文案对齐 App.OnStartup 已应用的当前主题（测试态无 App：ThemeManager
+        // 只记账不碰资源，Current 保持缺省 Light → 按钮显示目标"深色"）
+        ToggleThemeText = ThemeManager.Current == "Dark" ? "浅色" : "深色";
 
         RefreshTexts();
         LocalLog(Tr("软件启动"), -1);
@@ -91,6 +96,10 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     public string LoginHeader => _role == LoginRole.None
         ? Tr("登录") : $"{_loginUser} ({Tr("切换/退出")})";
 
+    /// <summary>顶栏登录钮短文案（按钮空间小：未登录"登录"，已登录只显示账号——
+    /// 点击仍是 LoginLogout 同链：已登录再点弹确认退出/切账号）。</summary>
+    public string BtnLoginText => _role == LoginRole.None ? Tr("登录") : _loginUser;
+
     /// <summary>PLC设置项显隐（仅 dev 可见，XAML 经转换器绑 Visibility）。</summary>
     public bool PlcVisible => _role == LoginRole.Dev;
 
@@ -98,13 +107,13 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     public bool SettingsItemEnabled => RunModeSettings.IsLoggedIn(_role);
 
     public string TitleText => Tr("CIM通信网关");
-    public string MiLogText => Tr("MES 交互实时日志");
-    public string MiDebugText => Tr("MES 接口调试界面");
-    public string MiSettingsText => Tr("设置");
-    public string MiPlcText => Tr("网关设置");
-    public string MiChangePwdText => Tr("修改密码");
-    public string MiShortcutText => Tr("创建桌面快捷方式");
-    public string MiLangText =>
+    public string ViewLabel => Tr("视图:");
+    public string BtnLogText => Tr("日志");
+    public string BtnDebugText => Tr("调试");
+    public string BtnPlcText => Tr("网关设置");
+    public string BtnChangePwdText => Tr("修改密码");
+    public string BtnShortcutText => Tr("快捷方式");
+    public string BtnLangText =>
         LanguageService.CurrentLanguage == "CH" ? "English" : "中文";
 
     public RelayCommand ShowLogCommand { get; }
@@ -114,6 +123,39 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     public RelayCommand ShowShortcutCommand { get; }
     public RelayCommand SwitchLanguageCommand { get; }
     public RelayCommand LoginCommand { get; }
+    public RelayCommand ToggleThemeCommand { get; }
+
+    // ---- 双主题（Light=G2 浅色 / Dark=G1 深空，与程序①同款交互） ----
+
+    private string _toggleThemeText = "深色";
+
+    /// <summary>主题按钮文案=切换目标（当前浅色显示"深色"，反之"浅色"）。</summary>
+    public string ToggleThemeText
+    {
+        get => _toggleThemeText;
+        private set => Set(ref _toggleThemeText, value);
+    }
+
+    /// <summary>
+    /// 主题切换：目标名 → ThemeManager 换字典（UI 线程，DynamicResource 全窗生效）
+    /// → 写回 ini（现场记住，下次启动同主题；写盘失败只丢记忆不回切）→
+    /// 按钮文案翻新目标。与程序① MainViewModel.ToggleTheme 同款口径。
+    /// </summary>
+    private void ToggleTheme()
+    {
+        var target = ThemeManager.ToggleTarget;
+        ThemeManager.ApplyTheme(target);
+        try
+        {
+            IniFile.Write(AppPaths.ConfigIni, "setting", "Theme", target);
+        }
+        catch
+        {
+            // 写盘失败不回切——界面已换，只是没记住（下次启动回旧主题）
+        }
+        ToggleThemeText = target == "Dark" ? "浅色" : "深色";
+        LocalLog(Tr("主题切换：") + (target == "Dark" ? "深色（G1）" : "浅色（G2）"), -1);
+    }
 
     public void RefreshTexts()
     {
@@ -126,6 +168,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     private void RefreshGating()
     {
         Raise(nameof(LoginHeader));
+        Raise(nameof(BtnLoginText));
         Raise(nameof(PlcVisible));
         Raise(nameof(PlcEnabled));
         Raise(nameof(SettingsItemEnabled));

@@ -1,0 +1,106 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+      Dark 主题色板（G1 · 深空玻璃舱，程序② CIM 通信网关版）：
+      - 与程序① CureStation/Themes/Dark.xaml 同源同值，只保留本程序有消费者的键；
+      - 主基调：#0E1626 深空底（左上径向冷光）+ rgba(白) 玻璃卡 + 霓虹状态灯；
+      - 键名与 Light.xaml 完全同名异值——ThemeManager 切字典即换肤；
+      - 键名勿改（ThemeDictionaryTests 文本级断言锁键不漂移）；
+      - α 十六进制前缀 = AARRGGBB（#14=8%、#26=15%、#29=16%、#2E=18%、#61=38%、#80=50%）。
+    -->
+
+    <!-- ══════════ 窗底 / 品牌顶栏 ══════════ -->
+    <!-- 主窗底 = G1 stage：ellipse at 18% 12% 的深蓝冷光晕开到 #0E1626（HTML g1-stage 直译） -->
+    <RadialGradientBrush x:Key="Brush.WindowBg" Center="0.18,0.12" GradientOrigin="0.18,0.12"
+                         RadiusX="1.35" RadiusY="1.2">
+        <GradientStop Color="#1B2A45" Offset="0"/>
+        <GradientStop Color="#0E1626" Offset="0.55"/>
+        <GradientStop Color="#0E1626" Offset="1"/>
+    </RadialGradientBrush>
+    <!-- 品牌顶栏：深蓝黑实底（HTML .topbar #101A2C）+ 底边弱蓝框 -->
+    <LinearGradientBrush x:Key="Brush.HeaderGrad" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#101A2C" Offset="0"/>
+        <GradientStop Color="#101A2C" Offset="1"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="Brush.TopbarBorder" Color="#4078A0DC"/>
+    <SolidColorBrush x:Key="Brush.TopbarFg" Color="#9DB8DC"/>
+    <SolidColorBrush x:Key="Brush.HeaderSubFg" Color="#9DB8DC"/>
+    <SolidColorBrush x:Key="Brush.HeaderChipBg" Color="#22FFFFFF"/>
+
+    <!-- ══════════ 文字三阶（HTML #EAF3FF / #9DB8DC / #7E9BBF） ══════════ -->
+    <SolidColorBrush x:Key="Brush.FgStrong" Color="#EAF3FF"/>
+    <SolidColorBrush x:Key="Brush.FgMid" Color="#9DB8DC"/>
+    <SolidColorBrush x:Key="Brush.FgDim" Color="#7E9BBF"/>
+    <SolidColorBrush x:Key="Brush.FgOnAccent" Color="#FFFFFF"/>
+
+    <!-- ══════════ 主色 ══════════ -->
+    <SolidColorBrush x:Key="Brush.Accent" Color="#4FC3F7"/>
+    <SolidColorBrush x:Key="Brush.AccentDeep" Color="#2E8FE0"/>
+    <SolidColorBrush x:Key="Brush.AccentSoft" Color="#3856B4FF"/>
+
+    <!-- ══════════ 面板玻璃（弹层共用） ══════════ -->
+    <SolidColorBrush x:Key="Brush.PanelBg" Color="#12203A"/>
+    <SolidColorBrush x:Key="Brush.PanelBorder" Color="#1F3350"/>
+
+    <!-- ══════════ 机台卡（玻璃卡底 / 低透明边 / 悬停提亮） ══════════ -->
+    <SolidColorBrush x:Key="Brush.CardBg" Color="#0EFFFFFF"/>
+    <SolidColorBrush x:Key="Brush.CardBorder" Color="#2994B4E1"/>
+    <SolidColorBrush x:Key="Brush.CardBorderHover" Color="#5294B4E1"/>
+
+    <!-- ══════════ 状态点色（霓虹口径） ══════════ -->
+    <SolidColorBrush x:Key="Brush.StateIdle" Color="#3A4A63"/>
+    <SolidColorBrush x:Key="Brush.StateRed" Color="#FF1744"/>
+    <SolidColorBrush x:Key="Brush.StateYellow" Color="#FFB300"/>
+    <SolidColorBrush x:Key="Brush.StateGreen" Color="#00E676"/>
+
+    <!-- ══════════ 顶栏按钮（HTML .btn #1B2740 底 #33486B 边 #9DB8DC 字；高亮钮=蓝玻璃亮字） ══════════ -->
+    <SolidColorBrush x:Key="Brush.GhostBg" Color="#FF1B2740"/>
+    <SolidColorBrush x:Key="Brush.GhostBorder" Color="#FF33486B"/>
+    <SolidColorBrush x:Key="Brush.GhostFg" Color="#FF9DB8DC"/>
+    <SolidColorBrush x:Key="Brush.GhostHoverBg" Color="#FF22345A"/>
+    <SolidColorBrush x:Key="Brush.GhostBorderHover" Color="#FF4C6E9B"/>
+    <SolidColorBrush x:Key="Brush.GhostPressedBg" Color="#FF182348"/>
+    <SolidColorBrush x:Key="Brush.PrimaryGhostBg" Color="#2E0A84FF"/>
+    <SolidColorBrush x:Key="Brush.PrimaryGhostBorder" Color="#6664D2FF"/>
+    <SolidColorBrush x:Key="Brush.PrimaryGhostFg" Color="#FF64D2FF"/>
+
+    <!-- ══════════ 弹窗键板 Fresh.*（G1 深空玻璃口径，与程序① Dark 同值） ══════════ -->
+    <!-- 实底深蓝卡（#12203A 对齐 PanelBg）+ 板岩蓝边（#33486B 对齐 GhostBorder）+
+         亮色文字三阶（#EAF3FF/#9DB8DC/#7E9BBF）。键名勿改。 -->
+    <SolidColorBrush x:Key="Brush.Fresh.CardBg" Color="#FF12203A"/>
+    <SolidColorBrush x:Key="Brush.Fresh.HintBg" Color="#FF16263F"/>
+    <SolidColorBrush x:Key="Brush.Fresh.Border" Color="#FF33486B"/>
+    <SolidColorBrush x:Key="Brush.Fresh.FgStrong" Color="#FFEAF3FF"/>
+    <SolidColorBrush x:Key="Brush.Fresh.FgMid" Color="#FF9DB8DC"/>
+    <SolidColorBrush x:Key="Brush.Fresh.FgDim" Color="#FF7E9BBF"/>
+    <SolidColorBrush x:Key="Brush.Fresh.ButtonBg" Color="#FF1B2740"/>
+    <SolidColorBrush x:Key="Brush.Fresh.ButtonHoverBg" Color="#FF22345A"/>
+    <SolidColorBrush x:Key="Brush.Fresh.ButtonHoverBorder" Color="#FF4C6E9B"/>
+    <SolidColorBrush x:Key="Brush.Fresh.ButtonPressedBg" Color="#FF182348"/>
+    <SolidColorBrush x:Key="Brush.Fresh.Accent" Color="#FF2E8FE0"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AccentBorder" Color="#FF47AEFF"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AccentHover" Color="#FF389BEB"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AccentPressed" Color="#FF2568C4"/>
+    <SolidColorBrush x:Key="Brush.Fresh.OnAccent" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Brush.Fresh.Danger" Color="#FFE5473F"/>
+    <SolidColorBrush x:Key="Brush.Fresh.DangerBorder" Color="#FFFF8A80"/>
+    <SolidColorBrush x:Key="Brush.Fresh.DangerHover" Color="#FFFF6E63"/>
+    <SolidColorBrush x:Key="Brush.Fresh.DangerPressed" Color="#FFB32720"/>
+    <SolidColorBrush x:Key="Brush.Fresh.InputBg" Color="#FF0F1D33"/>
+    <!-- 窗体骨架（深空窗底 / 关闭钮悬停红沿用 Win32 惯例双主题同值） -->
+    <SolidColorBrush x:Key="Brush.Fresh.WinBg" Color="#FF0F1B30"/>
+    <SolidColorBrush x:Key="Brush.Fresh.CloseHoverBg" Color="#E81123"/>
+    <!-- 变体面板 -->
+    <SolidColorBrush x:Key="Brush.Fresh.PanelBorder" Color="#FF1F3350"/>
+    <SolidColorBrush x:Key="Brush.Fresh.SubCardBg" Color="#FF142238"/>
+    <!-- 提示条两族（低透明状态浸染底 + 亮状态字） -->
+    <SolidColorBrush x:Key="Brush.Fresh.AlertErrBg" Color="#26FF1744"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AlertErrBorder" Color="#4DFF1744"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AlertErrFg" Color="#FF5252"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AlertOkBg" Color="#2600E676"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AlertOkBorder" Color="#4D00E676"/>
+    <SolidColorBrush x:Key="Brush.Fresh.AlertOkFg" Color="#FF00E676"/>
+    <!-- 滚动条胶囊 -->
+    <SolidColorBrush x:Key="Brush.Fresh.ScrollThumb" Color="#FF33486B"/>
+    <SolidColorBrush x:Key="Brush.Fresh.ScrollThumbHover" Color="#FF4C6E9B"/>
+</ResourceDictionary>

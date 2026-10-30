@@ -36,4 +36,7 @@ public partial class ChangePasswordWindow : Window
         else if (sender == TxtConfirm && TxtConfirm.Password != ViewModel.ConfirmPassword)
             ViewModel.ConfirmPassword = TxtConfirm.Password;
     }
+
+    /// <summary>标题条关闭钮：不设 DialogResult（等价取消，改动不落盘）。</summary>
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 }

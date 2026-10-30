@@ -56,7 +56,7 @@ public class StationRowViewModel : ViewModelBase
     private string _ip = "";
     private string _port = "";
     private string _resultText = "";
-    private string _resultForeground = "Black";
+    private string _resultForeground = "—"; // 语义色名：Ok/Err 之外（含初始）View 走中性字色
     private string? _resultTip;
     private bool _testing;
 
@@ -319,7 +319,9 @@ public class PlcConfigViewModel : ViewModelBase
             UiInvoke(() =>
             {
                 row.ResultText = ok ? Tr("连接成功") : Tr("连接失败");
-                row.ResultForeground = ok ? "DarkGreen" : "Red";
+                // 语义色名（"Ok"/"Err"）——View 层 DataTrigger 映射主题键
+                // （Brush.Fresh.AlertOkFg/AlertErrFg），深浅主题自动跟随
+                row.ResultForeground = ok ? "Ok" : "Err";
                 row.ResultTip = msg;
             });
         }

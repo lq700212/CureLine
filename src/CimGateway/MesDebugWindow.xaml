@@ -3,56 +3,95 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:vm="clr-namespace:CimGateway.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MesDebugViewModel, IsDesignTimeCreatable=False}"
         Icon="Assets/app.ico"
-        Title="{Binding TitleText, FallbackValue='MES 接口调试界面'}" Width="834" Height="560"
-        WindowStartupLocation="CenterScreen">
+        Title="{Binding TitleText, FallbackValue='MES 接口调试界面'}" Width="860" Height="580"
+        WindowStartupLocation="CenterScreen" MinWidth="680" MinHeight="420"
+        WindowStyle="None" Background="Transparent" AllowsTransparency="True" FontSize="13"
+        Foreground="{DynamicResource Brush.Fresh.FgMid}">
+    <shell:WindowChrome.WindowChrome>
+        <!-- 无边框自绘（弹窗统一骨架）：本窗可缩放——ResizeBorderThickness=6 还原态
+             边沿拉伸；CaptionHeight 撑标题条命中拖动；系统按钮全关（自绘 ✕） -->
+        <shell:WindowChrome CaptionHeight="34" GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False"
+                            ResizeBorderThickness="6"/>
+    </shell:WindowChrome.WindowChrome>
     <!--调试窗（MVVM：表单行走 MesDebugViewModel，本文件纯绑定）。
         字段行按接口显隐（Visible→Visibility）；值一改预览即刷新。
+        响应/预览两个只读框复用 FreshInput 样式（Height 实例覆盖成多行区）。
+        取色全走 Brush.Fresh.*（两主题字典同名异值，切字典即换肤）。
         设计时 DataContext 为空，展示文本取 FallbackValue 占位（仅预览，运行时走真值）。-->
-    <DockPanel Margin="8">
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-            <Label Content="{Binding ApiLabel, FallbackValue='接口类型:'}" VerticalAlignment="Center"/>
-            <ComboBox ItemsSource="{Binding Apis}" SelectedItem="{Binding SelectedApi}"
-                      Width="140" Height="28"/>
-            <Button Content="{Binding SaveText, FallbackValue='保存参数到本地'}" Width="130" Height="30"
-                    Margin="12,0,0,0" Command="{Binding SaveCommand}"/>
-            <Button Content="{Binding UploadText, FallbackValue='手动上传到MES'}" Width="130" Height="30"
-                    Margin="8,0,0,0" Background="#1E88E5" Foreground="White"
-                    Command="{Binding UploadCommand}"
-                    IsEnabled="{Binding UploadEnabled}"/>
-            <Button Content="{Binding LangText, FallbackValue='English'}" Width="70" Height="30"
-                    Margin="8,0,0,0" Command="{Binding SwitchLanguageCommand}"/>
-        </StackPanel>
-        <Label Content="{Binding RespLabel, FallbackValue='MES 返回信息:'}" DockPanel.Dock="Bottom"/>
-        <TextBox Text="{Binding Response, Mode=OneWay}" DockPanel.Dock="Bottom" Height="110"
-                 IsReadOnly="True" Background="#F0F0F0" TextWrapping="Wrap"
-                 VerticalScrollBarVisibility="Auto" Margin="0,2,0,6"/>
-        <Label Content="{Binding PreviewLabel, FallbackValue='发送报文预览:'}" DockPanel.Dock="Bottom"/>
-        <TextBox Text="{Binding Preview, Mode=OneWay}" DockPanel.Dock="Bottom" Height="52"
-                 IsReadOnly="True" TextWrapping="Wrap"
-                 VerticalScrollBarVisibility="Auto" Margin="0,2,0,6"/>
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <ItemsControl ItemsSource="{Binding Fields}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <WrapPanel/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <StackPanel Width="240" Height="52" Margin="5"
-                                    Visibility="{Binding Visible,
-                                        Converter={StaticResource BoolToVisibilityConverter}}">
-                            <Label Content="{Binding Caption}" Foreground="DarkBlue"
-                                   Padding="0"/>
-                            <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"/>
-                        </StackPanel>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
-    </DockPanel>
+    <Grid Margin="14">
+        <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+                BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+                Effect="{StaticResource Fx.WinShadow}">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
+                    <Grid>
+                        <TextBlock Style="{StaticResource WinTitleText}"
+                                   Text="{Binding TitleText, FallbackValue='MES 接口调试界面'}"/>
+                        <Button Style="{StaticResource WinTitleClose}" Content="✕"
+                                HorizontalAlignment="Right"
+                                Click="OnCloseClick" ToolTip="关闭"/>
+                    </Grid>
+                </Border>
+
+                <DockPanel Margin="16,12,16,14">
+                    <!-- 顶部工具行：接口选择 + 保存 / 上传 / 语言 -->
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
+                        <Label Content="{Binding ApiLabel, FallbackValue='接口类型:'}" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding Apis}" SelectedItem="{Binding SelectedApi}"
+                                  Style="{StaticResource FreshCombo}" Width="140" Margin="6,0,0,0"/>
+                        <Button Content="{Binding SaveText, FallbackValue='保存参数到本地'}" Height="32"
+                                Margin="12,0,0,0" Command="{Binding SaveCommand}"
+                                Style="{StaticResource FreshButton}" Tag="{StaticResource Geo.Save}"/>
+                        <Button Content="{Binding UploadText, FallbackValue='手动上传到MES'}" Height="32"
+                                Margin="8,0,0,0" Command="{Binding UploadCommand}"
+                                IsEnabled="{Binding UploadEnabled}"
+                                Style="{StaticResource FreshPrimaryButton}" Tag="{StaticResource Geo.Posting}"/>
+                        <Button Content="{Binding LangText, FallbackValue='English'}" Height="32"
+                                Margin="8,0,0,0" Command="{Binding SwitchLanguageCommand}"
+                                Style="{StaticResource FreshButton}"/>
+                    </StackPanel>
+                    <!-- MES 返回信息（只读多行区：FreshInput 框体 + Height 覆盖） -->
+                    <Label Content="{Binding RespLabel, FallbackValue='MES 返回信息:'}" DockPanel.Dock="Bottom"
+                           Padding="0,0,0,2"/>
+                    <TextBox Text="{Binding Response, Mode=OneWay}" DockPanel.Dock="Bottom"
+                             Style="{StaticResource FreshInput}" Height="110" Margin="0,0,0,8"
+                             IsReadOnly="True" TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
+                    <Label Content="{Binding PreviewLabel, FallbackValue='发送报文预览:'}" DockPanel.Dock="Bottom"
+                           Padding="0,0,0,2"/>
+                    <TextBox Text="{Binding Preview, Mode=OneWay}" DockPanel.Dock="Bottom"
+                             Style="{StaticResource FreshInput}" Height="52" Margin="0,0,0,8"
+                             IsReadOnly="True" TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
+                    <!-- 字段表单（WrapPanel 流式，按接口显隐） -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Fields}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Width="240" Height="52" Margin="4"
+                                                Visibility="{Binding Visible,
+                                                    Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Label Content="{Binding Caption}" Padding="0" Margin="0,0,0,2"/>
+                                        <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource FreshInput}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </DockPanel>
+        </Border>
+    </Grid>
 </Window>

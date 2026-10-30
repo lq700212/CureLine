@@ -165,13 +165,15 @@
 | --- | --- |
 | **两程序骨架** | |
 | `src/CureStation/` | **程序①固化程控**（新 exe）：30 仓位主窗 + IO 点表配置窗 + 工艺策略窗 + 工单信息窗 + 权限管理窗 + 登录窗（`ViewModels/` 六个 VM）+ 自建 `DialogService.cs` |
-| `src/CimGateway/MainWindow.*` | 主窗：多机网关视图、视图筛选（替代 Form2/Form6；单机视图与"运行模式"菜单已随单机链路删除；Phase 2 演化 CimGateway） |
-| `src/CimGateway/Controls/StationPanel.*` | 机台面板复用件（MVVM View，VM 由主窗注入，8 实例） |
-| `src/CimGateway/ViewModels/` | 主程序各窗 VM（`IDialogService` 基建 + 各窗 VM，主窗 VM 含视图筛选/门禁） |
+| `src/CimGateway/MainWindow.*` | 主窗：多机网关视图、视图筛选（替代 Form2/Form6；单机视图与"运行模式"菜单已随单机链路删除；Phase 2 演化 CimGateway）；**V0.0.31 无边框自绘**（品牌顶栏=标题条 44：chip"CIM"+标题+时钟 / 按钮组 / 系统三钮，最大化 RootGrid 垫边；原 Menu"设置"下拉拆为 网关设置/修改密码/快捷方式 三钮，门禁不变）+【深色/浅色】主题钮 |
+| `src/CimGateway/Themes/` | **程序②双主题**（V0.0.31，与程序①同构不同文件——主题键板是程序私有资产不下沉）：Light/Dark 语义键同名异值字典（只保留本程序有消费者的键）+ `ThemeManager`（ParseTheme 非法回 Light + 测试态防御）；ini `[setting] Theme` 同名键两程序各自 exe 独立生效；`CimGatewayThemeTests` 锁两字典键集合全等 |
+| `src/CimGateway/Controls/StationPanel.*` | 机台面板复用件（MVVM View，VM 由主窗注入，8 实例）；V0.0.31 走主题卡键 + 心跳灯 DataTrigger 映射 State*（VM 仍给 "Lime"/"Red"/"Green" 状态名不变） |
+| `src/CimGateway/ViewModels/` | 主程序各窗 VM（`IDialogService` 基建 + 各窗 VM，主窗 VM 含视图筛选/门禁 + 主题切换） |
 | `src/CimGateway/MesDebugWindow.*` | 调试窗：5 接口表单 + API0033 扩展 + 预览上传 |
-| `src/CimGateway/MesLogWindow.*` | 日志窗（-1 全部机台 / >=0 分机台，关窗退订） |
-| `src/CimGateway/PlcConfigWindow.*` | 网关配置窗（机台连接/接口地址两页 + 测试连接 + 保存热生效，逻辑在 Core；单机页已删；界面名已去 PLC 化——主窗"CIM通信网关"/菜单"网关设置"，V0.0.22 补丁） |
+| `src/CimGateway/MesLogWindow.*` | 日志窗（-1 全部机台 / >=0 分机台，关窗退订；清空钮=危险色） |
+| `src/CimGateway/PlcConfigWindow.*` | 网关配置窗（机台连接/接口地址两页 + 测试连接 + 保存热生效，逻辑在 Core；单机页已删；界面名已去 PLC 化——主窗"CIM通信网关"/菜单"网关设置"，V0.0.22 补丁）；V0.0.31 Tab 隐式主题样式 + 测试结果字色走语义名（VM "Ok"/"Err" → View 触发器映射 AlertOkFg/AlertErrFg） |
 | `src/CimGateway/MesAlarmWindow.*` / `ImageWindow.*` | 报警窗 / 图片查看 |
+| **程序② UI 键板** | `App.xaml`（GhostButton/Fresh 弹窗样式族/TabControl+TabItem 隐式主题/WinTitleBar/WinSysBtn + Geo.* 图标，色全 DynamicResource 走 Themes 字典）；全部弹窗统一圆角自绘骨架（WindowStyle=None + WindowChrome + Fx.WinShadow + WinTitleBar 品牌标题条，可缩放窗 ResizeBorderThickness=6）；原 `Styles/FreshBlue.xaml` 已删 |
 | **Core 共享（固化工艺家族，P3.1 新增）** | |
 | `src/CureLine.Core/Curing/CuringPolicy.cs` | 工艺策略模型：时长三级覆盖（仓位>层>全局，`ResolveMinutes` 唯一出口）+ 光栅门控 + `CuringPolicyValidator`（时长/层号/仓位键/重名） |
 | `src/CureLine.Core/Curing/CuringPolicyStore.cs` | `config/curingpolicy.json` 存取（策略库+激活名）+ `BuildDefaultBook` 缺省库自愈 |

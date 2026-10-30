@@ -3,42 +3,109 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:vm="clr-namespace:CimGateway.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:LoginViewModel, IsDesignTimeCreatable=False}"
         Icon="Assets/app.ico"
-        Title="{Binding TitleText, FallbackValue='登录'}" Width="340" Height="290"
-        WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+        Title="{Binding TitleText, FallbackValue='登录'}" Width="420" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        WindowStyle="None" Background="Transparent" AllowsTransparency="True" FontSize="13"
+        Foreground="{DynamicResource Brush.Fresh.FgMid}">
+    <shell:WindowChrome.WindowChrome>
+        <!-- 无边框自绘（弹窗统一骨架，对齐程序①口径）：CaptionHeight 撑标题条命中
+             拖动，NoResize 窗缩放边沿不需要；系统按钮全关（自绘 ✕ 走关闭链） -->
+        <shell:WindowChrome CaptionHeight="34" GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False"
+                            ResizeBorderThickness="0"/>
+    </shell:WindowChrome.WindowChrome>
     <!--登录窗（MVVM：状态走 LoginViewModel，本文件纯绑定）。
         两档账号：admin（普通管理），dev（最高权限，设置下全选项）；
         记住密码跟随账号。PasswordBox 密码经 PasswordChanged 事件转交 VM
-        （Password 非依赖属性不可绑定，见 LoginViewModel 注释）。
+        （Password 非依赖属性不可绑定）。取色全走 Brush.Fresh.*（两主题字典
+        同名异值，ThemeManager 切字典即换肤）；标题条/关闭钮走 App.xaml
+        WinTitleBar/WinTitleClose 共享样式。
+        账号/密码左缘对齐 UI 契约（程序① V0.0.30 同款）：用户名 TextBox 实例级
+        Padding 左 8（FreshInput 样式值 6 是普通表单口径；登录窗加 2 补偿
+        TextBoxView 内缩差异），密码 FreshPwdInput 左 3——两框首字符左缘同线，
+        动内边距须放大截图核对。
         设计时 DataContext 为空，展示文本取 FallbackValue 占位（仅预览，运行时走真值）。-->
-    <StackPanel Margin="20,14">
-        <Label Content="{Binding HeadText, FallbackValue='请登录'}"
-               FontSize="16" FontWeight="Bold"
-               Foreground="{StaticResource FreshPrimaryDeepBrush}"/>
-        <StackPanel Orientation="Horizontal" Margin="0,10,0,4" VerticalAlignment="Center">
-            <Label Content="{Binding UserLabel, FallbackValue='用户名'}" Width="70" VerticalAlignment="Center"/>
-            <TextBox x:Name="TxtUser"
-                     Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}"
-                     Width="210" VerticalAlignment="Center"/>
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" Margin="0,4" VerticalAlignment="Center">
-            <Label Content="{Binding PwdLabel, FallbackValue='密码'}" Width="70" VerticalAlignment="Center"/>
-            <PasswordBox x:Name="TxtPwd" Width="210" VerticalAlignment="Center"
-                         PasswordChanged="TxtPwd_Changed"/>
-        </StackPanel>
-        <CheckBox IsChecked="{Binding Remember}" Content="{Binding RememberText, FallbackValue='记住密码'}"
-                  Margin="70,6,0,0"
-                  VerticalAlignment="Center" VerticalContentAlignment="Center"/>
-        <Label Content="{Binding Tip}" Foreground="Red" Height="26"/>
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,4">
-            <Button Content="{Binding OkText, FallbackValue='确定'}" Width="100" Height="36"
-                    Margin="4" Command="{Binding OkCommand}" IsDefault="True"/>
-            <Button Content="{Binding CancelText, FallbackValue='取消'}" Width="100" Height="36"
-                    Margin="4" Command="{Binding CancelCommand}" IsCancel="True"
-                    Style="{StaticResource FreshCancelButton}"/>
-        </StackPanel>
-    </StackPanel>
+    <Grid Margin="14">
+        <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+                BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+                Effect="{StaticResource Fx.WinShadow}">
+            <DockPanel>
+                <!-- 品牌标题条：WinTitleBar 共享样式（主窗品牌渐变同源），右侧关闭钮 -->
+                <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
+                    <Grid>
+                        <TextBlock Style="{StaticResource WinTitleText}"
+                                   Text="{Binding TitleText, FallbackValue=登录}"/>
+                        <Button Style="{StaticResource WinTitleClose}" Content="✕"
+                                HorizontalAlignment="Right"
+                                Click="OnCloseClick" ToolTip="关闭（Esc）"/>
+                    </Grid>
+                </Border>
+
+                <StackPanel Margin="36,18,36,18">
+                    <!-- 居中横幅 -->
+                    <TextBlock Text="{Binding HeadText, FallbackValue='请登录'}" FontSize="20"
+                               FontWeight="Bold" Foreground="{DynamicResource Brush.Fresh.FgStrong}"
+                               HorizontalAlignment="Center"/>
+
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding UserLabel, FallbackValue='用户名'}"
+                                   VerticalAlignment="Center" Margin="0,0,12,10"/>
+                        <TextBox x:Name="TxtUser" Grid.Row="0" Grid.Column="1"
+                                 Style="{StaticResource FreshInput}" Padding="8,0,8,0"
+                                 Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,0,10"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding PwdLabel, FallbackValue='密码'}"
+                                   VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        <PasswordBox x:Name="TxtPwd" Grid.Row="1" Grid.Column="1"
+                                     Style="{StaticResource FreshPwdInput}"
+                                     PasswordChanged="TxtPwd_Changed"/>
+                    </Grid>
+                    <CheckBox IsChecked="{Binding Remember}"
+                              Content="{Binding RememberText, FallbackValue='记住密码'}"
+                              FontSize="12" HorizontalAlignment="Left" Margin="0,10,0,0"/>
+                    <!-- 提示条：底/边/字全走 AlertErr* 键（Tip 为空整条收起） -->
+                    <Border CornerRadius="4" Padding="10,6" Margin="0,12,0,0">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{DynamicResource Brush.Fresh.AlertErrBg}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.AlertErrBorder}"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Tip, FallbackValue=提示占位}" Value="">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="{Binding Tip}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource Brush.Fresh.AlertErrFg}"/>
+                    </Border>
+                    <!-- 按钮行：取消（次级，左）+ 确定（实色蓝主按钮，右） -->
+                    <Grid Margin="0,18,0,0">
+                        <Button Style="{StaticResource FreshButton}"
+                                Content="{Binding CancelText, FallbackValue='取消'}" Width="96" Height="32"
+                                Command="{Binding CancelCommand}" IsCancel="True"
+                                HorizontalAlignment="Left"/>
+                        <Button Style="{StaticResource FreshPrimaryButton}"
+                                Content="{Binding OkText, FallbackValue='确定'}" Width="128" Height="32"
+                                Command="{Binding OkCommand}" IsDefault="True"
+                                HorizontalAlignment="Right"/>
+                    </Grid>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+    </Grid>
 </Window>

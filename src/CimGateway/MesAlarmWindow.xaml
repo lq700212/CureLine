@@ -3,20 +3,54 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:vm="clr-namespace:CimGateway.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MesAlarmViewModel, IsDesignTimeCreatable=False}"
         Icon="Assets/app.ico"
         Title="{Binding TitleText, FallbackValue='MES 报警信息'}" Width="800" Height="450" Topmost="True"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen" MinWidth="480" MinHeight="280"
+        WindowStyle="None" Background="Transparent" AllowsTransparency="True" FontSize="13"
+        Foreground="{DynamicResource Brush.Fresh.FgMid}">
+    <shell:WindowChrome.WindowChrome>
+        <!-- 无边框自绘（弹窗统一骨架）：本窗可缩放——ResizeBorderThickness=6；
+             Topmost 置顶语义保留（报警窗老项目口径） -->
+        <shell:WindowChrome CaptionHeight="34" GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False"
+                            ResizeBorderThickness="6"/>
+    </shell:WindowChrome.WindowChrome>
     <!--报警窗（MVVM：展示走 MesAlarmViewModel，本文件纯绑定）。
+        机台名走品牌标题条；报文为只读多行区（FreshInput 框体 + Height 覆盖）。
+        取色全走 Brush.Fresh.*（两主题字典同名异值，切字典即换肤）。
         设计时 DataContext 为空，展示文本取 FallbackValue 占位（仅预览，运行时走真值）。-->
-    <DockPanel Margin="8">
-        <Label Content="{Binding MachineName, FallbackValue='机台名称'}" DockPanel.Dock="Top"/>
-        <Button Content="{Binding CloseText, FallbackValue='关闭'}" Width="187" Height="41"
-                DockPanel.Dock="Bottom" HorizontalAlignment="Center" Margin="0,6,0,0"
-                Command="{Binding CloseCommand}"/>
-        <TextBox Text="{Binding Message, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"
-                 VerticalScrollBarVisibility="Auto" AcceptsReturn="True"/>
-    </DockPanel>
+    <Grid Margin="14">
+        <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+                BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+                Effect="{StaticResource Fx.WinShadow}">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
+                    <Grid>
+                        <TextBlock Style="{StaticResource WinTitleText}"
+                                   Text="{Binding TitleText, FallbackValue='MES 报警信息'}"/>
+                        <Button Style="{StaticResource WinTitleClose}" Content="✕"
+                                HorizontalAlignment="Right"
+                                Click="OnCloseClick" ToolTip="关闭"/>
+                    </Grid>
+                </Border>
+
+                <Button Content="{Binding CloseText, FallbackValue='关闭'}" Width="110" Height="32"
+                        DockPanel.Dock="Bottom" HorizontalAlignment="Center" Margin="0,10,0,14"
+                        Command="{Binding CloseCommand}"
+                        Style="{StaticResource FreshPrimaryButton}"/>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="16,12,16,0">
+                    <Label Content="{Binding MachineName, FallbackValue='机台名称'}" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Brush.Fresh.FgStrong}"/>
+                </StackPanel>
+                <TextBox Text="{Binding Message, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"
+                         Style="{StaticResource FreshInput}" Height="Auto" Margin="16,8,16,0"
+                         VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"
+                         VerticalAlignment="Stretch"/>
+            </DockPanel>
+        </Border>
+    </Grid>
 </Window>

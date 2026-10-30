@@ -2,6 +2,48 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.31（2026-10-30，程序② CimGateway UI 对齐程序①：无边框自绘 + 双主题 + 全弹窗换肤）
+
+背景：用户要求程序②界面与 CureStation 风格保持一致，深浅双主题都要有，
+各弹窗界面全部优化。架构与程序①同构不同文件（主题键板是程序私有资产，
+分机部署独立演进，与"对话框接口不下沉"同精神）。
+
+- **主题体系移植（`src/CimGateway/Themes/`）**：Light.xaml（G2 浅色渐变浸染）/
+  Dark.xaml（G1 深空玻璃舱）语义键同名异值字典 + `ThemeManager` 切换中枢
+  （ParseTheme 纯函数非法回 Light + 测试态防御），App.OnStartup 按
+  `[setting] Theme` 应用（与程序①同名键，各自 exe 的 ini 独立生效）。
+  字典只保留本程序有消费者的键（无仓位卡/统计胶囊/工单卡——无消费者不放键）；
+  `Styles/FreshBlue.xaml`（单一浅色键板）废止删除，全站取色改走主题语义键。
+- **App.xaml 键板重建**：GhostButton/PrimaryGhostButton（顶栏胶囊钮）+
+  Fresh 弹窗样式族（次级/主/危险钮 + FreshInput/FreshPwdInput/FreshCombo +
+  ComboBoxItem）+ 隐式 CheckBox/ListBox/ToolTip/胶囊滚动条 + WinTitleBar
+  三样式（弹窗自绘标题条）+ WinSysBtn 系统钮；**新增 TabControl/TabItem
+  主题样式**（配置窗两页：选中页签=卡底与内容框连体，未选=透明纯文字）；
+  Geo.* 图标库按需精简（新增 Geo.Link 快捷方式图标）；Label 缺省字色走
+  Brush.FgMid（原系统黑字深色下不可读）。
+- **主窗无边框自绘**（对齐程序① V0.0.28 口径）：OS 标题栏移除，品牌顶栏
+  即标题条（CaptionHeight=44：chip"CIM"+标题+时钟 / 功能按钮组 / 系统三钮
+  ─ □·❐ ✕，最大化 RootGrid 垫回 resize 边框防裁切）；原 WPF Menu 菜单栏
+  拆为顶栏按钮组（"设置"下拉拆成 网关设置/修改密码/快捷方式 三枚独立钮，
+  门禁原样：网关设置 dev 可见、修改密码/快捷方式登录后可用）；新增
+  【深色/浅色】主题钮（切换即写 ini + VM 记操作日志）与 BtnLoginText 短文案
+  （按钮上只显示"登录"/账号，原 LoginHeader 保留给测试与提示文案）。
+- **StationPanel 机台卡换肤**：白卡/玻璃卡随主题（CardBg/CardBorder 三键），
+  心跳灯由硬编码色名（Lime/Red）改 DataTrigger 映射主题状态键
+  （StateGreen/StateRed，缺省 StateIdle）——深浅主题灯色自动跟随。
+- **全部弹窗统一圆角自绘骨架**（WindowStyle=None + WindowChrome +
+  Fx.WinShadow + WinTitleBar 品牌标题条 + 自绘 ✕）：登录窗（对齐程序①
+  登录窗布局：FreshInput/FreshPwdInput 左缘对齐契约 + AlertErr 提示条 +
+  主蓝确定钮）、改密窗（FreshCombo 用户下拉 + 三密码框）、网关配置窗
+  （Tab 主题化 + FreshInput 表单 + 测试结果字色改语义名触发器——VM
+  ResultForeground 由 "DarkGreen"/"Red" 改 "Ok"/"Err" 映射 AlertOkFg/
+  AlertErrFg）、调试窗（FreshPrimaryButton 上传 + 只读框复用 FreshInput
+  框体）、日志窗（危险清空钮 FreshDangerButton）、报警窗、图片查看窗。
+  可缩放弹窗（调试/日志/报警/图片）ResizeBorderThickness=6。
+- **测试**：新增 `CimGatewayThemeTests` 12 例（ParseTheme 纯函数 + 两字典
+  x:Key 集合全等锁 + Fresh 弹窗键板/主窗键板全集在两字典齐备——键漂移
+  挡在最便宜的位置）；345→357 全绿。
+
 ## V0.0.30（2026-10-30，顶栏按钮紧凑化 + 演示模式开关 + 登录窗密码对齐）
 
 背景：用户目检指出顶栏功能按钮高度撑满整条 44px 顶栏（"都顶到顶了"）；

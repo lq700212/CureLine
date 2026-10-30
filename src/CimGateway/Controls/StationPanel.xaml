@@ -9,20 +9,49 @@
              MinWidth="280" MinHeight="380">
     <!--机台面板（MVVM：状态走 StationPanelViewModel，DataContext 由父项继承）。
         双击日志行开窗走命令；单击选中即全文（SelectedLine setter 回调）。
+        卡片取色走主题字典（Brush.CardBg/CardBorder/FgStrong——G2 白卡/G1 玻璃卡随主题换皮）；
+        心跳灯 LampColor 是 VM 的状态字符串（"Lime"在线/"Red"断连/"Green"待机），
+        此处 DataTrigger 映射到主题状态点键（Brush.State*），深浅主题自动跟随。
         设计时 DataContext 为空，名称/灯色取 FallbackValue 占位（仅预览，运行时走真值）。-->
     <UserControl.InputBindings>
         <MouseBinding MouseAction="LeftDoubleClick"
                       Command="{Binding OpenLogCommand}"/>
     </UserControl.InputBindings>
-    <Border BorderBrush="{StaticResource FreshLightBorderBrush}" BorderThickness="1"
-            CornerRadius="8" Margin="3" Padding="4" Background="White">
+    <Border BorderBrush="{DynamicResource Brush.CardBorder}" BorderThickness="1"
+            CornerRadius="10" Margin="3" Padding="8" Background="{DynamicResource Brush.CardBg}">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.CardBorder}"/>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.CardBorderHover}"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
         <DockPanel>
-            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" VerticalAlignment="Center">
-                <Label Content="{Binding Name, FallbackValue='橡胶装配PCB设备'}" FontSize="14" FontWeight="Bold"
-                       VerticalAlignment="Center"
-                       Foreground="{StaticResource FreshPrimaryDeepBrush}" />
-                <Label Content="⚫" FontSize="16" Foreground="{Binding LampColor, FallbackValue=Gray}"
-                       VerticalAlignment="Center" ToolTip="通讯心跳" />
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" VerticalAlignment="Center"
+                        Margin="0,0,0,6">
+                <TextBlock Text="{Binding Name, FallbackValue='橡胶装配PCB设备'}" FontSize="14" FontWeight="Bold"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource Brush.FgStrong}"/>
+                <!-- 通讯心跳灯：状态字符串→主题点色映射（缺省=StateIdle 灰待机） -->
+                <Ellipse Width="11" Height="11" Margin="8,0,0,0" VerticalAlignment="Center"
+                         ToolTip="通讯心跳">
+                    <Ellipse.Style>
+                        <Style TargetType="Ellipse">
+                            <Setter Property="Fill" Value="{DynamicResource Brush.StateIdle}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding LampColor, FallbackValue=Green}" Value="Lime">
+                                    <Setter Property="Fill" Value="{DynamicResource Brush.StateGreen}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding LampColor, FallbackValue=Green}" Value="Red">
+                                    <Setter Property="Fill" Value="{DynamicResource Brush.StateRed}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Ellipse.Style>
+                </Ellipse>
             </StackPanel>
             <ListBox ItemsSource="{Binding LogLines}" SelectedItem="{Binding SelectedLine}"
                      HorizontalContentAlignment="Left" FontSize="12" />

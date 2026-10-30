@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Windows;
+using CimGateway.Themes;
 using CureLine.Core.Data;
 using CureLine.Core.Infrastructure;
 using CureLine.Core.Security;
@@ -24,6 +25,13 @@ public partial class App : Application
         // kernel32 写 INI 不会自动建目录（老项目靠现场预置 config/），此处确保。
         Directory.CreateDirectory(AppPaths.ConfigDir);
         AppConfig.Load();
+
+        // 双主题（2026-10-30 UI 对齐程序①）：按 [setting] Theme（Dark/Light，缺省
+        // Light、非法回 Light）换主题字典——缺省值同时借 IniFile 自愈语义落盘
+        // （首次启动补键，铁律 8：config.sample.ini 同步了该键）。
+        ThemeManager.ApplyTheme(IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Theme",
+            ThemeManager.DefaultTheme));
+
         MesParamStoreLoad();
         new SqliteHelper(AppPaths.DatabaseFile).EnsureDatabase();
         // 预置账号播种（admin 普通管理，dev 最高权限；初始密码见上注释）。

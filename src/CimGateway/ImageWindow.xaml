@@ -3,15 +3,47 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:vm="clr-namespace:CimGateway.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:ImageViewModel, IsDesignTimeCreatable=False}"
         Icon="Assets/app.ico"
-        Title="{Binding TitleText, FallbackValue='图片查看'}" Width="801" Height="560" WindowStartupLocation="CenterScreen">
+        Title="{Binding TitleText, FallbackValue='图片查看'}" Width="801" Height="560"
+        WindowStartupLocation="CenterScreen" MinWidth="420" MinHeight="320"
+        WindowStyle="None" Background="Transparent" AllowsTransparency="True" FontSize="13"
+        Foreground="{DynamicResource Brush.Fresh.FgMid}">
+    <shell:WindowChrome.WindowChrome>
+        <!-- 无边框自绘（弹窗统一骨架）：本窗可缩放——ResizeBorderThickness=6 -->
+        <shell:WindowChrome CaptionHeight="34" GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False"
+                            ResizeBorderThickness="6"/>
+    </shell:WindowChrome.WindowChrome>
     <!--图片查看（MVVM：展示走 ImageViewModel，本文件纯绑定）。
+        路径文本在品牌标题条下；图片区走 CardBg 融底（深浅主题跟随）。
         设计时 DataContext 为空，标题取 FallbackValue 占位（仅预览，运行时走真值）。-->
-    <DockPanel>
-        <Label Content="{Binding PathText}" DockPanel.Dock="Top" FontSize="12"/>
-        <Image Source="{Binding ImageSource}" Stretch="Uniform"/>
-    </DockPanel>
+    <Grid Margin="14">
+        <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+                BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+                Effect="{StaticResource Fx.WinShadow}">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
+                    <Grid>
+                        <TextBlock Style="{StaticResource WinTitleText}"
+                                   Text="{Binding TitleText, FallbackValue='图片查看'}"/>
+                        <Button Style="{StaticResource WinTitleClose}" Content="✕"
+                                HorizontalAlignment="Right"
+                                Click="OnCloseClick" ToolTip="关闭"/>
+                    </Grid>
+                </Border>
+
+                <Label Content="{Binding PathText}" DockPanel.Dock="Top" FontSize="12"
+                       Margin="16,8,16,0" Foreground="{DynamicResource Brush.Fresh.FgDim}"/>
+                <Border Background="{DynamicResource Brush.Fresh.CardBg}"
+                        BorderBrush="{DynamicResource Brush.Fresh.PanelBorder}" BorderThickness="1"
+                        CornerRadius="6" Margin="16,8,16,16">
+                    <Image Source="{Binding ImageSource}" Stretch="Uniform"/>
+                </Border>
+            </DockPanel>
+        </Border>
+    </Grid>
 </Window>

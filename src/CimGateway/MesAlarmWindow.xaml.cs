@@ -16,4 +16,7 @@ public partial class MesAlarmWindow : Window
         InitializeComponent();
         ViewModel.RequestClose += _ => Close();
     }
+
+    /// <summary>标题条关闭钮（与 VM CloseCommand 同链）。</summary>
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 }

@@ -18,4 +18,7 @@ public partial class MesDebugWindow : Window
         DataContext = ViewModel;
         InitializeComponent();
     }
+
+    /// <summary>标题条关闭钮。</summary>
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 }
