@@ -241,6 +241,33 @@ public class CureStationViewModelTests
         Assert.Equal("托盘有无检测", vm.SelectedBinding.RoleText);
     }
 
+    [Fact]
+    public void PointTableVm_SelectedBindingChange_ReechoesEditor()
+    {
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.PointTableViewModel(fake);
+        vm.GenerateTemplateCommand.Execute(null);
+
+        // 生成模板后编辑面板自动回显首行（换设备重建网格时 setter 联动）
+        Assert.Equal(vm.Bindings[0].Raw.Bit.ToString(), vm.EditBit);
+        Assert.Equal(vm.Bindings[0].Raw.FunctionName, vm.EditFunction);
+
+        // 点选另一行（位号 2 的输入行=托盘检测）→ 编辑面板立刻切到该行。
+        // 此前编辑面板停留首行不随选中变化（V0.0.36 修复的 bug）；
+        // DataGrid SelectedItem 双向绑定走的就是 VM 层 setter，此用例同路径。
+        var row = vm.Bindings.First(b => b.Raw.IsInput && b.Raw.Bit == 2);
+        Assert.NotEqual(row.Raw.FunctionName, vm.Bindings[0].Raw.FunctionName); // 前提：两行内容确实不同
+        vm.SelectedBinding = row;
+
+        Assert.Equal(row.Raw.Block.ToString(), vm.EditBlock);
+        Assert.Equal(row.Raw.Bit.ToString(), vm.EditBit);
+        Assert.Equal(row.Raw.IsInput, vm.EditIsInput);
+        Assert.Equal(row.Raw.Role, vm.EditRole);
+        Assert.Equal(row.Raw.Rack.ToString(), vm.EditRack);
+        Assert.Equal(row.Raw.Level.ToString(), vm.EditLevel);
+        Assert.Equal(row.Raw.FunctionName, vm.EditFunction);
+    }
+
     // ---------- 工艺策略 VM（P3.1 状态机配套） ----------
 
     [Fact]

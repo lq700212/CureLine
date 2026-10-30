@@ -109,8 +109,12 @@
                             <Button Style="{StaticResource FreshButton}" Content="关 闭" Width="72" Height="32"
                                     IsCancel="True"/>
                         </StackPanel>
-                        <TextBlock Text="DI=只读状态灯（灰底）；DO=可点击灯钮（点击切换 ON/OFF）；悬停看通道全名与状态"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="8,0"/>
+                        <!-- 圆点形状说明（用户反馈：不知道小圆/大圆各是什么）：
+                             上排小圆=DI 输入只读灯（15px Ellipse）、下排大圆=DO 输出可点击灯钮（24px Button），
+                             与卡内模板两排一一对应；悬停看通道角色/功能名/状态。 -->
+                        <TextBlock Text="小圆=DI 输入（只读灯）；大圆=DO 输出（可点切换 ON/OFF）；悬停看通道全名与状态"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="8,0"
+                                   ToolTip="每个仓位卡两排圆点——上排小圆 = DI 输入点：只读状态灯，现场传感/光栅信号进来，只能看不能点；下排大圆 = DO 输出点：可点击灯钮，点击把该路写成 ON/OFF 验证接线。灰色=OFF，绿色=ON，浅虚灰=未读到（断连或未轮询到）。鼠标悬停任意圆点看通道角色、功能名与当前状态。"/>
                     </DockPanel>
                 </Border>
 

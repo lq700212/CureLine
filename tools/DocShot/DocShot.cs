@@ -66,7 +66,6 @@ using GwMain = CimGateway.MainWindow;
 using GwLogin = CimGateway.LoginWindow;
 using GwLog = CimGateway.MesLogWindow;
 using GwDebug = CimGateway.MesDebugWindow;
-using GwAlarm = CimGateway.MesAlarmWindow;
 using GwChangePwd = CimGateway.ChangePasswordWindow;
 using GwGatewayConfig = CimGateway.GatewayConfigWindow;
 using GwDialogs = CimGateway.ViewModels.IDialogService;
@@ -233,7 +232,14 @@ public static class Program
         Shot(wo3, "cs-workorder-l3.png");
 
         // ---------- 点表配置窗 ----------
-        var ptw = new CwPointTable { DataContext = new CurePointTableVm(fake) };
+        // 演示选中联动（V0.0.36 修复"表格选中行变化编辑面板不回显"）：选中位号 2
+        // 的托盘检测输入行，表格选行与右侧编辑面板同屏展示"选中谁就编辑谁"。
+        // 兜底：手编点表若无 X2 输入行，回落首行，帧照拍（配置自由，不赌布局）。
+        var ptvm = new CurePointTableVm(fake);
+        ptvm.SelectedBinding =
+            ptvm.Bindings.FirstOrDefault(b => b.Raw.IsInput && b.Raw.Bit == 2)
+            ?? ptvm.Bindings.FirstOrDefault();
+        var ptw = new CwPointTable { DataContext = ptvm };
         Shot(ptw, "cs-pointtable.png", 900);
 
         // ---------- 工艺策略窗（可视化画布：点表口径） ----------
@@ -391,7 +397,7 @@ public static class Program
         main.Show();
         _ownerSource = main;
         Pump(1000);
-        ShotFrame(main, "gw-main-idle.png");      // 待机态（8 空面板 + 时钟）
+        //（gw-main-idle 待机帧已删：手册只引用 gw-main 连接后态，空闲帧无消费者）
 
         // 连接设备：Simulate=1 → 8 机台模拟 PLC 全流程（真实生产链）
         ((GwMainVm)main.DataContext).ConnectMultiCommand.Execute(null);
@@ -410,12 +416,7 @@ public static class Program
         var dbg = new GwDebug();
         Shot(dbg, "gw-debug.png", 900);
 
-        // ---------- 报警窗（演示报文） ----------
-        var alarm = new GwAlarm(
-            "上传失败：API0028 返回非 1（STATUS=2，MSG=设备号不存在）\r\n" +
-            "{\"RC_NO\":\"2405A2301\",\"PT_NO\":\"OP30\",\"MAC_NO\":\"CIM01\"}",
-            "点胶固化收料机");
-        Shot(alarm, "gw-alarm.png", 800);
+        //（gw-alarm 报警窗帧已删：手册无引用，报警窗不进操作文档）
 
         // ---------- 修改密码窗 ----------
         var cpw = new GwChangePwd("admin", LoginRole.Admin);

@@ -76,7 +76,14 @@ public sealed class PointTableViewModel : ViewModelBase
     public PointBindingRow? SelectedBinding
     {
         get => _selectedBinding;
-        set => Set(ref _selectedBinding, value);
+        set
+        {
+            // 表格选中行变化（DataGrid SelectedItem 双向绑定驱动；换设备/删行也走这）
+            // → 编辑面板立刻回显该行（"选中谁就编辑谁"）。
+            // 值没变不回显（Set 返回 false）：不打断用户正在编辑的草稿。
+            if (Set(ref _selectedBinding, value))
+                SyncEditorFromSelected();
+        }
     }
 
     // ---- 缺省模板生成参数 ----
@@ -233,9 +240,8 @@ public sealed class PointTableViewModel : ViewModelBase
         Bindings.Clear();
         foreach (var b in SelectedDevice?.Bindings ?? new())
             Bindings.Add(new PointBindingRow(b, this));
-        // 缺省选中第一行给编辑面板一个起点
+        // 缺省选中第一行给编辑面板一个起点（setter 联动 SyncEditorFromSelected 回显）
         SelectedBinding = Bindings.FirstOrDefault();
-        SyncEditorFromSelected();
     }
 
     private void SyncEditorFromSelected()
@@ -311,7 +317,8 @@ public sealed class PointTableViewModel : ViewModelBase
             Devices.Add(template.Devices[0]);
             SelectedDevice = template.Devices[0];
         }
-        ReloadBindings();
+        // SelectedDevice setter 已联动 ReloadBindings 重建绑定网格并回显首行，
+        // 此处不再重复调（改干净改彻底：双份口径容易日后改一半漏一半）。
         _dialogs.ShowMessage(
             $"已按 IO 表布局生成缺省模板：{racks} 架 × {levels} 层，" +
             $"共 {template.Devices[0].Bindings.Count} 点。" +
@@ -346,10 +353,10 @@ public sealed class PointTableViewModel : ViewModelBase
         SelectedDevice.Bindings.Remove(SelectedBinding.Raw);
         int index = Bindings.IndexOf(SelectedBinding);
         Bindings.Remove(SelectedBinding);
+        // 选中替代行（或清空）：setter 联动 SyncEditorFromSelected 已回显
         SelectedBinding = Bindings.Count > 0
             ? Bindings[Math.Clamp(index, 0, Bindings.Count - 1)]
             : null;
-        SyncEditorFromSelected();
     }
 
     /// <summary>"测试连接"：后台 Task 直测（后台线程网络 IO 铁律），完成弹结果。</summary>

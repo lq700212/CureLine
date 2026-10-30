@@ -2,6 +2,34 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.36（2026-10-30，IO 两窗目检答疑：测试窗圆点形状说明 + 点表窗选中行联动修复）
+
+背景：用户目检两问——① IO 通讯测试窗仓位卡里"小圆是什么、大圆是什么"
+（猜小圆=DI、大圆=DO，猜对了但界面没说）；② IO 点表配置窗右侧"绑定编辑"
+面板不随表格选中行变化，疑似 bug（实锤：`PointBindingRow.RefreshDisplay`
+注释写着"选中行变更→编辑面板回显"，意图存在而 `SelectedBinding` setter
+没接线，编辑面板永远停在换设备时的首行）。
+
+- **IO 测试窗圆点形状说明（`IoTestWindow.xaml`）**：顶栏说明改写为
+  "小圆=DI 输入（只读灯）；大圆=DO 输出（可点切换 ON/OFF）——与用户
+  猜测一致（卡内上排 15px 小圆 Ellipse=Inputs 只读、下排 24px 大圆
+  Button=Outputs 可点击）；详细形状/颜色/悬停释义全文放 ToolTip（顶栏
+  宽度有限，正文保精简）。
+- **悬停提示方向首标（`IoTestPointVm.Tip`）**：每个圆点悬停第一段改为
+  "DI 输入·角色 / DO 输出·角色"——与顶栏"小圆=DI/大圆=DO"呼应，
+  悬停即可确认通道方向，无需回看顶栏。
+- **点表窗选中行联动修复（`PointTableViewModel.cs`）**：`SelectedBinding`
+  setter 联动 `SyncEditorFromSelected()`（值没变不回显，不打断正编辑的
+  草稿）；随改删三处显式重复调用（`ReloadBindings`/`DeleteBinding` 的
+  手动 Sync 与 `GenerateTemplate` 的重复 `ReloadBindings`——setter 已
+  覆盖，双份口径容易日后改一半漏一半）。
+- **DocShot 点表帧联动演示（工具链）**：`cs-pointtable.png` 改拍"选中
+  位号 2 托盘检测行"状态，表格选行与右侧编辑面板同屏展示"选中谁就
+  编辑谁"（手编点表无 X2 输入行时回落首行兜底，帧照拍）。
+- **测试 +1**：`PointTableVm_SelectedBindingChange_ReechoesEditor` 锁
+  联动链（生成模板自动回显首行 + 选 X2 行编辑面板七字段全同步）。
+  基线 365→366。
+
 ## V0.0.35（2026-10-30，主窗仓位卡设计图一比一复刻：胶囊+大数字+进度条，头带/灯点退役）
 
 背景：用户出最新设计图（B02 卡=白底黄描边+右上"计时中"胶囊+中部"47 分"大

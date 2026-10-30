@@ -79,7 +79,10 @@ public sealed class IoTestPointVm : ViewModelBase
         set => Set(ref _busy, value);
     }
 
-    /// <summary>悬停全文（角色+功能名+状态）。</summary>
+    /// <summary>
+    /// 悬停全文：方向首标（DI 输入/DO 输出）+ 角色 + 状态 + 功能名——
+    /// 与顶栏"小圆=DI/大圆=DO"说明呼应，悬停就能确认这是输入还是输出通道。
+    /// </summary>
     public string Tip
     {
         get
@@ -91,7 +94,7 @@ public sealed class IoTestPointVm : ViewModelBase
                 null => "未读到（断连或未轮询）",
             };
             string fn = string.IsNullOrWhiteSpace(FunctionName) ? "" : $"\n{FunctionName}";
-            return $"{RoleText}\n{state}{fn}";
+            return $"{(IsInput ? "DI 输入" : "DO 输出")}·{RoleText}\n{state}{fn}";
         }
     }
 }
