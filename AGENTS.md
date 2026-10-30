@@ -99,8 +99,8 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 315/315（P3.1 增 36 例 + P3.2 前半增 17 例 + P3.2 后半增
-   22 例 + V0.0.19 增 25 例 + V0.0.20 增 32 例 + 登录记忆/改密链增 7 例 + 策略预置/IO 测试增 21 例；
+   `dotnet test` 374/374（V0.0.38 全量；P3 期分版增量与 V0.0.19~V0.0.20
+   各轮增量明细见各版本 CHANGELOG，V0.0.33~37 增量未逐版回填此括号——
    基线此后只增不减）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
@@ -212,7 +212,7 @@
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build CureLine.slnx --nologo
-# 全量测试（315/315 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
+# 全量测试（374/374 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
 dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
 # 子模块改动后（VS MSBuild，net472，原样沿用上游命令）
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
@@ -347,7 +347,13 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   Side），`MAC_NO/MAC_LOC_NO` 随工位取（L 工位可选 `MacNo_L/MacLocNo_L`，
   留空回落主值）；解析走 `SideOfRack` 使用时现算不缓存（配置窗保存是 new
   实例直赋属性的路径，缓存会漏更新）。改口径先改 `CuringMesPoster` 头注释
-  与 `CuringMesPosterTests` 断言；配置键名勿改（现场已按样例部署）。
+  与 `CuringMesPosterTests` 断言；配置键名勿改（现场已按样例部署）；
+  ⑩ **双工位开关（V0.0.38，现场实拍无双工位→缺省关）**：`[CuringMes]
+  DualSide` 0=单工位——`SideOfRack` 恒回 Side（RackSides 残留配置也忽略，
+  防把唯一工单引到空 L 槽）、工单窗只显 Side 侧一套面板且文案全去 R/L
+  字样（**视图↔槽映射恒定** R↔Right/L↔Left，Sync/Flush 不判开关——隐藏
+  侧数据原样往返）、顶栏过账文本不带工位字样；1=老双架双面板口径全量
+  回归（映射+Mac*_L+R/L 两枚上传钮）。过账配置窗勾选（L4）。
 
 ## 文档同步（每次任务收尾自查）
 

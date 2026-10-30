@@ -15,7 +15,10 @@
 //   ④ 中途取件（计时作废=强制出料语义）：老项目 Case3 照常上传，若现场
 //     不要，PostAbortOut 关掉；
 //   ⑤ 静态参数（MAC_NO/MAC_LOC_NO/PLANT/PRA_CODE/CHECK_RESULT）：本节配置
-//     优先，留空回退 config\mes_params.json 记忆值（主程序调试窗可维护）。
+//     优先，留空回退 config\mes_params.json 记忆值（主程序调试窗可维护）；
+//   ⑥ 工位布局开关 DualSide：现场只有一套工位就保持关（缺省 false=单工位）
+//     ——工单窗只显一套工单、文案不带工位字样，过账全按 Side；真有左右双架
+//     分开记账才开（RackSides/Mac*_L 只在开关下生效）。
 //
 // 怎么改：新增配置项 = 属性 + Load/Save 两处 + 过账配置窗加控件 + 校验器；
 //   ini 键名勿改（现场已按样例部署）。
@@ -44,6 +47,16 @@ public sealed class CuringMesOptions
 {
     /// <summary>过账总开关。false=只程控不过账（缺省——现场配好 MES 再开）。</summary>
     public bool Enabled { get; set; }
+
+    /// <summary>
+    /// 双工位模式开关（现场就一套工位 → 缺省 false=单工位）：
+    /// true=工单窗 R/L 双面板分开记账（R/L 两套途程/数量各一份）+ 上传按钮
+    /// 两枚 + 架号映射 <see cref="RackSides"/> 与工位专用参数 <c>Mac*_L</c> 生效；
+    /// false=单工位——工单窗只显 <see cref="Side"/> 那侧一套（Side=L 用 Left 槽）、
+    /// 界面文案不带 R/L 字样，<see cref="RackSides"/> 忽略（<see cref="SideOfRack"/>
+    /// 恒回 Side），进/出站与物料上传全按 Side 报本侧参数。
+    /// </summary>
+    public bool DualSide { get; set; }
 
     /// <summary>自动过账取工单哪个工位："R" / "L"（其它值按 R 兜底）。</summary>
     public string Side { get; set; } = "R";
@@ -90,11 +103,15 @@ public sealed class CuringMesOptions
 
     /// <summary>
     /// 全局架号 → 过账工位：命中 <see cref="RackSides"/> 映射段返回映射工位
-    /// （解析时已规范化），否则回落 <see cref="Side"/>。双架自动过账唯一入口——
-    /// 进站/出站都按它取工位槽与机台参数；物料上传不走这里（按钮工位红线）。
+    /// （解析时已规范化），否则回落 <see cref="Side"/>。双工位模式自动过账唯一入口
+    /// ——进站/出站都按它取工位槽与机台参数；物料上传不走这里（按钮工位红线）。
+    /// 单工位模式（DualSide=false）恒回 <see cref="Side"/>——没有另一侧，
+    /// RackSides 即使残留配置也忽略（防现场误配引出 L 报文）。
     /// </summary>
     public string SideOfRack(int rack)
     {
+        if (!DualSide)
+            return Side;
         foreach (var (start, end, side) in ParseRackSides(RackSides))
         {
             if (rack >= start && rack <= end)
@@ -145,6 +162,7 @@ public sealed class CuringMesOptions
         return new CuringMesOptions
         {
             Enabled = IniFile.ReadStr(ini, Section, "Enabled", "0") == "1",
+            DualSide = IniFile.ReadStr(ini, Section, "DualSide", "0") == "1",
             Side = NormSide(IniFile.ReadStr(ini, Section, "Side", "R")),
             TimeUnit = IniFile.ReadStr(ini, Section, "TimeUnit", "Seconds")
                 .Equals("Minutes", StringComparison.OrdinalIgnoreCase)
@@ -169,6 +187,7 @@ public sealed class CuringMesOptions
     {
         string ini = iniPath ?? AppPaths.ConfigIni;
         IniFile.Write(ini, Section, "Enabled", Enabled ? "1" : "0");
+        IniFile.Write(ini, Section, "DualSide", DualSide ? "1" : "0");
         IniFile.Write(ini, Section, "Side", NormSide(Side));
         IniFile.Write(ini, Section, "TimeUnit", TimeUnit == CuringTimeUnit.Minutes ? "Minutes" : "Seconds");
         IniFile.Write(ini, Section, "PostInAt", InAt == PostInAt.Start ? "Start" : "Arrive");

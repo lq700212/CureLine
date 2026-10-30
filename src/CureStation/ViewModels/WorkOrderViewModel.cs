@@ -6,6 +6,15 @@
 //   config/workorder.json。门禁（构造传操作员级别）：途程/数量/清零 L2+，
 //   制程代码 L3+，员工工号/条码 L1+（登录即可）——不够级别的编辑区禁用。
 // 编辑模式：与策略窗同款——打开回显，保存前 Flush；数字解析失败当场弹框拦下。
+//
+// 工位布局开关（[CuringMes] DualSide，构造传 postOptions；null=Load 现读盘）：
+//   ● 双工位（true）：R/L 双面板全显、文案带工位字样（"工单信息（R）"等）、
+//     上传 R/L 两枚——老口径不变；
+//   ● 单工位（缺省 false，现场就一套工位）：只显 Side 对应哪侧的面板
+//     （Side=L 用 Left 槽——视图↔槽映射恒定：R↔Right、L↔Left，Sync/Flush
+//     零改动，隐藏侧数据原样往返=盘上等值落回）；标题/按钮文案全去 R/L 字样，
+//     上传按钮带 Side 侧（过账报文口径与界面一致）。
+//
 // 怎么改：新增字段 = WorkOrderBook 加属性 + 窗加控件 + Sync/Flush 两处；
 //   与 MesParamStore 字段名对齐的（RC_NO 等）勿改名（过账映射靠它）。
 // =========================================================================
@@ -22,13 +31,22 @@ public sealed class WorkOrderViewModel : ViewModelBase
     private readonly OperatorLevel? _level;
     private readonly List<string> _flushErrors = new();
     private readonly Action<string>? _uploadMaterial; // 物料上传动作（过账服务；null=不可用）
+    private readonly string _mainSide; // 单工位模式所用工位（"R"/"L"）；双工位下不参与显隐判断
 
     public WorkOrderViewModel(IDialogService dialogs, OperatorLevel? level,
-        WorkOrderBook? book = null, Action<string>? uploadMaterial = null)
+        WorkOrderBook? book = null, Action<string>? uploadMaterial = null,
+        CuringMesOptions? postOptions = null)
     {
         _dialogs = dialogs;
         _level = level;
         _uploadMaterial = uploadMaterial;
+        // 工位布局开关（缺省 null=现读 [CuringMes] ini；测试可注入固定 options）：
+        // 双工位=两面板全显；单工位只显 Side 侧（Side=L 时主面板用 L 槽），文案去工位字样
+        var options = postOptions ?? CuringMesOptions.Load();
+        IsDualSide = options.DualSide;
+        _mainSide = CuringMesOptions.NormSide(options.Side);
+        ShowRightPanel = IsDualSide || _mainSide == "R";
+        ShowLeftPanel = IsDualSide || _mainSide == "L";
         SyncFromBook(book ?? WorkOrderStore.Load() ?? WorkOrderStore.BuildDefault());
         ClearCountRtCommand = new RelayCommand(() => EditRtProduced = "0", () => CanEditRoute);
         ClearCountLfCommand = new RelayCommand(() => EditLfProduced = "0", () => CanEditRoute);
@@ -36,6 +54,38 @@ public sealed class WorkOrderViewModel : ViewModelBase
         UploadRMaterialCommand = new RelayCommand(() => UploadMaterial("R"), () => CanUpload);
         UploadLMaterialCommand = new RelayCommand(() => UploadMaterial("L"), () => CanUpload);
     }
+
+    // ---------- 工位布局（构造定死不随运行时变；窗开一次读一次） ----------
+
+    /// <summary>双工位开关（[CuringMes] DualSide）：true=R/L 两面板全显带工位字样。</summary>
+    public bool IsDualSide { get; }
+
+    /// <summary>R 侧面板显隐：双工位恒显；单工位=工位是 R 才显（XAML Content 也随文案属性切换）。</summary>
+    public bool ShowRightPanel { get; }
+
+    /// <summary>L 侧面板显隐：双工位恒显；单工位=工位是 L 才显。</summary>
+    public bool ShowLeftPanel { get; }
+
+    /// <summary>窗标题/标题条文案：双工位带（R/L 双工位）字样，单工位不带。</summary>
+    public string WindowTitle => IsDualSide ? "工单信息（R/L 双工位）" : "工单信息";
+
+    /// <summary>R 侧面板标题（单工位=就是唯一那套，不带工位字样）。</summary>
+    public string RightPanelTitle => IsDualSide ? "工单信息（R）" : "工单信息";
+
+    /// <summary>L 侧面板标题（双工位专用；单工位 L 口径下同款去字样）。</summary>
+    public string LeftPanelTitle => IsDualSide ? "工单信息（L）" : "工单信息";
+
+    /// <summary>R 侧清零钮文案。</summary>
+    public string ClearRText => IsDualSide ? "R 计数清零" : "计数清零";
+
+    /// <summary>L 侧清零钮文案。</summary>
+    public string ClearLText => IsDualSide ? "L 计数清零" : "计数清零";
+
+    /// <summary>R 侧上传钮文案（报本侧工位）。</summary>
+    public string UploadRText => IsDualSide ? "上传 R 物料" : "物料上传";
+
+    /// <summary>L 侧上传钮文案（报本侧工位）。</summary>
+    public string UploadLText => IsDualSide ? "上传 L 物料" : "物料上传";
 
     // ---------- 门禁（级别不够的编辑区在 XAML 里禁用） ----------
 
@@ -139,7 +189,10 @@ public sealed class WorkOrderViewModel : ViewModelBase
             return;
         }
         _uploadMaterial(side);
-        UploadStatusText = $"{DateTime.Now:HH:mm:ss} 已提交 {side} 工位物料上传（结果见主窗顶栏过账状态）";
+        // 双工位带工位字样（区分两套工单）；单工位不带（与界面去工位字样的口径一致）
+        UploadStatusText = IsDualSide
+            ? $"{DateTime.Now:HH:mm:ss} 已提交 {side} 工位物料上传（结果见主窗顶栏过账状态）"
+            : $"{DateTime.Now:HH:mm:ss} 已提交物料上传（结果见主窗顶栏过账状态）";
     }
 
     /// <summary>保存公共体（Save 与上传共用）：Flush+校验+落盘。成功 true。</summary>

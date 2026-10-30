@@ -1,8 +1,8 @@
 // =========================================================================
 // MesPostConfigViewModel：单线过账配置窗编排（程序①，P3.2 后半）
 //
-// 干什么：过账的全部可调参数一处改——总开关/工位/固化时间单位/进站时机/
-//   中途取件口径/静态参数（MAC_NO 等）/三个接口 URL。保存落 config.ini
+// 干什么：过账的全部可调参数一处改——总开关/双工位模式/工位/固化时间单位/
+//   进站时机/中途取件口径/静态参数（MAC_NO 等）/三个接口 URL。保存落 config.ini
 //   （[CuringMes] 节 + [MES] Url 三键），主窗据此热更新过账服务（不重启）。
 // 为什么界面化：W68 终版未定 → 现场联调"点点鼠标"改配置，代码零改动
 //   （用户口径）；与网关配置窗同款"编辑面板+保存"模式与 XAML 纪律。
@@ -43,6 +43,9 @@ public sealed class MesPostConfigViewModel : ViewModelBase
 
     private bool _editEnabled;
     public bool EditEnabled { get => _editEnabled; set => Set(ref _editEnabled, value); }
+
+    private bool _editDualSide;
+    public bool EditDualSide { get => _editDualSide; set => Set(ref _editDualSide, value); }
 
     private string _editSide = "R";
     public string EditSide { get => _editSide; set => Set(ref _editSide, value ?? "R"); }
@@ -93,6 +96,7 @@ public sealed class MesPostConfigViewModel : ViewModelBase
     private void SyncFromOptions(CuringMesOptions o)
     {
         EditEnabled = o.Enabled;
+        EditDualSide = o.DualSide;
         EditSide = CuringMesOptions.NormSide(o.Side);
         EditTimeUnitIndex = o.TimeUnit == CuringTimeUnit.Minutes ? 1 : 0;
         EditInAtIndex = o.InAt == PostInAt.Start ? 1 : 0;
@@ -115,6 +119,7 @@ public sealed class MesPostConfigViewModel : ViewModelBase
         var o = new CuringMesOptions
         {
             Enabled = EditEnabled,
+            DualSide = EditDualSide,
             Side = CuringMesOptions.NormSide(EditSide),
             TimeUnit = EditTimeUnitIndex == 1 ? CuringTimeUnit.Minutes : CuringTimeUnit.Seconds,
             InAt = EditInAtIndex == 1 ? PostInAt.Start : PostInAt.Arrive,

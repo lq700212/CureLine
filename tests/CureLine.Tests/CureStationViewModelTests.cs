@@ -711,6 +711,92 @@ public class CureStationViewModelTests
         Assert.Contains(fake.Calls, c => c.Contains("数字格式"));
     }
 
+    // ---------- 工位布局开关（单/双工位，DualSide） ----------
+
+    [Fact]
+    public void WorkOrderVm_DualSide_BothPanelsWithSideLabels()
+    {
+        // 双工位开关开（老口径）：R/L 双面板全显、标题与按钮文案带工位字样
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorLevel.Level4,
+            postOptions: new CuringMesOptions { DualSide = true, Side = "R" });
+
+        Assert.True(vm.IsDualSide);
+        Assert.True(vm.ShowRightPanel);
+        Assert.True(vm.ShowLeftPanel);
+        Assert.Equal("工单信息（R/L 双工位）", vm.WindowTitle);
+        Assert.Equal("工单信息（R）", vm.RightPanelTitle);
+        Assert.Equal("工单信息（L）", vm.LeftPanelTitle);
+        Assert.Equal("R 计数清零", vm.ClearRText);
+        Assert.Equal("L 计数清零", vm.ClearLText);
+        Assert.Equal("上传 R 物料", vm.UploadRText);
+        Assert.Equal("上传 L 物料", vm.UploadLText);
+    }
+
+    [Fact]
+    public void WorkOrderVm_SingleSideR_RightPanelOnly_NoSideLabels()
+    {
+        // 单工位缺省（Side=R）：只显 R 侧、全界面文案不带 R/L；隐藏的 L 侧
+        // 编辑数据原样往返（保存后 L 槽仍是盘上原值——单工位不动另一侧数据）
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        WorkOrderStore.Save(new WorkOrderBook
+        {
+            Right = new WorkOrderSlot { RcNo = "R-KEEP", PresetQty = 10 },
+            Left = new WorkOrderSlot { RcNo = "L-KEEP", PresetQty = 20, ProducedQty = 3 },
+        });
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorLevel.Level4,
+            postOptions: new CuringMesOptions { DualSide = false, Side = "R" });
+
+        Assert.False(vm.IsDualSide);
+        Assert.True(vm.ShowRightPanel);
+        Assert.False(vm.ShowLeftPanel);
+        Assert.Equal("工单信息", vm.WindowTitle);
+        Assert.Equal("工单信息", vm.RightPanelTitle);
+        Assert.Equal("计数清零", vm.ClearRText);
+        Assert.Equal("物料上传", vm.UploadRText);
+        Assert.Equal("R-KEEP", vm.EditRtRcNo);
+
+        Assert.Equal("L-KEEP", vm.EditLfRcNo); // 隐藏侧照常回显（Flush 原样落回）
+        vm.SaveCommand.Execute(null);
+        var loaded = WorkOrderStore.Load()!;
+        Assert.Equal("R-KEEP", loaded.Right.RcNo);
+        Assert.Equal("L-KEEP", loaded.Left.RcNo);
+        Assert.Equal(20, loaded.Left.PresetQty);
+        Assert.Equal(3, loaded.Left.ProducedQty);
+    }
+
+    [Fact]
+    public void WorkOrderVm_SingleSideL_LeftSlotAsMain()
+    {
+        // 单工位但工位=L：主面板用 Left 槽（Side 对应槽——报文口径与界面一致）；
+        // 修改预设数量落回 Left，Right 槽数据原样不动
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        WorkOrderStore.Save(new WorkOrderBook
+        {
+            Right = new WorkOrderSlot { RcNo = "R-KEEP", PresetQty = 10 },
+            Left = new WorkOrderSlot { RcNo = "L-MAIN", PresetQty = 5 },
+        });
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorLevel.Level4,
+            postOptions: new CuringMesOptions { DualSide = false, Side = "L" });
+
+        Assert.False(vm.ShowRightPanel);
+        Assert.True(vm.ShowLeftPanel);
+        Assert.Equal("工单信息", vm.LeftPanelTitle);
+        Assert.Equal("L-MAIN", vm.EditLfRcNo); // 视图↔槽映射恒定：L 视图=Left 槽
+
+        vm.EditLfPreset = "66";
+        vm.SaveCommand.Execute(null);
+        var loaded = WorkOrderStore.Load()!;
+        Assert.Equal(66, loaded.Left.PresetQty);
+        Assert.Equal(10, loaded.Right.PresetQty); // Right 槽原样
+    }
+
     // ---------- 权限管理窗 VM（P3.2） ----------
 
     [Fact]

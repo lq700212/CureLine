@@ -17,10 +17,13 @@
 //   ③ 无自动重传（老项目同款——失败人工处理，防重复过账）。
 //
 // 可配置口径（W68 终版未定 → 全配置化，见 CuringMesOptions 头注释）：
-//   总开关 / 工位 / 固化时间单位 / 进站时机 / 中途取件是否出站 / 静态参数。
-//   双架（V0.0.20）：自动进/出站按全局架号查 RackSides 映射定工位（未命中
-//   回落 Side），MAC_NO/MAC_LOC_NO 随工位取（L 工位可选 MacNo_L/MacLocNo_L，
-//   缺省回落主值）；物料上传不走映射（按钮工位红线，见 UploadMaterial）。
+//   总开关 / 双工位开关 / 工位 / 固化时间单位 / 进站时机 / 中途取件是否出站 / 静态参数。
+//   双工位开关（现场单工位缺省关）：关=RackSides 忽略（SideOfRack 恒回 Side）、
+//     顶栏过账文本不带工位字样；开=下述双架口径生效。
+//   双架（V0.0.20，仅双工位开关开时）：自动进/出站按全局架号查 RackSides 映射
+//     定工位（未命中回落 Side），MAC_NO/MAC_LOC_NO 随工位取（L 工位可选
+//     MacNo_L/MacLocNo_L，缺省回落主值）；物料上传不走映射（按钮工位红线，
+//     见 UploadMaterial）。
 //
 // 线程模型（铁律 2）：HTTP 全在后台 Task.Run——状态机在 _sync 锁内调本类
 //   方法（事件处理器），方法体只投递不等待，绝不阻塞程控；工单读改写与
@@ -146,7 +149,7 @@ public sealed class CuringMesPoster
                 var book = _workOrderProvider();
                 if (book == null || !book.UploadEnabled)
                 {
-                    Notify($"过账：{Now2()} {s}工位物料上传 失败（物料上传使能未开启）");
+                    Notify($"过账：{Now2()} {SideTag(s)}物料上传 失败（物料上传使能未开启）");
                     return;
                 }
                 string url = MesConfig.GetUrl("API0032");
@@ -173,7 +176,7 @@ public sealed class CuringMesPoster
                 };
                 bool ok = await PostAsync(url, JsonConvert.SerializeObject(req), "物料上传")
                     .ConfigureAwait(false);
-                Notify($"过账：{Now2()} {s}工位物料上传 {(ok ? "OK" : "失败（详见 MES 日志）")}");
+                Notify($"过账：{Now2()} {SideTag(s)}物料上传 {(ok ? "OK" : "失败（详见 MES 日志）")}");
             }
             catch (Exception ex)
             {
@@ -182,10 +185,18 @@ public sealed class CuringMesPoster
         });
     }
 
+    /// <summary>顶栏工位字样：双工位带（如 "R工位"/"[R]"）——两套工单需要区分；
+    /// 单工位不带（现场没有左右概念，顶栏文案与工单窗口径一致全去工位字样）。</summary>
+    private string SideTag(string s) => _options.DualSide ? $"{s}工位" : "";
+
+    /// <summary>日志/顶栏的 [工位] 后缀（进站[R]/固化时间[R]/出站[R]）：单工位不带。</summary>
+    private string SideBrackets(string s) => _options.DualSide ? $"[{s}]" : "";
+
     // ---------- 上报链（后台线程执行） ----------
 
     /// <summary>进站：API0030 ACTION=I（BC_NO=工单批次物料条码，批次级过账）。
-    /// 工位按架号查映射（RackSides，未命中回落 Side），机台参数随工位。</summary>
+    /// 双工位模式按架号查映射（RackSides，未命中回落 Side）取工位；单工位恒 Side
+    /// （SideOfRack 内部短路）。机台参数随工位。</summary>
     private async Task PostBoardInAsync(int rack, int level, string why)
     {
         string url = MesConfig.GetUrl("API0030");
@@ -193,6 +204,7 @@ public sealed class CuringMesPoster
             return;
         var book = _workOrderProvider();
         string side = _options.SideOfRack(rack);
+        string stag = SideBrackets(side);
         var slot = SideSlot(book, side);
         if (slot == null || string.IsNullOrWhiteSpace(slot.RcNo))
         {
@@ -211,8 +223,8 @@ public sealed class CuringMesPoster
             CHECK_RESULT = StaticParam(_options.CheckResult, "CHECK_RESULT"),
             PLANT = StaticParam(_options.Plant, "PLANT"),
         };
-        bool ok = await PostAsync(url, JsonConvert.SerializeObject(req), $"进站[{side}]").ConfigureAwait(false);
-        Notify($"过账：{Now2()} 进站[{side}] {(ok ? "OK" : "失败（详见 MES 日志）")} 架{rack}层{level} {why}");
+        bool ok = await PostAsync(url, JsonConvert.SerializeObject(req), $"进站{stag}").ConfigureAwait(false);
+        Notify($"过账：{Now2()} 进站{stag} {(ok ? "OK" : "失败（详见 MES 日志）")} 架{rack}层{level} {why}");
     }
 
     /// <summary>
@@ -228,6 +240,7 @@ public sealed class CuringMesPoster
             return;
         var book = _workOrderProvider();
         string side = _options.SideOfRack(rack);
+        string stag = SideBrackets(side);
         var slot = SideSlot(book, side);
         if (slot == null || string.IsNullOrWhiteSpace(slot.RcNo))
         {
@@ -249,9 +262,9 @@ public sealed class CuringMesPoster
             Collect_Datetime = Now(),
             PLANT = StaticParam(_options.Plant, "PLANT"),
         };
-        bool ok27 = await PostAsync(url27, JsonConvert.SerializeObject(new[] { req27 }), $"固化时间[{side}]")
+        bool ok27 = await PostAsync(url27, JsonConvert.SerializeObject(new[] { req27 }), $"固化时间{stag}")
             .ConfigureAwait(false);
-        Notify($"过账：{Now2()} 固化时间[{side}] {(ok27 ? "OK" : "失败（详见 MES 日志）")} " +
+        Notify($"过账：{Now2()} 固化时间{stag} {(ok27 ? "OK" : "失败（详见 MES 日志）")} " +
                $"架{rack}层{level} {leavePhase} 固化{curedSeconds}秒");
 
         // --- API0030 出站（ACTION=O）---
@@ -267,7 +280,7 @@ public sealed class CuringMesPoster
             CHECK_RESULT = StaticParam(_options.CheckResult, "CHECK_RESULT"),
             PLANT = StaticParam(_options.Plant, "PLANT"),
         };
-        bool ok30 = await PostAsync(url30, JsonConvert.SerializeObject(req30), $"出站[{side}]")
+        bool ok30 = await PostAsync(url30, JsonConvert.SerializeObject(req30), $"出站{stag}")
             .ConfigureAwait(false);
 
         // 出站被接受 → 已生产数量 +1 落盘（工单是现场作业状态，读-改-写；

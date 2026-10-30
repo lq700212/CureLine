@@ -149,11 +149,13 @@ public sealed class DialogService : IDialogService
     {
         // 生产装配：工单窗（门禁在 VM——级别不够的编辑区禁用）。
         // 物料上传动作接单线过账服务（Poster 现读盘上工单发 API0032）。
+        // 工位布局开关（单/双工位面板）随开着窗那一刻的 [CuringMes] 配置。
         var win = new WorkOrderWindow
         {
             Owner = Application.Current?.MainWindow,
             DataContext = new WorkOrderViewModel(new DialogService(), currentLevel,
-                uploadMaterial: side => CuringMesPosterHolder.Default?.UploadMaterial(side)),
+                uploadMaterial: side => CuringMesPosterHolder.Default?.UploadMaterial(side),
+                postOptions: CuringMesOptions.Load()),
         };
         return win.ShowDialog() == true;
     }

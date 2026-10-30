@@ -128,7 +128,8 @@ public class CuringMesPosterTests
     public void SideOfRack_MapsByConfiguredRanges_FallsBackToSide(
         string rackSides, int rack, string expected)
     {
-        var o = new CuringMesOptions { Side = "R", RackSides = rackSides };
+        // 双工位开=老双架映射口径（开关关恒回 Side，另有单工位专例锁定）
+        var o = new CuringMesOptions { DualSide = true, Side = "R", RackSides = rackSides };
         Assert.Equal(expected, o.SideOfRack(rack));
     }
 
@@ -146,6 +147,7 @@ public class CuringMesPosterTests
         var (poster, _, _) = Make(new CuringMesOptions
         {
             Enabled = true,
+            DualSide = true, // 双架口径用例显式开开关（缺省单工位会忽略映射）
             Side = "R",
             RackSides = "11-20:L",
             MacNo = "MAC-R",
@@ -212,6 +214,64 @@ public class CuringMesPosterTests
         var plain = new CuringMesOptions { MacNo = "MAIN", MacNo_L = "" };
         Assert.Equal("MAIN", plain.MacNoOf("L"));
         Assert.Equal("MAIN", plain.MacNoOf("R"));
+    }
+
+    [Fact]
+    public void Options_DualSide_SaveLoadRoundTrip()
+    {
+        // 双工位开关 ini 往返（铁律 8）；缺省=单工位（现场无双工位→缺省关）
+        using var scope = new TestScope();
+        Directory.CreateDirectory(AppPaths.ConfigDir);
+        var o = new CuringMesOptions { DualSide = true, Side = "L" };
+        o.Save();
+        Assert.True(CuringMesOptions.Load().DualSide);
+
+        o.DualSide = false;
+        o.Save();
+        Assert.False(CuringMesOptions.Load().DualSide);
+
+        Assert.False(new CuringMesOptions().DualSide); // 代码缺省同样单工位
+    }
+
+    [Fact]
+    public void SideOfRack_SingleMode_IgnoresRackSides()
+    {
+        // 单工位（双工位开关关）：RackSides 即使残留配置也忽略——恒回 Side
+        // （防现场误配残留的 "11-20:L" 把唯一一套工单引到空 L 槽）
+        var single = new CuringMesOptions { DualSide = false, Side = "R", RackSides = "1-99:L" };
+        Assert.Equal("R", single.SideOfRack(15));
+
+        // 双工位开：同配置命中映射段 → L（回归老口径）
+        var dual = new CuringMesOptions { DualSide = true, Side = "R", RackSides = "1-99:L" };
+        Assert.Equal("L", dual.SideOfRack(15));
+        Assert.Equal("R", dual.SideOfRack(100)); // 未命中段回落 Side
+    }
+
+    [Fact]
+    public void BoardOut_SingleSide_MapsAllRacksToSide()
+    {
+        // 单工位出站端到端：架 15（残留映射段 11-20:L 内）也按 Side=R 报
+        // R 工位途程 + 主机台号（L 专用参数不上）
+        using var scope = new TestScope();
+        using var mes = new MesStubServer();
+        mes.EnqueueOk();
+        mes.EnqueueOk();
+        MesConfig.UrlApi0027 = mes.Url;
+        MesConfig.UrlApi0030 = mes.Url;
+        var (poster, _, _) = Make(new CuringMesOptions
+        {
+            Enabled = true,
+            Side = "R",
+            RackSides = "11-20:L", // 残留双架配置——单工位（缺省 DualSide=false）下忽略
+            MacNo = "MAC-R",
+            MacNo_L = "MAC-L2",
+        });
+
+        poster.OnTrayLeft(15, 1, SlotPhase.Done, 300);
+        mes.WaitForRequests(2);
+
+        Assert.Contains("\"RC_NO\":\"R-RC1\"", mes.Bodies[0]);
+        Assert.Contains("\"MAC_NO\":\"MAC-R\"", mes.Bodies[0]);
     }
 
     // ---------- 出站链 ----------
