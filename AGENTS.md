@@ -173,7 +173,7 @@
 | `src/CimGateway/MesLogWindow.*` | 日志窗（-1 全部机台 / >=0 分机台，关窗退订；清空钮=危险色） |
 | `src/CimGateway/GatewayConfigWindow.*` | 网关配置窗（机台连接/接口地址两页 + 测试连接 + 保存热生效，逻辑在 Core；单机页已删；V0.0.32 类名去 PLC 化 `PlcConfigWindow`→`GatewayConfigWindow`，VM 同改 `GatewayConfigViewModel`）；V0.0.31 Tab 隐式主题样式 + 测试结果字色走语义名（VM "Ok"/"Err" → View 触发器映射 AlertOkFg/AlertErrFg）；V0.0.32 机台连接页每行含机台名框（[StationNames] 配置化） |
 | `src/CimGateway/MesAlarmWindow.*` / `ImageWindow.*` | 报警窗 / 图片查看 |
-| **程序② UI 键板** | `App.xaml`（GhostButton/Fresh 弹窗样式族/TabControl+TabItem 隐式主题/WinTitleBar/WinSysBtn + Geo.* 图标，色全 DynamicResource 走 Themes 字典）；全部弹窗统一圆角自绘骨架（WindowStyle=None + WindowChrome + Fx.WinShadow + WinTitleBar 品牌标题条，可缩放窗 ResizeBorderThickness=6）；原 `Styles/FreshBlue.xaml` 已删 |
+| **程序② UI 键板** | `App.xaml`（GhostButton/Fresh 弹窗样式族/TabControl+TabItem 隐式主题/WinTitleBar/WinSysBtn + Geo.* 图标，色全 DynamicResource 走 Themes 字典）；全部弹窗统一圆角自绘骨架（WindowStyle=None + WindowChrome + Fx.WinShadow + WinTitleBar 品牌标题条，可缩放窗 ResizeBorderThickness=6）；**登录窗输入左缘对齐口径（V0.0.40 像素实测）**：自定义模板 ScrollViewer 已 Margin=Padding、控件内部又消费一次——文本左缘=框内白+2×左Padding+基础内缩（TextBox 系 7/PasswordBox 3），用户名 TextBox 左 8 对应密码框 FreshPwdInput 左 10 同线；程序①的"左 3"是 ComboBox（左 17）另一套定标，勿互套；原 `Styles/FreshBlue.xaml` 已删 |
 | **Core 共享（固化工艺家族，P3.1 新增）** | |
 | `src/CureLine.Core/Curing/CuringPolicy.cs` | 工艺策略模型：时长三级覆盖（仓位>层>全局，`ResolveMinutes` 唯一出口）+ 光栅门控 + `CuringPolicyValidator`（时长/层号/仓位键/重名） |
 | `src/CureLine.Core/Curing/CuringPolicyStore.cs` | `config/curingpolicy.json` 存取（策略库+激活名）+ `BuildDefaultBook` 缺省库自愈 |

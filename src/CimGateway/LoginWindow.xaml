@@ -25,10 +25,11 @@
         （Password 非依赖属性不可绑定）。取色全走 Brush.Fresh.*（两主题字典
         同名异值，ThemeManager 切字典即换肤）；标题条/关闭钮走 App.xaml
         WinTitleBar/WinTitleClose 共享样式。
-        账号/密码左缘对齐 UI 契约（程序① V0.0.30 同款）：用户名 TextBox 实例级
-        Padding 左 8（FreshInput 样式值 6 是普通表单口径；登录窗加 2 补偿
-        TextBoxView 内缩差异），密码 FreshPwdInput 左 3——两框首字符左缘同线，
-        动内边距须放大截图核对。
+        账号/密码左缘对齐 UI 契约（V0.0.40 像素实测重校）：用户名 TextBox 实例级
+        Padding 左 8（样式值 6 是普通表单口径），密码 FreshPwdInput 左 10——
+        自定义模板 ScrollViewer Margin=Padding 与控件内部消费叠加是"双倍"，
+        文本左缘=框内白+2×左Padding+控件基础内缩（TextBox 系 7/PasswordBox 3），
+        2×8+7 = 2×10+3 → 两框首字符左缘同线；动内边距须冒烟截图+像素扫描核对。
         设计时 DataContext 为空，展示文本取 FallbackValue 占位（仅预览，运行时走真值）。-->
     <Grid Margin="14">
         <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
