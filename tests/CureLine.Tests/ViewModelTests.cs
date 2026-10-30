@@ -78,17 +78,17 @@ public class ViewModelTests : IDisposable
             PlcResult = true,
         };
         using var vm = new MainWindowViewModel(fake);
-        // 未登录点 PLC 设置：提示登录，不开配置窗不重启
+        // 未登录点 PLC 设置：提示登录，不开配置窗
         vm.ShowGatewayCommand.Execute(null);
         Assert.Contains(fake.Calls, c => c.StartsWith("Msg:"));
         Assert.DoesNotContain("GatewayConfig", fake.Calls);
-        // 登录后：开配置窗 + 重启
+        // 登录后：开配置窗；保存返回 true 走热重建连接（V0.0.41 起
+        // RestartConnections 后台重建，程序化重启链路已删，不再有 Restart 调用）
         vm.LoginCommand.Execute(null);
         Assert.Equal($"dev ({LanguageService.Tr("切换/退出")})", vm.LoginHeader);
         Assert.True(vm.GatewayVisible);
         vm.ShowGatewayCommand.Execute(null);
         Assert.Contains("GatewayConfig", fake.Calls);
-        Assert.Contains("Restart", fake.Calls);
     }
 
     [Fact(DisplayName = "主窗VM退出登录清门禁")]

@@ -97,4 +97,42 @@ public class IoBusTests
         }
         Assert.True(sawTrue, "演示态 2.5 秒内应出现至少一个输入点为 true");
     }
+
+    // ---------- 扫描读取计划（V0.0.41 按块去重：180 帧/周期 → 20 帧） ----------
+
+    [Fact]
+    public void ScanPlan_SingleDeviceTenBlocks_GroupsByBlockAndDirection()
+    {
+        // 旧单台布局（1 台 10 块 18 绑定/块）：计划 = 10 块 × 2 方向 = 20 组，
+        // 每组 9 绑定（3 层 × 3 点）共用一帧——同块同方向绝不重复读
+        var device = IoPointTableStore.BuildDefaultTemplate("T", "192.168.1.20", 10, 3).Devices[0];
+        var plan = ScanPlanner.BuildScanPlan(device);
+        Assert.Equal(20, plan.Count);
+        Assert.All(plan, g => Assert.Equal(9, g.Bindings.Count));
+        foreach (var g in plan)
+        {
+            Assert.Equal(g.IsInput ? device.DiAddressOf(g.Block) : device.DoAddressOf(g.Block),
+                g.Address);
+            Assert.All(g.Bindings, b => Assert.Equal((b.IsInput, b.Block), (g.IsInput, g.Block)));
+        }
+        // 帧序稳定：块号升序、同块输入在前（现场抓包对照口径）
+        Assert.Equal(plan.OrderBy(g => g.Block).ThenBy(g => g.IsInput).Select(g => (g.Block, g.IsInput)),
+            plan.Select(g => (g.Block, g.IsInput)));
+    }
+
+    [Fact]
+    public void ScanPlan_SiteLayout_TenDevicesOneBlockEach_TwentyFramesTotal()
+    {
+        // 现场口径（10 台 × 每台 1 块 × 18 绑定）：每台 2 帧，全场 20 帧/周期
+        var config = IoPointTableStore.BuildMachineTemplate();
+        int total = 0;
+        foreach (var device in config.Devices)
+        {
+            var plan = ScanPlanner.BuildScanPlan(device);
+            Assert.Equal(2, plan.Count);                       // DI 1 帧 + DO 1 帧
+            Assert.All(plan, g => Assert.Equal(9, g.Bindings.Count));
+            total += plan.Count;
+        }
+        Assert.Equal(20, total);
+    }
 }

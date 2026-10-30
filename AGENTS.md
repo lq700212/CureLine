@@ -83,6 +83,11 @@
   换算（`EncodeInRack`）+ 模板起始架号 + 跨设备语义查重 + 点表设备高级参数
   全 UI 化 + `[CuringMes] RackSides` 工位映射（`MacNo_L/MacLocNo_L` 分套）+
   `[setting] StringByteOrder` 字节序配置化 + 登录窗重做/权限窗语义色。
+  **V0.0.41 多耦合器现场适配 + 全设备连接热更（已完成）**：现场布局落定
+  （10 列 × 3 层、每列 1 台町洋 GFNB-1A3A，IP 现值 .20~.29 预置）+
+  批量一键生成/自愈改现场口径 + 测试连接补 UI（死命令修复）+ 校验补
+  重复 IP/重名闸 + 轮询按块分组读（180→20 帧/周期）+ 通道归属可见 +
+  程序②机台连接保存即热重建（RestartApp 链删除）。
 
 ## 铁律（违反即返工）
 
@@ -243,10 +248,26 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
 - `config/` 目录 kernel32 不会自动建，`App.OnStartup` 已确保；删库不怕，
   `EnsureDatabase` 自建表。
 - 老项目第 1 台设备名英文译错（抄第 2 台的），本项目已修正。
-- **IO 总线两坑（P1 起生效）**：① DO 写必须"读-改-写"单寄存器位，
-  整寄存器覆盖会误伤同寄存器其它仓位的三色灯；② 逐块 FC04/FC03 各读
-  1 寄存器（子模块原始 `ReadInputRegisters`），块状布局地址不连续
-  （32 地址只用 16 位），**禁用** kaleidoscope 连续 `ReadAllInputs`。
+- **IO 总线两坑（P1 起生效，② V0.0.41 更新为分组读）**：① DO 写必须"读-改-写"
+  单寄存器位，整寄存器覆盖会误伤同寄存器其它仓位的三色灯；② DI/DO 扫描按
+  "块×方向"分组共用一帧（`ScanPlanner.BuildScanPlan` 纯函数：同块同方向
+  9 点一帧，10 台现场=20 帧/250ms 周期），块状布局地址不连续（32 地址只用
+  16 位），**禁用** kaleidoscope 连续 `ReadAllInputs`。
+- **多台耦合器现场语义（V0.0.41 起，全在 `BuildMachineTemplate`/`ScanPlanner`
+  一处）**：① 一台机台 = 10 列 × 上中下 3 层 = 30 仓位，每列 1 台町洋
+  NEMO GFNB-1A3A（1 块 = 16DI+16DO），**IP 现场现值 192.168.1.20~.29 已
+  预置为缺省模板**（自愈/批量生成共用；设备名"IO耦合器1~10"）；②
+  GFNB 寄存器占位 DI@0x1000(FC04)/DO@0x2000(FC03·FC06) 已对照官方手册
+  6.4/6.5 节核实一致（另有位区 FC02/FC05@0x0000 可用但无需）；③ 多台
+  生成器设备 **TimeoutMs=300**——多台串行建连 3s/台会拖首轮 30s（真机
+  自愈测试用例 34s 的教训），LAN 300ms 快失败快重连；④ "测试连接/测试
+  全部"测的是编辑区草稿值（先测再存），结果列表留最近 50 条；⑤ 校验器
+  拦跨设备重复 IP:端口与重名；⑥ **热更红线**：两程序所有连接/参数配置
+  保存即生效——程序①点表保存→`StartBus` 整换总线（状态机 Attach 流程
+  不丢），程序②网关配置保存→`RestartConnections()`（后台 Dispose 旧
+  `MultiMachineManager`→`InitMulti` 重建→复用 `ConnectMulti` 后台重连）；
+  **程序化重启链路已删**（`RestartApp`/`IsRestarting`/接口方法/Fake 桩/
+  语言 key 全清），勿再以"重启生效"为口径加回。
 - 点表布局三键可改现场分叉：`DiStartAddress`/`DoStartAddress`/
   `BlockStrideRegisters`（缺省 0x1000/0x1010/0x20，块 K 线性外推）；
   改动必同步 `PointTableTests` 的地址断言。

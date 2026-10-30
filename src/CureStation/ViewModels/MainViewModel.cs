@@ -520,16 +520,20 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     }
 
     // 点表读取：文件没了/空表 → 建缺省模板并立即落盘（现场第一次开机就有东西看）。
+    // V0.0.41 起按现场实况生成：一台机台 10 列 × 上中下 3 层，每列 1 台町洋
+    // GFNB-1A3A（IP 192.168.1.20~.29 现场现值预填）——自愈出来即是现场布局，
+    // 配置窗打开核对/微调即可，不用从单台旧口径重配。
     private PointTableConfig LoadOrDefault()
     {
         var config = IoPointTableStore.Load();
         if (config == null)
         {
-            config = IoPointTableStore.BuildDefaultTemplate("A线OP30固化架IO", "192.168.1.20", 10, 3);
+            config = IoPointTableStore.BuildMachineTemplate();
             IoPointTableStore.Save(config);
             _dialogs.ShowMessage(
-                "点表配置为空，已按 Audi cover module IO 表生成缺省模板并保存。\n" +
-                "菜单可打开点表配置窗调整（IP/绑定）。",
+                "点表配置为空，已按现场布局生成缺省模板并保存：" +
+                "10 台耦合器（IO耦合器1~10，IP 192.168.1.20~.29），每台管一列的上中下 3 层。\n" +
+                "菜单可打开点表配置窗核对（测试连接/批量生成/逐点改绑）。",
                 "配置自愈");
         }
         return config;

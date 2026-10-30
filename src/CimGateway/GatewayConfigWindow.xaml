@@ -42,7 +42,7 @@
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
                             DockPanel.Dock="Bottom" Margin="0,12,0,16">
-                    <Button Content="{Binding SaveText, FallbackValue='保存并重启'}" Width="120" Height="32"
+                    <Button Content="{Binding SaveText, FallbackValue='保存并生效'}" Width="120" Height="32"
                             Margin="0,0,8,0" Command="{Binding SaveCommand}" IsDefault="True"
                             Style="{StaticResource FreshPrimaryButton}"/>
                     <Button Content="{Binding CancelText, FallbackValue='取消'}" Width="100" Height="32"
@@ -52,7 +52,7 @@
 
                 <DockPanel Margin="20,12,20,0">
                     <Border Style="{StaticResource FreshHintBorder}" DockPanel.Dock="Top" Margin="0,0,0,10">
-                        <TextBlock Text="{Binding HintText, FallbackValue='测试用表单值直测保存后重启生效'}"
+                        <TextBlock Text="{Binding HintText, FallbackValue='测试用表单值直测，保存后立即生效（自动重连，无需重启）'}"
                                    TextWrapping="Wrap"
                                    Foreground="{DynamicResource Brush.Fresh.FgStrong}"/>
                     </Border>
@@ -69,11 +69,11 @@
                                                               IsChecked="{Binding Enabled}" Width="70"
                                                               VerticalContentAlignment="Center"/>
                                                     <!-- 机台名（V0.0.32 配置化）：面板/日志文件名/视图下拉同源，
-                                                         保存重启生效；缺省已回填当前生效名 -->
+                                                         保存即生效；缺省已回填当前生效名 -->
                                                     <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
                                                              Style="{StaticResource FreshInput}"
                                                              Width="170" Margin="0,0,4,0"
-                                                             ToolTip="机台名（面板标题/日志文件名/视图下拉共用，保存重启生效）"/>
+                                                             ToolTip="机台名（面板标题/日志文件名/视图下拉共用，保存即生效）"/>
                                                     <TextBox Text="{Binding Ip, UpdateSourceTrigger=PropertyChanged}"
                                                              Style="{StaticResource FreshInput}"
                                                              Width="120" Margin="4,0,0,0"/>

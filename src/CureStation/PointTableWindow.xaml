@@ -8,7 +8,7 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:PointTableViewModel, IsDesignTimeCreatable=False}"
         Title="IO 点表配置（点点鼠标，无需改代码）"
-        Height="720" Width="1120"
+        Height="780" Width="1120"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None" Background="Transparent" AllowsTransparency="True"
         Foreground="{DynamicResource Brush.Fresh.FgMid}"
@@ -21,9 +21,10 @@
                             ResizeBorderThickness="6"/>
     </shell:WindowChrome.WindowChrome>
     <!--★★ 点表配置窗（现场人员的配置主场）：
-         左：设备列表 + 缺省模板一键生成；右上：绑定网格；
-         右下：选中行编辑面板（块/位/方向/角色/架/层/功能名）。
-         底部：测试连接（不存盘直测）+ 保存（校验不过不落盘）。
+         左：设备列表 + 批量生成机台耦合器（10 台现场口径一键配完）+ 单台缺省模板；
+         右上：绑定网格（顶部显示当前设备归属）；右下：选中行编辑面板 +
+         测试连接/测试全部（不存盘直测，结果列表逐台定位）。
+         底部：保存（校验不过不落盘）。
          取色全走 Brush.Fresh.*；Expander/ListBox/DataGrid 走 App.xaml 主题化样式。-->
     <!-- 圆角弹窗骨架（全弹窗统一）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow 浮层投影，
          根 Grid Margin=14 给阴影渲染留白 -->
@@ -95,6 +96,26 @@
                                     Content="生成缺省模板（覆盖当前设备绑定）"
                                     Command="{Binding GenerateTemplateCommand}"/>
                         </StackPanel>
+                        <!-- 批量生成机台耦合器（V0.0.41 现场口径）：10 列 × 3 层、
+                             每列 1 台 GFNB——缺省参数即现场现值（IP .20~.29 已预填），
+                             点一下覆盖重建 10 台，逐台改 IP/名字即可保存 -->
+                        <StackPanel DockPanel.Dock="Bottom">
+                            <TextBlock Style="{StaticResource SectionTitle}"
+                                       Text="批量生成机台耦合器（推荐）"/>
+                            <TextBlock Text="一台机台 N 列 × 3 层 = N 台耦合器，一台管一列（每台 1 架 3 层）；IP 从首址按步长递增预填"
+                                       Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="0,2,0,6" TextWrapping="Wrap"/>
+                            <UniformGrid Columns="2">
+                                <TextBlock Text="台数（列数）：" VerticalAlignment="Center"/>
+                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding BatchCountText, FallbackValue=10}"/>
+                                <TextBlock Text="IP 首址：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding BatchIpFirstText, FallbackValue=192.168.1.20}" Margin="0,6,0,0"/>
+                                <TextBlock Text="IP 递增步长：" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding BatchIpStepText, FallbackValue=1}" Margin="0,6,0,0"/>
+                            </UniformGrid>
+                            <Button Style="{StaticResource FreshButton}" Margin="0,8"
+                                    Content="批量生成（覆盖全部设备，IP 预填现值）"
+                                    Command="{Binding GenerateMachineCommand}"/>
+                        </StackPanel>
                         <!-- 设备级编辑（选中设备回显） -->
                         <UniformGrid Columns="2" Margin="0,0,0,8">
                             <TextBlock Text="设备名：" VerticalAlignment="Center"/>
@@ -146,6 +167,10 @@
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}"
                                    Text="点位绑定（选中行 → 右下编辑）"/>
+                        <!-- 当前设备归属提示（V0.0.41）：多台耦合器部署排障时，
+                             这屏绑定属于哪台设备一眼定位（名称/IP 随左栏选中联动） -->
+                        <TextBlock DockPanel.Dock="Top" Text="{Binding CurrentDeviceText, FallbackValue=当前设备：—}"
+                                   Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="0,0,0,4"/>
                         <DataGrid DockPanel.Dock="Top" ItemsSource="{Binding Bindings, FallbackValue={x:Null}}"
                                   SelectedItem="{Binding SelectedBinding}" Height="420" Margin="0,8,0,0">
                             <DataGrid.Columns>
@@ -197,7 +222,33 @@
                                     Content="应用修改到选中行" Command="{Binding ApplyBindingCommand}"/>
                             <Button Tag="{StaticResource Geo.Trash}" Style="{StaticResource FreshButton}" Margin="0,8,0,0"
                                     Content="删除该绑定行" Command="{Binding DeleteBindingCommand}"/>
+                            <!-- 连通测试（V0.0.41 补 UI 死命令）：单台测当前选中设备、
+                                 全部逐台跑——测试期间两钮齐灰（IsTesting），不冻界面 -->
+                            <UniformGrid Columns="2" Margin="0,10,0,0">
+                                <Button Style="{StaticResource FreshButton}" Content="测试连接"
+                                        Command="{Binding TestConnectionCommand}" Margin="0,0,4,0"
+                                        ToolTip="直测当前选中设备（IP/端口/寄存器读回），不存盘"/>
+                                <Button Style="{StaticResource FreshButton}" Content="测试全部"
+                                        Command="{Binding TestAllCommand}" Margin="4,0,0,0"
+                                        ToolTip="逐台测试全部耦合器，结果进下方列表"/>
+                            </UniformGrid>
                         </StackPanel>
+                    </Border>
+                    <!-- 测试结果列表（测试全部逐台出结果：时间/设备/IP/OK·NG/原因） -->
+                    <Border DockPanel.Dock="Top" Style="{StaticResource FreshCardBorder}" Padding="10" Margin="0,8,0,0">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}" Text="测试结果（最近 50 条）"/>
+                            <DataGrid DockPanel.Dock="Top" ItemsSource="{Binding TestResults, FallbackValue={x:Null}}"
+                                      Height="170" Margin="0,8,0,0" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="时间" Binding="{Binding TimeText, FallbackValue=00:00:00}" Width="64"/>
+                                    <DataGridTextColumn Header="设备" Binding="{Binding DeviceName, FallbackValue=IO耦合器1}" Width="88"/>
+                                    <DataGridTextColumn Header="IP" Binding="{Binding Ip, FallbackValue=192.168.1.20}" Width="100"/>
+                                    <DataGridTextColumn Header="结果" Binding="{Binding ResultText, FallbackValue=OK}" Width="48"/>
+                                    <DataGridTextColumn Header="消息" Binding="{Binding Message}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
                     </Border>
                     <Button Tag="{StaticResource Geo.Save}" DockPanel.Dock="Bottom" Style="{StaticResource FreshButton}"
                             Content="保存（校验后写配置文件）"

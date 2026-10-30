@@ -88,9 +88,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         LocalLog(Tr("软件启动"), -1);
     }
 
-    /// <summary>程序化重启中（关窗跳过"是否退出"确认，防双开）。</summary>
-    public bool IsRestarting { get; private set; }
-
     // ================= 登录态 + 菜单 =================
 
     public string LoginHeader => _role == LoginRole.None
@@ -223,7 +220,29 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
         if (_dialogs.ShowGatewayConfig())
-            RestartApp();
+            RestartConnections();
+    }
+
+    /// <summary>
+    /// 按新配置热重建全部机台连接（网关配置窗保存后调，V0.0.41 起**不再重启程序**）：
+    /// 后台 Dispose 旧 Manager（内部停各机台网关线程）→ InitMulti 重建
+    /// （factory 即时读新 AppConfig 静态值：启用/IP/端口/机台名）→ 复用
+    /// ConnectMulti 的"连接中..."口径后台重连。热更语义：保存即生效，
+    /// 顶栏连接钮/心跳灯随新配置刷新；日志只记一条重建边沿。
+    /// </summary>
+    public void RestartConnections()
+    {
+        var old = _multi;
+        if (old == null)
+            return;
+        SetConnectUi(false, Tr("重连中..."));
+        Task.Run(() =>
+        {
+            old.Dispose();      // 停旧网关线程 + 关旧 TCP（新连接另起，不共 socket）
+            InitMulti();        // 新 Manager：factory 读已刷新的 AppConfig
+            ConnectMulti();     // 后台逐台连（阻塞网络 IO 在 Task 内）
+            LocalLog(Tr("连接已按新配置重建（保存即生效）"), -1);
+        });
     }
 
     private void ShowChangePwd()
@@ -247,12 +266,6 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         IniFile.Write(AppPaths.ConfigIni, "setting", "Language",
             LanguageService.CurrentLanguage);
         RefreshTexts();
-    }
-
-    private void RestartApp()
-    {
-        IsRestarting = true;
-        _dialogs.RestartApp();
     }
 
     // ================= 通用：时钟 + 全局日志 =================
@@ -404,13 +417,11 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     // ================= 关窗 =================
 
     /// <summary>
-    /// 关窗确认（View.OnClosing 调）：重启中跳过确认；用户手动关才确认。
+    /// 关窗确认（View.OnClosing 调）：用户手动关才确认。
     /// 返回 true 表示放行关闭。
     /// </summary>
     public bool OnClosing()
     {
-        if (IsRestarting)
-            return true;
         return _dialogs.Confirm(Tr("是否退出?"), TitleText);
     }
 

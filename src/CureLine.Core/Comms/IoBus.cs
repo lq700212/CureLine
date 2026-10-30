@@ -61,8 +61,10 @@ public interface IPointTableBus : IDisposable
 /// <summary>
 /// 真机 Modbus TCP 总线。轮询策略（单线程串行扫全部设备——耦合器单连接，
 /// 并发多线程反而抢同一 TCP，串行简单且峰值带宽可控）：
-///   每周期每台：逐块 FC04 读 DI 寄存器 1 个 + FC03 读 DO 寄存器 1 个；
-///   10 块设备 = 20 帧/周期；周期取全场最小 PollIntervalMs（缺省 250ms）。
+///   每周期每台：按"块×方向"分组读——同块同方向的所有绑定共用 1 帧
+///   （FC04 读 DI 寄存器 1 个 / FC03 读 DO 寄存器 1 个，组内逐位取值）。
+///   V0.0.41 由"逐绑定一帧"改"逐块一帧"：10 台×每台 1 块×18 绑定的现场布局
+///   从 180 帧/周期降到 20 帧，250ms 周期内带宽充裕。
 /// 重连策略：轮询前发现未连接 → 5 秒节流重连（ReadInputRegisters 等内部
 ///   断连标记由 kaleidoscope 静态保证；重连失败只 Error 一次边沿）。
 /// </summary>
@@ -246,29 +248,23 @@ public sealed class ModbusPointTableBus : IPointTableBus
         return rt.Connected;
     }
 
-    /// <summary>扫一台的 DI/DO：逐块各 1 寄存器；全部帧成功才算 connected（半失败本轮丢弃）。</summary>
+    /// <summary>
+    /// 扫一台的 DI/DO：按读取计划逐组各读 1 寄存器（同块同方向共用一帧）；
+    /// 任一帧失败整台本轮丢弃（半失败不算 connected，与原逐绑定口径一致）。
+    /// </summary>
     private bool ScanPoints(CouplerRuntime rt, Dictionary<IoPointKey, bool> states)
     {
-        var device = rt.Device;
-        var inputRoles = device.Bindings.Where(b => b.IsInput).ToList();
-        var outputRoles = device.Bindings.Where(b => !b.IsInput).ToList();
-
-        foreach (var b in inputRoles)
+        foreach (var g in ScanPlanner.BuildScanPlan(rt.Device))
         {
-            var regs = rt.Controller.ReadInputRegisters(device.DiAddressOf(b.Block), 1);
+            var regs = g.IsInput
+                ? rt.Controller.ReadInputRegisters(g.Address, 1)
+                : rt.Controller.ReadHoldingRegisters(g.Address, 1);
             if (regs == null || regs.Length != 1)
                 return false;
-            StoreBit(states, b, (regs[0] & (1 << b.Bit)) != 0, device.InvertInputs);
+            bool invert = g.IsInput ? rt.Device.InvertInputs : rt.Device.InvertOutputs;
+            foreach (var b in g.Bindings)
+                StoreBit(states, b, (regs[0] & (1 << b.Bit)) != 0, invert);
         }
-
-        foreach (var b in outputRoles)
-        {
-            var regs = rt.Controller.ReadHoldingRegisters(device.DoAddressOf(b.Block), 1);
-            if (regs == null || regs.Length != 1)
-                return false;
-            StoreBit(states, b, (regs[0] & (1 << b.Bit)) != 0, device.InvertOutputs);
-        }
-
         return true;
     }
 
@@ -336,6 +332,37 @@ public sealed class ModbusPointTableBus : IPointTableBus
         IsConnected = false;
         ConnectionSummary = "已停止";
         _snapshot = PointTableSnapshot.Empty;
+    }
+}
+
+/// <summary>
+/// 一帧寄存器读取的执行单元：同设备同块同方向的所有绑定共用一次读。
+/// internal 纯函数建模（BuildScanPlan 可单测锁定"同组仅一帧"的去重契约）。
+/// </summary>
+internal sealed record ScanGroup(bool IsInput, int Block, ushort Address,
+    IReadOnlyList<IoPointBinding> Bindings);
+
+/// <summary>
+/// 读取计划生成（纯函数）：把一台设备的绑定表按 (方向, 块) 分组成若干读取单元，
+/// 每单元 1 帧（FC04 读 DI 寄存器 / FC03 读 DO 寄存器，各 16 点打包 1 寄存器，
+/// 组内逐位取值）。10 台×每台 1 块×18 绑定的现场布局由 180 帧/周期降到 20 帧。
+/// 输出顺序：块号升序、同块输入在前——帧序稳定，方便现场抓包对照。
+/// </summary>
+internal static class ScanPlanner
+{
+    public static List<ScanGroup> BuildScanPlan(IoCouplerDevice device)
+    {
+        var plan = new List<ScanGroup>();
+        foreach (var g in device.Bindings
+                     .GroupBy(b => (b.IsInput, b.Block))
+                     .OrderBy(g => g.Key.Block).ThenBy(g => g.Key.IsInput))
+        {
+            plan.Add(new ScanGroup(
+                g.Key.IsInput, g.Key.Block,
+                g.Key.IsInput ? device.DiAddressOf(g.Key.Block) : device.DoAddressOf(g.Key.Block),
+                g.ToList()));
+        }
+        return plan;
     }
 }
 

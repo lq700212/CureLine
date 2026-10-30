@@ -37,11 +37,13 @@ public sealed class IoTestPointVm : ViewModelBase
     private bool? _isOn;
     private bool _busy;   // 写入中防抖（DO 专用；DI 恒 false）
 
-    public IoTestPointVm(IoPointKey key, string roleText, string functionName)
+    public IoTestPointVm(IoPointKey key, string roleText, string functionName,
+        string deviceTag = "")
     {
         Key = key;
         RoleText = roleText;
         FunctionName = functionName;
+        DeviceTag = deviceTag;
         Exists = true;
     }
 
@@ -50,6 +52,7 @@ public sealed class IoTestPointVm : ViewModelBase
     {
         RoleText = "未绑定";
         FunctionName = "";
+        DeviceTag = "";
     }
 
     public static IoTestPointVm Placeholder() => new();
@@ -59,6 +62,8 @@ public sealed class IoTestPointVm : ViewModelBase
     public string RoleText { get; }
     /// <summary>IO 表功能名（接线员对得上线的文本；空=只显示角色名）。</summary>
     public string FunctionName { get; }
+    /// <summary>所属耦合器（"设备名（IP）"，V0.0.41 多台部署排障定位用；空=单台旧表）。</summary>
+    public string DeviceTag { get; }
     /// <summary>是否真绑定了点（false=占位格，不响应点击）。</summary>
     public bool Exists { get; }
     public bool IsInput => Key.IsInput;
@@ -80,8 +85,9 @@ public sealed class IoTestPointVm : ViewModelBase
     }
 
     /// <summary>
-    /// 悬停全文：方向首标（DI 输入/DO 输出）+ 角色 + 状态 + 功能名——
-    /// 与顶栏"小圆=DI/大圆=DO"说明呼应，悬停就能确认这是输入还是输出通道。
+    /// 悬停全文：方向首标（DI 输入/DO 输出）+ 角色 + 状态 + 功能名 + 所属耦合器——
+    /// 与顶栏"小圆=DI/大圆=DO"说明呼应，悬停就能确认这是输入还是输出通道；
+    /// 多台部署时一眼看出这路点挂在哪台耦合器（V0.0.41）。
     /// </summary>
     public string Tip
     {
@@ -94,7 +100,8 @@ public sealed class IoTestPointVm : ViewModelBase
                 null => "未读到（断连或未轮询）",
             };
             string fn = string.IsNullOrWhiteSpace(FunctionName) ? "" : $"\n{FunctionName}";
-            return $"{(IsInput ? "DI 输入" : "DO 输出")}·{RoleText}\n{state}{fn}";
+            string dev = string.IsNullOrWhiteSpace(DeviceTag) ? "" : $"\n设备：{DeviceTag}";
+            return $"{(IsInput ? "DI 输入" : "DO 输出")}·{RoleText}\n{state}{fn}{dev}";
         }
     }
 }
@@ -225,28 +232,32 @@ public sealed class IoTestViewModel : ViewModelBase
                 .Select(b => b.Level).DefaultIfEmpty(1).Max());
 
         // 仓位卡铺格（行优先：先层后架，与主窗一致）+ 按绑定挂通道（点表怎么配就怎么显示；
-        // Reserved=未用位不进测试窗）
-        var bySlot = config.Devices.SelectMany(d => d.Bindings)
-            .Where(b => b.Role != IoPointRole.Reserved && b.Rack > 0 && b.Level > 0)
-            .GroupBy(b => (b.Rack, b.Level))
+        // Reserved=未用位不进测试窗）。绑定携带所属设备上下文（V0.0.41：多台部署
+        // 时通道悬停能定位到"哪台耦合器"——排障不用回点表窗对行）。
+        var bySlot = config.Devices
+            .SelectMany(d => d.Bindings.Select(b => (Device: d, B: b)))
+            .Where(x => x.B.Role != IoPointRole.Reserved && x.B.Rack > 0 && x.B.Level > 0)
+            .GroupBy(x => (x.B.Rack, x.B.Level))
             .ToDictionary(g => g.Key, g => g.ToList());
         for (int level = 1; level <= LevelCount; level++)
         for (int rack = 1; rack <= RackCount; rack++)
         {
             var slot = new IoTestSlotVm(rack, level);
-            if (bySlot.TryGetValue((rack, level), out var bindings))
+            if (bySlot.TryGetValue((rack, level), out var entries))
             {
-                foreach (var b in bindings.Where(b => b.IsInput).OrderBy(b => (int)b.Role))
+                foreach (var x in entries.Where(x => x.B.IsInput).OrderBy(x => (int)x.B.Role))
                 {
-                    var vm = new IoTestPointVm(b.Key, IoPointRoleInfo.ToText(b.Role), b.FunctionName);
+                    var vm = new IoTestPointVm(x.B.Key, IoPointRoleInfo.ToText(x.B.Role),
+                        x.B.FunctionName, $"{x.Device.Name}（{x.Device.Ip}）");
                     slot.Inputs.Add(vm);
-                    _points[b.Key] = vm;
+                    _points[x.B.Key] = vm;
                 }
-                foreach (var b in bindings.Where(b => !b.IsInput).OrderBy(b => (int)b.Role))
+                foreach (var x in entries.Where(x => !x.B.IsInput).OrderBy(x => (int)x.B.Role))
                 {
-                    var vm = new IoTestPointVm(b.Key, IoPointRoleInfo.ToText(b.Role), b.FunctionName);
+                    var vm = new IoTestPointVm(x.B.Key, IoPointRoleInfo.ToText(x.B.Role),
+                        x.B.FunctionName, $"{x.Device.Name}（{x.Device.Ip}）");
                     slot.Outputs.Add(vm);
-                    _points[b.Key] = vm;
+                    _points[x.B.Key] = vm;
                 }
             }
             // 卡内补空占位保持三格齐整（输入/输出各至少 3 格，视觉对齐）

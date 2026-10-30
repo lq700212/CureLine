@@ -86,20 +86,6 @@ public sealed class DialogService : IDialogService
     public void ShowMesDebug() =>
         Prep(new MesDebugWindow()).Show();
 
-    public void RestartApp()
-    {
-        string? exe = Environment.ProcessPath;
-        if (exe == null)
-        {
-            ShowMessage(LanguageService.Tr("设置已保存，重启软件后生效"),
-                LanguageService.Tr("设置"));
-            return;
-        }
-        // 先拉新进程再退当前进程（主窗关窗跳过退出确认，保证旧进程一定退出）。
-        Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true });
-        Application.Current.Shutdown();
-    }
-
     public void CreateDesktopShortcut()
     {
         try

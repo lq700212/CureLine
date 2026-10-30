@@ -231,12 +231,12 @@ public class GatewayConfigViewModel : ViewModelBase
     public string TitleText => Tr("网关配置");
     public string TabMultiText => Tr("机台连接");
     public string TabApiText => Tr("接口地址");
-    public string SaveText => Tr("保存并重启");
+    public string SaveText => Tr("保存并生效");
     public string CancelText => Tr("取消");
     public string TestText => Tr("测试连接");
     public string TestAllText => Tr("全部测试");
     public string RestoreText => Tr("恢复缺省");
-    public string HintText => Tr("测试用表单值直测保存后重启生效")
+    public string HintText => Tr("测试用表单值直测，保存后立即生效（自动重连，无需重启）")
         + (_useSim ? "（" + Tr("模拟模式下配置仅对真机有效") + "）" : "");
     public string DataLengthLabel => Tr("数据长度");
     public string DataSegmentOffsetsLabel => Tr("分段偏移");

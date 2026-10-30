@@ -54,9 +54,6 @@ public interface IDialogService
     /// <summary>调试窗（非模态，直接 Show）。</summary>
     void ShowMesDebug();
 
-    /// <summary>程序化重启（先拉新进程再退当前进程，跳过退出确认）。</summary>
-    void RestartApp();
-
     /// <summary>创建桌面快捷方式（逻辑在 Core，服务只弹结果提示）。</summary>
     void CreateDesktopShortcut();
 }

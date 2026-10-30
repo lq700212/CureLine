@@ -245,4 +245,101 @@ public class PointTableTests
         Assert.False(v.Ok);
         Assert.Contains(v.Errors, e => e.Contains("仓位必须清零"));
     }
+
+    // ---------- 机台批量模板（V0.0.41：10 台 GFNB-1A3A 现场口径） ----------
+
+    [Fact]
+    public void MachineTemplate_Defaults_MatchSiteLayout()
+    {
+        // 缺省参数=现场现值：10 台、IP 192.168.1.20~.29、每台 1 架 3 层
+        var config = IoPointTableStore.BuildMachineTemplate();
+        Assert.Equal(10, config.Devices.Count);
+        for (int i = 0; i < 10; i++)
+        {
+            var d = config.Devices[i];
+            Assert.Equal($"IO耦合器{i + 1}", d.Name);
+            Assert.Equal($"192.168.1.{20 + i}", d.Ip);
+            Assert.Equal(502, d.Port);
+            Assert.Equal(1, d.BlockCount);            // GFNB-1A3A = 16DI+16DO 一块
+            Assert.Equal(0x1000, d.DiStartAddress);   // iO-GRID 家族占位，现场实测后配置窗改
+            Assert.Equal(0x2000, d.DoStartAddress);
+            Assert.Equal(18, d.Bindings.Count);       // 1 架 3 层 × (3 入 + 3 出)
+            Assert.Equal(i + 1, d.Bindings[0].Rack);  // 架号=列号连续排（跨设备不撞）
+        }
+        Assert.True(PointTableValidator.Validate(config).Ok);
+    }
+
+    [Fact]
+    public void MachineTemplate_CustomCountIpStepRackStart()
+    {
+        // 3 台、首址 10.0.0.5 步长 2、起始架号 11（第二台机台扩线场景）
+        var config = IoPointTableStore.BuildMachineTemplate(
+            deviceCount: 3, rackStart: 11, levelsPerRack: 3, ipFirst: "10.0.0.5", ipStep: 2);
+        Assert.Equal(3, config.Devices.Count);
+        Assert.Equal("10.0.0.5", config.Devices[0].Ip);
+        Assert.Equal("10.0.0.7", config.Devices[1].Ip);
+        Assert.Equal("10.0.0.9", config.Devices[2].Ip);
+        Assert.Equal(11, config.Devices[0].Bindings[0].Rack);
+        Assert.Equal(13, config.Devices[2].Bindings[0].Rack);
+        Assert.True(PointTableValidator.Validate(config).Ok);
+    }
+
+    [Fact]
+    public void MachineTemplate_ZeroStepWithMultipleDevices_Throws()
+    {
+        // 多台步长 0 = 全部同 IP（现场连不上）——生成器当场拦
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            IoPointTableStore.BuildMachineTemplate(deviceCount: 5, ipStep: 0));
+    }
+
+    // ---------- 校验器多台闸（V0.0.41：重复 IP / 重名） ----------
+
+    [Fact]
+    public void Validation_DuplicateIpPort_Rejected()
+    {
+        var config = new PointTableConfig
+        {
+            Devices = { MakeBareDevice("A", "192.168.1.20"), MakeBareDevice("B", "192.168.1.20") },
+        };
+        var v = PointTableValidator.Validate(config);
+        Assert.False(v.Ok);
+        Assert.Contains(v.Errors, e => e.Contains("重复") && e.Contains("192.168.1.20:502"));
+    }
+
+    [Fact]
+    public void Validation_SameIpDifferentPort_Allowed()
+    {
+        // IP:端口 组合唯一才拦——同 IP 不同端口属两个独立 Modbus 服务，放行
+        var config = new PointTableConfig
+        {
+            Devices = { MakeBareDevice("A", "192.168.1.20"), MakeBareDevice("B", "192.168.1.20", 503) },
+        };
+        Assert.True(PointTableValidator.Validate(config).Ok);
+    }
+
+    [Fact]
+    public void Validation_DuplicateDeviceName_Rejected()
+    {
+        var config = new PointTableConfig
+        {
+            Devices = { MakeBareDevice("同名牌", "192.168.1.20"), MakeBareDevice("同名牌", "192.168.1.21") },
+        };
+        var v = PointTableValidator.Validate(config);
+        Assert.False(v.Ok);
+        Assert.Contains(v.Errors, e => e.Contains("重名"));
+    }
+
+    /// <summary>造一台最小设备（1 块 1 位绑定，专供校验器多台闸用例）。</summary>
+    private static IoCouplerDevice MakeBareDevice(string name, string ip, int port = 502) =>
+        new()
+        {
+            Name = name,
+            Ip = ip,
+            Port = port,
+            Bindings =
+            {
+                new IoPointBinding { Block = 1, Bit = 0, IsInput = true,
+                    Role = IoPointRole.TrayDetect, Rack = name == "A" ? 1 : 2, Level = 1 },
+            },
+        };
 }

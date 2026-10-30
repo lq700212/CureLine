@@ -196,7 +196,7 @@
                                         Visibility="{Binding GatewayVisible,
                                                     Converter={StaticResource BoolToVisibilityConverter},
                                                     FallbackValue=Collapsed}"
-                                        ToolTip="机台连接 / 接口地址配置（dev，保存后重启生效）"/>
+                                        ToolTip="机台连接 / 接口地址配置（dev，保存后立即生效）"/>
                                 <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.Debug}"
                                         Content="{Binding BtnDebugText, FallbackValue='调试'}"
                                         Command="{Binding ShowDebugCommand}" Click="OnMenuClick"

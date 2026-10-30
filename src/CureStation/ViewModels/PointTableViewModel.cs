@@ -74,7 +74,10 @@ public sealed class PointTableViewModel : ViewModelBase
         set
         {
             if (Set(ref _selectedDevice, value))
+            {
                 ReloadBindings();
+                Raise(nameof(CurrentDeviceText));
+            }
         }
     }
 
@@ -121,6 +124,15 @@ public sealed class PointTableViewModel : ViewModelBase
         get => _templateRackStart;
         set => Set(ref _templateRackStart, value);
     }
+
+    // ---- 批量生成机台耦合器（V0.0.41 现场口径：一台机台 10 列 × 3 层，
+    //      每列 1 台町洋 GFNB-1A3A——缺省参数即现场现值，点一下就配完 10 台）----
+    private string _batchCount = "10";
+    public string BatchCountText { get => _batchCount; set => Set(ref _batchCount, value); }
+    private string _batchIpFirst = "192.168.1.20";
+    public string BatchIpFirstText { get => _batchIpFirst; set => Set(ref _batchIpFirst, value); }
+    private string _batchIpStep = "1";
+    public string BatchIpStepText { get => _batchIpStep; set => Set(ref _batchIpStep, value); }
 
     // ---- 编辑面板（选中绑定行回显可改）----
     private string _editBlock = "1";
@@ -177,9 +189,11 @@ public sealed class PointTableViewModel : ViewModelBase
     public RelayCommand AddDeviceCommand { get; }
     public RelayCommand RemoveDeviceCommand { get; }
     public RelayCommand GenerateTemplateCommand { get; }
+    public RelayCommand GenerateMachineCommand { get; }
     public RelayCommand ApplyBindingCommand { get; }
     public RelayCommand DeleteBindingCommand { get; }
     public RelayCommand TestConnectionCommand { get; }
+    public RelayCommand TestAllCommand { get; }
     public RelayCommand SaveCommand { get; }
 
     public PointTableViewModel(IDialogService dialogs)
@@ -188,9 +202,11 @@ public sealed class PointTableViewModel : ViewModelBase
         AddDeviceCommand = new RelayCommand(AddDevice);
         RemoveDeviceCommand = new RelayCommand(RemoveDevice, () => SelectedDevice != null);
         GenerateTemplateCommand = new RelayCommand(GenerateTemplate);
+        GenerateMachineCommand = new RelayCommand(GenerateMachine);
         ApplyBindingCommand = new RelayCommand(ApplyBinding, () => SelectedBinding != null);
         DeleteBindingCommand = new RelayCommand(DeleteBinding, () => SelectedBinding != null);
-        TestConnectionCommand = new RelayCommand(TestConnection);
+        TestConnectionCommand = new RelayCommand(TestConnection, () => !IsTesting);
+        TestAllCommand = new RelayCommand(TestAll, () => !IsTesting);
         SaveCommand = new RelayCommand(Save);
 
         LoadFromDisk();
@@ -367,7 +383,8 @@ public sealed class PointTableViewModel : ViewModelBase
             : null;
     }
 
-    /// <summary>"测试连接"：后台 Task 直测（后台线程网络 IO 铁律），完成弹结果。</summary>
+    /// <summary>"测试连接"：后台 Task 直测当前选中设备（编辑区草稿值先刷进设备——
+    /// 先测再存的体验：IP 改了没保存也能测到新值），结果进列表 + 弹框。</summary>
     private async void TestConnection()
     {
         SyncDeviceFromEditor();
@@ -377,12 +394,86 @@ public sealed class PointTableViewModel : ViewModelBase
             return;
         }
         var device = SelectedDevice;
-        var (ok, msg) = await Task.Run(() => IoCouplerConnectionTester.Test(device));
-        if (ok)
+        SetTesting(true);
+        try
+        {
+            var (ok, msg) = await Task.Run(() => IoCouplerConnectionTester.Test(device));
+            AddTestResult(device.Name, device.Ip, ok, msg);
             _dialogs.ShowMessage(msg, "测试连接");
-        else
-            _dialogs.ShowMessage(msg, "测试连接");
+        }
+        finally
+        {
+            SetTesting(false);
+        }
     }
+
+    /// <summary>"测试全部"：逐台后台跑连通测试（一台一报，结果行实时进列表）。
+    /// 现场配完 10 台点一下，哪台没连上一眼定位（结果含设备名/IP/NG 原因）。</summary>
+    private async void TestAll()
+    {
+        if (Devices.Count == 0)
+        {
+            _dialogs.ShowMessage("先添加设备再测试。", "测试全部");
+            return;
+        }
+        // 编辑区草稿值先刷进选中设备（对齐单台测试口径，防测到旧值）
+        SyncDeviceFromEditor();
+        var devices = Devices.ToList();
+        SetTesting(true);
+        try
+        {
+            foreach (var device in devices)
+            {
+                var (ok, msg) = await Task.Run(() => IoCouplerConnectionTester.Test(device));
+                AddTestResult(device.Name, device.Ip, ok, msg);
+            }
+        }
+        finally
+        {
+            SetTesting(false);
+        }
+    }
+
+    // ---- 连通测试状态与结果列表（测试期间按钮灰，逐台出结果）----
+    private bool _testing;
+    public bool IsTesting
+    {
+        get => _testing;
+        private set
+        {
+            if (Set(ref _testing, value))
+            {
+                TestConnectionCommand.RaiseCanExecuteChanged();
+                TestAllCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    private void SetTesting(bool value) => UiInvoke(() => IsTesting = value);
+
+    /// <summary>结果行进列表（UiInvoke 封送：后台 Task 回调直接调也安全）。</summary>
+    private void AddTestResult(string name, string ip, bool ok, string message) =>
+        UiInvoke(() =>
+        {
+            TestResults.Insert(0, new TestResultRow(name, ip, ok, message));
+            // 只留最近 50 条防刷爆（现场反复点测试的场景）
+            while (TestResults.Count > 50)
+                TestResults.RemoveAt(TestResults.Count - 1);
+        });
+
+    /// <summary>连通测试结果行（测试全部列表的列：设备名/IP/OK·NG/原因）。</summary>
+    public sealed record TestResultRow(string DeviceName, string Ip, bool Ok, string Message)
+    {
+        public string ResultText => Ok ? "OK" : "NG";
+        public string TimeText => DateTime.Now.ToString("HH:mm:ss");
+    }
+
+    public ObservableCollection<TestResultRow> TestResults { get; } = new();
+
+    /// <summary>中栏顶部"当前设备"提示（多台部署排障：这屏绑定属于哪台耦合器）。</summary>
+    public string CurrentDeviceText => SelectedDevice == null
+        ? "当前设备：（未选中）"
+        : $"当前设备：{SelectedDevice.Name}（{SelectedDevice.Ip}:{SelectedDevice.Port}）";
 
     /// <summary>保存：先全量校验（错弹框不落盘），再写 pointtable.json。</summary>
     private void Save()
@@ -435,6 +526,55 @@ public sealed class PointTableViewModel : ViewModelBase
             d.PollIntervalMs = poll;
         d.InvertInputs = EditDeviceInvertInputs;
         d.InvertOutputs = EditDeviceInvertOutputs;
+        Raise(nameof(CurrentDeviceText)); // 名称/IP 编辑后中栏提示同步
+    }
+
+    /// <summary>
+    /// 批量生成机台耦合器（V0.0.41）：台数/IP 首址/IP 步长 → BuildMachineTemplate
+    /// 一次生成 N 台（每台 1 架 3 层、GFNB 占位地址），覆盖重建设备列表。
+    /// 确认弹框在前——覆盖动作不可撤销，防误点冲掉已配好的表。
+    /// </summary>
+    private void GenerateMachine()
+    {
+        if (!int.TryParse(BatchCountText, out var count) || count is < 1 or > 99)
+        {
+            _dialogs.ShowMessage("台数需要 1~99 的数字。", "批量生成");
+            return;
+        }
+        if (!int.TryParse(BatchIpStepText, out var step) || step is < 0 or > 255)
+        {
+            _dialogs.ShowMessage("IP 步长需要 0~255 的数字（多台不能为 0）。", "批量生成");
+            return;
+        }
+        string ipFirst = BatchIpFirstText.Trim();
+        if (!System.Net.IPAddress.TryParse(ipFirst, out _))
+        {
+            _dialogs.ShowMessage($"IP 首址非法：'{ipFirst}'。", "批量生成");
+            return;
+        }
+        if (!_dialogs.Confirm(
+                $"将按现值覆盖重建全部设备：{count} 台耦合器（IP {ipFirst} 起每台 +{step}，" +
+                $"每台 1 架 3 层）。\r\n现有设备与绑定会被清掉，确定继续？", "批量生成"))
+            return;
+
+        try
+        {
+            var template = IoPointTableStore.BuildMachineTemplate(
+                count, rackStart: 1, levelsPerRack: 3, ipFirst, step);
+            Devices.Clear();
+            foreach (var d in template.Devices)
+                Devices.Add(d);
+            SelectedDevice = Devices.FirstOrDefault();
+            SyncDeviceEditor();
+            _dialogs.ShowMessage(
+                $"已生成 {count} 台耦合器模板：IP {template.Devices[0].Ip} ~ " +
+                $"{template.Devices[^1].Ip}，每台 1 架 3 层共 {template.Devices[0].Bindings.Count} 点。" +
+                "\nIP 已按现场现值预填，如需调整逐台改名/改 IP 后保存即可。", "批量生成完成");
+        }
+        catch (Exception ex)
+        {
+            _dialogs.ShowMessage($"批量生成失败：{ex.Message}", "批量生成");
+        }
     }
 
     /// <summary>合成当前 VM 状态到配置对象（保存/校验共用）。</summary>

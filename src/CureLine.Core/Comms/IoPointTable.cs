@@ -183,6 +183,12 @@ public static class PointTableValidator
         // 第二台必须绑独立架号段（如 11~20），全场查重在保存前拦下撞号。
         var allSemantic = new HashSet<IoPointKey>();
 
+        // 重复 IP 与重复设备名闸（跨设备，V0.0.41）：多台手配最容易把上一台的
+        // IP 抄过来没改（两台连同一个地址——第二台永远连不上还难排查）、或设备
+        // 重名（错误提示/日志用 Name 定位，重名分不清是哪台）。保存前当场拦。
+        var seenIpPort = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var seenName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
         for (int di = 0; di < config.Devices.Count; di++)
         {
             var device = config.Devices[di];
@@ -190,9 +196,18 @@ public static class PointTableValidator
 
             if (string.IsNullOrWhiteSpace(device.Name))
                 errors.Add($"第 {di + 1} 台设备名称为空。");
+            else if (!seenName.TryAdd(device.Name.Trim(), di + 1))
+                errors.Add($"第 {di + 1} 台设备名称'{device.Name}'与第 {seenName[device.Name.Trim()]} 台重名（设备名必须唯一）。");
             if (string.IsNullOrWhiteSpace(device.Ip) ||
                 !System.Net.IPAddress.TryParse(device.Ip, out _))
                 errors.Add($"{where} IP 非法：'{device.Ip}'。");
+            else
+            {
+                string ipPort = $"{device.Ip.Trim()}:{device.Port}";
+                if (!seenIpPort.TryAdd(ipPort, device.Name))
+                    errors.Add($"{where} IP:端口（{ipPort}）与设备[{seenIpPort[ipPort]}]重复" +
+                        "——两台耦合器不能连同一地址，第二台会永远连不上。");
+            }
             if (device.Port is < 1 or > 65535)
                 errors.Add($"{where} 端口非法：{device.Port}。");
             if (device.BlockCount < 1)

@@ -77,10 +77,17 @@ public class CureStationViewModelTests
         using var vm = new CureStation.ViewModels.MainViewModel(fake);
 
         Assert.Contains(fake.Calls, c => c.Contains("配置自愈"));
-        // 落盘校验：再 Load 得到同一张表（自愈有据可查）
+        // 落盘校验：再 Load 得到同一张表（自愈有据可查）。
+        // V0.0.41 起自愈=现场口径：10 台耦合器（每台 1 架 3 层），IP 预填现值 .20~.29
         var loaded = IoPointTableStore.Load();
         Assert.NotNull(loaded);
-        Assert.Single(loaded!.Devices);
+        Assert.Equal(10, loaded!.Devices.Count);
+        Assert.All(loaded.Devices, d => Assert.Equal(1, d.BlockCount));
+        Assert.All(loaded.Devices, d => Assert.Equal(18, d.Bindings.Count));
+        Assert.Equal("192.168.1.20", loaded.Devices[0].Ip);
+        Assert.Equal("192.168.1.29", loaded.Devices[^1].Ip);
+        Assert.Equal(0x1000, loaded.Devices[0].DiStartAddress);
+        Assert.Equal(0x2000, loaded.Devices[0].DoStartAddress);
     }
 
     [Fact]
@@ -221,6 +228,66 @@ public class CureStationViewModelTests
         var loaded = IoPointTableStore.Load();
         Assert.NotNull(loaded);
         Assert.Equal(180, loaded!.Devices[0].Bindings.Count);
+    }
+
+    [Fact]
+    public void PointTableVm_GenerateMachine_BuildsDevicesWithSteppedIps()
+    {
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.PointTableViewModel(fake);
+        vm.BatchCountText = "3";
+        vm.BatchIpFirstText = "192.168.1.20";
+        vm.BatchIpStepText = "1";
+
+        vm.GenerateMachineCommand.Execute(null);    // ConfirmResult 缺省 true → 确认通过
+
+        Assert.Equal(3, vm.Devices.Count);
+        Assert.Equal("192.168.1.20", vm.Devices[0].Ip);
+        Assert.Equal("192.168.1.22", vm.Devices[^1].Ip);
+        Assert.All(vm.Devices, d => Assert.Equal(18, d.Bindings.Count)); // 1 架 3 层
+        Assert.Equal("IO耦合器1", vm.Devices[0].Name);
+        Assert.Contains(fake.Calls, c => c.Contains("批量生成完成"));
+    }
+
+    [Fact]
+    public void PointTableVm_GenerateMachine_CancelConfirm_KeepsDevices()
+    {
+        var fake = new FakeCureDialogService { ConfirmResult = false };
+        var vm = new CureStation.ViewModels.PointTableViewModel(fake);
+        vm.AddDeviceCommand.Execute(null);          // 先手工加一台，验证不被覆盖清掉
+        vm.BatchCountText = "3";
+
+        vm.GenerateMachineCommand.Execute(null);
+
+        Assert.Single(vm.Devices);
+        Assert.Contains(fake.Calls, c => c.StartsWith("Confirm:批量生成"));
+    }
+
+    [Fact]
+    public async Task PointTableVm_TestAll_ReportsPerDeviceResult()
+    {
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.PointTableViewModel(fake);
+        // 本机回环 + 端口 1（必然拒绝）+ 300ms 超时：两台测试亚秒级完成
+        vm.DeviceIp = "127.0.0.1";
+        vm.EditDevicePort = "1";
+        vm.EditDeviceTimeoutMs = "300";
+        vm.AddDeviceCommand.Execute(null);
+        vm.Devices[0].Port = 1;                     // 设备1 直接改 Raw（TestAll 只刷选中设备编辑区）
+        vm.Devices[0].TimeoutMs = 300;
+        vm.DeviceName = "测试B";
+        vm.AddDeviceCommand.Execute(null);          // 设备2（选中态）：TestAll 会把编辑区值刷进它
+        Assert.Equal(2, vm.Devices.Count);
+
+        vm.TestAllCommand.Execute(null);
+        // 逐台后台跑（每台连接拒绝快速失败），轮询等 IsTesting 落回 false
+        var deadline = DateTime.UtcNow.AddSeconds(8);
+        while (vm.IsTesting && DateTime.UtcNow < deadline)
+            await Task.Delay(50);
+
+        Assert.False(vm.IsTesting);
+        Assert.Equal(2, vm.TestResults.Count);
+        Assert.All(vm.TestResults, r => Assert.False(r.Ok));
     }
 
     [Fact]

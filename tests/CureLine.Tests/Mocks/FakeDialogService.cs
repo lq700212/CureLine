@@ -51,8 +51,6 @@ public class FakeDialogService : IDialogService
         return PlcResult;
     }
 
-    public void RestartApp() => Calls.Add("Restart");
-
     public void CreateDesktopShortcut() => Calls.Add("Shortcut");
 
     public void ShowAlarm(string message, string name) =>
