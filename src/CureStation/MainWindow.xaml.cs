@@ -38,11 +38,23 @@ public partial class MainWindow : Window
     private void OnMaxClick(object sender, RoutedEventArgs e) =>
         WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
 
-    /// <summary>退出去掉自带确认（骨架期一键关；状态机接入后加确认）。</summary>
+    /// <summary>系统钮：关闭 ✕ = 退出（V0.0.39 顶栏精简后"退出"钮已删，✕ 是唯一退出入口，
+    ///     与 VM.Dispose 同链，无二次确认弹窗）。</summary>
     private void OnExitClick(object sender, RoutedEventArgs e)
     {
         if (DataContext is MainViewModel vm)
             vm.Dispose();
         Application.Current.Shutdown();
+    }
+
+    /// <summary>
+    /// "设置"下拉菜单项统一收合：命令执行由 XAML Command 绑定转给 VM，
+    /// 这里只把触发钮 IsChecked 复位 false（Popup IsOpen 两向绑它）——
+    /// StaysOpen=False 只管"点外部自关"，点菜单项不会自动关，必须在此收口。
+    /// 程序①顶栏所有 SettingsMenuBtn 均挂本处理器。
+    /// </summary>
+    private void OnMenuClick(object sender, RoutedEventArgs e)
+    {
+        SettingsToggle.IsChecked = false;
     }
 }

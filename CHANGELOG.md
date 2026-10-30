@@ -2,6 +2,33 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.39（2026-10-30，两主窗顶栏精简：低频按钮收拢"设置 ▾"下拉）
+
+背景：两程序主窗顶栏按钮一排拉满（程序①原 12 钮/程序②原 7 钮），现场
+屏幕宽度紧张、杂讯多。用户拍板"最精简"档：高频钮留顶栏，其余收进一个
+"设置 ▾"下拉，**VM 层零改动**（命令/门禁/显隐/动态文案绑定原样搬移）。
+
+- **程序① CureStation 顶栏**：只留 登录/工单/【日志】+【设置 ▾】；
+  重新连接/演示开关/权限管理/工艺策略/过账配置/IO 通讯测试/点表配置/
+  【深色】收进下拉（演示项用 `SettingsMenuBtnAccent`，开时强调色高亮）。
+  **退出钮删除**——右侧系统 ✕ 走同一条退出链（code-behind `OnExitClick`）。
+- **程序② CimGateway 顶栏**：只留 连接设备/【日志】/登录+【设置 ▾】；
+  调试/网关设置（仅 dev 可见，`GatewayVisible`）/修改密码/快捷方式
+  （登录启用，`SettingsItemEnabled`）/English/【深色】收进下拉。
+- **实现（两 MainWindow.xaml + xaml.cs，各程序样式私有不下沉）**：
+  `ToggleButton("SettingsToggleBtn")`+`Popup`（`StaysOpen=False` 点外自关、
+  `AllowsTransparency`、`IsOpen`↔`IsChecked` 双向绑定）；弹层卡片走主题键
+  `Brush.CardBg`/`Brush.CardBorder` + `Fx.WinShadow`（右/下边距留阴影区）；
+  菜单图标复用既有 `Geo.*`，App.xaml 零改动；触发钮 `Content="设置"` 纯
+  字符串（UIA/读屏 Name 由此生成）；菜单项点击统一 code-behind
+  `OnMenuClick` 复位 `IsChecked` 收合。
+- **冒烟验证（UIA 脚本，临时已删）**：PrintWindow 拍主窗 + 展开下拉后
+  CopyFromScreen 拍弹层，两程序截图目检通过（程序①首拍曾出现重复"日志"
+  钮——Popup 节后残留一份重复按钮，已删净重拍复验）；构建 0 警 0 错 +
+  测试 374/374 全绿。
+- **文档**：README 两程序界面描述同步（顶栏按钮清单/主题切换入口/IO
+  测试与快捷方式入口措辞）；AGENTS.md 主窗导航行同步。
+
 ## V0.0.38（2026-10-30，双工位开关：现场单工位一步适配）
 
 背景：现场确认只有一套工位（无 R/L 双工位），工单窗双面板与"上传 R/L

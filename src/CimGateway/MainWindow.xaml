@@ -26,12 +26,103 @@
                             UseAeroCaptionButtons="False"
                             ResizeBorderThickness="6"/>
     </shell:WindowChrome.WindowChrome>
+    <Window.Resources>
+        <!-- ══════════════ 设置下拉（V0.0.39 顶栏精简） ══════════════ -->
+        <!-- 触发钮：仿 GhostButton 胶囊视觉的 ToggleButton（颜色全走主题语义键）。
+             与顶栏按钮同池：窗高 44 的品牌标题条整条是 caption 拖动区，必须声明
+             chrome 可命中否则点不到（对齐 App.xaml GhostButton 同款声明）。
+             IsChecked 即开下拉；勾选态=持续底色（GhostPressedBg）提示"已展开"。 -->
+        <Style x:Key="SettingsToggleBtn" TargetType="ToggleButton">
+            <Setter Property="Background" Value="{DynamicResource Brush.GhostBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.GhostBorder}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.GhostFg}"/>
+            <Setter Property="Padding" Value="13,5"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <!-- 文案走 ContentPresenter（Content="设置" 为纯字符串，
+                                 自动化 Name 由它生成——下拉触发点可被 UIA/读屏命中） -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                                        VerticalAlignment="Center">
+                                <ContentPresenter VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True"/>
+                                <TextBlock Text="▾" FontSize="10" Margin="4,1,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.GhostHoverBg}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.GhostBorderHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.GhostPressedBg}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.GhostBorderHover}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- 下拉菜单项：透明底、悬停 GhostHoverBg 高亮、左 Geo 图标右文字；
+             图标=Tag 挂 Geo.* 几何（描边线稿，跟随前景色随主题联动）。
+             点击收合统一走 code-behind OnMenuClick（Command/显隐绑定照旧转给 VM）。 -->
+        <Style x:Key="SettingsMenuBtn" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.FgMid}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}" Margin="7,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="{TemplateBinding Tag}" Width="14" Height="14" Stretch="Uniform"
+                                      Stroke="{TemplateBinding Foreground}" StrokeThickness="1.7"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                      VerticalAlignment="Center" Margin="0,0,9,0"/>
+                                <ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.GhostHoverBg}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.GhostPressedBg}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- 菜单内分组分隔线（低调细线，随主题 CardBorder） -->
+        <Style x:Key="SettingsMenuSep" TargetType="Border">
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Background" Value="{DynamicResource Brush.CardBorder}"/>
+            <Setter Property="Margin" Value="12,5"/>
+        </Style>
+    </Window.Resources>
     <!--主窗（MVVM：状态走 MainWindowViewModel，本文件纯绑定）。
         多机视图 = 多机版 Form1（单机视图与"运行模式"已随单机链路删除，P2.1）。
-        品牌顶栏按钮组 = 原 OS 菜单栏直迁（菜单"设置"下拉拆为三枚独立按钮，门禁
-        不变：网关设置 dev 可见、修改密码/快捷方式登录后可用）；主题切换钮写回
-        config.ini [setting] Theme。机台卡片 8 实例 + 视图筛选下拉（Form2/Form6
-        "只看某几台"）。
+        品牌顶栏按钮组（V0.0.39 精简）：连接设备/日志/登录高频留顶栏，其余收拢
+        "设置"下拉（网关设置·MES 调试/修改密码·快捷方式/中英文·主题 三组，
+        门禁/显隐/灰显绑定与原按钮一致 VM 零改：网关设置 dev 可见、修改密码
+        与快捷方式登录后可用）；主题切换钮写回 config.ini [setting] Theme。
+        机台卡片 8 实例 + 视图筛选下拉（Form2/Form6"只看某几台"）。
         设计时说明：设计器里 DataContext 为空，绑定全部失败取 FallbackValue
         显示占位文案（运行时 VM 注入后显示真值）。-->
     <Grid x:Name="RootGrid">
@@ -65,7 +156,8 @@
                                Margin="14,0,0,0" VerticalAlignment="Center" FontSize="12"
                                Foreground="{DynamicResource Brush.HeaderSubFg}"/>
                 </StackPanel>
-                <!-- 功能按钮组：与旧菜单同序同门禁（VM 命令/显隐/灰显不变）；
+                <!-- 功能按钮组（V0.0.39 精简）：连接设备/日志/登录高频留顶栏，其余收拢
+                     "设置"下拉——菜单项的命令/显隐/灰显绑定与原独立按钮一致（VM 零改）；
                      系统三钮收尾（最小化/最大化还原/关闭，无边框窗顶替 OS 按钮职责） -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Tag="{StaticResource Geo.Reconnect}" Style="{StaticResource GhostButton}"
@@ -77,38 +169,60 @@
                             Content="{Binding BtnLogText, FallbackValue='日志'}"
                             Command="{Binding ShowLogCommand}" Margin="0,0,6,0"
                             ToolTip="MES 交互实时日志（全部机台 / 分机台）"/>
-                    <Button Tag="{StaticResource Geo.Debug}" Style="{StaticResource GhostButton}"
-                            Content="{Binding BtnDebugText, FallbackValue='调试'}"
-                            Command="{Binding ShowDebugCommand}" Margin="0,0,6,0"
-                            ToolTip="MES 接口调试界面（5 接口表单 + 预览上传）"/>
-                    <!-- 网关设置：仅 dev 可见（GatewayVisible，与旧菜单项显隐一致） -->
-                    <Button Tag="{StaticResource Geo.Config}" Style="{StaticResource GhostButton}"
-                            Content="{Binding BtnGatewayText, FallbackValue='网关设置'}"
-                            Command="{Binding ShowGatewayCommand}" Margin="0,0,6,0"
-                            Visibility="{Binding GatewayVisible,
-                                        Converter={StaticResource BoolToVisibilityConverter}}"
-                            ToolTip="机台连接 / 接口地址配置（dev，保存后重启生效）"/>
-                    <!-- 修改密码 / 快捷方式：登录后可用（SettingsItemEnabled，与旧菜单一致） -->
-                    <Button Tag="{StaticResource Geo.Edit}" Style="{StaticResource GhostButton}"
-                            Content="{Binding BtnChangePwdText, FallbackValue='修改密码'}"
-                            Command="{Binding ShowChangePwdCommand}"
-                            IsEnabled="{Binding SettingsItemEnabled}" Margin="0,0,6,0"/>
-                    <Button Tag="{StaticResource Geo.Link}" Style="{StaticResource GhostButton}"
-                            Content="{Binding BtnShortcutText, FallbackValue='快捷方式'}"
-                            Command="{Binding ShowShortcutCommand}"
-                            IsEnabled="{Binding SettingsItemEnabled}" Margin="0,0,6,0"
-                            ToolTip="创建桌面快捷方式"/>
-                    <Button Style="{StaticResource GhostButton}"
-                            Content="{Binding BtnLangText, FallbackValue='English'}"
-                            Command="{Binding SwitchLanguageCommand}" Margin="0,0,6,0"/>
                     <Button Tag="{StaticResource Geo.Login}" Style="{StaticResource GhostButton}"
                             Content="{Binding BtnLoginText, FallbackValue='登录'}"
                             Command="{Binding LoginCommand}" Margin="0,0,6,0"
                             ToolTip="登录 / 已登录再点=退出或切换账号"/>
-                    <Button Style="{StaticResource GhostButton}"
-                            Content="{Binding ToggleThemeText, FallbackValue=深色}" Margin="0,0,6,0"
-                            Command="{Binding ToggleThemeCommand}"
-                            ToolTip="切换 浅色(G2)/深色(G1) 主题，写回 config.ini [setting] Theme"/>
+                    <!-- 设置 ▾：IsOpen 双向绑 IsChecked（点外 StaysOpen=False 自关）；
+                         菜单项点击在 code-behind OnMenuClick 收回 IsChecked 防挂住不关。
+                         Content 为可见字符串（自动化 Name 由此生成，UIA/读屏可命中）。 -->
+                    <ToggleButton x:Name="SettingsToggle" Style="{StaticResource SettingsToggleBtn}"
+                                  Content="设置"/>
+                    <Popup x:Name="SettingsPopup" PlacementTarget="{Binding ElementName=SettingsToggle}"
+                           Placement="Bottom" VerticalOffset="7"
+                           AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade"
+                           IsOpen="{Binding IsChecked, ElementName=SettingsToggle, Mode=TwoWay}">
+                        <!-- 弹层面板：卡片底/边/圆角走主题键 + Fx.WinShadow 投影；
+                             阴影 BlurRadius=24 向下 270°，右/下边距≈14 留阴影渲染区 -->
+                        <Border Background="{DynamicResource Brush.CardBg}"
+                                BorderBrush="{DynamicResource Brush.CardBorder}" BorderThickness="1"
+                                CornerRadius="8" Effect="{DynamicResource Fx.WinShadow}"
+                                MinWidth="216" Margin="0,0,14,14" SnapsToDevicePixels="True">
+                            <StackPanel Margin="0,7,0,7">
+                                <!-- 网关设置：仅 dev 可见（GatewayVisible，与旧菜单项显隐一致） -->
+                                <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.Config}"
+                                        Content="{Binding BtnGatewayText, FallbackValue='网关设置'}"
+                                        Command="{Binding ShowGatewayCommand}" Click="OnMenuClick"
+                                        Visibility="{Binding GatewayVisible,
+                                                    Converter={StaticResource BoolToVisibilityConverter},
+                                                    FallbackValue=Collapsed}"
+                                        ToolTip="机台连接 / 接口地址配置（dev，保存后重启生效）"/>
+                                <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.Debug}"
+                                        Content="{Binding BtnDebugText, FallbackValue='调试'}"
+                                        Command="{Binding ShowDebugCommand}" Click="OnMenuClick"
+                                        ToolTip="MES 接口调试界面（5 接口表单 + 预览上传）"/>
+                                <Border Style="{StaticResource SettingsMenuSep}"/>
+                                <!-- 修改密码 / 快捷方式：登录后可用（SettingsItemEnabled，与旧菜单一致） -->
+                                <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.Edit}"
+                                        Content="{Binding BtnChangePwdText, FallbackValue='修改密码'}"
+                                        Command="{Binding ShowChangePwdCommand}"
+                                        IsEnabled="{Binding SettingsItemEnabled}" Click="OnMenuClick"/>
+                                <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.Link}"
+                                        Content="{Binding BtnShortcutText, FallbackValue='快捷方式'}"
+                                        Command="{Binding ShowShortcutCommand}"
+                                        IsEnabled="{Binding SettingsItemEnabled}" Click="OnMenuClick"
+                                        ToolTip="创建桌面快捷方式"/>
+                                <Border Style="{StaticResource SettingsMenuSep}"/>
+                                <Button Style="{StaticResource SettingsMenuBtn}"
+                                        Content="{Binding BtnLangText, FallbackValue='English'}"
+                                        Command="{Binding SwitchLanguageCommand}" Click="OnMenuClick"/>
+                                <Button Style="{StaticResource SettingsMenuBtn}"
+                                        Content="{Binding ToggleThemeText, FallbackValue=深色}"
+                                        Command="{Binding ToggleThemeCommand}" Click="OnMenuClick"
+                                        ToolTip="切换 浅色(G2)/深色(G1) 主题，写回 config.ini [setting] Theme"/>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
                     <!-- 系统三钮：最小化 / 最大化还原（□↔❐ 随 WindowState 切换）/ 关闭
                          （关闭走 OnClosing 确认链，与标题栏 ✕ 同口径） -->
                     <Button Style="{StaticResource WinSysBtn}" Content="─" Margin="4,0,0,0"

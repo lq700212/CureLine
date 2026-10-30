@@ -47,6 +47,17 @@ public partial class MainWindow : Window
     /// <summary>系统钮关闭：走 OnClosing 确认链（与 VM"是否退出?"同口径）。</summary>
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
+    /// <summary>
+    /// "设置"下拉菜单项统一收合：命令/显隐/灰显仍由 XAML 绑定走 VM，
+    /// 这里只把触发钮 IsChecked 复位 false（Popup IsOpen 两向绑它）——
+    /// StaysOpen=False 只管"点外部自关"，点菜单项不会自动关，必须在此收口。
+    /// 程序②顶栏所有 SettingsMenuBtn 均挂本处理器。
+    /// </summary>
+    private void OnMenuClick(object sender, RoutedEventArgs e)
+    {
+        SettingsToggle.IsChecked = false;
+    }
+
     protected override void OnClosing(CancelEventArgs e)
     {
         if (!ViewModel.OnClosing())

@@ -1,4 +1,4 @@
-﻿<Window x:Class="CureStation.MainWindow"
+<Window x:Class="CureStation.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -33,8 +33,11 @@
       - 窗底 = Brush.WindowBg（G2 160°淡蓝→白 / G1 深空径向冷光），主题字典全键化；
       - 单条品牌顶栏（行 0 全宽贴边）：Light=品牌蓝渐变 / Dark=#101A2C 深蓝实底；
         左=chip"固"+连接灯点+策略+连接(*弹性)+过账+操作员，右=功能按钮组
-        （登录/工单/权限/策略/过账配置/IO测试/点表/重新连接/退出/深色/【日志】高亮）；
-        功能与门禁与旧两段顶栏完全一致（过账配置/点表=L4、IO测试/策略=L3、工单=L1）；
+        （登录/工单/【日志】高亮/设置▾）+ 系统三钮 ─□✕；其余功能收拢进"设置"下拉
+        （重新连接/演示开关/权限管理/工艺策略/过账配置/IO通讯测试/点表配置/主题切换，
+         门禁与命令与拆散前一致：权限管理·过账配置·点表·演示=L4、策略·IO测试=L3、工单=L1）；
+        退出钮已删（系统 ✕ 与其走同一条退出链）；演示开启态靠下拉项强调色 +
+        连接短词的"演示"字样提示；
       - 统计胶囊行（行 1）：HTML .g2-stat/.g1-stat 直译——五态白/玻璃胶囊
         （空闲/计时中/待门控/待取件/占用报警）+ ⚡剩余最短虚线胶囊（NextCloseText 格式锁定）；
       - 固化架分组（行 2 fill）：双架纵向堆两组职守不变（组标题条 grpbar=Brush.Ribbon*
@@ -429,6 +432,106 @@
                 </Grid>
             </Border>
         </DataTemplate>
+
+        <!-- ══════════════ 设置下拉（V0.0.39 顶栏精简） ══════════════ -->
+        <!-- 触发钮：仿 GhostButton 胶囊视觉的 ToggleButton（颜色全走主题语义键）。
+             与顶栏按钮同池：窗高 44 的品牌标题条整条是 caption 拖动区，必须声明
+             chrome 可命中否则点不到（对齐 App.xaml GhostButton 同款声明）。
+             IsChecked 即开下拉；勾选态=持续底色（GhostPressedBg）提示"已展开"。 -->
+        <Style x:Key="SettingsToggleBtn" TargetType="ToggleButton">
+            <Setter Property="Background" Value="{DynamicResource Brush.GhostBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.GhostBorder}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.GhostFg}"/>
+            <Setter Property="Padding" Value="13,5"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <!-- 文案走 ContentPresenter（Content="设置" 为纯字符串，
+                                 自动化 Name 由它生成——下拉触发点可被 UIA/读屏命中） -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                                        VerticalAlignment="Center">
+                                <ContentPresenter VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True"/>
+                                <TextBlock Text="▾" FontSize="10" Margin="4,1,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.GhostHoverBg}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.GhostBorderHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.GhostPressedBg}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.GhostBorderHover}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- 下拉菜单项：透明底、悬停 GhostHoverBg 高亮、左 Geo 图标右文字；
+             图标=Tag 挂 Geo.* 几何（描边线稿，跟随前景色随主题联动）。
+             点击收合统一走 code-behind OnMenuClick（命令Binding照旧转给 VM）。 -->
+        <Style x:Key="SettingsMenuBtn" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.FgMid}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}" Margin="7,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="{TemplateBinding Tag}" Width="14" Height="14" Stretch="Uniform"
+                                      Stroke="{TemplateBinding Foreground}" StrokeThickness="1.7"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                      VerticalAlignment="Center" Margin="0,0,9,0"/>
+                                <ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.GhostHoverBg}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.GhostPressedBg}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- 演示开关菜单项变体（BasedOn 同款外观）：IsSimulate=True 时文字转主色加粗
+             ——演示从顶栏收进下拉后，开启态的醒目提醒落在该项自身（顶栏连接短词
+             同步带"演示"字样兜底）。 -->
+        <Style x:Key="SettingsMenuBtnAccent" TargetType="Button" BasedOn="{StaticResource SettingsMenuBtn}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSimulate, FallbackValue=False}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.PrimaryGhostFg}"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <!-- 菜单内分组分隔线（低调细线，随主题 CardBorder） -->
+        <Style x:Key="SettingsMenuSep" TargetType="Border">
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Background" Value="{DynamicResource Brush.CardBorder}"/>
+            <Setter Property="Margin" Value="12,5"/>
+        </Style>
     </Window.Resources>
 
     <Grid x:Name="RootGrid">
@@ -487,53 +590,61 @@
                 <TextBlock Grid.Column="4" Text="{Binding OperatorText, FallbackValue=未登录}"
                            Margin="18,0,10,0" VerticalAlignment="Center"
                            Foreground="{DynamicResource Brush.TopbarFg}"/>
-                <!-- 功能按钮组：与旧运行条同序同门禁（VM 命令/未登录灰显不变）；
-                     相对顺序对齐对比稿（登录/工单/权限/策略 在前，日志高亮居末段、退出收尾） -->
+                <!-- 功能按钮组（V0.0.39 精简）：登录/工单/日志高频留顶栏，其余收拢
+                      "设置"下拉（命令/门禁/文案与拆散前一致，VM 层零改动）；
+                      退出钮删除——系统 ✕ 与其走同一条退出链（code-behind OnExitClick） -->
                 <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Tag="{StaticResource Geo.Login}" Style="{StaticResource GhostButton}" Content="登录"
                             Command="{Binding LoginCommand}" Margin="0,0,6,0"/>
                     <Button Tag="{StaticResource Geo.WorkOrder}" Style="{StaticResource GhostButton}" Content="工单"
                             Command="{Binding OpenWorkOrderCommand}" Margin="0,0,6,0"/>
-                    <Button Tag="{StaticResource Geo.Permission}" Style="{StaticResource GhostButton}" Content="权限"
-                            Command="{Binding OpenOperatorsCommand}" Margin="0,0,6,0"/>
-                    <Button Tag="{StaticResource Geo.Policy}" Style="{StaticResource GhostButton}" Content="策略"
-                            Command="{Binding OpenCuringPolicyCommand}" Margin="0,0,6,0"/>
-                    <Button Tag="{StaticResource Geo.Posting}" Style="{StaticResource GhostButton}" Content="过账配置"
-                            Command="{Binding OpenPostConfigCommand}" Margin="0,0,6,0"/>
-                    <Button Tag="{StaticResource Geo.IoTest}" Style="{StaticResource GhostButton}" Content="IO测试"
-                            Command="{Binding OpenIoTestCommand}" Margin="0,0,6,0"
-                            ToolTip="IO 耦合器通道通讯测试（L3+）：DI 状态灯 / DO 点击灯钮 / 一键遍历验接线"/>
-                    <Button Tag="{StaticResource Geo.PointTable}" Style="{StaticResource GhostButton}" Content="点表"
-                            Command="{Binding OpenPointTableCommand}" Margin="0,0,6,0"/>
-                    <Button Tag="{StaticResource Geo.Reconnect}" Style="{StaticResource GhostButton}" Content="重新连接"
-                            Command="{Binding ReconnectCommand}" Margin="0,0,6,0"/>
-                    <!-- 演示模式开关（Mock 数据热切换）：开=Mock 总线（高亮对齐日志钮），关=真机 Modbus；
-                         点击写回 [setting] Simulate 并重建总线立即生效，L4 门禁 -->
-                    <Button Tag="{StaticResource Geo.Eye}" Command="{Binding ToggleSimulateCommand}"
-                            Content="{Binding SimulateText, FallbackValue=演示：关}" Margin="0,0,6,0"
-                            ToolTip="演示模式开关：开启后仓位按演示脚本流转（无真实硬件），再次点击切回真机，立即生效。注意：演示边沿会照常驱动状态机与过账链，正式环境开启前请确认过账配置">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
-                                <!-- 开启态高亮（PrimaryGhost 三键，与日志钮同款）——一眼区分演示/真机 -->
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsSimulate, FallbackValue=False}" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource Brush.PrimaryGhostBg}"/>
-                                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.PrimaryGhostBorder}"/>
-                                        <Setter Property="Foreground" Value="{DynamicResource Brush.PrimaryGhostFg}"/>
-                                        <Setter Property="FontWeight" Value="Bold"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                    <Button Style="{StaticResource GhostButton}"
-                            Content="{Binding ToggleThemeText, FallbackValue=深色}" Margin="0,0,6,0"
-                            Command="{Binding ToggleThemeCommand}"
-                            ToolTip="切换 浅色(G2)/深色(G1) 主题，写回 config.ini [setting] Theme"/>
                     <Button Tag="{StaticResource Geo.Log}" Style="{StaticResource PrimaryGhostButton}" Content="日志"
                             Command="{Binding ShowLogCommand}" Margin="0,0,6,0"
                             ToolTip="打开操作日志 / 控制台悬浮窗（L1+）"/>
-                    <Button Tag="{StaticResource Geo.Exit}" Style="{StaticResource GhostButton}" Content="退出" Click="OnExitClick"/>
+                    <!-- 设置 ▾：下拉收拢 重新连接/演示开关/权限/策略/过账配置/IO测试/点表/主题。
+                         IsOpen 双向绑 IsChecked（点外 StaysOpen=False 自关）；菜单项点击在
+                         code-behind OnMenuClick 把 IsChecked 收回 false，防止下拉挂住不关。
+                         Content 为可见字符串（自动化 Name 由此生成，UIA/读屏可命中）。 -->
+                    <ToggleButton x:Name="SettingsToggle" Style="{StaticResource SettingsToggleBtn}"
+                                  Content="设置"/>
+                    <Popup x:Name="SettingsPopup" PlacementTarget="{Binding ElementName=SettingsToggle}"
+                           Placement="Bottom" VerticalOffset="7"
+                           AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade"
+                           IsOpen="{Binding IsChecked, ElementName=SettingsToggle, Mode=TwoWay}">
+                        <!-- 弹层面板：卡片底/边/圆角走主题键 + Fx.WinShadow 投影；
+                             阴影 BlurRadius=24 向下 270°，右/下边距≈14 留阴影渲染区（弹层窗透明） -->
+                        <Border Background="{DynamicResource Brush.CardBg}"
+                                BorderBrush="{DynamicResource Brush.CardBorder}" BorderThickness="1"
+                                CornerRadius="8" Effect="{DynamicResource Fx.WinShadow}"
+                                MinWidth="216" Margin="0,0,14,14" SnapsToDevicePixels="True">
+                            <StackPanel Margin="0,7,0,7">
+                                <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.Reconnect}"
+                                        Content="重新连接" Command="{Binding ReconnectCommand}" Click="OnMenuClick"
+                                        ToolTip="手动重连 IO 耦合器总线（总线断线自带 5s 节流重连，此钮立即重试）"/>
+                                <Button Style="{StaticResource SettingsMenuBtnAccent}" Tag="{StaticResource Geo.Eye}"
+                                        Content="{Binding SimulateText, FallbackValue=演示：关}"
+                                        Command="{Binding ToggleSimulateCommand}" Click="OnMenuClick"
+                                        ToolTip="演示模式开关：开启后仓位按演示脚本流转（无真实硬件），再次点击切回真机，立即生效。注意：演示边沿会照常驱动状态机与过账链，正式环境开启前请确认过账配置"/>
+                                <Border Style="{StaticResource SettingsMenuSep}"/>
+                                <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.Permission}"
+                                        Content="权限管理" Command="{Binding OpenOperatorsCommand}" Click="OnMenuClick"/>
+                                <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.Policy}"
+                                        Content="工艺策略" Command="{Binding OpenCuringPolicyCommand}" Click="OnMenuClick"/>
+                                <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.Posting}"
+                                        Content="过账配置" Command="{Binding OpenPostConfigCommand}" Click="OnMenuClick"/>
+                                <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.IoTest}"
+                                        Content="IO 通讯测试" Command="{Binding OpenIoTestCommand}" Click="OnMenuClick"
+                                        ToolTip="IO 耦合器通道通讯测试（L3+）：DI 状态灯 / DO 点击灯钮 / 一键遍历验接线"/>
+                                <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.PointTable}"
+                                        Content="点表配置" Command="{Binding OpenPointTableCommand}" Click="OnMenuClick"/>
+                                <Border Style="{StaticResource SettingsMenuSep}"/>
+                                <Button Style="{StaticResource SettingsMenuBtn}"
+                                        Content="{Binding ToggleThemeText, FallbackValue=深色}"
+                                        Command="{Binding ToggleThemeCommand}" Click="OnMenuClick"
+                                        ToolTip="切换 浅色(G2)/深色(G1) 主题，写回 config.ini [setting] Theme"/>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
                     <!-- 系统三钮（V0.0.28 无边框化补位 OS 标题栏职责）：最小化/最大化还原/关闭；
                          最大化还原图标 □↔❐ 随 WindowState 切换；关闭走"退出"同链 OnExitClick -->
                     <Button Style="{StaticResource WinSysBtn}" Content="─" Margin="4,0,0,0"
@@ -554,7 +665,7 @@
                         </TextBlock>
                     </Button>
                     <Button Style="{StaticResource WinSysClose}" Content="✕" Click="OnExitClick" ToolTip="关闭"/>
-                </StackPanel>
+                    </StackPanel>
             </Grid>
         </Border>
 
