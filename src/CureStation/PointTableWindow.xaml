@@ -192,27 +192,51 @@
                                 ToolTip="逐台测试全部耦合器，结果进下方列表"/>
                     </StackPanel>
                     <!-- 绑定表（V0.0.45 直编）：方向/角色=下拉（中文文案与落盘英文枚举
-                         同源转换），块/架/层=数字直填（填错弹回原值），功能名=文本；
-                         点号列只读（X/Y 前缀随方向刷新）——全部写穿 Raw，保存前校验统一拦 -->
+                         同源转换），块/点号/架/层=数字直填（填错弹回原值），功能名=文本；
+                         点号列 V0.0.47 起同行内可编辑（X/Y 前缀语义由方向列表达，
+                         LostFocus 即提交）——全部写穿 Raw，保存前校验统一拦 -->
+                    <!-- ★IsReadOnly="False" 是覆盖 App.xaml 隐式 DataGrid 样式的关键：
+                         隐式样式（弹窗通用）缺省 IsReadOnly=True=只读展示表口径，
+                         绑定表是编辑表，不显式覆盖则**全列改不了、点击没反应**（V0.0.46 修的根因）。
+                         PreviewMouseLeftButtonDown=文本列"单击即编辑"（code-behind）。 -->
                     <DataGrid ItemsSource="{Binding Bindings, FallbackValue={x:Null}}"
                               SelectedItem="{Binding SelectedBinding}"
+                              IsReadOnly="False"
+                              PreviewMouseLeftButtonDown="OnBindingsGridPreviewMouseLeftButtonDown"
                               HeadersVisibility="Column" AutoGenerateColumns="False"
                               CanUserAddRows="False" CanUserDeleteRows="False"
                               Margin="0,2,0,0">
                         <DataGrid.Columns>
-                            <DataGridComboBoxColumn Header="方向"
-                                                    SelectedValueBinding="{Binding IsInput}"
-                                                    SelectedValuePath="Value" DisplayMemberPath="Text"
-                                                    ItemsSource="{x:Static vm:PointTableViewModel.DirectionOptions}"
-                                                    Width="82"/>
+                            <!-- ★方向/角色两列=TemplateColumn+常驻下拉（单击直接出下拉框）：
+                                 DataGridComboBoxColumn 的下拉只见于编辑态，缺省单击只选中，
+                                 现场手感像"没反应"——傻瓜式直编必须常驻控件。FreshCombo 点哪
+                                 都开（ClickMode=Press 透明命中铺满全框），Height 32→24 免撑行高；
+                                 数据源 x:Static（静态枚举文案，零 DataContext 依赖） -->
+                            <DataGridTemplateColumn Header="方向" Width="96" SortMemberPath="IsInput">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox Style="{StaticResource FreshCombo}" Height="24"
+                                                  ItemsSource="{x:Static vm:PointTableViewModel.DirectionOptions}"
+                                                  SelectedValuePath="Value" DisplayMemberPath="Text"
+                                                  SelectedValue="{Binding IsInput, Mode=TwoWay}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="块" Binding="{Binding Block}" Width="46"/>
-                            <DataGridTextColumn Header="点号" Binding="{Binding BitText, Mode=OneWay}"
-                                                IsReadOnly="True" Width="88"/>
-                            <DataGridComboBoxColumn Header="角色"
-                                                    SelectedValueBinding="{Binding Role}"
-                                                    SelectedValuePath="Value" DisplayMemberPath="Text"
-                                                    ItemsSource="{x:Static vm:PointTableViewModel.RoleOptions}"
-                                                    Width="134"/>
+                            <!-- 点号（V0.0.47 开放编辑）：DisplayIndex 紧跟块列。显示=纯序号
+                                 0~15（端子 X0~XF/Y0~YF 的位号；X/Y 前缀由方向列表达不重复）；
+                                 越界/同点重复由保存前校验弹框拦 -->
+                            <DataGridTextColumn Header="点号" Binding="{Binding Bit}" Width="88"/>
+                            <DataGridTemplateColumn Header="角色" Width="134" SortMemberPath="Role">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox Style="{StaticResource FreshCombo}" Height="24"
+                                                  ItemsSource="{x:Static vm:PointTableViewModel.RoleOptions}"
+                                                  SelectedValuePath="Value" DisplayMemberPath="Text"
+                                                  SelectedValue="{Binding Role, Mode=TwoWay}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="架号" Binding="{Binding Rack}" Width="54"/>
                             <DataGridTextColumn Header="层号" Binding="{Binding Level}" Width="54"/>
                             <DataGridTextColumn Header="功能名" Binding="{Binding FunctionName}" Width="*"/>

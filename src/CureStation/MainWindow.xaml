@@ -209,10 +209,16 @@
                                         </Style.Triggers>
                                     </Style>
                                 </Border.Style>
-                                <TextBlock FontSize="10.5" FontWeight="SemiBold" Text="空闲">
+                                <!-- ★Text 缺省值必须放 Style 里而非标签上：标签上的
+                                     Text="空闲" 是本地值，优先级高于 Style 触发器，
+                                     会把下面 5 个亮态 setter 全压死（计时中/待门控/
+                                     放行/占用/未配置）——徽章永远显示"空闲"的根因
+                                     （V0.0.46 修；底色 Border 无本地背景所以照常变） -->
+                                <TextBlock FontSize="10.5" FontWeight="SemiBold">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
-                                            <!-- 字色缺省=空闲灰；亮态白字（FgOnAccent 双主题同名） -->
+                                            <!-- 文案缺省=空闲；字色缺省=灰；亮态白字（FgOnAccent 双主题同名） -->
+                                            <Setter Property="Text" Value="空闲"/>
                                             <Setter Property="Foreground" Value="{DynamicResource Brush.FgDim}"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing">
@@ -264,9 +270,13 @@
                                     </Style>
                                 </StackPanel.Style>
                                 <!-- 状态词行（文案/颜色分支：idle/gate/stat/warn/done 同原口径） -->
-                                <TextBlock FontSize="15" FontWeight="Bold" Text="空 闲">
+                                <!-- ★同胶囊同款坑：Text 缺省进 Style（标签本地值
+                                     "空 闲"压死 5 个亮态 setter——待门控/✓已放行/
+                                     ⚠占用/未配置/反推计时中，V0.0.46 修） -->
+                                <TextBlock FontSize="15" FontWeight="Bold">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="空 闲"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Gate">
                                                     <Setter Property="Text" Value="待门控"/>
@@ -316,10 +326,14 @@
                                     </TextBlock.Style>
                                 </TextBlock>
                                 <!-- 副文案行：Idle/未配置/反推计时无副文（数据缺省隐藏），三亮态各一句 -->
-                                <TextBlock FontSize="10.5" Margin="0,4,0,0" Visibility="Collapsed"
+                                <!-- ★同款坑：Visibility 缺省进 Style（标签本地值
+                                     Collapsed 压死触发器的 Visible——待门控/放行/
+                                     占用三句副文永不出现，V0.0.46 修） -->
+                                <TextBlock FontSize="10.5" Margin="0,4,0,0"
                                            Foreground="{DynamicResource Brush.NumSmall}">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Gate">
                                                     <Setter Property="Text" Value="光栅让空后计时"/>
@@ -804,13 +818,28 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!-- ④ 工单双卡（HTML .g2-wo/.g1-wo 直译）：R/L 各 工位·单号+过账角标+渐变进度条+已产出 -->
-        <UniformGrid Grid.Row="3" Columns="2" Margin="12,10,14,12">
-            <!-- R 工位（蓝色系） -->
+        <!-- ④ 工单卡（HTML .g2-wo/.g1-wo 直译）：双工位 R/L 两张（工位·单号+过账角标+
+             渐变进度条+已产出）；单工位只显 Side 侧一张且去"R/L 工位·"字样（V0.0.38
+             工单窗同口径，V0.0.47 主窗补齐——隐藏卡数据照常刷新不特殊处理）。
+             Columns 绑 定 WoCardColumns（双 2/单 1；数值绑定给 FallbackValue），
+             UniformGrid 跳过 Collapsed 子元素不占格——单卡自动独占整宽 -->
+        <UniformGrid Grid.Row="3" Columns="{Binding WoCardColumns, FallbackValue=2}" Margin="12,10,14,12">
+            <!-- R 工位（蓝色系）；单工位（Side≠R）整卡 Collapsed（V0.0.47）——
+                 ★Visibility 缺省值进 Style Setter，防"标签本地值压死触发器"（坑⑥） -->
             <Border CornerRadius="{DynamicResource Fn.WoCardRadius}" Padding="12,8" Margin="0,0,5,0"
                     Background="{DynamicResource Brush.WoBg}"
                     BorderBrush="{DynamicResource Brush.WoBorder}" BorderThickness="1"
                     ToolTip="工单信息窗保存后自动联动：途程单号 / 已产/预设 / 进度">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ShowWoCardR, FallbackValue=True}" Value="False">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -824,8 +853,22 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- "R 工位·"前缀双工位专属；单工位 Collapsed（V0.0.47）。
+                                 ★Visibility 缺省值必须进 Style Setter——标签本地值会
+                                 压死触发器（主窗坑⑥"触发器改不动＝找标签上的本地值"） -->
                             <TextBlock Text="R 工位 · " FontSize="11.5" FontWeight="Bold"
-                                       Foreground="{DynamicResource Brush.WoNoFg}"/>
+                                       Foreground="{DynamicResource Brush.WoNoFg}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsDualSide, FallbackValue=True}" Value="False">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                             <TextBlock Text="{Binding WorkOrderRcNoR, FallbackValue=—}" FontSize="11.5" FontWeight="Bold"
                                        Foreground="{DynamicResource Brush.WoNoFg}"
                                        TextTrimming="CharacterEllipsis"/>
@@ -878,11 +921,22 @@
                     </StackPanel>
                 </Grid>
             </Border>
-            <!-- L 工位（紫色系） -->
+            <!-- L 工位（紫色系）；单工位（Side≠L）整卡 Collapsed（V0.0.47）——
+                 ★Visibility 缺省值进 Style Setter，防"标签本地值压死触发器"（坑⑥） -->
             <Border CornerRadius="{DynamicResource Fn.WoCardRadius}" Padding="12,8" Margin="5,0,0,0"
                     Background="{DynamicResource Brush.WoBg}"
                     BorderBrush="{DynamicResource Brush.WoBorder}" BorderThickness="1"
                     ToolTip="工单信息窗保存后自动联动：途程单号 / 已产/预设 / 进度">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ShowWoCardL, FallbackValue=True}" Value="False">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>

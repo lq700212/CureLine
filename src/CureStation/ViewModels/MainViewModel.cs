@@ -443,6 +443,51 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private int _workOrderPctL;
     public int WorkOrderPctL { get => _workOrderPctL; private set => Set(ref _workOrderPctL, value); }
 
+    // ---------- 工单带显隐（单/双工位，V0.0.47） ----------
+    // [CuringMes] DualSide 开关的 UI 面子：双工位 = R/L 两张卡并排（V0.0.20 老口径）；
+    // 单工位 = 只显 Side 侧一张卡且文案去 R/L 工位字样（V0.0.38 工单窗同口径——
+    // 视图↔槽映射恒定 R↔Right/L↔Left，隐藏侧数据照常刷新不特殊处理，切回双工位立见）。
+
+    private string _mainSide = "R";
+    /// <summary>单工位所用工位（规范化后的 "R"/"L"）——只显哪张卡的依据；双工位不参与显隐。</summary>
+    public string MainSide
+    {
+        get => _mainSide;
+        private set
+        {
+            if (Set(ref _mainSide, value))
+            {
+                Raise(nameof(ShowWoCardR));
+                Raise(nameof(ShowWoCardL));
+            }
+        }
+    }
+
+    private bool _isDualSide;
+    /// <summary>双工位模式（[CuringMes] DualSide=1）——工单带两张卡全显；false 只显一张。</summary>
+    public bool IsDualSide
+    {
+        get => _isDualSide;
+        private set
+        {
+            if (Set(ref _isDualSide, value))
+            {
+                Raise(nameof(ShowWoCardR));
+                Raise(nameof(ShowWoCardL));
+                Raise(nameof(WoCardColumns));
+            }
+        }
+    }
+
+    /// <summary>R 工位卡是否显示（单工位时 Side==R 才显；双工位恒显）。</summary>
+    public bool ShowWoCardR => IsDualSide || MainSide == "R";
+
+    /// <summary>L 工位卡是否显示（单工位时 Side==L 才显；双工位恒显）。</summary>
+    public bool ShowWoCardL => IsDualSide || MainSide == "L";
+
+    /// <summary>工单带列数：双工位 2 张并排 / 单工位 1 张独占整宽（UniformGrid 跳过 Collapsed 卡不占格）。</summary>
+    public int WoCardColumns => IsDualSide ? 2 : 1;
+
     // ---------- 主题切换（双主题 G2/G1） ----------
 
     private string _toggleThemeText = "深色";
@@ -502,10 +547,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             () => WorkOrderStore.Load(), log: m => LocalLogService.Write(m));
         _poster.PostingChanged += t => UiInvoke(() => PostingText = t);
         CuringMesPosterHolder.Default = _poster; // 工单窗上传动作的全局访问点
-        PostingText = postOptions.Enabled
-            ? $"过账：已启用（{CuringMesOptions.NormSide(postOptions.Side)} 工位）"
-            : "过账：未启用";
-        PostingEnabled = postOptions.Enabled;
+        ApplyPostOptions(postOptions);
 
         // 启动装配：读点表 + 工艺策略（都自愈）→ 总线 Start + 状态机
         var config = LoadOrDefault();
@@ -804,6 +846,25 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
+    /// 顶栏过账状态与工单带显隐统一出口（ctor 初始化 + 过账配置窗保存热更共用，
+    /// V0.0.47 收拢——原先 ctor 与 OpenPostConfig 各写一份"已启用（R 工位）"口径，
+    /// 单工位改造只收了工单窗漏了主窗工单带）：
+    /// ① PostingText——双工位带"（R 工位）"字样、单工位去工位字样（V0.0.38 口径）；
+    /// ② PostingEnabled——工单卡"过账启用/过账未启用"角标；
+    /// ③ MainSide + IsDualSide——工单带显隐（单工位只显 Side 侧一张卡，对齐工单窗）。
+    /// </summary>
+    private void ApplyPostOptions(CuringMesOptions options)
+    {
+        PostingText = options.Enabled ? (options.DualSide
+            ? $"过账：已启用（{CuringMesOptions.NormSide(options.Side)} 工位）"
+            : "过账：已启用")
+            : "过账：未启用";
+        PostingEnabled = options.Enabled;
+        MainSide = CuringMesOptions.NormSide(options.Side);
+        IsDualSide = options.DualSide;
+    }
+
+    /// <summary>
     /// 过账配置窗：L4 专属。保存成功后热更新过账服务配置（不重启即生效）
     /// 并刷新顶栏状态。
     /// </summary>
@@ -816,10 +877,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             var options = CuringMesOptions.Load();
             _poster?.UpdateOptions(options);
-            PostingText = options.Enabled
-                ? $"过账：已启用（{CuringMesOptions.NormSide(options.Side)} 工位）"
-                : "过账：未启用";
-            PostingEnabled = options.Enabled;
+            ApplyPostOptions(options);
             _dialogs.ShowMessage("过账配置已保存并生效。", "保存成功");
         }
     }

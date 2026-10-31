@@ -274,8 +274,17 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   **行内直改写穿 Raw**（`PointBindingRow` 可编辑属性即 Raw 的门面，
   无编辑面板草稿——`Edit*` 七属性/ApplyBinding/FlushSelectedToRaw 链
   已删勿加回；物理点/语义键唯一冲突由保存前校验统一拦，行内不重复拦）；
-  角色/方向下拉的 ItemsSource 用 `x:Static`（DataGridColumn 不在可视树，
-  绑 DataContext 无效）；加删行双边同步 Raw 集合与行集合。
+  角色/方向下拉的 ItemsSource 用 `x:Static`（DataGridColumn 不在可视
+  树，绑 DataContext 无效）；V0.0.46 补手感三件：绑定表必须显式
+  `IsReadOnly="False"`（App.xaml 隐式 DataGrid 样式缺省 True=只读展示
+  表口径，不显式覆盖则全列改不了点击无反应）；
+  角色/方向列=TemplateColumn+**常驻 ComboBox**（单击直接出下拉——
+  DataGridComboBoxColumn 的下拉只见于编辑态，缺省单击只选中像"没反
+  应"）；文本列单击即编辑（`PointTableWindow` code-behind
+  PreviewMouseLeftButtonDown，缺省双击才进编辑）；加删行双边同步 Raw
+  集合与行集合；点号列 V0.0.47 起同行内可编辑（原先只读注释称"加删行
+  才是正路"但【＋添加行】固定位号 3、走不通——现场换接线本能换 UI 路径；
+  列绑 `Bit` 纯序号，X/Y 前缀语义由方向列表达，`BitText` 派生文本已删）。
 - 点表布局三键可改现场分叉：`DiStartAddress`/`DoStartAddress`/
   `BlockStrideRegisters`（缺省 0x1000/0x1010/0x20，块 K 线性外推）；
   改动必同步 `PointTableTests` 的地址断言。
@@ -293,7 +302,13 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   无固定宽高（拉伸均分），改布局别把固定 Width/Height 加回去；⑤ **双架分组
   契约**（V0.0.20）：全局架号每 10 站切一组（`RackGroupOf`），主窗绑
   `RackGroups`（组标题"N号固化架"+组内 10×3+标题条仅组数>1 显示），外层
-  `UniformGrid Rows=GroupCount` 纵向均分；组内卡与平铺 `Slots` 同批实例。
+  `UniformGrid Rows=GroupCount` 纵向均分；组内卡与平铺 `Slots` 同批实例；
+  ⑥ **XAML 触发器死区（V0.0.46 修徽章死文案的血泪）**：Style 触发器想
+  改的属性（卡状态胶囊/状态词的 `Text`、副文的 `Visibility`），缺省值
+  必须写进 Style Setter——写在元素标签上是**本地值，优先级高于 Style
+  触发器**，触发器永远不生效（徽章橙底+写"空闲"的根因：底色 Border
+  的 Background 没写本地值所以活了，TextBlock 的 Text 写了所以死）；
+  排查口诀："触发器改不动＝找标签上的本地值"。
 - **状态机语义四键（P3.1 起，P3.1 补丁加第④条，全在 `SlotCuringMachine` 一处）**：
   ① 流程"到位即计时"——托盘 OFF 即回空闲灭灯（中途取件计时作废记日志），
   红灯状态机不写（留异常语义）；② 计时状态**缺省不持久化**——断电/重启后托盘在架
@@ -399,7 +414,11 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   防把唯一工单引到空 L 槽）、工单窗只显 Side 侧一套面板且文案全去 R/L
   字样（**视图↔槽映射恒定** R↔Right/L↔Left，Sync/Flush 不判开关——隐藏
   侧数据原样往返）、顶栏过账文本不带工位字样；1=老双架双面板口径全量
-  回归（映射+Mac*_L+R/L 两枚上传钮）。过账配置窗勾选（L4）；
+  回归（映射+Mac*_L+R/L 两枚上传钮）。过账配置窗勾选（L4/热生效）。
+  **主窗底部工单带同口径（V0.0.47 补齐——V0.0.38 漏网）**：双工位 R/L 两卡并排
+  （`WoCardColumns`=2）；单工位只显 Side 侧一张卡（`ShowWoCardR/L`，列数=1 独占
+  整宽）+ 去"R/L 工位·"字样、隐藏卡数据照常刷新；顶栏文案与工单带显隐统一走
+  `MainViewModel.ApplyPostOptions`（ctor + 配置窗热更唯一出口，勿再散写两份）；
   ⑪ **"过账工位"下拉仅双工位勾选时显示**（V0.0.42，用户拍板：单工位常显
   R/L 选择易误会要配双工位）——隐藏但 `EditSide` 照常 Sync/Flush，ini
   `[CuringMes] Side` 缺省 R 原样往返、`SideOfRack` 语义不变，勿把该属性

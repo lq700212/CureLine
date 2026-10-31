@@ -297,13 +297,15 @@ public class CureStationViewModelTests
         var vm = new CureStation.ViewModels.PointTableViewModel(fake);
         vm.GenerateTemplateCommand.Execute(null);
 
-        // 表格直编（V0.0.45）：行 VM 属性写穿 Raw 所见即所得——角色/功能名/架/层/块/方向
+        // 表格直编（V0.0.45；点号 V0.0.47 开放）：行 VM 属性写穿 Raw 所见即所得——
+        // 角色/功能名/架/层/块/点号/方向
         var row = vm.Bindings.First(b => b.Raw.IsInput);
         row.Role = IoPointRole.TrayDetect;
         row.FunctionName = "手动改名";
         row.Rack = 3;
         row.Level = 2;
         row.Block = 2;
+        row.Bit = 7;
         row.IsInput = false;
 
         Assert.Equal(IoPointRole.TrayDetect, row.Raw.Role);
@@ -311,9 +313,9 @@ public class CureStationViewModelTests
         Assert.Equal(3, row.Raw.Rack);
         Assert.Equal(2, row.Raw.Level);
         Assert.Equal(2, row.Raw.Block);
+        Assert.Equal(7, row.Raw.Bit);      // 点号写穿（现场换接线挪备用通道的 UI 入口）
         Assert.False(row.Raw.IsInput);
-        // 派生文本随编辑刷新：点号 X→Y 前缀、仓位列跟随架/层
-        Assert.Contains("(Y", row.BitText);
+        // 仓位列跟随架/层刷新
         Assert.Equal("架3层2", row.SlotText);
     }
 
@@ -513,7 +515,7 @@ public class CureStationViewModelTests
         vm.SelectionMinutesText = "45";
         vm.ApplySelectionCommand.Execute(null);
 
-        var row = Assert.Single(vm.SlotRows.Where(r => r.Rack == "3" && r.Level == "2"));
+        var row = Assert.Single(vm.SlotRows, r => r.Rack == "3" && r.Level == "2");
         Assert.Equal("45", row.Minutes);
         // 行通知自动重建：格子时长/特殊标识即刷（45 分 + 单独设置过）
         var cell = Cell(vm, 3, 2);
@@ -548,8 +550,8 @@ public class CureStationViewModelTests
         vm.ApplySelectionCommand.Execute(null);
 
         Assert.Equal("60", vm.SlotRows.First(r => r.Rack == "3" && r.Level == "2").Minutes);
-        Assert.Single(vm.SlotRows.Where(r => r.Rack == "3" && r.Level == "2"));   // 无重复行
-        Assert.Single(vm.SlotRows.Where(r => r.Rack == "7" && r.Level == "1"));   // 新增一行
+        Assert.Single(vm.SlotRows, r => r.Rack == "3" && r.Level == "2");   // 无重复行
+        Assert.Single(vm.SlotRows, r => r.Rack == "7" && r.Level == "1");   // 新增一行
         Assert.Equal(rowsBefore + 1, vm.SlotRows.Count);
         Assert.Equal(60, Cell(vm, 7, 1).Minutes);
         Assert.True(Cell(vm, 7, 1).IsSpecial);
@@ -1275,6 +1277,42 @@ public class CureStationViewModelTests
         vm.OpenPostConfigCommand.Execute(null);
         Assert.Contains(fake.Calls, c => c == "ShowMesPostConfig");
         Assert.Contains("已启用", vm.PostingText);
+
+        // DualSide=1 → 双工位：两卡全显（列数 2）+ 顶栏带"（R 工位）"字样（V0.0.47）
+        IniFile.Write(AppPaths.ConfigIni, "CuringMes", "DualSide", "1");
+        vm.OpenPostConfigCommand.Execute(null);
+        Assert.True(vm.IsDualSide);
+        Assert.Equal(2, vm.WoCardColumns);
+        Assert.True(vm.ShowWoCardR);
+        Assert.True(vm.ShowWoCardL);
+        Assert.Contains("工位）", vm.PostingText);
+
+        // 切回单工位（Side 缺省 R）→ 只显 R 卡（列数 1）+ 顶栏去工位字样
+        IniFile.Write(AppPaths.ConfigIni, "CuringMes", "DualSide", "0");
+        vm.OpenPostConfigCommand.Execute(null);
+        Assert.False(vm.IsDualSide);
+        Assert.Equal(1, vm.WoCardColumns);
+        Assert.True(vm.ShowWoCardR);
+        Assert.False(vm.ShowWoCardL);
+        Assert.DoesNotContain("工位", vm.PostingText);
+    }
+
+    [Fact]
+    public void MainVm_SingleSideL_OnlyLCard()
+    {
+        // 单工位配 Side=L（现场实体可以是 L 工位机）：只显 L 卡——对齐工单窗
+        // "只显 Side 侧"口径（视图↔槽映射恒定 R↔Right/L↔Left，V0.0.47 主窗补齐）
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+        IniFile.Write(AppPaths.ConfigIni, "CuringMes", "Enabled", "1");
+        IniFile.Write(AppPaths.ConfigIni, "CuringMes", "Side", "L");
+        var fake = new FakeCureDialogService();
+        using var vm = new CureStation.ViewModels.MainViewModel(fake);
+        Assert.False(vm.IsDualSide);
+        Assert.True(vm.ShowWoCardL);
+        Assert.False(vm.ShowWoCardR);
+        Assert.Equal(1, vm.WoCardColumns);
     }
 
     // ---------- 登录窗 VM（V0.0.20 对齐 HJVision mFormLogin：记住/跟随/改密） ----------

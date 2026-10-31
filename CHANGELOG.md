@@ -2,6 +2,55 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.47（2026-10-31，主窗工单带补齐单工位口径 + 点表点号开放编辑）
+
+- **主窗底部工单带 R/L 双卡不随双工位开关注隐（用户现场反馈）**：V0.0.38
+  单工位改造只收了工单窗（只显 Side 侧一套面板+文案去 R/L）与顶栏/日志字样，
+  主窗底部"R 工位/L 工位"工单卡漏网——DualSide=0 时依旧两卡并排显示 L 工位。
+  修复：MainViewModel 新增 `MainSide`/`IsDualSide`/`ShowWoCardR`/`ShowWoCardL`/
+  `WoCardColumns` 五属性；顶栏过账文案与工单带显隐收拢为唯一出口
+  `ApplyPostOptions`（ctor 初始化 + 过账配置窗保存热更共用——原先两处各写一份
+  顶栏文案口径，正是漏了工单带联动的根源；热改 DualSide/Side 立见不重启）。
+  XAML：工单带列数绑定 `WoCardColumns`（双 2 并排/单 1 独占整宽，UniformGrid
+  跳过 Collapsed 卡不占格）；R/L 卡各自 `ShowWoCard*` 触发器整卡显隐、
+  "R 工位·"前缀 `IsDualSide` 触发器隐藏（缺省值全进 Style Setter——坑⑥纪律）。
+  测试：热更有例扩展（双↔单切换锁两卡/一卡/顶栏字样）+ 新增 Side=L 单工位
+  用例 + 点号开放用例，394/394 全绿。
+- **点表绑定表"点号"列开放行内编辑（用户拍板）**：原设计只读（注释口径
+  "改它等于换点——加删行才是正路"），但【＋添加行】固定位号 3、行内又不可改，
+  "正路"实际走不通——现场换接线挪备用通道时整个 UI 无入口，只能手改
+  point-table.json。修复：`PointBindingRow.Bit` 行内可编辑（写穿 Raw），
+  点号列改绑 `Bit` 直填（V0.0.45 直编口径补齐）；显示改纯序号 0~15——端子
+  X0~XF/Y0~YF 前缀语义由方向列表达，`BitText` 派生文本与 `RefreshDisplay`
+  无消费者直接删（铁律 9）；越界（≥每块点数）与同块同方向重复位绑定由
+  保存前校验统一弹框拦（`PointTableValidator` 既有闸，无新代码）。
+
+## V0.0.46（2026-10-31，修两处 UI 交互 bug：点表直编不可编辑 + 主窗卡状态徽章死文案）
+
+- **点表绑定表"点击没反应"（用户现场反馈）**：双重根因——
+  ① App.xaml 隐式 DataGrid 样式（弹窗通用口径）缺省 `IsReadOnly=True`，
+  绑定表没有显式覆盖被钉死只读，全列无法编辑、点击无编辑反应；
+  ② 方向/角色列用 `DataGridComboBoxColumn`——下拉只见于编辑态，缺省
+  单击只选中不进编辑，"点出下拉框"永远点不出来。修复三件套：绑定表
+  显式 `IsReadOnly="False"`（注释防再删）+ 方向/角色改 `DataGridTemplate-
+  Column` **常驻 ComboBox**（FreshCombo 隐式命中铺满全框+ClickMode=
+  Press，单击直接出下拉无需进编辑态；Height 32→24 免撑行高；数据源
+  仍 x:Static）+ 文本列 code-behind"单击即编辑"
+  （`OnBindingsGridPreviewMouseLeftButtonDown`：单击设 CurrentCell+选行+
+  BeginEdit，e.Handled 阻断缺省链防"刚开的编辑被提交"，已在编辑格
+  放行保光标定位；下拉列/点号列/表头滚动条走缺省）。
+- **主窗卡状态徽章死文案（用户对照设计图反馈"计时中的卡写空闲"）**：
+  顶部"计时中 5"计数正确（VM Kind 判定无恙），卡中部 117 分大数字/进度
+  条也正确，唯独右上角徽章橙底写"空闲"。根因=WPF 本地值压死 Style
+  触发器：胶囊文字与中部状态词的 `Text="空闲"`/`Text="空 闲"`写在元素
+  标签上（本地值优先级高于 Style.Triggers），五组亮态 Text setter
+  （计时中/待门控/放行/占用/未配置）永远不生效——底色 Border 的
+  Background 没写本地值所以触发器正常变橙，"橙底 idle 文案"的矛盾
+  由此自洽；副文案行 `Visibility="Collapsed"` 同款（待门控/放行/占用
+  三句副文永不出现）。修复三处：Text/Visibility 缺省值移进 Style
+  Setter。顺手清 3 个 xUnit2031 警告（Assert.Single 带 filter 重载），
+  全量构建 0 警 0 错，测试 393/393 全绿。
+
 ## V0.0.45（2026-10-31，点表窗：修设备切换不回显 bug + 绑定表直编傻瓜式）
 
 - **修 bug（用户目检发现）**：选择设备列表条目后，"设备名/IP/高级参数"

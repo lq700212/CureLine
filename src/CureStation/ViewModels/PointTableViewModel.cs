@@ -24,8 +24,9 @@ namespace CureStation.ViewModels;
 /// <summary>
 /// 绑定表行（V0.0.45 起表格直编）：可编辑属性**写穿 Raw**（所见即所得，无独立
 /// 编辑面板草稿——物理点唯一/语义键唯一冲突由保存前校验统一拦，行内不重复拦）；
-/// 派生文本（点号/仓位）随编辑即时刷新。Bit/点号只读（点号是块内物理位置，改它
-/// 等于换点——加删行才是正路）。
+/// 点号（Bit）同样行内可编辑（V0.0.47 开放）：点号=块内物理端子位——"改它等于
+/// 换点"的场景=现场换接线挪备用通道，UI 直接改即可；越界（≥每块点数）与同块
+/// 同方向重复绑定由保存前校验统一拦（加删行不再是唯一换点路径）。
 /// </summary>
 public sealed class PointBindingRow : ViewModelBase
 {
@@ -38,25 +39,18 @@ public sealed class PointBindingRow : ViewModelBase
         _owner = owner;
     }
 
-    // ---- 行内可编辑列（写穿 Raw） ----
+    // ---- 行内可编辑列（写穿 Raw；保存前校验统一兜底） ----
     public int Block { get => Raw.Block; set => Raw.Block = value; }
-    public bool IsInput { get => Raw.IsInput; set { Raw.IsInput = value; RefreshDisplay(); } }
-    public IoPointRole Role { get => Raw.Role; set { Raw.Role = value; RefreshDisplay(); } }
+    public int Bit { get => Raw.Bit; set => Raw.Bit = value; }
+    public bool IsInput { get => Raw.IsInput; set => Raw.IsInput = value; }
+    public IoPointRole Role { get => Raw.Role; set { Raw.Role = value; Raise(nameof(SlotText)); } }
     public int Rack { get => Raw.Rack; set { Raw.Rack = value; Raise(nameof(SlotText)); } }
     public int Level { get => Raw.Level; set { Raw.Level = value; Raise(nameof(SlotText)); } }
     public string FunctionName { get => Raw.FunctionName; set => Raw.FunctionName = value ?? ""; }
 
-    // ---- 只读派生列 ----
-    public string BitText => $"{Raw.Bit} ({(Raw.IsInput ? "X" : "Y")}{Raw.Bit:X1})";
+    // ---- 派生列 ----
     public string SlotText => Raw.Role == IoPointRole.Reserved
         ? "—" : $"架{Raw.Rack}层{Raw.Level}";
-
-    /// <summary>方向/角色变化 → 派生文本刷新（点号 X/Y 前缀与仓位显隐随之）。</summary>
-    public void RefreshDisplay()
-    {
-        Raise(nameof(BitText));
-        Raise(nameof(SlotText));
-    }
 }
 
 public sealed class PointTableViewModel : ViewModelBase
