@@ -11,8 +11,7 @@
 ![测试](https://img.shields.io/badge/xUnit-395%20passing-brightgreen)
 ![平台](https://img.shields.io/badge/OS-Windows-lightgrey?logo=windows11&logoColor=white)
 
-从 VB 老项目（`PLC_ReadData` 单机固化收料 + `PLC_ReadDataA` 八机通用网关）
-融合重构的 .NET 8 解决方案，含两个可独立部署的 WPF 程序、共享一个业务内核。
+一套 .NET 8 解决方案：两个可独立部署的 WPF 上位机程序（固化程控 + CIM 整线过账），共享一个业务内核。
 
 </div>
 
@@ -158,8 +157,8 @@ CureLine/
 | 手册 | 程序① 固化程控 | 程序② 整线网关 |
 | --- | --- | --- |
 | 操作员 | [固化程控_操作员手册](docs/固化程控_操作员手册.md) | [整线网关_操作员手册](docs/整线网关_操作员手册.md) |
-| 客户技术工艺 | [固化程控_客户技术工艺手册](docs/固化程序_客户技术工艺手册.md) | [整线网关_客户技术工艺手册](docs/整线网关_客户技术工艺手册.md) |
-| 内部 | [固化程控_内部手册](docs/固化程序_内部手册.md) | [整线网关_内部手册](docs/整线网关_内部手册.md) |
+| 客户技术工艺 | [固化程控_客户技术工艺手册](docs/固化程控_客户技术工艺手册.md) | [整线网关_客户技术工艺手册](docs/整线网关_客户技术工艺手册.md) |
+| 内部 | [固化程控_内部手册](docs/固化程控_内部手册.md) | [整线网关_内部手册](docs/整线网关_内部手册.md) |
 
 - [两程序拆分设计](docs/重构设计_20261028.md) —— 架构边界与 Phase 路线
 - [AGENTS.md](AGENTS.md) —— 维护规范（开工必读）｜[CHANGELOG.md](CHANGELOG.md) —— 版本日志
