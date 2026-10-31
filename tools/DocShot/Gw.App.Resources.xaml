@@ -265,13 +265,15 @@
                 </Setter>
             </Style>
             <!-- 密码输入框：与 FreshInput 同款（PasswordBox 是独立控件需独立模板）。
-                 Padding 左 3 非 6 是程序①实测校准值的同构口径：PasswordBox 内部渲染
-                 无 TextBoxView 的额外内缩，左 Padding 比文本输入框小一档让首字符与
-                 相邻文本框文本左缘对齐（登录窗"账号/密码文本左缘对齐" UI 契约，
-                 动此值须跑目检截图像素比对两框首字符左缘） -->
+                 左 Padding 10 的来历（V0.0.40 像素实测校准，勿凭感觉改）：
+                 自定义模板 ScrollViewer 已 Margin=Padding，控件内部又消费一次 Padding
+                 ——文本左缘 = 框内白 + 2×左Padding + 控件基础内缩（TextBox 系 7px，
+                 PasswordBox 3px）。登录窗用户名 TextBox 左 8（墨迹=框内+23），
+                 密码框须 2×P+3 = 23 → P=10 两框首字符左缘同线；
+                 动此值须按"冒烟截图+像素扫描"复核两框墨迹 x 坐标 -->
             <Style x:Key="FreshPwdInput" TargetType="PasswordBox">
                 <Setter Property="Height" Value="32"/>
-                <Setter Property="Padding" Value="3,0,8,0"/>
+                <Setter Property="Padding" Value="10,0,8,0"/>
                 <Setter Property="VerticalContentAlignment" Value="Center"/>
                 <Setter Property="Background" Value="{DynamicResource Brush.Fresh.InputBg}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Border}"/>

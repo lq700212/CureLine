@@ -94,20 +94,33 @@ public class OperatorStore
     }
 
     /// <summary>
-    /// 空表播种预置三账号（只播一次：表里有任一用户即跳过）。初始密码调用方
-    /// （App 启动装配）传入，本类不存明文；上线必须改掉。
+    /// 预置三账号自愈播种（App 每次启动都调，幂等无害）：
+    /// ① 清旧四级残留——level 存 Level1~4 文本的是 V0.0.48 之前的老库，新库永不
+    ///   写入该口径；残行占住"admin"等预置名，不删会让下面对号补种撞"已存在"
+    ///   （现场实测坑：老库只剩 admin/Level4，operator/dev 永远种不进去登录不上；
+    ///   项目未上线，用户拍板直接删掉重建，无兼容包袱）；
+    /// ② 预置账号缺谁补谁——已存在者一律不动（不覆盖运行期改过的密码）。
+    /// 初始密码调用方（App 启动装配）传入，本类不存明文；上线必须改掉。
     /// 播种直写库走 SeedUser——AddUser 对 Dev 角色有"不开放创建"边界（那是给
     /// 登录用户用的兜底，不能拦预置装配），否则 dev 账号永远播不进库。
     /// </summary>
     public void EnsureSeeded(string operatorPassword, string adminPassword, string devPassword)
     {
         EnsureSchema();
-        object? n = _db.ExecuteScalar("select count(*) from operators", null);
+        _db.ExecuteNonQuery("delete from operators where level like 'Level%'", null);
+        SeedIfMissing("operator", OperatorRole.Operator, operatorPassword);
+        SeedIfMissing("admin", OperatorRole.Admin, adminPassword);
+        SeedIfMissing("dev", OperatorRole.Dev, devPassword);
+    }
+
+    /// <summary>预置名对号补种：在册即跳过（自愈语义，不碰已有密码）。</summary>
+    private void SeedIfMissing(string user, OperatorRole role, string password)
+    {
+        object? n = _db.ExecuteScalar("select count(*) from operators where username=@u",
+            new Dictionary<string, object?> { ["u"] = user });
         if (n != null && Convert.ToInt64(n) > 0)
             return;
-        SeedUser("operator", OperatorRole.Operator, operatorPassword);
-        SeedUser("admin", OperatorRole.Admin, adminPassword);
-        SeedUser("dev", OperatorRole.Dev, devPassword);
+        SeedUser(user, role, password);
     }
 
     /// <summary>

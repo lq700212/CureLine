@@ -127,4 +127,50 @@ public class OperatorStoreTests : IDisposable
         Assert.False(OperatorRoleInfo.AtLeast(OperatorRole.Admin, OperatorRole.Dev));
         Assert.False(OperatorRoleInfo.AtLeast(null, OperatorRole.Operator));
     }
+
+    [Fact]
+    public void Seed_LegacyLevel4Db_SelfHealsToThreeRoles()
+    {
+        // 现场实测坑（V0.0.49 收尾发现）：老库只播过 admin/Level4，EnsureSeeded
+        // 空表才播——operator/dev 永远进不了库，dev/dev123 登录失败。自愈播种
+        // 必须把这种老库拉回三账号（旧 Level% 行清掉+预置对号补齐）。
+        var store = new OperatorStore(
+            new SqliteHelper(Path.Combine(_tmp, "ops-legacy.db3")));
+        var (hash, salt) = PasswordHasher.CreateHash("old-pwd");
+        store.EnsureSchema();
+        // 裸 insert 一行老口径（绕过 AddUser 边界模拟现场老库实况）
+        var helper = new SqliteHelper(Path.Combine(_tmp, "ops-legacy.db3"));
+        helper.ExecuteNonQuery(
+            "insert into operators (username, level, pwd_hash, salt, iterations, updated_at)" +
+            " values (@u, @l, @h, @s, @i, @t)",
+            new Dictionary<string, object?>
+            {
+                ["u"] = "admin",
+                ["l"] = "Level4",
+                ["h"] = hash,
+                ["s"] = salt,
+                ["i"] = PasswordHasher.Iterations,
+                ["t"] = "2026-01-01 00:00:00",
+            });
+
+        store.EnsureSeeded("123456", "123456", "dev123");
+
+        // 三预置账号全在、角色对、密码对；老口径 admin 行已被清（旧密码失效）
+        Assert.Equal(OperatorRole.Operator, store.Verify("operator", "123456"));
+        Assert.Equal(OperatorRole.Admin, store.Verify("admin", "123456"));
+        Assert.Equal(OperatorRole.Dev, store.Verify("dev", "dev123"));
+        Assert.Null(store.Verify("admin", "old-pwd"));   // 老 Level4 残行已删
+        Assert.Equal(3, store.ListUsers().Count);        // 只剩三预置账号
+    }
+
+    [Fact]
+    public void Seed_ExistingAccounts_NeverOverwritten()
+    {
+        // 自愈播种必须遵守"在册不动"——运行期改过的密码不能被启动重播回预置值。
+        var store = NewStore();
+        Assert.Null(store.SetPassword("admin", "new-pwd-9", OperatorRole.Dev));
+        store.EnsureSeeded("123456", "777777", "000000"); // 再跑一次启动播种
+        Assert.Equal(OperatorRole.Admin, store.Verify("admin", "new-pwd-9"));
+        Assert.Null(store.Verify("admin", "777777"));     // 覆盖即失败
+    }
 }

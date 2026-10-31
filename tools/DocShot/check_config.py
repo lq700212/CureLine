@@ -34,12 +34,14 @@ DOC_TITLES = {
     "整线网关_内部手册.md": "# 整线网关 内部手册",
 }
 
-# ---- 截图白名单（docs/images 实际落盘；V0.0.31/32 重拍后 15 张）----
-# 程序① 9 张（cs-*）+ 程序② 6 张（gw-*）；顺序约定：前 9 张属程序①，其后属程序②
-# （check_docs.py 内部版"全量"断言按此切片，改动须同步）。
+# ---- 截图白名单（docs/images 实际落盘；V0.0.50 重拍后 18 张）----
+# 程序① 12 张（cs-*，主窗三帧 idle/flow/dark + 工单两视角 operator/admin，
+#   cs-main/ -light/ -pwd/ workorder 旧名已随重拍一并删除）+ 程序② 6 张（gw-*）；
+# 顺序约定：前 12 张属程序①，其后属程序②（check_docs.py 内部版"全量"断言
+# 按此切片，改动须同步）。
 IMG_WHITE = [
-    "cs-main.png", "cs-main-dark.png", "cs-main-light.png",
-    "cs-login.png", "cs-login-pwd.png", "cs-workorder.png",
+    "cs-main-idle.png", "cs-main-flow.png", "cs-main-dark.png",
+    "cs-login.png", "cs-workorder-operator.png", "cs-workorder-admin.png",
     "cs-pointtable.png", "cs-policy.png", "cs-iotest.png",
     "cs-operators.png", "cs-mespost.png", "cs-log.png",
     "gw-main.png", "gw-login.png", "gw-log.png",
@@ -62,12 +64,12 @@ CUSTOMER_BANNED = [
 # 各份文档必含截图（写了就必须有；内部版加"全集"断言在 check_docs 里）
 REQUIRED_IMGS = {
     "固化程控_操作员手册.md": [
-        "cs-main.png", "cs-main-dark.png", "cs-login.png", "cs-login-pwd.png",
-        "cs-workorder.png",
+        "cs-main-idle.png", "cs-main-flow.png", "cs-main-dark.png",
+        "cs-login.png", "cs-workorder-operator.png",
     ],
     "固化程控_客户技术工艺手册.md": [
-        "cs-main.png", "cs-policy.png", "cs-pointtable.png",
-        "cs-mespost.png", "cs-iotest.png", "cs-workorder.png",
+        "cs-main-idle.png", "cs-policy.png", "cs-pointtable.png",
+        "cs-mespost.png", "cs-iotest.png", "cs-workorder-admin.png",
     ],
     "固化程控_内部手册.md": IMG_WHITE[:12],
     "整线网关_操作员手册.md": [

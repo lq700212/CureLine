@@ -60,25 +60,21 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="用户名" VerticalAlignment="Center" Margin="0,0,12,10"/>
-                    <!-- 在册账号下拉（可编辑：点选或手输），Text 变化即跟随账号回填记住的密码；
-                         Padding 与 FreshPwdInput（边框1+8）对齐出同款文本左缘；ItemContainerStyle
-                         让下拉列表项文本左缘跟编辑框文本对齐（下拉项默认更靠左，实测补 19px） -->
+                    <!-- 在册账号下拉（可编辑：点选或手输），Text 变化即跟随账号回填记住的密码。
+                         编辑框文本左缘 = 模板 PART_EditableTextBox Margin 8 定标（App.xaml FreshCombo），
+                         不要在 ComboBox 上挂 Padding 等"对齐补丁"——现行模板没有任何 Padding
+                         消费点（V0.0.40 旧口径"Padding 左 17"已随模板改版失效，勿再回写）；
+                         下拉列表项直接继承 App.xaml 隐式 ComboBoxItem Padding 8,4，其文本左缘
+                         （Popup 边框1+Padding2+Item8=11）与编辑框文本同线，本地 ItemContainerStyle
+                         覆盖已删（V0.0.50，曾按旧模板补 19 反而多偏 13px——改对齐先在运行期
+                         放大截图比对两处文本左缘，勿凭记忆改数） -->
                     <ComboBox Style="{StaticResource FreshCombo}" x:Name="UserCombo" Grid.Row="0" Grid.Column="1"
-                              Height="32" VerticalContentAlignment="Center" Padding="17,0"
+                              Height="32" VerticalContentAlignment="Center"
                               IsEditable="True" StaysOpenOnEdit="False"
                               ItemsSource="{Binding HistoryUsers}"
                               Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}"
                               Margin="0,0,0,10"
-                              ToolTip="下拉选在册账号或直接输入；换账号自动跟出该账号记住的密码">
-                        <ComboBox.ItemContainerStyle>
-                            <!-- BasedOn 隐式主题样式（App.xaml）：不带 BasedOn 会整体覆盖回
-                                 系统默认模板（白底黑字），深色模式下拉弹层刺眼——只补 Padding 对齐 -->
-                            <Style TargetType="ComboBoxItem"
-                                   BasedOn="{StaticResource {x:Type ComboBoxItem}}">
-                                <Setter Property="Padding" Value="19,3"/>
-                            </Style>
-                        </ComboBox.ItemContainerStyle>
-                    </ComboBox>
+                              ToolTip="下拉选在册账号或直接输入；换账号自动跟出该账号记住的密码"/>
                     <TextBlock Grid.Row="1" Grid.Column="0" Text="密码" VerticalAlignment="Center" Margin="0,0,12,0"/>
                     <PasswordBox x:Name="PwdBox" Grid.Row="1" Grid.Column="1"
                                  Style="{StaticResource FreshPwdInput}"/>

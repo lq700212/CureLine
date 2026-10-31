@@ -108,9 +108,10 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 393/393（V0.0.49 全量；P3 期分版增量与 V0.0.19~V0.0.20
+   `dotnet test` 395/395（V0.0.49 全量；P3 期分版增量与 V0.0.19~V0.0.20
    各轮增量明细见各版本 CHANGELOG，V0.0.33~37 增量未逐版回填此括号——
-   基线此后只增不减，V0.0.49 因删改密面板与旧权限窗用例从 397 净减 4）；禁止交付编译不过/测试不过的代码。
+   基线此后只增不减，V0.0.49 因删改密面板与旧权限窗用例净减 4、
+   自愈播种防回归 +2）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
 8. **配置样例同步**：新增配置键必须同步改 `config.sample.ini` + `AppConfig`
@@ -185,7 +186,7 @@
 | `src/CimGateway/MesLogWindow.*` | 日志窗（-1 全部机台 / >=0 分机台，关窗退订；清空钮=危险色） |
 | `src/CimGateway/GatewayConfigWindow.*` | 网关配置窗（机台连接/接口地址两页 + 测试连接 + 保存热生效，逻辑在 Core；单机页已删；V0.0.32 类名去 PLC 化 `PlcConfigWindow`→`GatewayConfigWindow`，VM 同改 `GatewayConfigViewModel`）；V0.0.31 Tab 隐式主题样式 + 测试结果字色走语义名（VM "Ok"/"Err" → View 触发器映射 AlertOkFg/AlertErrFg）；V0.0.32 机台连接页每行含机台名框（[StationNames] 配置化） |
 | `src/CimGateway/MesAlarmWindow.*` / `ImageWindow.*` | 报警窗 / 图片查看 |
-| **程序② UI 键板** | `App.xaml`（GhostButton/Fresh 弹窗样式族/TabControl+TabItem 隐式主题/WinTitleBar/WinSysBtn + Geo.* 图标，色全 DynamicResource 走 Themes 字典）；全部弹窗统一圆角自绘骨架（WindowStyle=None + WindowChrome + Fx.WinShadow + WinTitleBar 品牌标题条，可缩放窗 ResizeBorderThickness=6）；**登录窗输入左缘对齐口径（V0.0.40 像素实测）**：自定义模板 ScrollViewer 已 Margin=Padding、控件内部又消费一次——文本左缘=框内白+2×左Padding+基础内缩（TextBox 系 7/PasswordBox 3），用户名 TextBox 左 8 对应密码框 FreshPwdInput 左 10 同线；程序①的"左 3"是 ComboBox（左 17）另一套定标，勿互套；原 `Styles/FreshBlue.xaml` 已删 |
+| **程序② UI 键板** | `App.xaml`（GhostButton/Fresh 弹窗样式族/TabControl+TabItem 隐式主题/WinTitleBar/WinSysBtn + Geo.* 图标，色全 DynamicResource 走 Themes 字典）；全部弹窗统一圆角自绘骨架（WindowStyle=None + WindowChrome + Fx.WinShadow + WinTitleBar 品牌标题条，可缩放窗 ResizeBorderThickness=6）；**登录窗输入左缘对齐口径（V0.0.40 像素实测）**：自定义模板 ScrollViewer 已 Margin=Padding、控件内部又消费一次——文本左缘=框内白+2×左Padding+基础内缩（TextBox 系 7/PasswordBox 3），用户名 TextBox 左 8 对应密码框 FreshPwdInput 左 10 同线；程序①登录窗的对齐锚点是 `PART_EditableTextBox` Margin 8（ComboBox 上挂 Padding 无效——现行 FreshCombo 模板无 Padding 消费点，旧"左 17/左 3"定标已失效，详见程序① 登录窗语义 ⑩，勿互套）；原 `Styles/FreshBlue.xaml` 已删 |
 | **Core 共享（固化工艺家族，P3.1 新增）** | |
 | `src/CureLine.Core/Curing/CuringPolicy.cs` | 工艺策略模型：时长三级覆盖（仓位>层>全局，`ResolveMinutes` 唯一出口）+ 光栅门控 + `CuringPolicyValidator`（时长/层号/仓位键/重名） |
 | `src/CureLine.Core/Curing/CuringPolicyStore.cs` | `config/curingpolicy.json` 存取（策略库+激活名）+ `BuildDefaultBook` 缺省库自愈 |
@@ -216,15 +217,16 @@
 | `src/CureLine.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段） |
 | `src/CureLine.Core/Data/CureRecordStore.cs` | `cure_record` 表 CRUD（V0.0.32 由 PLCtable 改名，项目未上线无兼容包袱）+ `ComputeStats` 纯统计 |
 | `src/CureLine.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/机台连接配置（`StationConfig.cs`：StationConfigStore/Validator） |
-| `tests/CureLine.Tests/` | 315 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
+| `tests/CureLine.Tests/` | 395 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
 | `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
+| `tools/DocShot/` | **文档截图 harness（V0.0.50 重作）**：`run_docshot.ps1` 一键 build 两程序→build harness→组装 runner→起 exe 全自动；**完全后台静默纪律（用户拍板）**——所有窗（含两主窗）`ShowActivated=false`+`ShowInTaskbar=false`+Left/Top=-20000 离屏，绝不抢焦点/不进任务栏/不落用户屏幕；**成品口径=RTB 优先**（`ShotRtb` 按 DPI 缩放渲染视觉树——无 DWM 阴影黑边、与窗口位置无关），PrintWindow 降为兜底（离屏下拍出黑边已被用户目检否决）；镜头名与文档引用全对齐（`cs-workorder-operator/admin.png` 三级视角、`cs-main-idle/flow/dark.png` 三帧），万象清单校验走 `check_config.py`（IMG_WHITE/REQUIRED_IMGS 两张表）+`check_docs.py`；**深色帧换装坑**：斜杠 URI `"/Themes/Dark.xaml"` 相对 Application 根（harness=DocShot 组件 404 FATAL）——必须手 Build `pack://…/CureStation;component/Themes/Dark.xaml` 并**按 Source 认出主题槽替换**（盲替 merged[0] 会把主样式字典换没，半坏视觉），`ThemeManager.Current` 私有 setter 反射同步防顶栏按钮文案不符；工单镜头演示数据用种子 `WorkOrderBook` 不落盘（R1 纪律） |
 
 ## 构建与验证命令
 
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build CureLine.slnx --nologo
-# 全量测试（393/393 全绿，串行，约 20s；含本地 HttpListener 桩 MES 端到端）
+# 全量测试（395/395 全绿，串行，约 20s；含本地 HttpListener 桩 MES 端到端）
 dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
 # 子模块改动后（VS MSBuild，net472，原样沿用上游命令）
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
@@ -344,7 +346,11 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   ② 预置三账号：operator/123456、admin/123456、dev/dev123（App.OnStartup
   三参 `EnsureSeeded`，**播种直写库走私有 `SeedUser`**——`AddUser` 对
   Dev 角色有"不开放创建"边界，会拦预置装配曾致 dev 播不进库，勿再绕回
-  AddUser 播种）；上线必改，文档不得记录现场真实密码；
+  AddUser 播种）。**自愈播种语义（V0.0.49 收尾实测定）**：App 每次启动
+  都调且幂等无害——先清 level 存 `Level1~4` 文本的旧口径残行（老库会占住
+  预置名致 operator/dev 种不进、登录失败；未上线无兼容包袱），再对预置名
+  **缺谁补谁**、在册者不动（不覆盖运行期改过的密码——`Seed_` 两用例锁定）；
+  上线必改，文档不得记录现场真实密码；
   ③ **防锁死红线（换口径）**：dev 账号**永不可删**（谁删都拒）、密码只有
   dev 本人可改、Dev 角色不开放创建（预置唯一）——系统永远留最高权限钥匙；
   "改级别"功能已删（换角色=删了重建），`SetLevel` 勿再出现；
@@ -381,8 +387,14 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   `order by level desc`）；
   ⑩ 顶栏登录态格式="角色短名：账号"（`ShortName`，如"管理员：admin"，
   不带 LEVEL 字样——UI 口径 V0.0.20 二轮定）；登录窗下拉
-  编辑框/下拉项（ItemContainerStyle Padding=19）/密码框三处文本左缘对齐
-  是 UI 契约，动输入框内边距须放大截图核对——`FreshPwdInput` Padding 左 3
+  编辑框/下拉项/密码框三处文本左缘对齐是 UI 契约（V0.0.50 实测重定）：
+  **编辑框文本左缘=FreshCombo 模板 `PART_EditableTextBox` Margin 8 定标**——
+  ComboBox 上挂 Padding 无效（现行模板无 Padding 消费点，旧"左 17"口径已
+  失效勿回写）；**下拉项直接继承 App.xaml 隐式 ComboBoxItem Padding 8,4**
+  （Popup 边框1+Padding2+Item8=11 与编辑框同线；登录窗本地
+  ItemContainerStyle Padding=19 覆盖已删，那是旧模板的左拉补丁，方向相反
+  曾致下拉项文本右偏约 13px）；密码框对齐契约不变且动输入框内边距须
+  放大截图核对——`FreshPwdInput` Padding 左 3
   是实机像素定标值（PasswordBox 内部渲染无 TextBoxView 内缩，同抄
   FreshInput 的 6 会让密码首字符偏右约 3 逻辑 px，V0.0.30 校准）；
   顶栏连接**短词+悬停全文**两段口径（V0.0.37 推翻"全文不截断"——用户

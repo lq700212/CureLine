@@ -2,11 +2,17 @@
 
   <!-- =====================================================================
        DocShot.csproj —— 培训文档截图 harness 工程（WPF net8）
-       干什么：引用两程序（CureStation/CimGateway）与 Core 的编译产物，
+       干什么：直引两程序（CureStation/CimGateway）与 Core 工程源，
          直接 new 生产窗体 + 生产装配链截 PNG（见 DocShot.cs）。
-       为什么引用 bin 产物而不是 ProjectReference：ProjectReference 会把
-         两程序的 App.xaml.StartupUri 幹进来（同 App 类冲突），bin 产物只取
-         窗体与业务类型，规避 Application 实例冲突。
+       为什么用 ProjectReference（V0.0.50 由 bin dll 引用换过来）：bin dll
+         (Reference HintPath) 引用被"神秘引用解析"污染——响应文件竟把
+         /reference 指到 tools/DocShot/runner 的旧产物（删除 runner 目录清
+         obj 缓存均无效，编译 CS0234/CS0535 找新类型全是旧 dll 里的缺席，
+         与 src bin 里实际存在的事实矛盾），root 无法定位；换 ProjectReference
+         后解析链干净（与 tests/CureLine.Tests 的先例一致——它同样以
+         ProjectReference 直引两个 WinExe 工程，只取类型不启 App）。
+         ProjectReference 不串两程序 App.xaml 的 StartupUri：Application
+         定义各留在自己工程程序集内，harness 只 new 窗体与 VM，不调 App.Main。
        怎么跑：run_docshot.ps1 统筹（build 两程序 → build 本工程 →
          组装 runner 依赖目录 → 起 exe）。
        ===================================================================== -->
@@ -25,18 +31,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="CureStation">
-      <HintPath>..\..\src\CureStation\bin\Debug\net8.0-windows\CureStation.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
-    <Reference Include="CimGateway">
-      <HintPath>..\..\src\CimGateway\bin\Debug\net8.0-windows\CimGateway.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
-    <Reference Include="CureLine.Core">
-      <HintPath>..\..\src\CureLine.Core\bin\Debug\net8.0-windows\CureLine.Core.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
+    <ProjectReference Include="..\..\src\CureStation\CureStation.csproj" />
+    <ProjectReference Include="..\..\src\CimGateway\CimGateway.csproj" />
+    <ProjectReference Include="..\..\src\CureLine.Core\CureLine.Core.csproj" />
   </ItemGroup>
 
   <!-- SQLite（与 Core 同版本 NuGet——harness deps.json 声明后强名加载才能解析） -->

@@ -106,7 +106,7 @@
                             </TextBlock.Style>
                         </TextBlock>
 
-                        <TextBlock Text="红线：开发者账号唯一预置不可删除（防锁死）；操作员无改密权，密码一律由此窗代改。密码 ≥6 位，存 PBKDF2 哈希。"
+                        <TextBlock Text="红线：开发者账号不可删（防锁死）；新密码 ≥6 位，保存即生效。"
                                    Foreground="{DynamicResource Brush.Fresh.FgDim}" TextWrapping="Wrap" Margin="0,12,0,0"/>
                     </StackPanel>
                 </Border>

@@ -2,6 +2,53 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.50（2026-10-31，文档整备：README 图文并茂 + 截图 harness 完全后台化 + 培训文档三级口径同步）
+
+- **登录窗用户名下拉对齐（用户目检发现）**：登录窗本地
+  `ItemContainerStyle Padding=19` 是旧模板时代的左拉补丁，现行 FreshCombo
+  模板下方向相反——下拉项文本右偏约 13px。删除本地覆盖与死值
+  `Padding="17,0"`（模板无 Padding 消费点），下拉项直接继承 App.xaml 隐式
+  ComboBoxItem Padding 8,4（Popup 边框1+Padding2+Item8=11 与编辑框
+  `PART_EditableTextBox` Margin 8 同线）；实测截图确认 ≤1px 对齐。
+  AGENTS.md ⑩ 与程序②键板行旧口径同步重定（V0.0.50 实测重定）。
+- **用户管理窗底部红线提示精简**（用户反馈太长）：
+  "红线：开发者账号不可删（防锁死）；新密码 ≥6 位，保存即生效。"
+- **README 图文并茂重写**：徽章行 + 界面速览（主窗浅/深对照 + 功能窗
+  四宫格）+ 两程序卡片 + 三级权限表 + mermaid 架构图 + 目录树 + 文档
+  导航 + 快速开始/配置自愈；全部引用重拍后新截图。
+- **DocShot 截图 harness 完全后台化（用户拍板：不影响现场用机）**：
+  - 全部窗（含两主窗）`ShowActivated=false` + `ShowInTaskbar=false` +
+    Left/Top=-20000 离屏——不抢焦点、不进任务栏、不落屏幕；
+  - 成品口径反转：**RTB 优先当成品**（按 DPI 缩放渲染视觉树——无 DWM
+    阴影黑边、与窗口位置无关；print 离屏拍黑边已被用户目检否决），Print
+    Window 降为兜底，`SHOOT` 日志记两者指标与 used 来源；
+  - 镜头重命名对齐新现实：`cs-main-idle/flow/dark.png` 三帧、
+    `cs-workorder-operator/admin.png` 三级两视角；`cs-login-pwd`（改密
+    面板）镜头删除；新增深色主题主窗帧（README 对照用）。
+  - `cs-main-dark` 两坑踩平：① `ThemeManager.ApplyTheme` 斜杠相对 URI 在
+    harness 解析到 DocShot 组件根 404 FATAL——改手 build
+    `pack://…/CureStation;component/Themes/Dark.xaml`；② 首拍盲替
+    `merged[0]` 把主样式字典换没（用户目检"深色截图不对"）——改按
+    Source 认出主题槽位替换 + `Current` 反射同步防顶栏按钮文案不符。
+  - `DocShot.csproj` bin-dll 引用换 **ProjectReference 三件**：bin
+    (Reference HintPath) 引用被"神秘引用解析"污染（响应文件 /reference
+    指向 runner 旧产物、删 runner 清 obj 均无效），ProjectReference 后
+    解析链干净（靠 tests 工程同款先例护航）。
+- **培训文档 6 份同步三级权限口径（替代全部四级 LEVEL.1~4）**：操作员
+  手册（L1~4 → operator 单角色；功能表按"设置▾"下拉+门禁矩阵重排；
+  "修改密码"节 →"忘记密码怎么办"），客户技术工艺手册（LEVEL.3 →
+  admin 管理员；工单对比表按三档编辑权重排——operator 可数量/清零），
+  内部手册（权限管理窗 → 用户管理窗；防锁死红线换"dev 钥匙永在"
+  口径；改密段重写为用户管理重置链；顶栏清单按 V0.0.39 设置下拉重排），
+  整线网关内部手册（LEVEL.4 → dev 专属；初始密码两参补 dev123），
+  重构设计（P3.2 前半 / P3 行 / 过账窗 L4 / 播种 PLCdatabase→CureLine
+  三账号 / 测试基线 395），UI 设计（L1 → 登录即可）。
+- **截图全量重拍 + 死图清理**：docs/images 24 → 18 张（8 张旧名孤儿
+  删除：cs-main/ -light/ -pwd/ workorder/ workorder-l1/ l3/ -
+  main-curing/ -flow2）；`check_config.py` IMG_WHITE/REQUIRED_IMGS 两
+  表同步新镜头名，`check_docs.py` 13 FAIL → ALL PASS。
+- 产品行为零变化（XAML 提示文案/死资源清理），测试 395/395 全绿。
+
 ## V0.0.49（2026-10-31，权限体系重做：四级→三级角色 + 用户管理窗换血）
 
 - **权限模型四级→三级（用户拍板）**：`OperatorLevel.Level1~4` 整体删除，
@@ -36,6 +83,17 @@
   ② `ListUsers` 的 `order by level desc`：level 现存文本 Operator/Admin/
   Dev，字母序与权限序不一致（会排成 Operator>Dev>Admin），改 case 显式
   定权（Dev>Admin>Operator）。
+- **老库自愈播种（收尾实测发现+用户追加）**：现场 Debug 库是 V0.0.48 之前
+  的老库（operators 只有一行 `admin/Level4`），`EnsureSeeded` 空表才播——
+  operator/dev 永远进不了库，**dev/dev123 与 operator/123456 登录全失败**
+  （admin 能登纯靠 L4→Admin 兜底映射）。修复：`EnsureSeeded` 升级
+  "自愈播种"——启动每次跑：① 清 level 存 `Level1~4` 文本的旧口径残行
+  （会占住预置名让补种撞"已存在"；项目未上线，用户拍板直接删掉重建）；
+  ② 预置三账号**缺谁补谁**，在册者一律不动（不覆盖运行期改过的密码）。
+  现场旧库删文件即全量重建；GUI 冒烟+PBKDF2 复算哈希逐一实证三账号
+  （operator/123456、admin/123456、dev/dev123）可登录；程序②（CimGateway）
+  users 表语义从未换代，独立无此坑。新增 2 用例（老库自愈回三账号/已改
+  密码不被重播覆盖），395/395 全绿。
 - **初始化**：`App.OnStartup` 播种改三参 `EnsureSeeded("123456","123456",
   "dev123")`——上线必改初始密码（同前口径，文档不记现场实值）。
 - **删除清单**：`OperatorLevel` 枚举、`OperatorWindow.xaml/.cs`、

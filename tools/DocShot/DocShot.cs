@@ -49,7 +49,7 @@ using CwWorkOrder = CureStation.WorkOrderWindow;
 using CwPolicy = CureStation.CuringPolicyWindow;
 using CwIoTest = CureStation.IoTestWindow;
 using CwPointTable = CureStation.PointTableWindow;
-using CwOperators = CureStation.OperatorWindow;
+using CwAccounts = CureStation.AccountManagerWindow;
 using CwMesPost = CureStation.MesPostConfigWindow;
 using CureDialogs = CureStation.ViewModels.IDialogService;
 using CureMainVm = CureStation.ViewModels.MainViewModel;
@@ -58,7 +58,7 @@ using CureWorkOrderVm = CureStation.ViewModels.WorkOrderViewModel;
 using CurePolicyVm = CureStation.ViewModels.CuringPolicyViewModel;
 using CureIoTestVm = CureStation.ViewModels.IoTestViewModel;
 using CurePointTableVm = CureStation.ViewModels.PointTableViewModel;
-using CureOperatorVm = CureStation.ViewModels.OperatorViewModel;
+using CureAccountVm = CureStation.ViewModels.AccountManagerViewModel;
 using CureMesPostVm = CureStation.ViewModels.MesPostConfigViewModel;
 using CureLogSnap = CureStation.ViewModels.LogSystemSnapshot;
 
@@ -170,7 +170,9 @@ public static class Program
             var store = new OperatorStore(
                 new CureLine.Core.Infrastructure.SqliteHelper(AppPaths.DatabaseFile));
             store.EnsureSchema();
-            store.EnsureSeeded("123456"); // 与产品初始一致，现场上线必改
+            // 三级三账号与产品一致（App 同参——operator/admin/dev123，上线必改；自
+            // 愈播种幂等，老库也能拉回三账号）
+            store.EnsureSeeded("123456", "123456", "dev123");
         }
         catch (Exception ex) { Log($"WARN 操作员播种失败（权限窗可能空表）：{ex.Message}"); }
 
@@ -190,10 +192,16 @@ public static class Program
         var fake = new SilentCureDialogs();
 
         // ---------- 主窗（Mock 总线直启 → 状态机演示流转） ----------
+        // 完全离屏 + 不激活 + 不进任务栏（用户拍板"完全后台静默"——主窗流转
+        //   演示最长要 12s+，屏上显示会打扰现场操作；RTB 渲染与窗口位置无关，
+        //   离屏照样拍全。此前 Left=60 屏上拍是 print 时代的妥协，已废）。
         var main = new CwMain
         {
             WindowStartupLocation = WindowStartupLocation.Manual,
-            Left = 60, Top = 60,
+            Left = -20000, Top = -20000,
+            WindowState = WindowState.Normal,
+            ShowActivated = false,
+            ShowInTaskbar = false,
             DataContext = new CureMainVm(fake),
         };
         main.Show();
@@ -209,27 +217,25 @@ public static class Program
         // （剩 119/进度 1%），拍不到断电续算的 61% 填充——harness 直改演（见方法注）。
         InjectCuringFrame(main, "cs-main-curing.png");
 
-        // ---------- 登录窗（登录面板 + 改密面板） ----------
+        // ---------- 登录窗（纯登录——V0.0.49 起改密面板删除，operator 无改密权） ----------
         var lv = new CureLoginVm();
         lv.Password = "123456";                // R1 例外允许的"模拟打字"
         var lw = new CwLogin { DataContext = lv };
-        ShotFrame(lw, "cs-login.png", 800);    // 两态连拍（Shot 会关窗，改密面板复用同窗）
-        lv.ChangePwdCommand.Execute(null);
-        Pump(250);
-        ShotFrame(lw, "cs-login-pwd.png");
+        ShotFrame(lw, "cs-login.png", 800);
         lw.Hide(); lw.Close();
 
-        // ---------- 工单窗（操作员只读态 + 管理员全可编辑态） ----------
+        // ---------- 工单窗（V0.0.49 三级权限：operator 可编辑数量/清零，
+        //   admin 制程+上传使能——两视角对照拍，比旧四级"只读/全开"口径真实） ----------
         var wo1 = new CwWorkOrder
         {
             DataContext = new CureWorkOrderVm(fake, OperatorRole.Operator, book),
         };
-        Shot(wo1, "cs-workorder-l1.png");
+        Shot(wo1, "cs-workorder-operator.png", 900);
         var wo3 = new CwWorkOrder
         {
             DataContext = new CureWorkOrderVm(fake, OperatorRole.Admin, book),
         };
-        Shot(wo3, "cs-workorder-l3.png");
+        Shot(wo3, "cs-workorder-admin.png", 900);
 
         // ---------- 点表配置窗 ----------
         // 演示选中联动（V0.0.36 修复"表格选中行变化编辑面板不回显"）：选中位号 2
@@ -265,9 +271,13 @@ public static class Program
         Shot(iot, "cs-iotest.png", 900);
         testBus.Dispose();
 
-        // ---------- 权限管理窗（L4） ----------
-        var opw = new CwOperators { DataContext = new CureOperatorVm(fake) };
-        Shot(opw, "cs-operators.png", 900);
+        // ---------- 用户管理窗（V0.0.49 三级角色；Dev 视角全功能可用） ----------
+        // 选中 dev 行 = 展示"开发者永不可删/仅本人可改"的选中原因提示（教学信息量更大；
+        // Dev 视角下其余账号的重置/删除按钮全亮）。
+        var acvm = new CureAccountVm(fake, OperatorRole.Dev);
+        acvm.SelectedUser = acvm.Users.FirstOrDefault(u => u.Role == OperatorRole.Dev);
+        var acw = new CwAccounts { DataContext = acvm };
+        Shot(acw, "cs-operators.png", 900);
 
         // ---------- 过账配置窗（L4） ----------
         var mp = new CwMesPost { DataContext = new CureMesPostVm(fake) };
@@ -276,6 +286,38 @@ public static class Program
         // ---------- 主窗流转后期（更多仓位走过一轮；避开 Mock 演示掉线窗口） ----------
         Pump(6000);
         ShotFrame(main, "cs-main-flow2.png");
+
+        // ---------- 主窗深色主题帧（README 主视觉对照；同进程热切主题字典，
+        //   无需重启——Mock 总线照常流转）。
+        //   不直调 ThemeManager.ApplyTheme：它用相对 pack URI "/Themes/Dark.xaml"，
+        //   相对的是 Application 根（harness 里=DocShot 程序集，查无此文件致
+        //   FATAL IOException 中断全局拍摄）。
+        //   换装语义与产品 ApplyTheme 一致的要点：**只换"主题键板"所在槽**，
+        //   不得动主样式字典（Cure.App.Resources——FreshButton/Geo.* 等）。
+        //   本 harness 装填顺序 [0]=主样式、[1]=主题（跑 shot 前 Add 的），一次
+        //   把 Blind merged[0]=Dark 的教训（V0.0.50 首拍把主样式字典换没了，
+        //   深色帧半坏样式被用户目检逮住）——故按 Source 认出 Themes/ 槽替换。
+        var darkDict = new ResourceDictionary
+        {
+            Source = new Uri("pack://application:,,,/CureStation;component/Themes/Dark.xaml"),
+        };
+        var merged = app.Resources.MergedDictionaries;
+        int themeSlot = -1;
+        for (int i = 0; i < merged.Count; i++)
+        {
+            var src = merged[i].Source?.OriginalString;
+            if (src != null && src.Contains("/Themes/")) { themeSlot = i; break; }
+        }
+        if (merged.Count == 0) merged.Add(darkDict);
+        else if (themeSlot < 0) merged[merged.Count - 1] = darkDict; // 兜底：末槽=键板
+        else merged[themeSlot] = darkDict;
+        // Current 同步（private set，反射写——只影响主题钮"切到 X"文案，让
+        // 截图里顶栏按钮语义与画面一致；产品链路遥不可及，是 harness 层）。
+        typeof(CureStation.Themes.ThemeManager)
+            .GetProperty("Current")!
+            .SetValue(null, "Dark", null);
+        Pump(800);
+        ShotFrame(main, "cs-main-dark.png");
 
         // 主窗不 Close（关窗链有确认框风险）；进程收尾统一 Exit。
         main.Hide();
@@ -388,10 +430,14 @@ public static class Program
         var fake = new SilentGatewayDialogs();
 
         // ---------- 主窗（未连接 → 连接设备 → 8 机台跑起来） ----------
+        // 完全离屏 + 不激活 + 不进任务栏（同程序①主窗——"完全后台静默"口径）
         var main = new GwMain
         {
             WindowStartupLocation = WindowStartupLocation.Manual,
-            Left = 60, Top = 60,
+            Left = -20000, Top = -20000,
+            WindowState = WindowState.Normal,
+            ShowActivated = false,
+            ShowInTaskbar = false,
             DataContext = new GwMainVm(fake),
         };
         main.Show();
@@ -473,8 +519,26 @@ public static class Program
         {
             try { if (w.Owner != _ownerSource) w.Owner = _ownerSource; } catch { }
         }
-        // 统一截图尺寸（XAML 里 Maximized 的主窗在屏幕上是全屏；
-        //   截图按设计稿 1280×760 / 1230×640 的理解态处理）。
+        // ---------- 后台截图准备（V0.0.50 后台化） ----------
+        // 语义：所有窗完全离屏 + 不抢焦点 + 不进任务栏——现场机台上跑 harness
+        //   不打扰操作员（用户拍板：界面不在前台也要能截到正确的图）。手段：
+        //   ① ShowActivated=false：Show 只建 HWND 不置前——键盘鼠标焦点零打扰；
+        //   ② ShowInTaskbar=false：任务栏不蹦图标（用户实测反馈"主界面截图
+        //      还是打扰我"——图标闪现也算打扰，一并静默）；
+        //   ③ 窗口位置挪到虚拟桌面外（-20000,-20000）：屏幕上看不到窗；压过
+        //      XAML 里 CenterOwner/CenterScreen 等启动定位（定位语义对截图
+        //      无意义——RTB 按视觉树渲染，与窗口在屏幕上的位置无关）；
+        //   ④ WindowState=Normal：主窗缺省 Maximized 的设定在离屏下按理解态
+        //      1280×760 截（SizeToContent / Height 定格不受影响）。
+        try { w.ShowActivated = false; } catch { }
+        try { w.ShowInTaskbar = false; } catch { }
+        try
+        {
+            w.WindowStartupLocation = WindowStartupLocation.Manual;
+            w.Left = -20000;
+            w.Top = -20000;
+        }
+        catch { }
         try { w.WindowState = WindowState.Normal; } catch { }
         if (string.IsNullOrEmpty(file)) throw new InvalidOperationException("file 必填");
         try
@@ -504,30 +568,44 @@ public static class Program
             var hwnd = helper.EnsureHandle();
             print = ShotPrintWindow(hwnd);
             if (print != null)
-            {
-                mPrint = Metrics(print, out var samples);
-                SavePng(print, path);
-            }
+                mPrint = Metrics(print, out _);
         }
         catch (Exception ex) { Log($"WARN PrintWindow {file}：{ex.Message}"); }
 
-        // RTB 兜底（WPF 视觉树必渲染；print 指标差时另存 .rtb.png 供人眼挑）
+        // RTB（WPF 视觉树必渲染。V0.0.50 二轮定版：**RTB 优先当成品**——
+        // PrintWindow 拍的是 OS 合成的整窗位图，会把窗口外圈 DWM 阴影区一起
+        // 拍进来，离屏下阴影区无合成内容**变纯黑**（用户实拍反馈"截图要去
+        // 黑边，有黑边不好看"）；两程序全部窗体都是 WindowStyle=None 无边框
+        // 自绘（品牌标题条本就是视觉树元素），RTB 只渲染视觉树内容——
+        // **天然无阴影无黑边**，且与窗口是否离屏/是否在前台完全无关（完全
+        // 后台静默的同盟军）。print 降为兜底：RTB 异常/不健康时才用。
         BitmapSource? rtb = null;
         (int distinct, int dark) mRtb = (0, 0);
         try
         {
             rtb = ShotRtb(w);
-            mRtb = Metrics(rtb, out _);
-            if (mPrint != (0, 0) && !Healthy(mPrint) && Healthy(mRtb))
-                SavePng(rtb, Path.ChangeExtension(path, ".rtb.png").Replace(".png.p", ".png"));
+            if (rtb != null)
+                mRtb = Metrics(rtb, out _);
         }
         catch (Exception ex) { Log($"WARN RTB {file}：{ex.Message}"); }
 
-        bool ok = (print != null && Healthy(mPrint));
-        if (!ok) { _failCount++; }
-        Log($"SHOOT {file} print={(print != null ? "1" : "0")} " +
-            $"p(Func{mPrint.distinct}/{mPrint.dark}) rtb(Func{mRtb.distinct}/{mRtb.dark}) " +
-            $"{(ok ? "PASS" : "WARN(plc pass to human)")}");
+        string used = "none";
+        if (rtb != null && Healthy(mRtb))
+        {
+            SavePng(rtb, path);
+            used = "rtb";
+        }
+        else if (print != null && Healthy(mPrint))
+        {
+            SavePng(print, path);
+            used = "print";
+        }
+        else
+        {
+            _failCount++;
+        }
+        Log($"SHOOT {file} rtb={mRtb.distinct}/{mRtb.dark} print={mPrint.distinct}/{mPrint.dark} " +
+            $"used={used} {(used != "none" ? "PASS" : "FAIL")}");
     }
 
     private static bool Healthy((int distinct, int dark) m) => m.distinct >= 6 && m.dark >= 8;
@@ -580,12 +658,18 @@ public static class Program
         }
     }
 
-    /// <summary>RenderTargetBitmap 纯 WPF 视觉树版（不含 OS 标题栏）。</summary>
+    /// <summary>
+    /// RenderTargetBitmap 纯 WPF 视觉树版（不含 OS 标题栏/阴影——无黑边）。
+    /// 尺寸按本机 DPI 缩放（1.5x 屏上 1280 逻辑宽 → 1920 物理像素成品，
+    /// 与 print 拍的同清晰度；96dpi 屏退化为原逻辑尺寸，两态都成立）。
+    /// </summary>
     private static BitmapSource ShotRtb(Window w)
     {
-        int px = Math.Max(1, (int)Math.Ceiling(w.ActualWidth));
-        int py = Math.Max(1, (int)Math.Ceiling(w.ActualHeight));
-        var rtb = new RenderTargetBitmap(px, py, 96, 96, PixelFormats.Pbgra32);
+        var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(w);
+        int px = Math.Max(1, (int)Math.Ceiling(w.ActualWidth * dpi.DpiScaleX));
+        int py = Math.Max(1, (int)Math.Ceiling(w.ActualHeight * dpi.DpiScaleY));
+        var rtb = new RenderTargetBitmap(
+            px, py, dpi.DpiScaleX * 96, dpi.DpiScaleY * 96, PixelFormats.Pbgra32);
         rtb.Render(w);
         return rtb;
     }
