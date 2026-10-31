@@ -10,23 +10,32 @@
 //      AddBindingCommand/DeleteBindingCommand（双边同步 Raw 集合与行集合）；
 //   ④ 保存前 PointTableValidator 全量校验（有误绝不落盘，弹错当场拦）；
 //   ⑤ "测试连接"后台 Task 直测（IP/端口/寄存器读回）不冻界面。
+//   ⑥ 点号显示形态（V0.0.48，简单化设计——用户拍板"一个下拉能表达的就不
+//      拆四件套"）：单下拉 BitDisplayStyle 六形态（端子号 X/Y=GFNB 丝印口径
+//      缺省、I/Q=IEC、0x 十六进制、十/八/二进制），选择即落盘 config.ini
+//      [setting] PointBitStyle 记忆——**仅显示口径**，Bit 存储恒为十进制
+//      int，通讯/校验全链零改动。
 // 事件流向：保存成功 → CloseDialog（VM 不 new Window，关窗经 DialogResult；
 //   测试用 FakeDialogService 断言调用，见 tests 工程用例）。
 // =========================================================================
 
 using System.Collections.ObjectModel;
 using CureLine.Core.Comms;
+using CureLine.Core.Infrastructure;
 using CureLine.ViewModels;
 
 namespace CureStation.ViewModels;
 
-/// <summary>绑定表行：网格直编列（写穿 Raw）+ 只读派生文本（点号/仓位）。</summary>
 /// <summary>
 /// 绑定表行（V0.0.45 起表格直编）：可编辑属性**写穿 Raw**（所见即所得，无独立
 /// 编辑面板草稿——物理点唯一/语义键唯一冲突由保存前校验统一拦，行内不重复拦）；
 /// 点号（Bit）同样行内可编辑（V0.0.47 开放）：点号=块内物理端子位——"改它等于
 /// 换点"的场景=现场换接线挪备用通道，UI 直接改即可；越界（≥每块点数）与同块
 /// 同方向重复绑定由保存前校验统一拦（加删行不再是唯一换点路径）。
+/// V0.0.48 起"点号"列拆成**显示 vs 编辑两个口径**：BitDisplay=按右上显示下拉
+/// 形态（端子号 X/Y 等，owner.FormatBitDisplay）格式化的只读展示；BitEdit=
+/// 编辑模板的文本口（当前形态裸数字，解析失败弹回原值），写成功写穿 Raw.Bit
+/// ——两者均不改变存储：Bit 恒为十进制 int，通讯帧组装用位号原值，全链无感。
 /// </summary>
 public sealed class PointBindingRow : ViewModelBase
 {
@@ -42,11 +51,59 @@ public sealed class PointBindingRow : ViewModelBase
     // ---- 行内可编辑列（写穿 Raw；保存前校验统一兜底） ----
     public int Block { get => Raw.Block; set => Raw.Block = value; }
     public int Bit { get => Raw.Bit; set => Raw.Bit = value; }
-    public bool IsInput { get => Raw.IsInput; set => Raw.IsInput = value; }
+    public bool IsInput
+    {
+        get => Raw.IsInput;
+        set
+        {
+            // 方向改了=端子前缀口径变（X↔Y / I↔Q），点号展示串随手刷新
+            if (Raw.IsInput != value)
+            {
+                Raw.IsInput = value;
+                Raise(nameof(BitDisplay));
+            }
+        }
+    }
     public IoPointRole Role { get => Raw.Role; set { Raw.Role = value; Raise(nameof(SlotText)); } }
     public int Rack { get => Raw.Rack; set { Raw.Rack = value; Raise(nameof(SlotText)); } }
     public int Level { get => Raw.Level; set { Raw.Level = value; Raise(nameof(SlotText)); } }
     public string FunctionName { get => Raw.FunctionName; set => Raw.FunctionName = value ?? ""; }
+
+    // ---- 点号展示/编辑（V0.0.48，偏好收在 owner——进制/前缀全行统一） ----
+
+    /// <summary>
+    /// 点号展示串（按右上"点号显示"下拉的形态）：端子号口径=X/I（输入）或
+    /// Y/Q（输出）+十六进制位号，0x 口径加 0x 消歧，八/十/二进制裸数字。
+    /// </summary>
+    public string BitDisplay => _owner.FormatBitDisplay(Raw.Bit, Raw.IsInput);
+
+    /// <summary>
+    /// 点号编辑框文本（编辑模板独用）：当前口径的裸数字（端子前缀/0x 是展示
+    /// 口径，编辑改的是数字本体）。提交按当前口径解析：成功写穿 Raw.Bit 并双刷
+    /// BitEdit/BitDisplay；解析失败值不动、编辑框弹回原值（越界/同点重复不在
+    /// 行内拦——保存前校验统一兜，V0.0.45 直编口径）。
+    /// </summary>
+    public string BitEdit
+    {
+        get => _owner.FormatBitNumber(Raw.Bit);
+        set
+        {
+            if (!_owner.TryParseBitNumber(value, Raw.IsInput, out int bit))
+            {
+                Raise(nameof(BitEdit));   // 非法文本：值不动，编辑框弹回原显示
+                return;
+            }
+            Raw.Bit = bit;
+            Raise(nameof(BitEdit));
+            Raise(nameof(BitDisplay));
+        }
+    }
+
+    /// <summary>
+    /// owner 显示口径（BitStyle）变化时广播本行点号显示刷新——BitDisplay 依赖
+    /// owner 全局口径，行内没有触发源，由 owner 逐行调。
+    /// </summary>
+    public void RefreshBitDisplay() => Raise(nameof(BitDisplay));
 
     // ---- 派生列 ----
     public string SlotText => Raw.Role == IoPointRole.Reserved
@@ -57,6 +114,16 @@ public sealed class PointTableViewModel : ViewModelBase
 {
     private readonly IDialogService _dialogs;
     private bool _closed;
+
+    // ---- 点号显示偏好（V0.0.48：单属性 BitStyle；config.ini [setting] 持久化） ----
+    private BitDisplayStyle _bitStyle;
+
+    /// <summary>点号列显示形态（缺省端子号 X/Y；setter 即落盘并广播全部行刷显示串）。</summary>
+    public BitDisplayStyle BitStyle
+    {
+        get => _bitStyle;
+        set { if (Set(ref _bitStyle, value)) { PersistDisplayPref(); RefreshAllBitDisplay(); } }
+    }
 
     /// <summary>
     /// 角色下拉数据源：Text=中文文案（与左侧表格"角色"列同一来源
@@ -75,6 +142,28 @@ public sealed class PointTableViewModel : ViewModelBase
 
     public static IReadOnlyList<DirectionOption> DirectionOptions { get; } =
         new DirectionOption[] { new(true, "输入(DI)"), new(false, "输出(DO)") };
+
+    // ---- 点号显示偏好数据源（V0.0.48：单下拉选显示形态，零 DataContext 依赖） ----
+
+    /// <summary>
+    /// 点号显示形态（V0.0.48 简单化设计）：**Bit 存储恒为十进制 int**，这里只选
+    /// "显示成什么样"。TerminalXY 缺省——GFNB 耦合器端子丝印 X0~XF/Y0~YF（十六
+    /// 进制位号）对端子总图最顺；TerminalIQ 是 IEC 61131 欧系口径（I/Q）；剩下
+    /// 四档纯数字（0x 十六进制 / 十进制 / 八进制 / 二进制）不挂前缀。
+    /// </summary>
+    public enum BitDisplayStyle { TerminalXY, TerminalIQ, Hex0x, Dec, Oct, Bin }
+
+    public sealed record BitDisplayOption(BitDisplayStyle Value, string Text);
+
+    public static IReadOnlyList<BitDisplayOption> BitDisplayOptions { get; } =
+    [
+        new(BitDisplayStyle.TerminalXY, "端子号 X/Y（X8→YF）"),
+        new(BitDisplayStyle.TerminalIQ, "端子号 I/Q（I8→QF）"),
+        new(BitDisplayStyle.Hex0x, "0x 十六进制（0x8→0xF）"),
+        new(BitDisplayStyle.Dec, "十进制（0→15）"),
+        new(BitDisplayStyle.Oct, "八进制（0→17）"),
+        new(BitDisplayStyle.Bin, "二进制（0→1111）"),
+    ];
 
     public ObservableCollection<IoCouplerDevice> Devices { get; } = new();
 
@@ -205,6 +294,19 @@ public sealed class PointTableViewModel : ViewModelBase
         TestAllCommand = new RelayCommand(TestAll, () => !IsTesting);
         SaveCommand = new RelayCommand(Save);
 
+        // 点号显示偏好读回（V0.0.48）：缺省端子号 X/Y=丝印口径；非法值回缺省
+        // （Theme 同款自愈口径——程序①专用 UI 键不进 AppConfig）。
+        string style = IniFile.ReadStr(AppPaths.ConfigIni, "setting", "PointBitStyle", "TerminalXY");
+        _bitStyle = style.Trim() switch
+        {
+            "TerminalIQ" => BitDisplayStyle.TerminalIQ,
+            "Hex0x" => BitDisplayStyle.Hex0x,
+            "Dec" => BitDisplayStyle.Dec,
+            "Oct" => BitDisplayStyle.Oct,
+            "Bin" => BitDisplayStyle.Bin,
+            _ => BitDisplayStyle.TerminalXY,   // 空值/乱值一律端子号（安全侧不算错档）
+        };
+
         LoadFromDisk();
     }
 
@@ -237,6 +339,123 @@ public sealed class PointTableViewModel : ViewModelBase
     }
 
     private static string FmtAddr(int value) => $"0x{value:X4}";
+
+    // ---- 点号显示偏好工具（V0.0.48） ----
+
+    /// <summary>
+    /// 显示样式落盘（setter 即写——与本程序"改即生效"惯例一致，重开窗记住选择）。
+    /// </summary>
+    private void PersistDisplayPref() =>
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PointBitStyle", _bitStyle.ToString());
+
+    /// <summary>
+    /// 偏好变化 → 当前绑定表逐行刷点号显示（BitDisplay 依赖 owner 偏好，
+    /// 行内无触发源，必须由 owner 广播）。
+    /// </summary>
+    private void RefreshAllBitDisplay()
+    {
+        foreach (var row in Bindings)
+            row.RefreshBitDisplay();
+    }
+
+    /// <summary>
+    /// 点号数字部分的进制格式（BitDisplay/BitEdit 共用，不带端子前缀）。
+    /// Terminal*/Hex0x 三个口径位号都按十六进制丝印；负位号护栏：来自坏配置
+    /// （保存前校验会拦）——按十进制原样显示，不产出补码式长串误导现场。
+    /// </summary>
+    public string FormatBitNumber(int bit)
+    {
+        if (bit < 0)
+            return bit.ToString();
+        return _bitStyle switch
+        {
+            BitDisplayStyle.Oct => Convert.ToString(bit, 8),
+            BitDisplayStyle.Bin => Convert.ToString(bit, 2),
+            BitDisplayStyle.Dec => bit.ToString(),
+            _ => bit.ToString("X"),   // Terminal*/Hex0x 一律十六进制丝印
+        };
+    }
+
+    /// <summary>
+    /// 点号展示串（BitDisplay 用）：端子号口径=行方向对应前缀（输入 X/I、
+    /// 输出 Y/Q）+十六进制位号；0x 口径加 "0x" 消歧（裸 "A" 容易看漏 16 进制）；
+    /// 八/十/二进制裸数字。
+    /// </summary>
+    public string FormatBitDisplay(int bit, bool isInput)
+    {
+        string digits = FormatBitNumber(bit);
+        return _bitStyle switch
+        {
+            BitDisplayStyle.TerminalXY => (isInput ? "X" : "Y") + digits,
+            BitDisplayStyle.TerminalIQ => (isInput ? "I" : "Q") + digits,
+            BitDisplayStyle.Hex0x => "0x" + digits,
+            _ => digits,
+        };
+    }
+
+    /// <summary>剥行方向对应的端子前缀（端子号口径下"看到什么输什么"——输入行
+    /// X9、Y 输出行 YF 都直接吃），大小写不敏感，不带前缀的裸数字照常收。</summary>
+    private static string StripBitPrefix(string s, string prefix) =>
+        s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? s[prefix.Length..] : s;
+
+    /// <summary>
+    /// 点号编辑文本解析（BitEdit 提交口）：按当前显示口径解析数字；坏文本/负数
+    /// 一律 false（行内弹回原值，UI 面上不响应坏输入）。三层宽容：
+    /// ① 端子号口径直接收"看到什么输什么"——按行方向剥 X/I（输入）或 Y/Q
+    ///   （输出）前缀再解析十六进制（X/Y 两前缀互剥的不接，防手滑串行）；
+    /// ② 显式 0x/0b/0o 前缀跨进制直输（现场从别处复制的写法不解析崩，
+    ///   优先级高于当前口径）；
+    /// ③ Hex 走 HexNumber 只认 0-9A-F，不带符号，天然拒负；Oct/Bin 手工累加防溢出。
+    /// 越界（≥每块点数）**不在行内拦**——写穿成功，保存前校验统一兜
+    /// （"刚加了备用点先记个 255 等接线确认再调"这类现场节奏需要允许暂存）。
+    /// </summary>
+    public bool TryParseBitNumber(string? text, bool isInput, out int bit)
+    {
+        bit = 0;
+        string s = (text ?? "").Trim();
+        if (s.Length == 0)
+            return false;
+
+        BitDisplayStyle radix = _bitStyle;
+        if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            (radix, s) = (BitDisplayStyle.Hex0x, s[2..]);
+        else if (s.StartsWith("0b", StringComparison.OrdinalIgnoreCase))
+            (radix, s) = (BitDisplayStyle.Bin, s[2..]);
+        else if (s.StartsWith("0o", StringComparison.OrdinalIgnoreCase))
+            (radix, s) = (BitDisplayStyle.Oct, s[2..]);
+        else
+        {
+            s = radix switch
+            {
+                BitDisplayStyle.TerminalXY => StripBitPrefix(s, isInput ? "X" : "Y"),
+                BitDisplayStyle.TerminalIQ => StripBitPrefix(s, isInput ? "I" : "Q"),
+                _ => s,
+            };
+        }
+        if (s.Length == 0)
+            return false;
+
+        if (radix is BitDisplayStyle.Oct or BitDisplayStyle.Bin)
+        {
+            int baseVal = radix == BitDisplayStyle.Oct ? 8 : 2;
+            foreach (char c in s)
+            {
+                int d = c - '0';
+                if (d < 0 || d >= baseVal)
+                    return false;
+                if (bit > int.MaxValue / baseVal)
+                    return false;   // 大串粘贴防溢出：超程拒绝
+                bit = bit * baseVal + d;
+            }
+            return bit >= 0;
+        }
+
+        bool ok = radix is BitDisplayStyle.TerminalXY or BitDisplayStyle.TerminalIQ or BitDisplayStyle.Hex0x
+            ? int.TryParse(s, System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out bit)
+            : int.TryParse(s, out bit);
+        return ok && bit >= 0;
+    }
 
     /// <summary>
     /// 地址/数字文本解析：带 "0x" 前缀按十六进制，否则十进制——现场对照

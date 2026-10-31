@@ -34,8 +34,9 @@
       - 单条品牌顶栏（行 0 全宽贴边）：Light=品牌蓝渐变 / Dark=#101A2C 深蓝实底；
         左=chip"固"+连接灯点+策略+连接(*弹性)+过账+操作员，右=功能按钮组
         （登录/工单/【日志】高亮/设置▾）+ 系统三钮 ─□✕；其余功能收拢进"设置"下拉
-        （重新连接/演示开关/权限管理/工艺策略/过账配置/IO通讯测试/点表配置/主题切换，
-         门禁与命令与拆散前一致：权限管理·过账配置·点表·演示=L4、策略·IO测试=L3、工单=L1）；
+        （重新连接/演示开关/用户管理/工艺策略/过账配置/IO通讯测试/点表配置/主题切换，
+         V0.0.49 三级门禁：用户管理·过账配置·演示·策略·IO测试=管理员+、点表=开发者
+         （admin 下拉里直接没有此项）、工单·日志=登录即可；operator 登录后设置整钮禁用）；
         退出钮已删（系统 ✕ 与其走同一条退出链）；演示开启态靠下拉项强调色 +
         连接短词的"演示"字样提示；
       - 统计胶囊行（行 1）：HTML .g2-stat/.g1-stat 直译——五态白/玻璃胶囊
@@ -451,7 +452,8 @@
         <!-- 触发钮：仿 GhostButton 胶囊视觉的 ToggleButton（颜色全走主题语义键）。
              与顶栏按钮同池：窗高 44 的品牌标题条整条是 caption 拖动区，必须声明
              chrome 可命中否则点不到（对齐 App.xaml GhostButton 同款声明）。
-             IsChecked 即开下拉；勾选态=持续底色（GhostPressedBg）提示"已展开"。 -->
+             IsChecked 即开下拉；勾选态=持续底色（GhostPressedBg）提示"已展开"；
+             V0.0.49 起 operator 登录后整钮禁用（IsSettingsEnabled），禁用=半透明。 -->
         <Style x:Key="SettingsToggleBtn" TargetType="ToggleButton">
             <Setter Property="Background" Value="{DynamicResource Brush.GhostBg}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.GhostBorder}"/>
@@ -485,6 +487,10 @@
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.GhostPressedBg}"/>
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.GhostBorderHover}"/>
+                            </Trigger>
+                            <!-- 禁用视觉：半透明（operator 登录后整钮禁用） -->
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -615,12 +621,15 @@
                     <Button Tag="{StaticResource Geo.Log}" Style="{StaticResource PrimaryGhostButton}" Content="日志"
                             Command="{Binding ShowLogCommand}" Margin="0,0,6,0"
                             ToolTip="打开操作日志 / 控制台悬浮窗（L1+）"/>
-                    <!-- 设置 ▾：下拉收拢 重新连接/演示开关/权限/策略/过账配置/IO测试/点表/主题。
+                    <!-- 设置 ▾：下拉收拢 重新连接/演示开关/用户管理/策略/过账配置/IO测试/点表/主题。
                          IsOpen 双向绑 IsChecked（点外 StaysOpen=False 自关）；菜单项点击在
                          code-behind OnMenuClick 把 IsChecked 收回 false，防止下拉挂住不关。
-                         Content 为可见字符串（自动化 Name 由此生成，UIA/读屏可命中）。 -->
+                         Content 为可见字符串（自动化 Name 由此生成，UIA/读屏可命中）。
+                         V0.0.49 门禁：operator 登录后整钮禁用（IsSettingsEnabled）；
+                         admin 登录后点表配置项直接隐藏（ShowPointTableItem），dev/未登录可见。 -->
                     <ToggleButton x:Name="SettingsToggle" Style="{StaticResource SettingsToggleBtn}"
-                                  Content="设置"/>
+                                  Content="设置"
+                                  IsEnabled="{Binding IsSettingsEnabled, FallbackValue=True}"/>
                     <Popup x:Name="SettingsPopup" PlacementTarget="{Binding ElementName=SettingsToggle}"
                            Placement="Bottom" VerticalOffset="7"
                            AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade"
@@ -641,16 +650,28 @@
                                         ToolTip="演示模式开关：开启后仓位按演示脚本流转（无真实硬件），再次点击切回真机，立即生效。注意：演示边沿会照常驱动状态机与过账链，正式环境开启前请确认过账配置"/>
                                 <Border Style="{StaticResource SettingsMenuSep}"/>
                                 <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.Permission}"
-                                        Content="权限管理" Command="{Binding OpenOperatorsCommand}" Click="OnMenuClick"/>
+                                        Content="用户管理" Command="{Binding OpenAccountsCommand}" Click="OnMenuClick"
+                                        ToolTip="账号增删与密码重置（admin 只管操作员，dev 全管）"/>
                                 <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.Policy}"
                                         Content="工艺策略" Command="{Binding OpenCuringPolicyCommand}" Click="OnMenuClick"/>
                                 <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.Posting}"
                                         Content="过账配置" Command="{Binding OpenPostConfigCommand}" Click="OnMenuClick"/>
                                 <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.IoTest}"
                                         Content="IO 通讯测试" Command="{Binding OpenIoTestCommand}" Click="OnMenuClick"
-                                        ToolTip="IO 耦合器通道通讯测试（L3+）：DI 状态灯 / DO 点击灯钮 / 一键遍历验接线"/>
-                                <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.PointTable}"
-                                        Content="点表配置" Command="{Binding OpenPointTableCommand}" Click="OnMenuClick"/>
+                                        ToolTip="IO 耦合器通道通讯测试（管理员+）：DI 状态灯 / DO 点击灯钮 / 一键遍历验接线"/>
+                                <!-- 点表配置=开发者专属菜单项：admin 登录后直接隐藏（VM ShowPointTableItem） -->
+                                <Button Content="点表配置" Command="{Binding OpenPointTableCommand}" Click="OnMenuClick"
+                                        Tag="{StaticResource Geo.PointTable}">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource SettingsMenuBtn}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ShowPointTableItem, FallbackValue=True}" Value="False">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
                                 <Border Style="{StaticResource SettingsMenuSep}"/>
                                 <Button Style="{StaticResource SettingsMenuBtn}"
                                         Content="{Binding ToggleThemeText, FallbackValue=深色}"

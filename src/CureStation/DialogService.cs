@@ -39,19 +39,22 @@ public interface IDialogService
     bool ShowCuringPolicy();
 
     /// <summary>
-    /// 登录窗（模态）。返回 null=取消；成功返回（用户名, 级别）——
-    /// 级别是工单页/策略窗/点表/权限管理门禁的依据。
+    /// 登录窗（模态）。返回 null=取消；成功返回（用户名, 角色）——
+    /// 角色是工单页/策略窗/点表/用户管理等门禁的依据。
     /// </summary>
-    (string User, OperatorLevel Level)? ShowLogin();
-
-    /// <summary>打开权限管理窗（模态）。仅 LEVEL.4 可开（门禁在主窗，VM 不重复查）。</summary>
-    void ShowOperators();
+    (string User, OperatorRole Role)? ShowLogin();
 
     /// <summary>
-    /// 打开工单信息窗（模态，传当前操作员级别做门禁——级别不够的编辑区禁用）。
+    /// 打开用户管理窗（模态）。传当前登录者角色做本窗内的授权
+    /// （admin 只管操作员，dev 全管；主窗门禁已拦 operator 与未登录）。
+    /// </summary>
+    void ShowAccounts(OperatorRole actor);
+
+    /// <summary>
+    /// 打开工单信息窗（模态，传当前登录者角色做门禁——权限不够的编辑区禁用）。
     /// 返回 true 表示保存了工单。
     /// </summary>
-    bool ShowWorkOrder(OperatorLevel? currentLevel);
+    bool ShowWorkOrder(OperatorRole? currentRole);
 
     /// <summary>打开过账配置窗（模态）。返回 true 表示保存了配置（调用方热更新过账服务）。</summary>
     bool ShowMesPostConfig();
@@ -122,7 +125,7 @@ public sealed class DialogService : IDialogService
         win.ShowDialog();
     }
 
-    public (string User, OperatorLevel Level)? ShowLogin()
+    public (string User, OperatorRole Role)? ShowLogin()
     {
         // 生产装配：VM 在服务里 new（测试用 Fake 桩带出预置结果）。
         var vm = new LoginViewModel();
@@ -131,29 +134,29 @@ public sealed class DialogService : IDialogService
             Owner = Application.Current?.MainWindow,
             DataContext = vm,
         };
-        return win.ShowDialog() == true ? (vm.LoginName, vm.Level!.Value) : null;
+        return win.ShowDialog() == true ? (vm.LoginName, vm.Role!.Value) : null;
     }
 
-    public void ShowOperators()
+    public void ShowAccounts(OperatorRole actor)
     {
-        // 生产装配：权限管理窗（LEVEL.4 门禁在主窗）。
-        var win = new OperatorWindow
+        // 生产装配：用户管理窗（admin/dev 门禁在主窗；窗内授权再按实际角色）。
+        var win = new AccountManagerWindow
         {
             Owner = Application.Current?.MainWindow,
-            DataContext = new OperatorViewModel(new DialogService()),
+            DataContext = new AccountManagerViewModel(new DialogService(), actor),
         };
         win.ShowDialog();
     }
 
-    public bool ShowWorkOrder(OperatorLevel? currentLevel)
+    public bool ShowWorkOrder(OperatorRole? currentRole)
     {
-        // 生产装配：工单窗（门禁在 VM——级别不够的编辑区禁用）。
+        // 生产装配：工单窗（门禁在 VM——角色不够的编辑区禁用）。
         // 物料上传动作接单线过账服务（Poster 现读盘上工单发 API0032）。
         // 工位布局开关（单/双工位面板）随开着窗那一刻的 [CuringMes] 配置。
         var win = new WorkOrderWindow
         {
             Owner = Application.Current?.MainWindow,
-            DataContext = new WorkOrderViewModel(new DialogService(), currentLevel,
+            DataContext = new WorkOrderViewModel(new DialogService(), currentRole,
                 uploadMaterial: side => CuringMesPosterHolder.Default?.UploadMaterial(side),
                 postOptions: CuringMesOptions.Load()),
         };

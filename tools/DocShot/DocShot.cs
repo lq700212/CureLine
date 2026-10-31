@@ -219,15 +219,15 @@ public static class Program
         ShotFrame(lw, "cs-login-pwd.png");
         lw.Hide(); lw.Close();
 
-        // ---------- 工单窗（L1 只读态 + L3 全可编辑态） ----------
+        // ---------- 工单窗（操作员只读态 + 管理员全可编辑态） ----------
         var wo1 = new CwWorkOrder
         {
-            DataContext = new CureWorkOrderVm(fake, OperatorLevel.Level1, book),
+            DataContext = new CureWorkOrderVm(fake, OperatorRole.Operator, book),
         };
         Shot(wo1, "cs-workorder-l1.png");
         var wo3 = new CwWorkOrder
         {
-            DataContext = new CureWorkOrderVm(fake, OperatorLevel.Level3, book),
+            DataContext = new CureWorkOrderVm(fake, OperatorRole.Admin, book),
         };
         Shot(wo3, "cs-workorder-l3.png");
 
@@ -669,9 +669,9 @@ public static class Program
         public bool Confirm(string message, string title) => true;   // 放行关窗链
         public bool ShowPointTable() => false;
         public bool ShowCuringPolicy() => false;
-        public (string User, OperatorLevel Level)? ShowLogin() => null;
-        public void ShowOperators() { }
-        public bool ShowWorkOrder(OperatorLevel? currentLevel) => false;
+        public (string User, OperatorRole Role)? ShowLogin() => null;
+        public void ShowAccounts(OperatorRole actor) { }
+        public bool ShowWorkOrder(OperatorRole? currentRole) => false;
         public bool ShowMesPostConfig() => false;
         public void ShowIoTest(IPointTableBus bus, PointTableConfig config) { }
         public void ShowLog(CureLogSnap snapshot) { }                 // 日志窗桩（截图段另开真实 LogWindow）

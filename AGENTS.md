@@ -69,14 +69,18 @@
   `AppConfig.ScanIntervalMs`）。
 - **P3 固化程控（进行中，P3.1 完成 + P3.2 完成）**：**P3.1=仓位状态机 +
   工艺策略**（`Core/Curing/` 三件套 + `CuringStateStore` 断电续算开关；工艺
-  策略窗 + 主窗接线）。**P3.2 前半=四级权限 + 登录 + 工单信息页（已完成）**：
-  `Security/OperatorStore`（operators 表四级 L1~4 + 防锁死）+ 登录窗 +
-  工单窗（R/L 双工位，编辑区按级别禁用）+ 权限管理窗 + 主窗 Gate 统一门禁
-  （工单 L1/策略 L3/点表·权限 L4）。**P3.2 后半=单线过账（已完成 2026-10-28，
+  策略窗 + 主窗接线）。**P3.2 前半=权限 + 登录 + 工单信息页（已完成，
+  V0.0.49 重做三级角色）**：
+  `Security/OperatorStore`（operators 表三级 `OperatorRole` operator/admin/
+  dev + actor 兜底 + 防锁死）+ 登录窗（纯登录，改密面板已删）+
+  工单窗（R/L 双工位，编辑区按角色三档禁用）+ 用户管理窗 +
+  主窗 Gate 统一门禁（工单·日志=登录即可/策略·IO·过账·演示·用户管理=
+  管理员+/点表=开发者，operator 登录后设置整钮禁用）。
+  **P3.2 后半=单线过账（已完成 2026-10-28，
   全配置化）**：`CuringMesOptions`（[CuringMes] 节）+ `CuringMesPoster`
   （托盘到位=进站 API0030 I / 托盘离开=固化时间 API0027+出站 API0030 O /
   工单窗 API0032 物料上传；出站被接受→已生产+1）+ 状态机三事件挂点 +
-  过账配置窗（L4，保存即热更新）+ 顶栏过账状态。**待现场校准（W68 终版
+  过账配置窗（管理员+，保存即热更新）+ 顶栏过账状态。**待现场校准（W68 终版
   到位后配置窗改 URL/口径即可，代码零改动）**：三接口 URL、时间单位、
   进站时机、静态参数实值。**V0.0.20 双固化架（已完成）**：主窗分组布局
   （全局架号每 10 站一组、上下堆叠带标题条，单架视觉不变）+ 库位编码架内
@@ -104,18 +108,21 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 374/374（V0.0.38 全量；P3 期分版增量与 V0.0.19~V0.0.20
+   `dotnet test` 393/393（V0.0.49 全量；P3 期分版增量与 V0.0.19~V0.0.20
    各轮增量明细见各版本 CHANGELOG，V0.0.33~37 增量未逐版回填此括号——
-   基线此后只增不减）；禁止交付编译不过/测试不过的代码。
+   基线此后只增不减，V0.0.49 因删改密面板与旧权限窗用例从 397 净减 4）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
 8. **配置样例同步**：新增配置键必须同步改 `config.sample.ini` + `AppConfig`
    缺省值（ini 自愈依赖缺省值，漏了现场起不来）。
-9. **改干净改彻底（2026-10-29 用户拍板：项目未上线，无兼容历史包袱）**：
-   废弃的键/样式/字段/属性/接口一律**直接删除**，禁止留"兼容旧引用"的占位、
-   空资源、过渡注释或双套并存口径；勿再以"防破坏既有行为/老项目口径"为由
-   保留内部历史包袱。边界：**外部契约不属此列**——MES 报文口径、机台寄存器
-   语义、点表键名、配置节名等现场约定（"已知坑"小节列明的）仍须遵守。
+9. **改干净改彻底（2026-10-29 用户拍板，2026-10-31 重申强化：项目未上线，
+   无任何兼容历史包袱）**：**所有修改一律不用考虑兼容老项目/旧版本**——
+   废弃的键/样式/字段/属性/接口/枚举/显示口径/配置窗段落一律**直接删除**，
+   旧实现残体（不再被任何一方调用的方法/事件/ini 键/XAML 资源）随改动
+   **同批清光**；禁止留"兼容旧引用"的占位、空资源、过渡注释、双套并存口径，
+   也禁止以"防破坏既有行为/老项目口径/渐进迁移"为由保守保留——默认就地
+   删净，无须回问用户。边界：**外部契约不属此列**——MES 报文口径、机台
+   寄存器语义、点表键名、配置节名等**现场约定**（"已知坑"小节列明的）仍须遵守。
 
 ## 代码约定
 
@@ -169,7 +176,7 @@
 | 文件 | 作用 |
 | --- | --- |
 | **两程序骨架** | |
-| `src/CureStation/` | **程序①固化程控**（新 exe）：30 仓位主窗 + IO 点表配置窗 + 工艺策略窗 + 工单信息窗 + 权限管理窗 + 登录窗（`ViewModels/` 六个 VM）+ 自建 `DialogService.cs` |
+| `src/CureStation/` | **程序①固化程控**（新 exe）：30 仓位主窗 + IO 点表配置窗 + 工艺策略窗 + 工单信息窗 + 用户管理窗 + 登录窗（`ViewModels/` 各窗 VM）+ 自建 `DialogService.cs` |
 | `src/CimGateway/MainWindow.*` | 主窗：多机网关视图、视图筛选（替代 Form2/Form6；单机视图与"运行模式"菜单已随单机链路删除；Phase 2 演化 CimGateway）；**V0.0.31 无边框自绘**（品牌顶栏=标题条 44：chip"CIM"+标题+时钟 / 按钮组 / 系统三钮，最大化 RootGrid 垫边）+【深色/浅色】主题钮；**V0.0.39 顶栏精简**：连接设备/日志/登录留顶栏，调试/网关设置/修改密码/快捷方式/中英切换/主题收"设置 ▾"下拉（ToggleButton+Popup：StaysOpen=False 点外自关 + IsOpen↔IsChecked 双向绑定 + 菜单项点击 code-behind OnMenuClick 收合；门禁/VM 文案零改动） |
 | `src/CimGateway/Themes/` | **程序②双主题**（V0.0.31，与程序①同构不同文件——主题键板是程序私有资产不下沉）：Light/Dark 语义键同名异值字典（只保留本程序有消费者的键）+ `ThemeManager`（ParseTheme 非法回 Light + 测试态防御）；ini `[setting] Theme` 同名键两程序各自 exe 独立生效；`CimGatewayThemeTests` 锁两字典键集合全等 |
 | `src/CimGateway/Controls/StationPanel.*` | 机台面板复用件（MVVM View，VM 由主窗注入，8 实例）；V0.0.31 走主题卡键 + 心跳灯 DataTrigger 映射 State*（VM 仍给 "Lime"/"Red"/"Green" 状态名不变） |
@@ -184,13 +191,13 @@
 | `src/CureLine.Core/Curing/CuringPolicyStore.cs` | `config/curingpolicy.json` 存取（策略库+激活名）+ `BuildDefaultBook` 缺省库自愈 |
 | `src/CureLine.Core/Curing/CuringStateStore.cs` | `config/curingstate.json` 计时状态持久化（`PersistMinutes` 开关的落盘件；运行时数据非配置，删了即回退重计） |
 | `src/CureLine.Core/Curing/WorkOrderStore.cs` | 工单信息 `config/workorder.json`（R/L 双工位+EMP/BC/PT×2，字段名对齐 MES 16 字段）+ 自愈空工单 |
-| `src/CureLine.Core/Security/OperatorStore.cs` | 程序①四级操作员账号（operators 表 L1~4 + PBKDF2 复用）；**防锁死红线**：最后一个 L4 删/降拒绝 |
+| `src/CureLine.Core/Security/OperatorStore.cs` | 程序①三级操作员账号（V0.0.49 重做：`OperatorRole` Operator/Admin/Dev + 预置三账号 `SeedUser` 播种 + PBKDF2 复用；增删/改密全带 **actor 兜底**，VM 置灰之外的第二道防线）；**防锁死红线**：dev 账号永不可删、密码仅本人可改、Dev 角色不开放创建（预置唯一） |
 | `src/CureLine.Core/Curing/SlotCuringMachine.cs` | **仓位状态机**：托盘到位→（门控）→黄灯计时→绿灯放行→离开灭灯；边沿后台直转+1s 心跳 Pump；灯写去重补写/断连恢复对齐/策略热切换三自愈；过账挂点三事件（TrayArrived/CuringStarted/TrayLeft，只发真实边沿） |
 | `src/CureLine.Core/Curing/SlotLocationCode.cs` | 客户库位编码换算（Date Matrix，10 站×3 层）：架×层↔编码互转（`Encode`/`TryDecode` 客户约定锚点）+ 双架口径（`RackGroupOf`/`StationInRack`/`EncodeInRack` 按架内站号换算，每台架独立一套 A01~J12），主窗卡片标题与后续扫码绑定的同源入口 |
 | **Core 共享（单线过账家族，P3.2 后半新增）** | |
 | `src/CureLine.Core/Curing/CuringMesOptions.cs` | 过账配置模型（ini `[CuringMes]` 节）：开关/工位/时间单位/进站时机/中途取件/静态参数五件；`NormSide` 规范化（非 L 按 R 兜底） |
 | `src/CureLine.Core/Curing/CuringMesPoster.cs` | **过账服务**：状态机边沿→MES 报文（进站/出站链/物料上传）；出站被接受→已生产+1；门槛双保险（开关+URL）；全 Task.Run 后台+异常兜底；`UpdateOptions` 热更新；`PostingChanged` 顶栏事件（后台线程触发，UI 须封送） |
-| `src/CureStation/MesPostConfigWindow.*` + `ViewModels/MesPostConfigViewModel.cs` | 过账配置窗（L4）：全参数一窗改，URL 校验→写 ini→`MesConfig` 本进程生效；主窗保存后热更新 |
+| `src/CureStation/MesPostConfigWindow.*` + `ViewModels/MesPostConfigViewModel.cs` | 过账配置窗（管理员+）：全参数一窗改，URL 校验→写 ini→`MesConfig` 本进程生效；主窗保存后热更新 |
 | `src/CureStation/DialogService.cs` | 生产 `IDialogService` + `CuringMesPosterHolder`（工单窗上传动作的静态桥接点，收在程序①内） |
 | **Core 共享（IO 家族，P1 新增）** | |
 | `src/CureLine.Core/ViewModels/` | 下沉的 VM 基建（`ViewModelBase`/`RelayCommand`，namespace 不变） |
@@ -217,7 +224,7 @@
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build CureLine.slnx --nologo
-# 全量测试（374/374 全绿，串行，约 8s；含本地 HttpListener 桩 MES 端到端）
+# 全量测试（393/393 全绿，串行，约 20s；含本地 HttpListener 桩 MES 端到端）
 dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
 # 子模块改动后（VS MSBuild，net472，原样沿用上游命令）
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
@@ -285,6 +292,18 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   集合与行集合；点号列 V0.0.47 起同行内可编辑（原先只读注释称"加删行
   才是正路"但【＋添加行】固定位号 3、走不通——现场换接线本能换 UI 路径；
   列绑 `Bit` 纯序号，X/Y 前缀语义由方向列表达，`BitText` 派生文本已删）。
+   ⑧ **点号列"显示 vs 编辑"两口径（V0.0.48）**：显示=按钮行右端"点号显示"
+   **单下拉**（用户拍板简单化设计：一个下拉能表达的不拆"进制+勾选+前缀
+   下拉"四件套）六形态——`BitDisplayStyle`（`TerminalXY`=端子号 X8/YF
+   缺省丝印口径 / `TerminalIQ`=I/Q IEC / `Hex0x` / `Dec` / `Oct` / `Bin`），
+   选择即落盘 config.ini [setting] `PointBitStyle`（非法回缺省，Theme 同款
+   自愈；程序①专用 UI 键不进 AppConfig）；编辑=模板列 `BitEdit` 当前形态
+   裸数字（端子号口径下带本行方向前缀 X/I 或 Y/Q 也能吃，解析失败弹回
+   原值）；越界/重复照旧保存前校验统一拦。**Bit 存储恒为十进制 int**，
+   状态机/通讯/校验零感知；点号=块内物理端子位（16 位寄存器位号），误改
+   =绑错端子静默失灵——三道闸已有（UI 数字弹回/保存校验/StartBus 兜底），
+   语义误改属直编固有风险，用户拍板不加保存前确认弹框，靠"测试连接+
+   IO 测试窗"现场验证。
 - 点表布局三键可改现场分叉：`DiStartAddress`/`DoStartAddress`/
   `BlockStrideRegisters`（缺省 0x1000/0x1010/0x20，块 K 线性外推）；
   改动必同步 `PointTableTests` 的地址断言。
@@ -318,28 +337,50 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   影响新到位的仓位，进行中的按开计时那一刻锁定的时长走完（持久化恢复也用
   记录里的锁定时长，不用当前策略）；④ WaitingGate 不落盘——没开计时，重启
   重走门控。改流程先改 `SlotCuringMachine` 头注释与 `SlotCuringMachineTests` 断言。
-- **权限门禁语义（P3.2 前半起生效）**：① 账号体系两程序各自独立——程序①
-  `operators` 表四级 L1~4，主程序 `users` 表 admin/dev，互不相干（分机部署）；
-  ② **防锁死红线**：最后一个 LEVEL.4 删/降一律拒绝（`OperatorStore` 层拦，
-  权限窗只负责弹框展示）；③ 未知级别文本按 L1 兜底（安全侧：错降无害错升
-  危险）；④ 门禁级别缺省：工单 L1（途程/数量/清零 L2、制程代码 L3）、
-  工艺策略 L3、IO 测试 L3、点表/权限管理/过账配置/演示模式切换 L4——
-  演示开关 L4 的理由：Mock 边沿会照常驱动状态机与过账链（影响生产数据
-  口径）——改门禁只动 `MainViewModel.Gate` 调用处；
-  ⑤ 工单窗 Flush 有门禁兜底：级别不够的字段回读盘上原值（防绕过 IsEnabled
-  直改 VM 属性越权落盘）；⑥ 初始密码 admin/123456 只在 App.OnStartup 一处，
-  上线必改，文档不得记录现场真实密码；⑦ **登录窗记忆/改密语义（V0.0.20 对齐
-  mFormLogin）**——记住密码复用 `RunModeSettings`（DPAPI 密文存 config.ini
-  [setting]，SavedUser + RememberToken_<账号>，ini 永无明文），用户名一改
-  就跟出该账号记忆（命中回填+勾选，未命中清空+取消勾），**改密成功必须同步
-  记忆**（勾记住=存新密文，没勾=清本户，否则下次回填旧密码必败）；改密四道
-  闸顺序：在册（`OperatorStore.Exists`）→ 原密码验对 → `ValidateNewPassword`
-  （≥6 位+不与旧同）→ 两次一致；用户名下拉=在册账号实时表（ListUsers），
-  不是登录历史文件；改密三框/登录密码框共四个 PasswordBox 双向接线（VM→框
-  回写靠"值不同才走"防互踢），键盘链统一在 View 层 PreviewKeyDown（按钮
-  禁用 IsDefault/IsCancel——双面板下会吃错回车；下拉展开时回车/Esc 放行）；
-  ⑧ 顶栏登录态格式="级别短名：账号"（`ShortName`，如"管理员：admin"，
-  不带"操作员"前缀/LEVEL 字样——UI 口径 V0.0.20 二轮定）；登录窗下拉
+- **权限门禁语义（V0.0.49 三级角色起生效，全在 `OperatorStore` +
+  `MainViewModel.Gate` 一处）**：① 账号体系两程序各自独立——程序①
+  `operators` 表三级 `OperatorRole`（Operator 操作员 < Admin 管理员 <
+  Dev 开发者），主程序 `users` 表 admin/dev，互不相干（分机部署）；
+  ② 预置三账号：operator/123456、admin/123456、dev/dev123（App.OnStartup
+  三参 `EnsureSeeded`，**播种直写库走私有 `SeedUser`**——`AddUser` 对
+  Dev 角色有"不开放创建"边界，会拦预置装配曾致 dev 播不进库，勿再绕回
+  AddUser 播种）；上线必改，文档不得记录现场真实密码；
+  ③ **防锁死红线（换口径）**：dev 账号**永不可删**（谁删都拒）、密码只有
+  dev 本人可改、Dev 角色不开放创建（预置唯一）——系统永远留最高权限钥匙；
+  "改级别"功能已删（换角色=删了重建），`SetLevel` 勿再出现；
+  ④ 未知/脏 level 文本按操作员兜底（安全侧：错降无害错升危险）；旧库存量
+  Level1~4 文本 `FromText` 就地映射（L4→Admin、L1~3→Operator）——纯防老
+  测试库崩，勿据此新增"兼容老分级"逻辑；
+  ⑤ 门禁矩阵（三级）：工单/日志=登录即可；工艺策略/IO 测试/过账配置/
+  演示开关/用户管理=管理员+；点表配置=开发者专属且 **admin 登录后设置
+  下拉里直接没有该项**（`ShowPointTableItem` → XAML DataTrigger 收起项，
+  不是置灰）；演示开关收管理员的理由：Mock 边沿会照常驱动状态机与过账链
+  （影响生产数据口径）——改门禁只动 `MainViewModel.Gate` 调用处；
+  ⑥ **operator 登录后设置整钮禁用**（`IsSettingsEnabled` → XAML 半透明
+  触发器）——不是逐项隐藏，勿拆成逐项控制；
+  ⑦ **operator 无改密权**（登录窗改密面板已删勿加回）：改密全走用户管理窗
+  （`AccountManagerWindow`，替代原"权限管理窗"）由 admin/dev **重置**
+  （免验原密码，立即生效；新密码 ≥6 位）；admin 可重置 operator+admin
+  （含自己）、dev 可重置所有人（含自己）；用户管理窗操作方法开头有
+  CanXxx 兜底（RelayCommand 直调 Execute 不判灰，程序态调用也拦）+
+  Store 层 actor 兜底（AddUser/RemoveUser/SetPassword 全带 actor 参数），
+  双层防线勿拆；
+  ⑧ 工单窗 Flush 有门禁兜底：级别不够的字段回读盘上原值（防绕过 IsEnabled
+  直改 VM 属性越权落盘）；编辑权三档（V0.0.49）：`CanEditDaily` 数量/清零
+  （operator+）、`CanEditRoute` 途程、`CanEditProcess` 制程+上传使能
+  （admin+）；
+  ⑨ **登录窗记忆语义（V0.0.20 对齐 mFormLogin 的保留部分）**——记住密码
+  复用 `RunModeSettings`（DPAPI 密文存 config.ini [setting]，SavedUser +
+  RememberToken_<账号>，ini 永无明文），用户名一改就跟出该账号记忆（命中
+  回填+勾选，未命中清空+取消勾）；改密面板删除后"改密成功同步记忆"链路
+  已不存在，记忆只在登录成功时保存；用户名下拉=在册账号实时表（ListUsers），
+  不是登录历史文件；登录密码框双向接线（VM→框回写靠"值不同才走"防互踢），
+  键盘链统一在 View 层 PreviewKeyDown（按钮禁用 IsDefault/IsCancel——
+  下拉展开时回车/Esc 放行）；`ListUsers` 排序走 case 表达式定权
+  （Dev>Admin>Operator——level 现存文本，字母序与权限序不一致，勿改回
+  `order by level desc`）；
+  ⑩ 顶栏登录态格式="角色短名：账号"（`ShortName`，如"管理员：admin"，
+  不带 LEVEL 字样——UI 口径 V0.0.20 二轮定）；登录窗下拉
   编辑框/下拉项（ItemContainerStyle Padding=19）/密码框三处文本左缘对齐
   是 UI 契约，动输入框内边距须放大截图核对——`FreshPwdInput` Padding 左 3
   是实机像素定标值（PasswordBox 内部渲染无 TextBoxView 内缩，同抄
@@ -414,7 +455,7 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   防把唯一工单引到空 L 槽）、工单窗只显 Side 侧一套面板且文案全去 R/L
   字样（**视图↔槽映射恒定** R↔Right/L↔Left，Sync/Flush 不判开关——隐藏
   侧数据原样往返）、顶栏过账文本不带工位字样；1=老双架双面板口径全量
-  回归（映射+Mac*_L+R/L 两枚上传钮）。过账配置窗勾选（L4/热生效）。
+  回归（映射+Mac*_L+R/L 两枚上传钮）。过账配置窗勾选（管理员+/热生效）。
   **主窗底部工单带同口径（V0.0.47 补齐——V0.0.38 漏网）**：双工位 R/L 两卡并排
   （`WoCardColumns`=2）；单工位只显 Side 侧一张卡（`ShowWoCardR/L`，列数=1 独占
   整宽）+ 去"R/L 工位·"字样、隐藏卡数据照常刷新；顶栏文案与工单带显隐统一走

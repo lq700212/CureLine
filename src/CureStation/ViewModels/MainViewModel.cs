@@ -349,9 +349,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         private set => Set(ref _policyText, value);
     }
 
-    /// <summary>当前登录操作员（顶栏展示；登录窗带出，级别是各窗门禁依据）。</summary>
+    /// <summary>当前登录操作员（顶栏展示；登录窗带出，角色是各窗门禁依据）。</summary>
     private string _currentUserName = "";
-    private OperatorLevel? _currentLevel;
+    private OperatorRole? _currentRole;
 
     private string _operatorText = "未登录";
     public string OperatorText
@@ -361,7 +361,21 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>是否有操作员在线（未登录时各功能入口一律拦下）。</summary>
-    public bool IsLoggedIn => _currentLevel.HasValue;
+    public bool IsLoggedIn => _currentRole.HasValue;
+
+    /// <summary>
+    /// "设置"按钮可用性（V0.0.49 用户拍板）：operator 登录后整钮禁用——
+    /// 该角色除工单外无任何管理功能，下拉可点无意义；未登录沿用现状
+    /// （可点开下拉，点项时 Gate 拦"请先登录"）。
+    /// </summary>
+    public bool IsSettingsEnabled => _currentRole == null || _currentRole != OperatorRole.Operator;
+
+    /// <summary>
+    /// "点表配置"菜单项可见性：admin 隐藏此项（用户拍板"直接没有这个选项"）；
+    /// 未登录/操作员仍显示（未登录点项被 Gate 拦；operator 反正按钮整钮禁用）。
+    /// 只有 dev（真开发者账号）能见到点表配置。
+    /// </summary>
+    public bool ShowPointTableItem => _currentRole != OperatorRole.Admin;
 
     /// <summary>单线过账状态（顶栏展示；过账服务后台线程回调，经 UiInvoke 封送）。</summary>
     private string _postingText = "过账：—";
@@ -510,7 +524,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public RelayCommand ReconnectCommand { get; }
     public RelayCommand LoginCommand { get; }
     public RelayCommand OpenWorkOrderCommand { get; }
-    public RelayCommand OpenOperatorsCommand { get; }
+    public RelayCommand OpenAccountsCommand { get; }
     public RelayCommand OpenIoTestCommand { get; }
     public RelayCommand ShowLogCommand { get; }
     public RelayCommand ToggleThemeCommand { get; }
@@ -526,7 +540,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         ReconnectCommand = new RelayCommand(() => StartBus(_config));
         LoginCommand = new RelayCommand(Login);
         OpenWorkOrderCommand = new RelayCommand(OpenWorkOrder);
-        OpenOperatorsCommand = new RelayCommand(OpenOperators);
+        OpenAccountsCommand = new RelayCommand(OpenAccounts);
         OpenIoTestCommand = new RelayCommand(OpenIoTest);
         ShowLogCommand = new RelayCommand(ShowLog);
         ToggleThemeCommand = new RelayCommand(ToggleTheme);
@@ -744,7 +758,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private void OpenPointTable()
     {
-        if (!Gate(OperatorLevel.Level4, "点表配置"))
+        // 点表配置=开发者专属（V0.0.49：admin 也不会在下拉里见到此项）。
+        if (!Gate(OperatorRole.Dev, "点表配置"))
             return;
         var saved = _dialogs.ShowPointTable();
         var config = IoPointTableStore.Load() ?? LoadOrDefault();
@@ -758,7 +773,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// <summary>工艺策略窗：保存/激活后重读策略库（激活名可能已换，热切换生效）。</summary>
     private void OpenCuringPolicy()
     {
-        if (!Gate(OperatorLevel.Level3, "工艺策略"))
+        if (!Gate(OperatorRole.Admin, "工艺策略"))
             return;
         var saved = _dialogs.ShowCuringPolicy();
         if (saved)
@@ -771,46 +786,49 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     // ---------- 登录与权限门禁（P3.2） ----------
 
     /// <summary>
-    /// 门禁统一出口：未登录先拦（提示登录），级别不够提示所需级别。
-    /// 返回 true=放行。各功能所需级别：工单 L1 / 工艺策略 L3 / 点表·权限管理 L4。
+    /// 门禁统一出口：未登录先拦（提示登录），角色不够提示所需角色。
+    /// 返回 true=放行。各功能所需角色（V0.0.49 三级口径）：工单·日志=操作员+ /
+    /// 策略·IO测试·过账配置·演示·用户管理=管理员+ / 点表配置=开发者。
     /// </summary>
-    private bool Gate(OperatorLevel required, string what)
+    private bool Gate(OperatorRole required, string what)
     {
-        if (!_currentLevel.HasValue)
+        if (!_currentRole.HasValue)
         {
             _dialogs.ShowMessage("请先登录（顶栏『登录』按钮）。", "未登录");
             return false;
         }
-        if (!OperatorLevelInfo.AtLeast(_currentLevel, required))
+        if (!OperatorRoleInfo.AtLeast(_currentRole, required))
         {
             _dialogs.ShowMessage(
-                $"{what}需要 {OperatorLevelInfo.DisplayName(required)} 及以上，" +
-                $"当前 {OperatorLevelInfo.DisplayName(_currentLevel.Value)}。",
+                $"{what}需要 {OperatorRoleInfo.DisplayName(required)} 及以上，" +
+                $"当前 {OperatorRoleInfo.DisplayName(_currentRole.Value)}。",
                 "权限不足");
             return false;
         }
         return true;
     }
 
-    /// <summary>登录窗：成功后记下操作员与级别（再点可换账号重登）。</summary>
+    /// <summary>登录窗：成功后记下操作员与角色（再点可换账号重登）。</summary>
     private void Login()
     {
         var result = _dialogs.ShowLogin();
         if (result == null)
             return;
-        (_currentUserName, _currentLevel) = result.Value;
-        // 顶栏格式"管理员：admin"——权限短名开头（V0.0.20 口径：不带"操作员"前缀、
-        // 不带 LEVEL 字样），级别全名只在权限管理窗展示。
-        OperatorText = $"{OperatorLevelInfo.ShortName(_currentLevel.Value)}：{_currentUserName}";
-        LocalLogService.Write($"操作员登录：{_currentUserName}（{OperatorLevelInfo.ToText(_currentLevel.Value)}）");
+        (_currentUserName, _currentRole) = result.Value;
+        // 顶栏格式"开发者：dev"——角色名开头（V0.0.49 三级口径，不带 LEVEL 字样）。
+        OperatorText = $"{OperatorRoleInfo.DisplayName(_currentRole.Value)}：{_currentUserName}";
+        LocalLogService.Write($"操作员登录：{_currentUserName}（{OperatorRoleInfo.ToText(_currentRole.Value)}）");
+        // 设置按钮可用性/点表菜单项随角色刷新（operator 登录后设置按钮置灰、admin 点表项隐藏）。
+        Raise(nameof(IsSettingsEnabled));
+        Raise(nameof(ShowPointTableItem));
     }
 
-    /// <summary>工单信息窗：L1+ 可开（窗内编辑区按级别再细分禁用）。</summary>
+    /// <summary>工单信息窗：登录即可开（窗内编辑区按角色再细分禁用）。</summary>
     private void OpenWorkOrder()
     {
-        if (!Gate(OperatorLevel.Level1, "工单信息"))
+        if (!Gate(OperatorRole.Operator, "工单信息"))
             return;
-        var saved = _dialogs.ShowWorkOrder(_currentLevel);
+        var saved = _dialogs.ShowWorkOrder(_currentRole);
         if (saved)
         {
             // 工单窗刚落盘——主动重读一次（下部工单带立见新号，不等 500ms 下一拍；
@@ -820,22 +838,21 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>权限管理窗：L4 专属。</summary>
-    private void OpenOperators()
+    /// <summary>用户管理窗：管理员+（admin 只能管操作员，dev 全管——窗内再按角色授权）。</summary>
+    private void OpenAccounts()
     {
-        if (!Gate(OperatorLevel.Level4, "权限管理"))
+        if (!Gate(OperatorRole.Admin, "用户管理"))
             return;
-        _dialogs.ShowOperators();
+        _dialogs.ShowAccounts(_currentRole!.Value);
     }
 
     /// <summary>
-    /// IO 通讯测试窗：L3+（工程师——现场接线的角色；比点表 L4 低一档，
-    /// 因为测试只动 IO 不改配置）。共享当前总线与点表（null 拦下——总线
-    /// 还没启动时无连接可共享）。
+    /// IO 通讯测试窗：管理员+（现场接线的角色；比点表低一级——测试只动 IO 不改配置）。
+    /// 共享当前总线与点表（null 拦下——总线还没启动时无连接可共享）。
     /// </summary>
     private void OpenIoTest()
     {
-        if (!Gate(OperatorLevel.Level3, "IO通讯测试"))
+        if (!Gate(OperatorRole.Admin, "IO通讯测试"))
             return;
         if (_bus == null || _config == null)
         {
@@ -865,12 +882,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
-    /// 过账配置窗：L4 专属。保存成功后热更新过账服务配置（不重启即生效）
+    /// 过账配置窗：管理员+。保存成功后热更新过账服务配置（不重启即生效）
     /// 并刷新顶栏状态。
     /// </summary>
     private void OpenPostConfig()
     {
-        if (!Gate(OperatorLevel.Level4, "过账配置"))
+        if (!Gate(OperatorRole.Admin, "过账配置"))
             return;
         var saved = _dialogs.ShowMesPostConfig();
         if (saved)
@@ -968,10 +985,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     // ---------- 日志悬浮窗（顶栏【日志】；非模态单例由 DialogService 防重复） ----------
 
-    /// <summary>日志/控制台悬浮窗：L1+（只读不碰配置，操作员即可开）。</summary>
+    /// <summary>日志/控制台悬浮窗：登录即可（只读不碰配置）。</summary>
     private void ShowLog()
     {
-        if (!Gate(OperatorLevel.Level1, "日志悬浮窗"))
+        if (!Gate(OperatorRole.Operator, "日志悬浮窗"))
             return;
         _dialogs.ShowLog(BuildSystemSnapshot());
     }
@@ -1031,7 +1048,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// </summary>
     private void ToggleSimulate()
     {
-        if (!Gate(OperatorLevel.Level4, "演示模式切换"))
+        if (!Gate(OperatorRole.Admin, "演示模式切换"))
             return;
         bool target = !IsSimulate;
         IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", target ? "1" : "0");

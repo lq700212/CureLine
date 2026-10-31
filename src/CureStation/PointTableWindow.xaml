@@ -7,7 +7,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:PointTableViewModel, IsDesignTimeCreatable=False}"
-        Title="IO 点表配置（点点鼠标，无需改代码）"
+        Title="IO 点表配置"
         Height="880" Width="1400" MinHeight="720" MinWidth="1200"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None" Background="Transparent" AllowsTransparency="True"
@@ -38,7 +38,7 @@
             <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
                 <Grid>
                     <TextBlock Style="{StaticResource WinTitleText}"
-                               Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=IO 点表配置（点点鼠标，无需改代码）}"/>
+                               Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=IO 点表配置}"/>
                     <Button Style="{StaticResource WinTitleClose}" Content="✕" HorizontalAlignment="Right"
                             Click="OnCloseClick" ToolTip="关闭"/>
                 </Grid>
@@ -175,26 +175,44 @@
                          这屏绑定属于哪台设备一眼定位（名称/IP 随左栏选中联动） -->
                     <TextBlock DockPanel.Dock="Top" Text="{Binding CurrentDeviceText, FallbackValue=当前设备：—}"
                                Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="0,0,0,4"/>
-                    <!-- 按钮行：加删行（表格编辑配套）+ 连通测试（V0.0.41 补 UI 死命令：
-                         测试期间两钮齐灰 IsTesting，不冻界面） -->
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,4,0,4">
-                        <Button Tag="{StaticResource Geo.Plus}" Style="{StaticResource FreshButton}" Content="＋ 添加行"
-                                Command="{Binding AddBindingCommand}" Margin="0,0,8,0" Width="110"
-                                ToolTip="给当前设备加一行预留位（块1·位3·输入），在表格里接着改角色/架/层"/>
-                        <Button Tag="{StaticResource Geo.Trash}" Style="{StaticResource FreshButton}" Content="－ 删除选中行"
-                                Command="{Binding DeleteBindingCommand}" Margin="0,0,24,0" Width="110"
-                                ToolTip="删除当前选中行（未保存前关窗可找回）"/>
-                        <Button Style="{StaticResource FreshButton}" Content="测试连接" Width="110" Margin="0,0,8,0"
-                                Command="{Binding TestConnectionCommand}"
-                                ToolTip="直测当前选中设备（IP/端口/寄存器读回），不存盘"/>
-                        <Button Style="{StaticResource FreshButton}" Content="测试全部" Width="110"
-                                Command="{Binding TestAllCommand}"
-                                ToolTip="逐台测试全部耦合器，结果进下方列表"/>
-                    </StackPanel>
+                    <!-- 按钮行：左 4 钮（加删行/连通测试，测试期间两钮齐灰不冻界面）+
+                         右端"点号显示"单下拉（V0.0.48 简单化设计：一个下拉选显示
+                         形态——端子号 X/Y=GFNB 丝印口径、I/Q=IEC 口径，或纯进制
+                         0x/十/八/二进制）。选择即落盘 config.ini 记忆，只换显示
+                         不碰 Bit 存储/读写链 -->
+                    <DockPanel DockPanel.Dock="Top" LastChildFill="False" Margin="0,4,0,4">
+                        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                            <Button Tag="{StaticResource Geo.Plus}" Style="{StaticResource FreshButton}" Content="＋ 添加行"
+                                    Command="{Binding AddBindingCommand}" Margin="0,0,8,0" Width="110"
+                                    ToolTip="给当前设备加一行预留位（块1·位3·输入），在表格里接着改角色/架/层"/>
+                            <!-- 删除按钮宽 132：「图标18 + 左右Padding20 + 边框2 = 40」固定开销，
+                                 文本"－ 删除选中行"约 76px，110 放不下截掉末字（V0.0.48）；
+                                 测试连接/测试全部等文本短的按钮仍用 110 -->
+                            <Button Tag="{StaticResource Geo.Trash}" Style="{StaticResource FreshButton}" Content="－ 删除选中行"
+                                    Command="{Binding DeleteBindingCommand}" Margin="0,0,24,0" Width="132"
+                                    ToolTip="删除当前选中行（未保存前关窗可找回）"/>
+                            <Button Style="{StaticResource FreshButton}" Content="测试连接" Width="110" Margin="0,0,8,0"
+                                    Command="{Binding TestConnectionCommand}"
+                                    ToolTip="直测当前选中设备（IP/端口/寄存器读回），不存盘"/>
+                            <Button Style="{StaticResource FreshButton}" Content="测试全部" Width="110"
+                                    Command="{Binding TestAllCommand}"
+                                    ToolTip="逐台测试全部耦合器，结果进下方列表"/>
+                        </StackPanel>
+                        <!-- 点号显示单下拉：选项文案自带示例（如"端子号 X/Y (X8~YF)"），
+                             选中即所见——不再拆"进制+前缀开关+前缀选字"四件套 -->
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <TextBlock Text="点号显示：" VerticalAlignment="Center" Margin="10,0,2,0"/>
+                            <ComboBox Style="{StaticResource FreshCombo}" Height="29" Width="196"
+                                      ItemsSource="{x:Static vm:PointTableViewModel.BitDisplayOptions}"
+                                      SelectedValuePath="Value" DisplayMemberPath="Text"
+                                      SelectedValue="{Binding BitStyle, Mode=TwoWay}"
+                                      ToolTip="点号列显示形态（缺省端子号 X/Y，按耦合器端子丝印对图最顺）。只换显示：数据存储恒为十进制、通讯与校验照旧；选择即时生效并记住"/>
+                        </StackPanel>
+                    </DockPanel>
                     <!-- 绑定表（V0.0.45 直编）：方向/角色=下拉（中文文案与落盘英文枚举
-                         同源转换），块/点号/架/层=数字直填（填错弹回原值），功能名=文本；
-                         点号列 V0.0.47 起同行内可编辑（X/Y 前缀语义由方向列表达，
-                         LostFocus 即提交）——全部写穿 Raw，保存前校验统一拦 -->
+                         同源转换），块/架/层=数字直填（填错弹回原值），功能名=文本；
+                         点号列 V0.0.48 拆"显示 vs 编辑"两口径（显示=右上下拉形态，
+                         编辑=裸数字 LostFocus 即提交）——全部写穿 Raw，保存前拦截 -->
                     <!-- ★IsReadOnly="False" 是覆盖 App.xaml 隐式 DataGrid 样式的关键：
                          隐式样式（弹窗通用）缺省 IsReadOnly=True=只读展示表口径，
                          绑定表是编辑表，不显式覆盖则**全列改不了、点击没反应**（V0.0.46 修的根因）。
@@ -226,7 +244,28 @@
                             <!-- 点号（V0.0.47 开放编辑）：DisplayIndex 紧跟块列。显示=纯序号
                                  0~15（端子 X0~XF/Y0~YF 的位号；X/Y 前缀由方向列表达不重复）；
                                  越界/同点重复由保存前校验弹框拦 -->
-                            <DataGridTextColumn Header="点号" Binding="{Binding Bit}" Width="88"/>
+                            <!-- 点号列（V0.0.48 显示/编辑两口径）：展示=BitDisplay 按
+                                 右上"点号显示"下拉形态（端子号 X/Y / 0x / 十八二进制）；
+                                 编辑=BitEdit 当前口径裸数字，解析失败弹回原值；
+                                 根元素是 TextBlock——code-behind"单击即编辑"按
+                                 cell.Content is TextBlock 判定，须原样保留 -->
+                            <DataGridTemplateColumn Header="点号" Width="88" SortMemberPath="Bit">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding BitDisplay}" Margin="4,0"
+                                                   VerticalAlignment="Center"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                                <DataGridTemplateColumn.CellEditingTemplate>
+                                    <DataTemplate>
+                                        <!-- 编辑态只进裸数字（不带端子前缀/0x——那是展示口径）；
+                                             LostFocus 即提交，非法文本由 VM 弹回原值 -->
+                                        <TextBox Text="{Binding BitEdit, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                 Margin="1" VerticalAlignment="Center"
+                                                 VerticalContentAlignment="Center"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellEditingTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTemplateColumn Header="角色" Width="134" SortMemberPath="Role">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>

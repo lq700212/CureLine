@@ -1,21 +1,22 @@
 // =========================================================================
-// OperatorStore：程序①固化程控的四级操作员账号体系（operators 表）
+// OperatorStore：程序①操作员账号库（SQLite operators 表，三级角色）
 //
-// 干什么：CureStation 的登录验谁 + 权限管理窗的账号增删改——四级权限
-//   LEVEL.1 操作员 / LEVEL.2 班长 / LEVEL.3 工程师 / LEVEL.4 管理员
-//   （对照 docs/参考界面 权限管理页 HMI）。门禁缺省：工单页 L1+（途程/
-//   数量/清零 L2+、制程代码 L3+）、工艺策略 L3+、点表/权限管理 L4+。
-// 为什么自建表而不复用主程序 users 表：两程序分机部署（拆分设计），
-//   账号是各程序私有资产——主程序 admin/dev 管网关配置，程序①四级管
-//   现场操作；与 IDialogService"不下沉"同理。密码哈希复用 PasswordHasher
-//   （PBKDF2 同款锁芯），表与 cure_record 同库（备份拷一个 db3 全带走）。
-// 怎么改：
-//   - 表结构只加列不改列（username 主键 / level / pwd_hash / salt /
-//     iterations / updated_at）；level 存 "Level1".."Level4" 文本。
-//   - EnsureSeeded 只在空表播种（初始 LEVEL.4 admin，密码调用方传入，
-//     本类不存明文常量）。
-//   - 防锁死红线：删除/降级最后一个 LEVEL.4 一律拒绝——现场永远留一把
-//     最高权限钥匙，否则账号配错谁也救不回来。
+// 干什么：账号的建/删/验密/代改密（PBKDF2 复用 PasswordHasher）。
+//   三级角色（V0.0.49 起，替代四级 LEVEL.1~4，用户拍板）：
+//     Operator 操作员 —— 只能登录（工单基础字段+数量），无改密权；
+//     Admin    管理员 —— 加工艺策略/IO测试/过账配置/演示开关/用户管理，
+//                       用户管理窗建删操作员、重置 operator+admin 密码（含自己）；
+//     Dev      开发者 —— 全权限（含点表配置），可删 dev 外任何账号、
+//                       可重置所有人密码（含自己）。
+// 预置三账号（空表播种，初始密码调用方 App.OnStartup 传入，本类不存明文）：
+//   operator/123456、admin/123456、dev/dev123 —— 上线必改。
+// 谁能干什么全部带 actor 参数收在 Store 层兜底（VM 层只做置灰/提示，
+// 双层防线与工单 Flush 兜底同思路）；防锁死红线=Dev 账号永不可删
+// （角色不开放创建、预置唯一，系统永远留最高权限钥匙）。
+// 怎么改：新增操作 = Store 加方法（actor 兜底）+ VM 加命令 + 测试补用例。
+// 旧库兜底：operators 表 level 列若存老四级文本（Level1~4），FromText
+//   就地映射（L4→Admin、L1~3→Operator）——项目未上线无兼容包袱，纯让
+//   老测试库不崩，勿据此新增任何"兼容老分级"逻辑。
 // =========================================================================
 
 using System.Data;
@@ -23,61 +24,51 @@ using CureLine.Core.Infrastructure;
 
 namespace CureLine.Core.Security;
 
-/// <summary>操作员权限级别（对应参考 HMI 的 LEVEL.1~4，数字越大权限越高）。</summary>
-public enum OperatorLevel
+/// <summary>操作员角色（三级：Operator 操作员 &lt; Admin 管理员 &lt; Dev 开发者）。</summary>
+public enum OperatorRole
 {
-    Level1,
-    Level2,
-    Level3,
-    Level4,
+    Operator,
+    Admin,
+    Dev,
 }
 
-/// <summary>操作员级别助手：存储文本 / 中文文案 / 门禁判断一处收敛。</summary>
-public static class OperatorLevelInfo
+/// <summary>角色助手：存储文本 / 中文文案 / 门禁判断一处收敛。</summary>
+public static class OperatorRoleInfo
 {
-    public static string ToText(OperatorLevel level) => level switch
+    public static string ToText(OperatorRole role) => role switch
     {
-        OperatorLevel.Level1 => "Level1",
-        OperatorLevel.Level2 => "Level2",
-        OperatorLevel.Level3 => "Level3",
-        _ => "Level4",
+        OperatorRole.Operator => "Operator",
+        OperatorRole.Admin => "Admin",
+        _ => "Dev",
     };
 
-    public static OperatorLevel FromText(string? text) => text?.Trim() switch
+    public static OperatorRole FromText(string? text) => text?.Trim() switch
     {
-        "Level1" => OperatorLevel.Level1,
-        "Level2" => OperatorLevel.Level2,
-        "Level3" => OperatorLevel.Level3,
-        "Level4" => OperatorLevel.Level4,
+        "Operator" => OperatorRole.Operator,
+        "Admin" => OperatorRole.Admin,
+        "Dev" => OperatorRole.Dev,
+        // 旧四级库的身位兜底映射（见类头）：L4=管理员，L1~L3 一律降操作员（错降无害）。
+        "Level4" => OperatorRole.Admin,
+        "Level1" or "Level2" or "Level3" => OperatorRole.Operator,
         // 未知/脏文本按最低级处理（安全侧：错降无害，错升危险）
-        _ => OperatorLevel.Level1,
+        _ => OperatorRole.Operator,
     };
 
-    /// <summary>中文文案（界面直接绑）。</summary>
-    public static string DisplayName(OperatorLevel level) => level switch
+    /// <summary>中文角色名（用户管理/登录顶栏/工单窗直接绑）。</summary>
+    public static string DisplayName(OperatorRole role) => role switch
     {
-        OperatorLevel.Level1 => "LEVEL.1 操作员",
-        OperatorLevel.Level2 => "LEVEL.2 班长",
-        OperatorLevel.Level3 => "LEVEL.3 工程师",
-        _ => "LEVEL.4 管理员",
+        OperatorRole.Operator => "操作员",
+        OperatorRole.Admin => "管理员",
+        _ => "开发者",
     };
 
-    /// <summary>级别短名（不带 LEVEL 前缀，顶栏"管理员：admin"这类拼接用）。</summary>
-    public static string ShortName(OperatorLevel level) => level switch
-    {
-        OperatorLevel.Level1 => "操作员",
-        OperatorLevel.Level2 => "班长",
-        OperatorLevel.Level3 => "工程师",
-        _ => "管理员",
-    };
-
-    /// <summary>门禁：操作者级别是否够得上 required（L4 ≥ L3 ≥ L2 ≥ L1）。</summary>
-    public static bool AtLeast(OperatorLevel? operatorLevel, OperatorLevel required) =>
-        operatorLevel.HasValue && operatorLevel.Value >= required;
+    /// <summary>门禁：操作者角色是否够得上 required（Dev ≥ Admin ≥ Operator）。</summary>
+    public static bool AtLeast(OperatorRole? actual, OperatorRole required) =>
+        actual.HasValue && actual.Value >= required;
 }
 
-/// <summary>操作员账号行（权限管理窗列表 + 测试断言用）。</summary>
-public sealed record OperatorAccount(string UserName, OperatorLevel Level);
+/// <summary>账号行（用户管理窗列表 + 测试断言用）。</summary>
+public sealed record OperatorAccount(string UserName, OperatorRole Role);
 
 public class OperatorStore
 {
@@ -103,23 +94,27 @@ public class OperatorStore
     }
 
     /// <summary>
-    /// 空表播种预置管理员（只播一次：表里有任一用户即跳过）。初始密码调用方
-    /// （App 启动装配）传入，本类不存明文；上线后必须改掉。
+    /// 空表播种预置三账号（只播一次：表里有任一用户即跳过）。初始密码调用方
+    /// （App 启动装配）传入，本类不存明文；上线必须改掉。
+    /// 播种直写库走 SeedUser——AddUser 对 Dev 角色有"不开放创建"边界（那是给
+    /// 登录用户用的兜底，不能拦预置装配），否则 dev 账号永远播不进库。
     /// </summary>
-    public void EnsureSeeded(string adminPassword)
+    public void EnsureSeeded(string operatorPassword, string adminPassword, string devPassword)
     {
         EnsureSchema();
         object? n = _db.ExecuteScalar("select count(*) from operators", null);
         if (n != null && Convert.ToInt64(n) > 0)
             return;
-        AddUser("admin", OperatorLevel.Level4, adminPassword);
+        SeedUser("operator", OperatorRole.Operator, operatorPassword);
+        SeedUser("admin", OperatorRole.Admin, adminPassword);
+        SeedUser("dev", OperatorRole.Dev, devPassword);
     }
 
     /// <summary>
-    /// 登录校验。成功返回级别，失败/未知用户一律 null（不区分，防枚举）；
+    /// 登录校验。成功返回角色，失败/未知用户一律 null（不区分，防枚举）；
     /// 用户名去空格、大小写敏感（与主程序账号语义一致）。
     /// </summary>
-    public OperatorLevel? Verify(string? user, string? password)
+    public OperatorRole? Verify(string? user, string? password)
     {
         string u = user?.Trim() ?? "";
         if (string.IsNullOrEmpty(u) || string.IsNullOrEmpty(password))
@@ -134,11 +129,11 @@ public class OperatorStore
         int iterations = Convert.ToInt32(row["iterations"]);
         if (!PasswordHasher.Verify(password, hash, salt, iterations))
             return null;
-        return OperatorLevelInfo.FromText(row["level"]?.ToString());
+        return OperatorRoleInfo.FromText(row["level"]?.ToString());
     }
 
     /// <summary>
-    /// 账号是否在册（登录窗改密面板入口先拦"账号不存在"，admin 已删也算不存在）。
+    /// 账号是否在册（登录窗用户名下拉以外的场景用；被删账号不算在册）。
     /// 用户名去空格、忽略空串（空串一律不算在册）。
     /// </summary>
     public bool Exists(string? user)
@@ -152,24 +147,34 @@ public class OperatorStore
         return n != null && Convert.ToInt64(n) > 0;
     }
 
-    /// <summary>全部账号（权限管理窗四级列表用；按级别降序 + 用户名排序）。</summary>
+    /// <summary>全部账号（用户管理窗列表用；Dev>Admin>Operator 降序 + 用户名排序）。
+    /// level 列存的是文本 Operator/Admin/Dev，字母序与权限序不一致——必须 case 显式定权，
+    /// 直接 desc 会得到 Operator&gt;Dev&gt;Admin 的错序。</summary>
     public IReadOnlyList<OperatorAccount> ListUsers()
     {
         DataTable dt = _db.ExecuteDataTable(
-            "select username, level from operators order by level desc, username", null);
+            "select username, level from operators order by " +
+            "case level when 'Dev' then 0 when 'Admin' then 1 else 2 end, username", null);
         var list = new List<OperatorAccount>(dt.Rows.Count);
         foreach (DataRow r in dt.Rows)
             list.Add(new OperatorAccount(
                 r["username"]?.ToString() ?? "",
-                OperatorLevelInfo.FromText(r["level"]?.ToString())));
+                OperatorRoleInfo.FromText(r["level"]?.ToString())));
         return list;
     }
 
     /// <summary>
-    /// 新增账号：重名/密码规则不过返回中文原因，成功 null。
+    /// 新增账号（actor=当前登录者的角色，Store 层兜底）：
+    /// ① 开发者账号不开放创建（预置唯一，防最高权限扩散）；
+    /// ② 管理员只能创建操作员；
+    /// ③ 重名/密码规则（≥6 位）不过返回中文原因。成功 null。
     /// </summary>
-    public string? AddUser(string? user, OperatorLevel level, string? password)
+    public string? AddUser(string? user, OperatorRole role, string? password, OperatorRole actor)
     {
+        if (role == OperatorRole.Dev)
+            return "开发者账号不开放创建（预置唯一）";
+        if (actor == OperatorRole.Admin && role == OperatorRole.Admin)
+            return "管理员只能创建操作员账号";
         string u = user?.Trim() ?? "";
         if (string.IsNullOrEmpty(u))
             return "用户名不能为空";
@@ -180,27 +185,38 @@ public class OperatorStore
         string? rule = PasswordHasher.ValidateNewPassword(password, null);
         if (rule != null)
             return rule;
-        var (hash, salt) = PasswordHasher.CreateHash(password!);
+        SeedUser(u, role, password!);
+        return null;
+    }
+
+    /// <summary>
+    /// 预置/新增共用落库（哈希+插入一处收敛）：EnsureSeeded 直播预置三账号、
+    /// AddUser 过完权限链后也走此处写行。
+    /// </summary>
+    private void SeedUser(string user, OperatorRole role, string password)
+    {
+        var (hash, salt) = PasswordHasher.CreateHash(password);
         _db.ExecuteNonQuery(
             "insert into operators (username, level, pwd_hash, salt, iterations, updated_at)" +
             " values (@u, @l, @h, @s, @i, @t)",
             new Dictionary<string, object?>
             {
-                ["u"] = u,
-                ["l"] = OperatorLevelInfo.ToText(level),
+                ["u"] = user,
+                ["l"] = OperatorRoleInfo.ToText(role),
                 ["h"] = hash,
                 ["s"] = salt,
                 ["i"] = PasswordHasher.Iterations,
                 ["t"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
             });
-        return null;
     }
 
     /// <summary>
-    /// 删除账号。防锁死：最后一个 LEVEL.4 不许删（现场永远留一把最高权限钥匙）。
+    /// 删除账号（actor=当前登录者的角色，Store 层兜底）：
+    /// ① 开发者账号永不可删（防锁死红线——系统永远留最高权限钥匙）；
+    /// ② 管理员只能删操作员（管理员账号只有开发者可以删）。
     /// 返回中文原因，成功 null。
     /// </summary>
-    public string? RemoveUser(string? user)
+    public string? RemoveUser(string? user, OperatorRole actor)
     {
         string u = user?.Trim() ?? "";
         if (string.IsNullOrEmpty(u))
@@ -213,26 +229,26 @@ public class OperatorStore
         DataRow? row = _db.ExecuteDataRow(
             "select level from operators where username=@u",
             new Dictionary<string, object?> { ["u"] = u });
-        if (row != null && OperatorLevelInfo.FromText(row["level"]?.ToString()) == OperatorLevel.Level4)
-        {
-            object? l4 = _db.ExecuteScalar(
-                "select count(*) from operators where level=@l",
-                new Dictionary<string, object?> { ["l"] = "Level4" });
-            if (l4 != null && Convert.ToInt64(l4) <= 1)
-                return "不能删除最后一个 LEVEL.4 账号（防锁死）";
-        }
+        var target = OperatorRoleInfo.FromText(row?["level"]?.ToString());
+        if (target == OperatorRole.Dev)
+            return "开发者账号不可删除（防锁死）";
+        if (actor == OperatorRole.Admin && target == OperatorRole.Admin)
+            return "管理员账号只有开发者可以删除";
         _db.ExecuteNonQuery("delete from operators where username=@u",
             new Dictionary<string, object?> { ["u"] = u });
         return null;
     }
 
     /// <summary>
-    /// 调整账号级别。防锁死：把最后一个 LEVEL.4 降到 L3 以下拒绝。
-    /// 返回中文原因，成功 null。
+    /// 代改密码（用户管理窗"重置密码"按编辑区新密码重置，不需要旧密码——
+    /// operator 无改密权，改密全走此处）。actor=当前登录者的角色：
+    /// ① 开发者账号的密码只有开发者本人可改；
+    /// ② 管理员可重置操作员/管理员的密码（含自己）。
+    /// 目标不存在返回"用户不存在"，规则不过返回规则原因，成功 null。
     /// </summary>
-    public string? SetLevel(string? user, OperatorLevel level)
+    public string? SetPassword(string? targetUser, string? newPassword, OperatorRole actor)
     {
-        string u = user?.Trim() ?? "";
+        string u = targetUser?.Trim() ?? "";
         if (string.IsNullOrEmpty(u))
             return "用户名不能为空";
         object? n = _db.ExecuteScalar("select count(*) from operators where username=@u",
@@ -242,39 +258,9 @@ public class OperatorStore
         DataRow? row = _db.ExecuteDataRow(
             "select level from operators where username=@u",
             new Dictionary<string, object?> { ["u"] = u });
-        if (row != null && level != OperatorLevel.Level4 &&
-            OperatorLevelInfo.FromText(row["level"]?.ToString()) == OperatorLevel.Level4)
-        {
-            object? l4 = _db.ExecuteScalar(
-                "select count(*) from operators where level=@l",
-                new Dictionary<string, object?> { ["l"] = "Level4" });
-            if (l4 != null && Convert.ToInt64(l4) <= 1)
-                return "不能降级最后一个 LEVEL.4 账号（防锁死）";
-        }
-        _db.ExecuteNonQuery(
-            "update operators set level=@l, updated_at=@t where username=@u",
-            new Dictionary<string, object?>
-            {
-                ["l"] = OperatorLevelInfo.ToText(level),
-                ["t"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-                ["u"] = u,
-            });
-        return null;
-    }
-
-    /// <summary>
-    /// 改密码（权限管理窗管理员代改，不需要旧密码——调用方保证操作者够级别）。
-    /// 目标不存在返回"用户不存在"，规则不过返回规则原因，成功 null。
-    /// </summary>
-    public string? SetPassword(string? targetUser, string? newPassword)
-    {
-        string u = targetUser?.Trim() ?? "";
-        if (string.IsNullOrEmpty(u))
-            return "用户名不能为空";
-        object? n = _db.ExecuteScalar("select count(*) from operators where username=@u",
-            new Dictionary<string, object?> { ["u"] = u });
-        if (n == null || Convert.ToInt64(n) == 0)
-            return "用户不存在";
+        var target = OperatorRoleInfo.FromText(row?["level"]?.ToString());
+        if (target == OperatorRole.Dev && actor != OperatorRole.Dev)
+            return "开发者密码只能由开发者本人修改";
         string? rule = PasswordHasher.ValidateNewPassword(newPassword, null);
         if (rule != null)
             return rule;

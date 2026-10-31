@@ -39,22 +39,29 @@ public class FakeCureDialogService : CureStation.ViewModels.IDialogService
         return CuringPolicyResult;
     }
 
-    /// <summary>ShowLogin 的桩返回值（null=取消；有值=登录成功带出级别）。</summary>
-    public (string User, OperatorLevel Level)? LoginResult { get; set; }
+    /// <summary>ShowLogin 的桩返回值（null=取消；有值=登录成功带出角色）。</summary>
+    public (string User, OperatorRole Role)? LoginResult { get; set; }
     /// <summary>ShowWorkOrder 的桩返回值（true=保存成功）。</summary>
     public bool WorkOrderResult { get; set; }
 
-    public (string User, OperatorLevel Level)? ShowLogin()
+    public (string User, OperatorRole Role)? ShowLogin()
     {
         Calls.Add("ShowLogin");
         return LoginResult;
     }
 
-    public void ShowOperators() => Calls.Add("ShowOperators");
+    /// <summary>ShowAccounts 收到的 actor（断言门禁传得对）。</summary>
+    public OperatorRole? AccountActor { get; private set; }
 
-    public bool ShowWorkOrder(OperatorLevel? currentLevel)
+    public void ShowAccounts(OperatorRole actor)
     {
-        Calls.Add($"ShowWorkOrder:{currentLevel?.ToString() ?? "null"}");
+        Calls.Add("ShowAccounts");
+        AccountActor = actor;
+    }
+
+    public bool ShowWorkOrder(OperatorRole? currentRole)
+    {
+        Calls.Add($"ShowWorkOrder:{currentRole?.ToString() ?? "null"}");
         return WorkOrderResult;
     }
 

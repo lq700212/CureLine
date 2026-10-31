@@ -2,6 +2,84 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.49（2026-10-31，权限体系重做：四级→三级角色 + 用户管理窗换血）
+
+- **权限模型四级→三级（用户拍板）**：`OperatorLevel.Level1~4` 整体删除，
+  新 `OperatorRole` 三级——`Operator 操作员 / Admin 管理员 / Dev 开发者`。
+  预置三账号：operator/123456、admin/123456、dev/dev123（**dev 是真正最高
+  权限**，角色不开放创建、账号永不可删、密码只有本人可改——防锁死红线
+  由"最后一个 L4"改为"开发者钥匙永在"）。
+- **operator 无改密权**：登录窗改密面板整体删除（回归纯登录，三框/四道闸
+  /Back 链与 TipIsError 等副产品全清）；改密全走用户管理窗由 admin/dev
+  **重置**（免验旧密码，立即生效）。
+- **用户管理窗重做**（`AccountManagerWindow` + `AccountManagerViewModel`，
+  替代原"权限管理窗"）：admin 只能建删操作员、可重置 operator+admin 密码
+  （含自己）；dev 建删 operator+admin（删 admin 只有 dev 可做）、可重置
+  所有人密码（含自己）。dev 行删除灰禁+原因提示；选中不可操作统一给
+  `SelectedActionHint` 中文原因。"改级别"功能删除（换角色=删了重建）。
+  删除/重置方法开头加 CanXxx 兜底（RelayCommand 直调 Execute 不判灰，
+  程序态调用也拦——与工单 Flush 兜底同思路的双层防线）。
+- **门禁矩阵（三级）**：设置按钮 operator 登录后**整钮禁用**
+  （`IsSettingsEnabled`，XAML 半透明触发器）；点表配置=dev 专属且 admin
+  登录后设置下拉里**直接没有该项**（`ShowPointTableItem` → DataTrigger
+  收起）；工艺策略/IO 通讯测试/过账配置/演示开关/用户管理=管理员+；
+  工单（operator 可开，窗内拆三档：CanEditDaily 数量/清零、CanEditRoute
+  途程、CanEditProcess 制程+上传使能，admin+ 才能改）/日志=登录即可。
+  工单 Flush 兜底随三档拆分同步。
+- **Store 层 actor 兜底**（VM 置灰之外的防线）：`AddUser/RemoveUser/
+  SetPassword` 全带 actor 参数在 `OperatorStore` 收口；`SetLevel` 随
+  "改级别"删除；旧库存量 Level1~4 文本 `FromText` 就地映射（L4→Admin、
+  L1~3→Operator，纯防老测试库崩，非兼容义务）；脏文本按操作员兜底。
+- **两处实现坑（本次踩平）**：① `EnsureSeeded` 原走 `AddUser` 播种，而
+  AddUser 对 Dev 角色"不开放创建"边界会把预置 dev 拦下——dev 永远播不进
+  库、Verify 全 null；改 `SeedUser` 直写库（与 UserAccountStore 同款）。
+  ② `ListUsers` 的 `order by level desc`：level 现存文本 Operator/Admin/
+  Dev，字母序与权限序不一致（会排成 Operator>Dev>Admin），改 case 显式
+  定权（Dev>Admin>Operator）。
+- **初始化**：`App.OnStartup` 播种改三参 `EnsureSeeded("123456","123456",
+  "dev123")`——上线必改初始密码（同前口径，文档不记现场实值）。
+- **删除清单**：`OperatorLevel` 枚举、`OperatorWindow.xaml/.cs`、
+  `OperatorViewModel.cs`、`OperatorLevelNameConverter.cs`、登录窗改密面板；
+  `IDialogService` 签名更新：`ShowLogin()`→`(User, OperatorRole)?`、
+  `ShowOperators()`→`ShowAccounts(actor)`、`ShowWorkOrder(level)`→
+  `(OperatorRole?)`；DocShot 工具截图桩同步（工单窗改为
+  Operator/Admin 双态）。
+- 测试：`OperatorStoreTests` 整文件重写（三角色播种/添加边界/删除边界/
+  改密边界/文本迁移与门禁判断）；CureStationViewModelTests 登录门禁改
+  **三角色矩阵**（operator=设置禁用+管理/点表/演示全拦、admin=除点表全放
+  行+菜单项隐藏、dev=点表放行）、工单三档、账号管理 admin/dev 双视角、
+  删登改装用例；`FakeCureDialogService` 新签名桩。393/393 全绿（基线 397，
+  改密面板与旧权限窗用例删除后净减 4，其余零回退）。
+
+## V0.0.48（2026-10-31，点表窗按钮截断修复 + 点号显示形态单下拉）
+
+- **点表窗标题精简（用户目检反馈）**：标题栏尾缀"(点点鼠标，无需改代码)"
+  删掉——窗口大标题回归"IO 点表配置"（Window.Title 与品牌标题条
+  FallbackValue 两处同改）；设计理念说明保留在代码注释，不占用户屏幕。
+- **点表窗按钮行文本显示不全修复（用户目检反馈）**："删除选中行"按钮
+  `Width=110` 放不下"图标18+左右Padding20+边框2=40 固定开销 + 文本约 76px"
+  （合计约 116px），末字被截。放宽到 `Width=132`（内容完整的最小整值）；
+  文本较短的"＋添加行/测试连接/测试全部"保持 110 不动。
+- **点表"点号"列改单下拉显示形态（用户拍板简单化设计：一个下拉能表达的
+  不拆"进制+勾选框+前缀下拉"四件套）**：按钮行右端新增"点号显示"下拉，
+  `BitDisplayStyle` 六形态——`TerminalXY` 端子号 X8/YF（缺省，GFNB 端子
+  丝印口径，对端子总图最顺）/ `TerminalIQ` 端子号 I/Q（IEC 口径）/
+  `Hex0x` 十六进制 / `Dec` 十进制 / `Oct` 八进制 / `Bin` 二进制。选择即
+  落盘 config.ini [setting] `PointBitStyle` 记忆（非法值开机回缺省，Theme
+  同款自愈；程序①专用 UI 键，照 Theme 先例不进 AppConfig）。**Bit 存储恒
+  为十进制 int，只换显示**：点号列改模板列"显示 vs 编辑"两口径——显示
+  `BitDisplay` 按所选形态渲染（0x 消歧、端子号前缀随行方向换 X↔Y/I↔Q），
+  编辑 `BitEdit` 按当前形态裸数字直填（端子号口径下"看到什么输什么"：
+  带本行方向前缀 X/I 或 Y/Q 也直接吃，串行前缀不接防手滑；解析失败弹回
+  原值；越界不在行内拦——保存前校验统一兜的 V0.0.45 直编口径不变）。
+  意义：点号=块内物理端子位（16 位寄存器位号），此前的纯序号显示对现场
+  对端子丝印不直观；三道安全闸不变（UI 非法输入弹回 / 保存前 `PointTableValidator`
+  越界+同点重复双拦 / `StartBus` 起总线前全量校验兜底）——语义误改属
+  表格直编固有风险（用户知情拍板不加确认弹框，靠测试连接+IO 测试窗
+  现场验证）。config.sample.ini 同步 `PointBitStyle` 键；新增 3 用例
+  （六形态显示/事件广播、编辑解析+垃圾弹回+跨口径前缀、单键持久化+坏值
+  自愈），397/397 全绿。
+
 ## V0.0.47（2026-10-31，主窗工单带补齐单工位口径 + 点表点号开放编辑）
 
 - **主窗底部工单带 R/L 双卡不随双工位开关注隐（用户现场反馈）**：V0.0.38

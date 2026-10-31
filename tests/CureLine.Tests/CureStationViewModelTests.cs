@@ -384,6 +384,128 @@ public class CureStationViewModelTests
             Assert.Equal((IoPointRole)i, options[i].Value);
     }
 
+    // ---------- 点号显示形态（V0.0.48：单下拉六形态，显示/编辑两口径） ----------
+
+    private static readonly CureStation.ViewModels.PointTableViewModel.BitDisplayStyle
+        StyleXY = CureStation.ViewModels.PointTableViewModel.BitDisplayStyle.TerminalXY,
+        StyleIQ = CureStation.ViewModels.PointTableViewModel.BitDisplayStyle.TerminalIQ,
+        StyleHex = CureStation.ViewModels.PointTableViewModel.BitDisplayStyle.Hex0x,
+        StyleDec = CureStation.ViewModels.PointTableViewModel.BitDisplayStyle.Dec,
+        StyleOct = CureStation.ViewModels.PointTableViewModel.BitDisplayStyle.Oct,
+        StyleBin = CureStation.ViewModels.PointTableViewModel.BitDisplayStyle.Bin;
+
+    [Fact]
+    public void PointTableVm_BitDisplay_SixStyles_TerminalXYIsDefault()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var vm = new CureStation.ViewModels.PointTableViewModel(new FakeCureDialogService());
+        vm.GenerateTemplateCommand.Execute(null);
+        var input = vm.Bindings.First(b => b.IsInput);
+        var output = vm.Bindings.First(b => !b.IsInput);
+
+        // 缺省=端子号 X/Y（GFNB 丝印口径）：输入 X+hex、输出 Y+hex
+        Assert.Equal(StyleXY, vm.BitStyle);
+        input.Raw.Bit = 10;
+        output.Raw.Bit = 15;
+        Assert.Equal("XA", input.BitDisplay);
+        Assert.Equal("YF", output.BitDisplay);
+
+        // 六形态逐切（Bit 存储恒为十进制，只换显示）；IsInput 变更实时换前缀
+        vm.BitStyle = StyleIQ;
+        Assert.Equal("IA", input.BitDisplay);
+        Assert.Equal("QF", output.BitDisplay);
+        vm.BitStyle = StyleHex;
+        Assert.Equal("0xA", input.BitDisplay);
+        Assert.Equal("0xF", output.BitDisplay);
+        vm.BitStyle = StyleDec;
+        Assert.Equal("10", input.BitDisplay);
+        Assert.Equal("15", output.BitDisplay);
+        vm.BitStyle = StyleOct;
+        input.Raw.Bit = 12;
+        Assert.Equal("14", input.BitDisplay);            // 12 = 八进制 14
+        vm.BitStyle = StyleBin;
+        Assert.Equal("1100", input.BitDisplay);          // 12 = 二进制 1100
+
+        // 事件广播：口径切换/方向变更 → 每行 BitDisplay 通知（XAML 绑定刷新源）
+        int raises = 0;
+        input.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(input.BitDisplay)) raises++; };
+        vm.BitStyle = StyleXY;
+        input.IsInput = !input.IsInput;                  // 前缀随方向换（Y→X 侧）
+        Assert.Equal(2, raises);
+    }
+
+    [Fact]
+    public void PointTableVm_BitEdit_ParsesVisibleForm_FallsBackOnGarbage()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var vm = new CureStation.ViewModels.PointTableViewModel(new FakeCureDialogService());
+        vm.GenerateTemplateCommand.Execute(null);
+        var input = vm.Bindings.First(b => b.IsInput);
+        var output = vm.Bindings.First(b => !b.IsInput);
+
+        // 端子号口径（缺省）：编辑=裸 hex 数字；"看到什么输什么"——带前缀也吃
+        input.Raw.Bit = 10;
+        Assert.Equal("A", input.BitEdit);                // 裸数字（前缀是展示口径）
+        input.BitEdit = "B";
+        Assert.Equal(11, input.Raw.Bit);
+        input.BitEdit = "XB";                            // 带本行方向前缀直输
+        Assert.Equal(11, input.Raw.Bit);
+        Assert.Equal("XB", input.BitDisplay);
+
+        // 输出行剥 Y 前缀；串行的 X 不接（防手滑写串行→值原地不动）
+        output.Raw.Bit = 15;
+        Assert.Equal("F", output.BitEdit);
+        output.BitEdit = "Y7";
+        Assert.Equal(7, output.Raw.Bit);
+        output.BitEdit = "X7";                           // X≠Y 行前缀 → 解析失败弹回
+        Assert.Equal(7, output.Raw.Bit);
+        Assert.Equal("7", output.BitEdit);
+
+        // 垃圾输入（非数字/负数）：值原地不动，编辑框弹回原显示
+        input.Raw.Bit = 9;
+        input.BitEdit = "GG";
+        Assert.Equal(9, input.Raw.Bit);
+        Assert.Equal("9", input.BitEdit);
+        input.BitEdit = "-3";                            // HexNumber 无符号 + bit>=0 双拒
+        Assert.Equal(9, input.Raw.Bit);
+        input.BitEdit = "1F";                            // 越界（31≥16）行内放行写穿——保存前校验统一拦
+        Assert.Equal(31, input.Raw.Bit);
+
+        // 0x/0o/0b 显式前缀跨口径（现场复制文本宽容）；且优先于当前口径
+        vm.BitStyle = StyleDec;
+        Assert.Equal("31", input.BitEdit);
+        input.BitEdit = "0x1A";
+        Assert.Equal(26, input.Raw.Bit);
+        vm.BitStyle = StyleOct;
+        input.BitEdit = "17";
+        Assert.Equal(15, input.Raw.Bit);
+        vm.BitStyle = StyleBin;
+        input.BitEdit = "1010";
+        Assert.Equal(10, input.Raw.Bit);
+    }
+
+    [Fact]
+    public void PointTableVm_BitStyle_SingleIniKey_PersistsAndHealsBadValue()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var vm = new CureStation.ViewModels.PointTableViewModel(new FakeCureDialogService());
+        Assert.Equal(StyleXY, vm.BitStyle);              // 缺省端子号 X/Y
+
+        vm.BitStyle = StyleDec;
+        Assert.Equal("Dec", IniFile.ReadStr(AppPaths.ConfigIni, "setting", "PointBitStyle", ""));
+
+        var vm2 = new CureStation.ViewModels.PointTableViewModel(new FakeCureDialogService());
+        Assert.Equal(StyleDec, vm2.BitStyle);            // 重开窗记住选择
+
+        // 手编 ini 写坏值：自愈回缺省（Theme 同款口径），不炸不猜档
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PointBitStyle", "zzz");
+        var vm3 = new CureStation.ViewModels.PointTableViewModel(new FakeCureDialogService());
+        Assert.Equal(StyleXY, vm3.BitStyle);
+    }
+
     [Fact(DisplayName = "顶栏连接短词：起停/配置/演示/连通/部分台/错误详情六态抓重点")]
     public void MainVm_DeriveConnectionShort_CoversKeyStates()
     {
@@ -691,8 +813,8 @@ public class CureStationViewModelTests
         using var vm = new CureStation.ViewModels.MainViewModel(fake);
         Assert.Contains("自定义", vm.PolicyText);   // 缺省库激活名（V0.0.20 三轮）
 
-        // 登录 L4（策略窗现在有门禁：L3+，未登录会被 Gate 拦下）→ 激活"快固"落盘 → 顶栏刷新
-        fake.LoginResult = ("admin", OperatorLevel.Level4);
+        // 登录管理员（策略窗有门禁：管理员+，未登录会被 Gate 拦下）→ 激活"快固"落盘 → 顶栏刷新
+        fake.LoginResult = ("admin", OperatorRole.Admin);
         vm.LoginCommand.Execute(null);
         var book = new CuringPolicyBook
         {
@@ -726,12 +848,12 @@ public class CureStationViewModelTests
         Assert.Contains(fake.Calls, c => c.Contains("未登录"));
         Assert.DoesNotContain(fake.Calls, c => c.StartsWith("ShowWorkOrder"));
 
-        vm.OpenOperatorsCommand.Execute(null);   // 未登录 → 权限管理也拦
-        Assert.DoesNotContain(fake.Calls, c => c == "ShowOperators");
+        vm.OpenAccountsCommand.Execute(null);   // 未登录 → 用户管理也拦
+        Assert.DoesNotContain(fake.Calls, c => c == "ShowAccounts");
     }
 
     [Fact]
-    public void MainVm_Login_AndLevelGate()
+    public void MainVm_Login_AndRoleGate()
     {
         using var scope = new TestScope();
         EnsureConfigDir();
@@ -739,23 +861,38 @@ public class CureStationViewModelTests
         var fake = new FakeCureDialogService();
         using var vm = new CureStation.ViewModels.MainViewModel(fake);
 
-        // L1 登录：工单可开、权限管理拦（需 L4）、策略拦（需 L3）
-        fake.LoginResult = ("op1", OperatorLevel.Level1);
+        // 操作员登录：工单可开；设置按钮整钮禁用；用户管理/点表/演示全拦
+        fake.LoginResult = ("operator", OperatorRole.Operator);
         vm.LoginCommand.Execute(null);
-        // 顶栏格式"操作员：op1"（V0.0.20 口径：权限短名开头，不带 LEVEL 字样）
-        Assert.Equal("操作员：op1", vm.OperatorText);
+        // 顶栏格式"操作员：operator"（角色名开头，不带 LEVEL 字样）
+        Assert.Equal("操作员：operator", vm.OperatorText);
+        Assert.False(vm.IsSettingsEnabled);     // operator → 设置按钮不可用（用户拍板）
 
         vm.OpenWorkOrderCommand.Execute(null);
-        Assert.Contains(fake.Calls, c => c.StartsWith("ShowWorkOrder:Level1"));
+        Assert.Contains(fake.Calls, c => c.StartsWith("ShowWorkOrder:Operator"));
 
-        vm.OpenOperatorsCommand.Execute(null);
-        Assert.Contains(fake.Calls, c => c.Contains("权限不足"));
+        vm.OpenAccountsCommand.Execute(null);
+        vm.OpenPointTableCommand.Execute(null);
+        vm.ToggleSimulateCommand.Execute(null);
+        Assert.Equal(3, fake.Calls.Count(c => c.Contains("权限不足")));
+        Assert.DoesNotContain(fake.Calls, c => c == "ShowAccounts");
+        Assert.DoesNotContain(fake.Calls, c => c == "ShowPointTable");
 
-        // L4 重登：全部放行
-        fake.LoginResult = ("admin", OperatorLevel.Level4);
+        // 管理员登录：策略/IO/过账/演示/用户管理全放行；点表仍拦 + 菜单项隐藏
+        fake.LoginResult = ("admin", OperatorRole.Admin);
         vm.LoginCommand.Execute(null);
-        vm.OpenOperatorsCommand.Execute(null);
-        Assert.Contains(fake.Calls, c => c == "ShowOperators");
+        Assert.True(vm.IsSettingsEnabled);
+        Assert.False(vm.ShowPointTableItem);    // admin 点表项直接没有（用户拍板）
+        vm.OpenAccountsCommand.Execute(null);
+        Assert.Equal(OperatorRole.Admin, fake.AccountActor);
+        vm.OpenPointTableCommand.Execute(null);
+        Assert.Contains(fake.Calls, c => c.Contains("权限不足"));
+        Assert.DoesNotContain(fake.Calls, c => c == "ShowPointTable");
+
+        // 开发者登录：点表放行 + 菜单项可见
+        fake.LoginResult = ("dev", OperatorRole.Dev);
+        vm.LoginCommand.Execute(null);
+        Assert.True(vm.ShowPointTableItem);
         vm.OpenPointTableCommand.Execute(null);
         Assert.Contains(fake.Calls, c => c == "ShowPointTable");
     }
@@ -785,7 +922,7 @@ public class CureStationViewModelTests
         var fake = new FakeCureDialogService();
         using var vm = new CureStation.ViewModels.MainViewModel(fake);
 
-        fake.LoginResult = ("op1", OperatorLevel.Level1);  // L1 即可开（只读不碰配置）
+        fake.LoginResult = ("operator", OperatorRole.Operator);  // 登录即可开（只读不碰配置）
         vm.LoginCommand.Execute(null);
         vm.ShowLogCommand.Execute(null);
         Assert.Contains(fake.Calls, c => c == "ShowLog");
@@ -827,8 +964,8 @@ public class CureStationViewModelTests
 
     // ---------- 演示模式开关（Mock 数据热切换，2026-10-30） ----------
 
-    [Fact(DisplayName = "演示开关门禁：未登录拦下、L1 拦下（需 L4）")]
-    public void MainVm_ToggleSimulate_GateBlocksBelowLevel4()
+    [Fact(DisplayName = "演示开关门禁：未登录拦下、操作员拦下（需管理员）")]
+    public void MainVm_ToggleSimulate_GateBlocksBelowAdmin()
     {
         using var scope = new TestScope();
         EnsureConfigDir();
@@ -842,7 +979,7 @@ public class CureStationViewModelTests
         Assert.False(vm.IsSimulate);
         Assert.Equal("0", IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Simulate", "0"));
 
-        fake.LoginResult = ("op1", OperatorLevel.Level1);   // L1 不够（需 L4）
+        fake.LoginResult = ("operator", OperatorRole.Operator);   // 操作员不够（需管理员）
         vm.LoginCommand.Execute(null);
         vm.ToggleSimulateCommand.Execute(null);
         Assert.Contains(fake.Calls, c => c.Contains("权限不足"));
@@ -851,7 +988,7 @@ public class CureStationViewModelTests
         Assert.Equal("演示：关", vm.SimulateText);
     }
 
-    [Fact(DisplayName = "演示开关：L4 切换写回 ini + 文案跟随 + 总线热切换")]
+    [Fact(DisplayName = "演示开关：管理员切换写回 ini + 文案跟随 + 总线热切换")]
     public void MainVm_ToggleSimulate_WritesConfigAndSwitchesBus()
     {
         using var scope = new TestScope();
@@ -864,7 +1001,7 @@ public class CureStationViewModelTests
         IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "0");
         var fake = new FakeCureDialogService();
         using var vm = new CureStation.ViewModels.MainViewModel(fake);
-        fake.LoginResult = ("admin", OperatorLevel.Level4);
+        fake.LoginResult = ("admin", OperatorRole.Admin);
         vm.LoginCommand.Execute(null);
 
         // 关 → 开：Mock 总线接管（ConnectionSummary 带"演示模式"）
@@ -908,7 +1045,7 @@ public class CureStationViewModelTests
         using var scope = new TestScope();
         EnsureConfigDir();
         var fake = new FakeCureDialogService();
-        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorLevel.Level4);
+        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorRole.Admin);
 
         vm.EditRtRcNo = "R-001";
         vm.EditRtPreset = "100";
@@ -938,11 +1075,11 @@ public class CureStationViewModelTests
     }
 
     [Fact]
-    public void WorkOrderVm_LevelGate_BlocksLowLevelEdits()
+    public void WorkOrderVm_RoleGate_BlocksLowRoleEdits()
     {
         using var scope = new TestScope();
         EnsureConfigDir();
-        // 预置工单：途程/制程已有值
+        // 预置工单：途程/数量/制程已有值
         WorkOrderStore.Save(new WorkOrderBook
         {
             Right = new WorkOrderSlot { RcNo = "原途程", PresetQty = 50, ProducedQty = 5 },
@@ -950,30 +1087,39 @@ public class CureStationViewModelTests
         });
         var fake = new FakeCureDialogService();
 
-        // L1：途程/数量/制程全锁，只能录员工工号/条码
-        var vm1 = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorLevel.Level1);
+        // 未登录：数量也锁（连清零都不给——日常录入以登录为准）
+        var vm0 = new CureStation.ViewModels.WorkOrderViewModel(fake, null);
+        Assert.False(vm0.CanEditDaily);
+        Assert.False(vm0.CanEditRoute);
+        Assert.False(vm0.CanEditProcess);
+
+        // 操作员：条码/工号/数量/清零可录；途程/制程全锁（就算绕过 IsEnabled 也兜底回原值）
+        var vm1 = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorRole.Operator);
+        Assert.True(vm1.CanEditDaily);
         Assert.False(vm1.CanEditRoute);
         Assert.False(vm1.CanEditProcess);
-        vm1.EditRtRcNo = "越权改";      // 就算绕过 IsEnabled 直改属性，Flush 也兜底回原值
+        vm1.EditRtRcNo = "越权改";      // 绕过 IsEnabled 直改属性
         vm1.EditPtNo1 = "越权制程";
+        vm1.EditRtPreset = "88";        // 数量是操作员权限
+        vm1.EditRtProduced = "9";
+        vm1.ClearCountLfCommand.Execute(null);   // L 侧清零（操作员可点）
         vm1.EditEmpNo = "EMP009";
+        vm1.EditBcNo = "BC-9";
         vm1.SaveCommand.Execute(null);
         Assert.True(vm1.CloseDialog);
         var loaded1 = WorkOrderStore.Load()!;
-        Assert.Equal("原途程", loaded1.Right.RcNo);   // L1 改不动途程
-        Assert.Equal("原制程", loaded1.PtNo1);        // L1 改不动制程
-        Assert.Equal("EMP009", loaded1.EmpNo);        // 员工工号可录
+        Assert.Equal("原途程", loaded1.Right.RcNo);   // 操作员改不动途程
+        Assert.Equal("原制程", loaded1.PtNo1);        // 制程同样锁
+        Assert.Equal(88, loaded1.Right.PresetQty);    // 数量可改
+        Assert.Equal(9, loaded1.Right.ProducedQty);
+        Assert.Equal(0, loaded1.Left.ProducedQty);    // 清零生效
+        Assert.Equal("EMP009", loaded1.EmpNo);
+        Assert.Equal("BC-9", loaded1.BcNo);
 
-        // L2：途程/数量/清零可改，制程仍锁
-        var vm2 = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorLevel.Level2);
+        // 管理员：途程/数量/制程全解锁
+        var vm2 = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorRole.Admin);
         Assert.True(vm2.CanEditRoute);
-        Assert.False(vm2.CanEditProcess);
-        vm2.ClearCountRtCommand.Execute(null);        // 计数清零（L2 权限）
-        Assert.Equal("0", vm2.EditRtProduced);
-
-        // L3：制程解锁
-        var vm3 = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorLevel.Level3);
-        Assert.True(vm3.CanEditProcess);
+        Assert.True(vm2.CanEditProcess);
     }
 
     [Fact]
@@ -982,7 +1128,7 @@ public class CureStationViewModelTests
         using var scope = new TestScope();
         EnsureConfigDir();
         var fake = new FakeCureDialogService();
-        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorLevel.Level4);
+        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorRole.Admin);
         vm.EditRtPreset = "abc";
 
         vm.SaveCommand.Execute(null);
@@ -1000,7 +1146,7 @@ public class CureStationViewModelTests
         using var scope = new TestScope();
         EnsureConfigDir();
         var fake = new FakeCureDialogService();
-        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorLevel.Level4,
+        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorRole.Admin,
             postOptions: new CuringMesOptions { DualSide = true, Side = "R" });
 
         Assert.True(vm.IsDualSide);
@@ -1028,7 +1174,7 @@ public class CureStationViewModelTests
             Left = new WorkOrderSlot { RcNo = "L-KEEP", PresetQty = 20, ProducedQty = 3 },
         });
         var fake = new FakeCureDialogService();
-        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorLevel.Level4,
+        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorRole.Admin,
             postOptions: new CuringMesOptions { DualSide = false, Side = "R" });
 
         Assert.False(vm.IsDualSide);
@@ -1062,7 +1208,7 @@ public class CureStationViewModelTests
             Left = new WorkOrderSlot { RcNo = "L-MAIN", PresetQty = 5 },
         });
         var fake = new FakeCureDialogService();
-        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorLevel.Level4,
+        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorRole.Admin,
             postOptions: new CuringMesOptions { DualSide = false, Side = "L" });
 
         Assert.False(vm.ShowRightPanel);
@@ -1077,85 +1223,120 @@ public class CureStationViewModelTests
         Assert.Equal(10, loaded.Right.PresetQty); // Right 槽原样
     }
 
-    // ---------- 权限管理窗 VM（P3.2） ----------
+    // ---------- 用户管理窗 VM（V0.0.49 三级角色重做） ----------
 
     [Fact]
-    public void OperatorVm_AddRemove_RoundTrip()
+    public void AccountVm_AsAdmin_CreatesAndDeletesOperatorOnly()
     {
         using var scope = new TestScope();
         var dbPath = Path.Combine(scope.TempDir, "ops-vm.db3");
         var store = new OperatorStore(new SqliteHelper(dbPath));
-        store.EnsureSeeded("test-admin-pwd");
+        store.EnsureSeeded("123456", "test-admin-pwd", "dev123");
         var fake = new FakeCureDialogService();
-        var vm = new CureStation.ViewModels.OperatorViewModel(fake, store);
+        var vm = new CureStation.ViewModels.AccountManagerViewModel(
+            fake, OperatorRole.Admin, store);
 
-        Assert.Single(vm.Users); // 播种的 admin
+        // 种子三账号（dev/admin/operator），角色下拉只见"操作员"
+        Assert.Equal(3, vm.Users.Count);
+        Assert.Equal(["操作员"], vm.CreateRoleOptions);
 
-        // 新增：弱密码拦下弹框
+        // 新增：弱密码拦下弹框（admin 视角角色下拉只有"操作员"——UI 层就选不出
+        // "管理员/开发者"选项；Store 对 admin 建 admin 的兜底拦截另有 Store 层用例）
         vm.EditUserName = "op1";
-        vm.EditLevel = OperatorLevel.Level1;
         vm.EditPassword = "123";
         vm.AddUserCommand.Execute(null);
         Assert.Contains(fake.Calls, c => c.Contains("新增失败"));
 
-        // 新增成功 → 列表刷新
+        // 新增操作员成功 → 列表刷新为四个
         vm.EditPassword = "abc123";
         vm.AddUserCommand.Execute(null);
-        Assert.Equal(2, vm.Users.Count);
-        Assert.Contains(vm.Users, u => u.UserName == "op1");
+        Assert.Equal(4, vm.Users.Count);
+        Assert.Contains(vm.Users, u => u.UserName == "op1" && u.RoleText == "操作员");
 
-        // 删 admin（最后一个 L4）→ 防锁死弹框
+        // 删 admin 行：按钮不可用（CanDeleteSelected=false）+ 提示文案；Confirm 都不该弹
         vm.SelectedUser = vm.Users.First(u => u.UserName == "admin");
-        vm.RemoveUserCommand.Execute(null);
-        Assert.Contains(fake.Calls, c => c.Contains("删除失败"));
+        Assert.False(vm.CanDeleteSelected());
+        Assert.Contains("开发者", vm.SelectedActionHint);
+        fake.Calls.Clear();
+        vm.RemoveUserCommand.Execute(null);   // CanExecute=false，Command 直接无效
+        Assert.DoesNotContain(fake.Calls, c => c.StartsWith("Confirm:删除"));
 
-        // 删 op1 → Confirm 后删掉
+        // 删 op1 → Confirm 后删掉（剩三个）
         vm.SelectedUser = vm.Users.First(u => u.UserName == "op1");
+        Assert.True(vm.CanDeleteSelected());
         vm.RemoveUserCommand.Execute(null);
-        Assert.Single(vm.Users);
+        Assert.Equal(3, vm.Users.Count);
     }
 
     [Fact]
-    public void OperatorVm_SetLevelAndPassword_RoundTrip()
+    public void AccountVm_AsDev_CanCreateAdminAndDeleteAdmin_DevUntouchable()
     {
         using var scope = new TestScope();
-        var dbPath = Path.Combine(scope.TempDir, "ops-vm2.db3");
+        var dbPath = Path.Combine(scope.TempDir, "ops-vm-dev.db3");
         var store = new OperatorStore(new SqliteHelper(dbPath));
-        store.EnsureSeeded("test-admin-pwd");
+        store.EnsureSeeded("123456", "test-admin-pwd", "dev123");
         var fake = new FakeCureDialogService();
-        var vm = new CureStation.ViewModels.OperatorViewModel(fake, store);
+        var vm = new CureStation.ViewModels.AccountManagerViewModel(
+            fake, OperatorRole.Dev, store);
 
-        vm.SelectedUser = vm.Users.First(u => u.UserName == "admin");
-        vm.EditLevel = OperatorLevel.Level3;
-        vm.SetLevelCommand.Execute(null);        // 降最后一个 L4 → 防锁死
-        Assert.Contains(fake.Calls, c => c.Contains("改级别失败"));
+        // 开发者视角：角色下拉两选
+        Assert.Equal(["操作员", "管理员"], vm.CreateRoleOptions);
 
-        // 加第二个 L4 后，降级放行（重开 VM 拿最新列表）
-        store.AddUser("boss", OperatorLevel.Level4, "abc123");
-        var vm2 = new CureStation.ViewModels.OperatorViewModel(fake, store);
-        vm2.SelectedUser = vm2.Users.First(u => u.UserName == "admin");
-        vm2.EditLevel = OperatorLevel.Level3;
-        vm2.SetLevelCommand.Execute(null);
-        Assert.DoesNotContain(fake.Calls.Skip(1), c => c.Contains("改级别失败")); // 第二次成功
-        Assert.Equal(OperatorLevel.Level3, store.Verify("admin", "test-admin-pwd"));
+        // 选中自己（dev 行）：删除禁用，但重置密码可用（dev 改自己）
+        vm.SelectedUser = vm.Users.First(u => u.UserName == "dev");
+        Assert.False(vm.CanDeleteSelected());
+        Assert.True(vm.ResetPasswordCommand.CanExecute(null));
+
+        // 选中 admin 行：删除/重置都可用 —— 建第二个 admin 再删，全链验证
+        vm.EditUserName = "a2";
+        vm.EditRoleText = "管理员";
+        vm.EditPassword = "abc123";
+        vm.AddUserCommand.Execute(null);
+        Assert.Equal(OperatorRole.Admin, store.Verify("a2", "abc123"));
+        Assert.Equal(4, vm.Users.Count);
+        vm.SelectedUser = vm.Users.First(u => u.UserName == "a2");
+        Assert.True(vm.CanDeleteSelected());
+        Assert.Equal("", vm.SelectedActionHint);
+        vm.RemoveUserCommand.Execute(null);
+        Assert.Equal(3, vm.Users.Count);
+        Assert.Null(store.Verify("a2", "abc123"));    // 已删
     }
 
     [Fact]
-    public void OperatorVm_SetPassword_RoundTrip()
+    public void AccountVm_ResetPassword_AdminBoundaryAndSuccess()
     {
         using var scope = new TestScope();
-        var dbPath = Path.Combine(scope.TempDir, "ops-vm3.db3");
+        var dbPath = Path.Combine(scope.TempDir, "ops-vm-pwd.db3");
         var store = new OperatorStore(new SqliteHelper(dbPath));
-        store.EnsureSeeded("test-admin-pwd");
+        store.EnsureSeeded("123456", "test-admin-pwd", "dev123");
         var fake = new FakeCureDialogService();
-        var vm = new CureStation.ViewModels.OperatorViewModel(fake, store);
+        var vm = new CureStation.ViewModels.AccountManagerViewModel(
+            fake, OperatorRole.Admin, store);
 
-        vm.SelectedUser = vm.Users.First(u => u.UserName == "admin");
-        vm.EditPassword = "new-pwd-9";
-        vm.SetPasswordCommand.Execute(null);
+        // admin 选中 dev 行：重置禁用（开发者密码只有开发者本人可改）
+        vm.SelectedUser = vm.Users.First(u => u.UserName == "dev");
+        Assert.False(vm.CanResetSelected());
+        Assert.False(vm.ResetPasswordCommand.CanExecute(null));
+        Assert.Contains("开发者", vm.SelectedActionHint);
 
-        Assert.Contains(fake.Calls, c => c.Contains("改密码成功"));
-        Assert.Equal(OperatorLevel.Level4, store.Verify("admin", "new-pwd-9"));
+        // admin 重置 operator：两次一致 → Confirm → 成功弹框 + 库里新密码可登录
+        vm.SelectedUser = vm.Users.First(u => u.UserName == "operator");
+        vm.NewPassword = "new-op-pwd";
+        vm.NewPassword2 = "new-op-pwd";
+        vm.ResetPasswordCommand.Execute(null);
+        Assert.Contains(fake.Calls, c => c.StartsWith("Confirm:重置确认"));
+        Assert.Contains(fake.Calls, c => c.Contains("重置成功"));
+        Assert.Equal(OperatorRole.Operator, store.Verify("operator", "new-op-pwd"));
+        Assert.Null(store.Verify("operator", "123456"));   // 旧密码失效
+
+        // 两次不一致 → 弹框拦下（Store 未动，旧密码仍有效）
+        fake.Calls.Clear();
+        vm.SelectedUser = vm.Users.First(u => u.UserName == "operator");
+        vm.NewPassword = "abc123";
+        vm.NewPassword2 = "abc124";
+        vm.ResetPasswordCommand.Execute(null);
+        Assert.Contains(fake.Calls, c => c.Contains("重置失败"));
+        Assert.Equal(OperatorRole.Operator, store.Verify("operator", "new-op-pwd"));
     }
 
     // ---------- 单线过账（P3.2 后半） ----------
@@ -1168,7 +1349,7 @@ public class CureStationViewModelTests
         var fake = new FakeCureDialogService();
         string? sideSeen = null;
         WorkOrderBook? diskAtCallback = null; // 回调触发那一刻的盘上工单
-        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorLevel.Level4,
+        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorRole.Admin,
             uploadMaterial: s =>
             {
                 sideSeen = s;
@@ -1191,7 +1372,7 @@ public class CureStationViewModelTests
     {
         var fake = new FakeCureDialogService();
         // 不传 uploadMaterial（=过账服务未装配）→ 按钮禁用，点了也不炸
-        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorLevel.Level4);
+        var vm = new CureStation.ViewModels.WorkOrderViewModel(fake, OperatorRole.Admin);
 
         Assert.False(vm.CanUpload);
         vm.UploadRMaterialCommand.Execute(null); // 防御：直接执行也不抛
@@ -1262,15 +1443,15 @@ public class CureStationViewModelTests
         vm.OpenPostConfigCommand.Execute(null);
         Assert.DoesNotContain(fake.Calls, c => c == "ShowMesPostConfig");
 
-        // L1 → 拦（过账配置 L4 专属）
-        fake.LoginResult = ("op1", OperatorLevel.Level1);
+        // 操作员 → 拦（过账配置管理员+）
+        fake.LoginResult = ("operator", OperatorRole.Operator);
         vm.LoginCommand.Execute(null);
         vm.OpenPostConfigCommand.Execute(null);
         Assert.DoesNotContain(fake.Calls, c => c == "ShowMesPostConfig");
 
-        // L4 → 放行；ini 预置 Enabled=1（模拟现场保存过）→ 保存成功后重读配置
+        // 管理员 → 放行；ini 预置 Enabled=1（模拟现场保存过）→ 保存成功后重读配置
         // 热更新过账服务 + 顶栏状态刷新（不重启）
-        fake.LoginResult = ("admin", OperatorLevel.Level4);
+        fake.LoginResult = ("admin", OperatorRole.Admin);
         vm.LoginCommand.Execute(null);
         IniFile.Write(AppPaths.ConfigIni, "CuringMes", "Enabled", "1");
         fake.MesPostConfigResult = true;
@@ -1315,14 +1496,14 @@ public class CureStationViewModelTests
         Assert.Equal(1, vm.WoCardColumns);
     }
 
-    // ---------- 登录窗 VM（V0.0.20 对齐 HJVision mFormLogin：记住/跟随/改密） ----------
+    // ---------- 登录窗 VM（V0.0.20 记住/跟随账号；V0.0.49 改密面板删除回归纯登录） ----------
 
     /// <summary>登录 VM 测试装配：临时库播种 + 临时 ini，双隔离（不碰现场 config）。</summary>
     private static (CureStation.ViewModels.LoginViewModel Vm, OperatorStore Store, string IniPath) NewLoginVm(
         TestScope scope, string dbName = "login-vm.db3")
     {
         var store = new OperatorStore(new SqliteHelper(Path.Combine(scope.TempDir, dbName)));
-        store.EnsureSeeded("test-admin-pwd");
+        store.EnsureSeeded("operator-seed", "test-admin-pwd", "dev123");
         string ini = Path.Combine(scope.TempDir, "login.ini");
         return (new CureStation.ViewModels.LoginViewModel(store, ini), store, ini);
     }
@@ -1332,7 +1513,7 @@ public class CureStationViewModelTests
     {
         using var scope = new TestScope();
         var (vm, store, ini) = NewLoginVm(scope);
-        store.AddUser("op1", OperatorLevel.Level1, "abc123");
+        store.AddUser("op1", OperatorRole.Operator, "abc123", OperatorRole.Admin);
         RunModeSettings.SaveLogin(ini, true, "op1", "abc123");
 
         // 重新构造（模拟现场第二次打开登录窗）：回填最后账号 + 它记住的密码 + 勾选。
@@ -1343,8 +1524,6 @@ public class CureStationViewModelTests
         // 下拉候选=在册账号实时表（含播种的 admin 与新增的 op1）。
         Assert.Contains("admin", vm2.HistoryUsers);
         Assert.Contains("op1", vm2.HistoryUsers);
-        Assert.False(vm2.IsChangePwd);
-        Assert.Equal("账号登录", vm2.BannerText);
     }
 
     [Fact]
@@ -1352,7 +1531,7 @@ public class CureStationViewModelTests
     {
         using var scope = new TestScope();
         var (vm, store, ini) = NewLoginVm(scope);
-        store.AddUser("op1", OperatorLevel.Level1, "abc123");
+        store.AddUser("op1", OperatorRole.Operator, "abc123", OperatorRole.Admin);
         RunModeSettings.SaveLogin(ini, true, "op1", "abc123");
 
         // 切到没记过密码的账号 → 密码清空 + 取消勾选（不残留别人的密码）。
@@ -1367,7 +1546,7 @@ public class CureStationViewModelTests
     }
 
     [Fact]
-    public void LoginVm_Ok_Success_SavesLoginAndBringsOutLevel()
+    public void LoginVm_Ok_Success_SavesLoginAndBringsOutRole()
     {
         using var scope = new TestScope();
         var (vm, store, ini) = NewLoginVm(scope);
@@ -1379,7 +1558,7 @@ public class CureStationViewModelTests
         vm.Remember = true;
         vm.OkCommand.Execute(null);
 
-        Assert.Equal(OperatorLevel.Level4, vm.Level);
+        Assert.Equal(OperatorRole.Admin, vm.Role);
         Assert.Equal("admin", vm.LoginName);
         Assert.True(closed);
         // 记住落盘：SavedUser=admin 且该账号密文可解回密码（ini 里永无明文）。
@@ -1402,104 +1581,9 @@ public class CureStationViewModelTests
         vm.OkCommand.Execute(null);
 
         Assert.Null(closed);                       // 不关窗（留在登录面板重试）
-        Assert.Null(vm.Level);
+        Assert.Null(vm.Role);
         Assert.Contains("错误", vm.Tip);
-        Assert.True(vm.TipIsError);
         Assert.Equal("", vm.Password);             // 密码清空重输
-    }
-
-    [Fact]
-    public void LoginVm_ChangePwd_FullChain_FourGatesThenSuccess()
-    {
-        using var scope = new TestScope();
-        var (vm, store, ini) = NewLoginVm(scope);
-
-        // ① 入口闸：账号不存在（未播种的 ghost）→ 不进面板。
-        vm.UserName = "ghost";
-        vm.ChangePwdCommand.Execute(null);
-        Assert.False(vm.IsChangePwd);
-        Assert.Contains("账号不存在", vm.Tip);
-
-        // 进面板（admin 在册）：横幅带账号名，三框清空。
-        vm.UserName = "admin";
-        vm.ChangePwdCommand.Execute(null);
-        Assert.True(vm.IsChangePwd);
-        Assert.Contains("admin", vm.BannerText);
-        vm.Remember = true;   // 用户勾了记住 → 改密成功后记忆同步新密码（见末尾断言）
-
-        // ② 原密码闸：验不对 → 拦，库未变。
-        vm.OldPassword = "not-the-old";
-        vm.NewPassword = "abc123";
-        vm.NewPassword2 = "abc123";
-        vm.SavePwdCommand.Execute(null);
-        Assert.True(vm.IsChangePwd);
-        Assert.Contains("原密码不正确", vm.Tip);
-        Assert.Equal(OperatorLevel.Level4, store.Verify("admin", "test-admin-pwd"));
-
-        // ③ 规则闸：新密码不足 6 位 → 拦。
-        vm.OldPassword = "test-admin-pwd";
-        vm.NewPassword = "abc";
-        vm.NewPassword2 = "abc";
-        vm.SavePwdCommand.Execute(null);
-        Assert.Contains("至少", vm.Tip);
-
-        // ④ 一致性闸：两次不一致 → 拦。
-        vm.NewPassword = "abc123";
-        vm.NewPassword2 = "abc123d";
-        vm.SavePwdCommand.Execute(null);
-        Assert.Contains("不一致", vm.Tip);
-        Assert.Equal(OperatorLevel.Level4, store.Verify("admin", "test-admin-pwd"));
-
-        // 全过 → 写盘即生效：新密码可登录、旧密码失效；回登录面板 + 绿色成功提示；
-        // 记住勾选开着 → 记忆同步新密码（否则下次回填旧密码直接失败的坑）。
-        vm.NewPassword = "abc123";
-        vm.NewPassword2 = "abc123";
-        vm.SavePwdCommand.Execute(null);
-        Assert.False(vm.IsChangePwd);
-        Assert.Equal("账号登录", vm.BannerText);
-        Assert.False(vm.TipIsError);
-        Assert.Contains("成功", vm.Tip);
-        Assert.Equal(OperatorLevel.Level4, store.Verify("admin", "abc123"));
-        Assert.Null(store.Verify("admin", "test-admin-pwd"));
-        var (remember, _, pwd) = RunModeSettings.ReadSavedLogin(ini, "admin");
-        Assert.True(remember);
-        Assert.Equal("abc123", pwd);
-    }
-
-    [Fact]
-    public void LoginVm_ChangePwd_NoRemember_ClearsSavedPassword()
-    {
-        using var scope = new TestScope();
-        var (vm, store, ini) = NewLoginVm(scope);
-        // 前置：admin 曾勾记住。
-        RunModeSettings.SaveLogin(ini, true, "admin", "test-admin-pwd");
-
-        vm.UserName = "admin";      // 跟随会把 admin 的旧记忆勾上（前置 SaveLogin 过）
-        vm.Remember = false;        // 用户显式取消勾选 → 改密成功应清本户记忆
-        vm.OldPassword = "test-admin-pwd";
-        vm.NewPassword = "abc123";
-        vm.NewPassword2 = "abc123";
-        vm.SavePwdCommand.Execute(null);
-        Assert.False(vm.TipIsError);
-
-        // 没勾记住改密 → 本户记忆清掉（下次全手输，不留旧密码影子）。
-        var (remember, _, _) = RunModeSettings.ReadSavedLogin(ini, "admin");
-        Assert.False(remember);
-    }
-
-    [Fact]
-    public void LoginVm_Back_ReturnsToLoginPanel()
-    {
-        using var scope = new TestScope();
-        var (vm, store, ini) = NewLoginVm(scope);
-        vm.UserName = "admin";
-        vm.ChangePwdCommand.Execute(null);
-        Assert.True(vm.IsChangePwd);
-
-        vm.BackCommand.Execute(null);
-        Assert.False(vm.IsChangePwd);
-        Assert.Equal("账号登录", vm.BannerText);
-        Assert.Equal("", vm.Tip);
     }
 
     // ---------- 工艺策略：预置库/套用/拦截/可视化预览（V0.0.20 三轮） ----------

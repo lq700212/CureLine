@@ -28,17 +28,17 @@ namespace CureStation.ViewModels;
 public sealed class WorkOrderViewModel : ViewModelBase
 {
     private readonly IDialogService _dialogs;
-    private readonly OperatorLevel? _level;
+    private readonly OperatorRole? _role;
     private readonly List<string> _flushErrors = new();
     private readonly Action<string>? _uploadMaterial; // 物料上传动作（过账服务；null=不可用）
     private readonly string _mainSide; // 单工位模式所用工位（"R"/"L"）；双工位下不参与显隐判断
 
-    public WorkOrderViewModel(IDialogService dialogs, OperatorLevel? level,
+    public WorkOrderViewModel(IDialogService dialogs, OperatorRole? role,
         WorkOrderBook? book = null, Action<string>? uploadMaterial = null,
         CuringMesOptions? postOptions = null)
     {
         _dialogs = dialogs;
-        _level = level;
+        _role = role;
         _uploadMaterial = uploadMaterial;
         // 工位布局开关（缺省 null=现读 [CuringMes] ini；测试可注入固定 options）：
         // 双工位=两面板全显；单工位只显 Side 侧（Side=L 时主面板用 L 槽），文案去工位字样
@@ -48,8 +48,8 @@ public sealed class WorkOrderViewModel : ViewModelBase
         ShowRightPanel = IsDualSide || _mainSide == "R";
         ShowLeftPanel = IsDualSide || _mainSide == "L";
         SyncFromBook(book ?? WorkOrderStore.Load() ?? WorkOrderStore.BuildDefault());
-        ClearCountRtCommand = new RelayCommand(() => EditRtProduced = "0", () => CanEditRoute);
-        ClearCountLfCommand = new RelayCommand(() => EditLfProduced = "0", () => CanEditRoute);
+        ClearCountRtCommand = new RelayCommand(() => EditRtProduced = "0", () => CanEditDaily);
+        ClearCountLfCommand = new RelayCommand(() => EditLfProduced = "0", () => CanEditDaily);
         SaveCommand = new RelayCommand(Save);
         UploadRMaterialCommand = new RelayCommand(() => UploadMaterial("R"), () => CanUpload);
         UploadLMaterialCommand = new RelayCommand(() => UploadMaterial("L"), () => CanUpload);
@@ -87,21 +87,25 @@ public sealed class WorkOrderViewModel : ViewModelBase
     /// <summary>L 侧上传钮文案（报本侧工位）。</summary>
     public string UploadLText => IsDualSide ? "上传 L 物料" : "物料上传";
 
-    // ---------- 门禁（级别不够的编辑区在 XAML 里禁用） ----------
+    // ---------- 门禁（角色不够的编辑区在 XAML 里禁用；Flush 另兜底一道） ----------
+    // 三级口径（V0.0.49）：操作员可录日常生产字段（条码/工号/数量/清零），
+    // 途程 RC 与制程 PT 属工艺参数，管理员及以上（含开发者）才能改。
 
-    /// <summary>途程单号/预设数量/已生产数量/计数清零：LEVEL.2+（班长及以上）。</summary>
-    public bool CanEditRoute => OperatorLevelInfo.AtLeast(_level, OperatorLevel.Level2);
+    /// <summary>预设数量/已生产数量/计数清零：操作员及以上（登录即可——日常生产录入）。</summary>
+    public bool CanEditDaily => OperatorRoleInfo.AtLeast(_role, OperatorRole.Operator);
 
-    /// <summary>制程代码（PT_NO）：LEVEL.3+（工程师及以上）。</summary>
-    public bool CanEditProcess => OperatorLevelInfo.AtLeast(_level, OperatorLevel.Level3);
+    /// <summary>途程单号（RC_NO）：管理员及以上（工艺参数，操作员只读）。</summary>
+    public bool CanEditRoute => OperatorRoleInfo.AtLeast(_role, OperatorRole.Admin);
+
+    /// <summary>制程代码（PT_NO）+ 物料上传使能：管理员及以上。</summary>
+    public bool CanEditProcess => OperatorRoleInfo.AtLeast(_role, OperatorRole.Admin);
 
     /// <summary>门禁说明（窗内提示行）。</summary>
-    public string GateText => _level == null
+    public string GateText => _role == null
         ? "未登录——只读查看"
-        : $"{OperatorLevelInfo.DisplayName(_level.Value)} 登录：" +
+        : $"{OperatorRoleInfo.DisplayName(_role.Value)} 登录：" +
           (CanEditProcess ? "可编辑全部"
-            : CanEditRoute ? "可编辑途程/数量，制程代码需工程师"
-            : "仅可录员工工号/条码");
+            : "可录工号/条码/数量，途程与制程代码需管理员");
 
     // ---------- 编辑区（打开回显；保存前 Flush 回对象） ----------
 
@@ -223,16 +227,16 @@ public sealed class WorkOrderViewModel : ViewModelBase
     {
         _flushErrors.Clear();
         var b = target ?? new WorkOrderBook();
-        // 门禁兜底：级别不够的字段不落编辑区值（防绕过界面直改）——回读原值
+        // 门禁兜底：角色不够的字段不落编辑区值（防绕过界面直改）——回读原值
         var src = WorkOrderStore.Load() ?? WorkOrderStore.BuildDefault();
         b.Right.RcNo = CanEditRoute ? EditRtRcNo.Trim() : src.Right.RcNo;
         b.Left.RcNo = CanEditRoute ? EditLfRcNo.Trim() : src.Left.RcNo;
-        b.Right.PresetQty = CanEditRoute ? ParseOrError(EditRtPreset, src.Right.PresetQty, "R 预设数量") : src.Right.PresetQty;
-        b.Left.PresetQty = CanEditRoute ? ParseOrError(EditLfPreset, src.Left.PresetQty, "L 预设数量") : src.Left.PresetQty;
-        b.Right.ProducedQty = CanEditRoute ? ParseOrError(EditRtProduced, src.Right.ProducedQty, "R 已生产数量") : src.Right.ProducedQty;
-        b.Left.ProducedQty = CanEditRoute ? ParseOrError(EditLfProduced, src.Left.ProducedQty, "L 已生产数量") : src.Left.ProducedQty;
-        b.EmpNo = EditEmpNo.Trim();          // L1+（登录即可录）
-        b.BcNo = EditBcNo.Trim();            // L1+
+        b.Right.PresetQty = CanEditDaily ? ParseOrError(EditRtPreset, src.Right.PresetQty, "R 预设数量") : src.Right.PresetQty;
+        b.Left.PresetQty = CanEditDaily ? ParseOrError(EditLfPreset, src.Left.PresetQty, "L 预设数量") : src.Left.PresetQty;
+        b.Right.ProducedQty = CanEditDaily ? ParseOrError(EditRtProduced, src.Right.ProducedQty, "R 已生产数量") : src.Right.ProducedQty;
+        b.Left.ProducedQty = CanEditDaily ? ParseOrError(EditLfProduced, src.Left.ProducedQty, "L 已生产数量") : src.Left.ProducedQty;
+        b.EmpNo = EditEmpNo.Trim();          // 登录即可录
+        b.BcNo = EditBcNo.Trim();            // 登录即可录
         b.PtNo1 = CanEditProcess ? EditPtNo1.Trim() : src.PtNo1;
         b.PtNo2 = CanEditProcess ? EditPtNo2.Trim() : src.PtNo2;
         b.UploadEnabled = CanEditProcess && EditUploadEnabled; // 使能按工程师级

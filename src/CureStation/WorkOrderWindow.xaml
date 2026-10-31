@@ -73,13 +73,13 @@
                                     <TextBlock Text="途程单号(RC_NO)：" VerticalAlignment="Center"/>
                                     <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditRtRcNo}" IsEnabled="{Binding CanEditRoute}"/>
                                     <TextBlock Text="预设数量：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditRtPreset, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"/>
+                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditRtPreset, FallbackValue=0}" IsEnabled="{Binding CanEditDaily}" Margin="0,6,0,0"/>
                                     <TextBlock Text="已生产数量：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditRtProduced, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"
+                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditRtProduced, FallbackValue=0}" IsEnabled="{Binding CanEditDaily}" Margin="0,6,0,0"
                                              Background="{DynamicResource Brush.Fresh.LockedBg}"/>
                                 </UniformGrid>
                                 <Button Style="{StaticResource FreshButton}" Content="{Binding ClearRText, FallbackValue=计数清零}"
-                                        Command="{Binding ClearCountRtCommand}" IsEnabled="{Binding CanEditRoute}"
+                                        Command="{Binding ClearCountRtCommand}" IsEnabled="{Binding CanEditDaily}"
                                         HorizontalAlignment="Right" Margin="0,6,0,0" Width="120" Height="28"/>
                             </StackPanel>
 
@@ -90,13 +90,13 @@
                                     <TextBlock Text="途程单号(RC_NO)：" VerticalAlignment="Center"/>
                                     <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditLfRcNo}" IsEnabled="{Binding CanEditRoute}"/>
                                     <TextBlock Text="预设数量：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditLfPreset, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"/>
+                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditLfPreset, FallbackValue=0}" IsEnabled="{Binding CanEditDaily}" Margin="0,6,0,0"/>
                                     <TextBlock Text="已生产数量：" VerticalAlignment="Center" Margin="0,6,0,0"/>
-                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditLfProduced, FallbackValue=0}" IsEnabled="{Binding CanEditRoute}" Margin="0,6,0,0"
+                                    <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditLfProduced, FallbackValue=0}" IsEnabled="{Binding CanEditDaily}" Margin="0,6,0,0"
                                              Background="{DynamicResource Brush.Fresh.LockedBg}"/>
                                 </UniformGrid>
                                 <Button Style="{StaticResource FreshButton}" Content="{Binding ClearLText, FallbackValue=计数清零}"
-                                        Command="{Binding ClearCountLfCommand}" IsEnabled="{Binding CanEditRoute}"
+                                        Command="{Binding ClearCountLfCommand}" IsEnabled="{Binding CanEditDaily}"
                                         HorizontalAlignment="Right" Margin="0,6,0,0" Width="120" Height="28"/>
                             </StackPanel>
 

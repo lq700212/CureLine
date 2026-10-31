@@ -27,10 +27,10 @@ public partial class App : Application
         Directory.CreateDirectory(AppPaths.ConfigDir);
         Directory.CreateDirectory(AppPaths.LogDir);
 
-        // 数据库与账号（P3.2）：建表（cure_record/users 兜底）+ 播种四级操作员的
-        // 初始管理员（空表才播；初始密码只在此一处，上线前必须在权限管理改掉）。
+        // 数据库与账号（P3.2）：建表（cure_record/users 兜底）+ 播种三级预置账号
+        // （空表才播；初始密码只在此一处，上线必须在用户管理窗改掉——包括 dev）。
         new SqliteHelper(AppPaths.DatabaseFile).EnsureDatabase();
-        OperatorStore.Default.EnsureSeeded("123456");
+        OperatorStore.Default.EnsureSeeded("123456", "123456", "dev123");
 
         // 启动配置（P3.2 后半）：读 config.ini——语言 + [MES] 6 接口 URL（过账用）
         // + MES 参数记忆（mes_params.json，静态参数的回退源）。ini 缺键自动回填。
