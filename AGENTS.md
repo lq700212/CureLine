@@ -267,7 +267,15 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   不丢），程序②网关配置保存→`RestartConnections()`（后台 Dispose 旧
   `MultiMachineManager`→`InitMulti` 重建→复用 `ConnectMulti` 后台重连）；
   **程序化重启链路已删**（`RestartApp`/`IsRestarting`/接口方法/Fake 桩/
-  语言 key 全清），勿再以"重启生效"为口径加回。
+  语言 key 全清），勿再以"重启生效"为口径加回；⑦ **点表绑定表直编
+  （V0.0.45）+ 设备切换回显**：`SelectedDevice` setter 必须联动
+  `SyncDeviceEditor`（设备名/IP/高级参数全套回显——此前漏调的 bug 用户
+  目检发现；全删设备 null→null 不触发 setter，手动清编辑区）；绑定表
+  **行内直改写穿 Raw**（`PointBindingRow` 可编辑属性即 Raw 的门面，
+  无编辑面板草稿——`Edit*` 七属性/ApplyBinding/FlushSelectedToRaw 链
+  已删勿加回；物理点/语义键唯一冲突由保存前校验统一拦，行内不重复拦）；
+  角色/方向下拉的 ItemsSource 用 `x:Static`（DataGridColumn 不在可视树，
+  绑 DataContext 无效）；加删行双边同步 Raw 集合与行集合。
 - 点表布局三键可改现场分叉：`DiStartAddress`/`DoStartAddress`/
   `BlockStrideRegisters`（缺省 0x1000/0x1010/0x20，块 K 线性外推）；
   改动必同步 `PointTableTests` 的地址断言。

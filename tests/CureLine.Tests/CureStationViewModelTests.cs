@@ -291,48 +291,82 @@ public class CureStationViewModelTests
     }
 
     [Fact]
-    public void PointTableVm_ApplyBinding_UpdatesRawRow()
+    public void PointTableVm_InlineEdit_WritesThroughToRaw()
     {
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.PointTableViewModel(fake);
         vm.GenerateTemplateCommand.Execute(null);
 
-        // 选中首行（架1层1 左光栅）→ 编辑面板改角色为托盘 + 功能名 → 应用
-        vm.SelectedBinding = vm.Bindings.First(b => b.Raw.IsInput);
-        vm.EditRole = IoPointRole.TrayDetect;
-        vm.EditFunction = "手动改名";
-        vm.ApplyBindingCommand.Execute(null);
+        // 表格直编（V0.0.45）：行 VM 属性写穿 Raw 所见即所得——角色/功能名/架/层/块/方向
+        var row = vm.Bindings.First(b => b.Raw.IsInput);
+        row.Role = IoPointRole.TrayDetect;
+        row.FunctionName = "手动改名";
+        row.Rack = 3;
+        row.Level = 2;
+        row.Block = 2;
+        row.IsInput = false;
 
-        Assert.Equal(IoPointRole.TrayDetect, vm.SelectedBinding.Raw.Role);
-        Assert.Equal("手动改名", vm.SelectedBinding.Raw.FunctionName);
-        Assert.Equal("托盘有无检测", vm.SelectedBinding.RoleText);
+        Assert.Equal(IoPointRole.TrayDetect, row.Raw.Role);
+        Assert.Equal("手动改名", row.Raw.FunctionName);
+        Assert.Equal(3, row.Raw.Rack);
+        Assert.Equal(2, row.Raw.Level);
+        Assert.Equal(2, row.Raw.Block);
+        Assert.False(row.Raw.IsInput);
+        // 派生文本随编辑刷新：点号 X→Y 前缀、仓位列跟随架/层
+        Assert.Contains("(Y", row.BitText);
+        Assert.Equal("架3层2", row.SlotText);
     }
 
     [Fact]
-    public void PointTableVm_SelectedBindingChange_ReechoesEditor()
+    public void PointTableVm_SelectedDeviceChange_SyncsDeviceEditor()
+    {
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.PointTableViewModel(fake);
+        vm.GenerateMachineCommand.Execute(null);   // 批量生成 10 台（IP .20~.29）
+
+        // V0.0.45 修的 bug：切换设备后设备名/IP 编辑区必须跟随回显
+        // （此前 setter 漏调 SyncDeviceEditor，编辑区停在上台设备的值）
+        var target = vm.Devices[3];   // IO耦合器4（192.168.1.23）
+        vm.SelectedDevice = target;
+
+        Assert.Equal(target.Name, vm.DeviceName);
+        Assert.Equal(target.Ip, vm.DeviceIp);
+        Assert.Equal("502", vm.EditDevicePort);
+        Assert.Contains("IO耦合器4", vm.CurrentDeviceText);
+
+        // 换回第一台同样跟随
+        vm.SelectedDevice = vm.Devices[0];
+        Assert.Equal(vm.Devices[0].Name, vm.DeviceName);
+        Assert.Equal(vm.Devices[0].Ip, vm.DeviceIp);
+    }
+
+    [Fact]
+    public void PointTableVm_AddAndDeleteBinding_SyncsBothCollections()
     {
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.PointTableViewModel(fake);
         vm.GenerateTemplateCommand.Execute(null);
+        int rawBefore = vm.SelectedDevice!.Bindings.Count;
+        int rowsBefore = vm.Bindings.Count;
 
-        // 生成模板后编辑面板自动回显首行（换设备重建网格时 setter 联动）
-        Assert.Equal(vm.Bindings[0].Raw.Bit.ToString(), vm.EditBit);
-        Assert.Equal(vm.Bindings[0].Raw.FunctionName, vm.EditFunction);
+        // ＋添加行：Raw 集合与行集合双边同步加，新行选中（预留位缺省值）
+        vm.AddBindingCommand.Execute(null);
+        Assert.Equal(rawBefore + 1, vm.SelectedDevice.Bindings.Count);
+        Assert.Equal(rowsBefore + 1, vm.Bindings.Count);
+        Assert.Equal(IoPointRole.Reserved, vm.SelectedBinding!.Raw.Role);
+        Assert.Equal(3, vm.SelectedBinding.Raw.Bit);
 
-        // 点选另一行（位号 2 的输入行=托盘检测）→ 编辑面板立刻切到该行。
-        // 此前编辑面板停留首行不随选中变化（V0.0.36 修复的 bug）；
-        // DataGrid SelectedItem 双向绑定走的就是 VM 层 setter，此用例同路径。
-        var row = vm.Bindings.First(b => b.Raw.IsInput && b.Raw.Bit == 2);
-        Assert.NotEqual(row.Raw.FunctionName, vm.Bindings[0].Raw.FunctionName); // 前提：两行内容确实不同
-        vm.SelectedBinding = row;
-
-        Assert.Equal(row.Raw.Block.ToString(), vm.EditBlock);
-        Assert.Equal(row.Raw.Bit.ToString(), vm.EditBit);
-        Assert.Equal(row.Raw.IsInput, vm.EditIsInput);
-        Assert.Equal(row.Raw.Role, vm.EditRole);
-        Assert.Equal(row.Raw.Rack.ToString(), vm.EditRack);
-        Assert.Equal(row.Raw.Level.ToString(), vm.EditLevel);
-        Assert.Equal(row.Raw.FunctionName, vm.EditFunction);
+        // 表格里直改新行（写穿 Raw）后删除：双边同步删、选中替代行
+        vm.SelectedBinding.Role = IoPointRole.LampRed;
+        Assert.Equal(IoPointRole.LampRed, vm.SelectedBinding.Raw.Role);
+        var deletedRow = vm.SelectedBinding;
+        vm.DeleteBindingCommand.Execute(null);
+        Assert.Equal(rawBefore, vm.SelectedDevice.Bindings.Count);
+        Assert.Equal(rowsBefore, vm.Bindings.Count);
+        // 被删的行两集合都不在了（选中行是替代行，属集合内正常成员）
+        Assert.DoesNotContain(vm.Bindings, b => ReferenceEquals(b.Raw, deletedRow.Raw));
+        Assert.DoesNotContain(vm.SelectedDevice.Bindings, b => ReferenceEquals(b, deletedRow.Raw));
+        Assert.NotSame(deletedRow, vm.SelectedBinding);
     }
 
     [Fact]

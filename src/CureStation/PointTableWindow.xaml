@@ -23,9 +23,10 @@
     <!--★★ 点表配置窗（现场人员的配置主场）：
          左：设备列表 + 设备编辑/高级参数 + 批量生成机台耦合器（10 台现场口径
          一键配完）+ 单台缺省模板（下半部包 ScrollViewer，小窗只滚动不裁剪）；
-         中：绑定网格（占满剩余高度，顶部显示当前设备归属）；
-         右：选中行编辑面板 + 测试连接/测试全部（不存盘直测，结果列表逐台定位）+
-         保存（校验不过不落盘）。
+         右：绑定表**直编**（V0.0.45 用户拍板傻瓜式——原"选中行→右下编辑面板"
+         两步操作删除，方向/块/角色/架/层/功能名全部行内改，写穿 Raw 所见即
+         所得）+ 加/删行按钮 + 测试连接/测试全部（不存盘直测，结果列表逐台
+         定位）+ 保存（校验不过不落盘）。
          取色全走 Brush.Fresh.*；Expander/ListBox/DataGrid 走 App.xaml 主题化样式。-->
     <!-- 圆角弹窗骨架（全弹窗统一）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow 浮层投影，
          根 Grid Margin=14 给阴影渲染留白 -->
@@ -43,24 +44,20 @@
                 </Grid>
             </Border>
             <Grid Margin="8">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="290"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="380"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- 左列：设备管理 + 缺省模板 -->
-                <Border Grid.RowSpan="2" Grid.Column="0" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
+                <!-- 左列：设备管理 + 高级参数 + 生成模板（内容多，包 ScrollViewer
+                     防小窗/小屏挤压裁剪——此前底部模板区把设备编辑区挤出可视区） -->
+                <Border Grid.Column="0" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}"
                                    Text="设备（IO 耦合器）"/>
                         <Button Tag="{StaticResource Geo.Plus}" DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
                                 Content="＋ 添加设备" Command="{Binding AddDeviceCommand}" Margin="0,8"/>
-                        <ListBox DockPanel.Dock="Top" Height="130"
+                        <ListBox DockPanel.Dock="Top" Height="148"
                                  ItemsSource="{Binding Devices, FallbackValue={x:Null}}"
                                  SelectedItem="{Binding SelectedDevice}" Margin="0,0,0,8">
                             <ListBox.ItemTemplate>
@@ -75,14 +72,11 @@
                         </ListBox>
                         <Button Tag="{StaticResource Geo.Trash}" DockPanel.Dock="Top" Style="{StaticResource FreshButton}"
                                 Content="－ 删除选中设备" Command="{Binding RemoveDeviceCommand}" Margin="0,0,0,10"/>
-                        <!-- 其余内容进滚动区（2026-10-31 目检修）：此前设备编辑区/高级参数
-                             是 DockPanel 填充区、两个模板区钉在 Bottom，栏内高度不足时
-                             填充区被整个挤出可视区（设备名/IP 与高级参数看不见）。
-                             改为纵向 StackPanel 全量排列——窗口再小也只滚动不裁剪。
-                             动线=选设备→改名/调参→批量生成→单台模板 -->
+                        <!-- 其余内容进滚动区：设备编辑 → 高级参数 → 批量生成 → 单台模板，
+                             动线=选设备→改名/调参→批量生成→单台模板；窗口再小也只滚动不裁剪 -->
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel Margin="0,0,2,0">
-                                <!-- 设备级编辑（选中设备回显） -->
+                                <!-- 设备级编辑（选中设备回显，V0.0.45 修切换不跟随） -->
                                 <UniformGrid Columns="2" Margin="0,0,0,8">
                                     <TextBlock Text="设备名：" VerticalAlignment="Center"/>
                                     <TextBox Style="{StaticResource FreshInput}" Text="{Binding DeviceName, FallbackValue=IO耦合器1}"/>
@@ -173,88 +167,63 @@
                     </DockPanel>
                 </Border>
 
-                <!-- 中列：绑定网格 -->
-                <Border Grid.RowSpan="2" Grid.Column="1" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}"
-                                   Text="点位绑定（选中行 → 右下编辑）"/>
-                        <!-- 当前设备归属提示（V0.0.41）：多台耦合器部署排障时，
-                             这屏绑定属于哪台设备一眼定位（名称/IP 随左栏选中联动） -->
-                        <TextBlock DockPanel.Dock="Top" Text="{Binding CurrentDeviceText, FallbackValue=当前设备：—}"
-                                   Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="0,0,0,4"/>
-                        <!-- 绑定网格：DockPanel 末位填充元素——占满中栏剩余高度（不再
-                             钉死 420），窗口加高后 18 行绑定一屏看全（2026-10-31 用户
-                             反馈"表格显示完整"）；HeadersVisibility=Column 去行头省宽 -->
-                        <DataGrid ItemsSource="{Binding Bindings, FallbackValue={x:Null}}"
-                                  SelectedItem="{Binding SelectedBinding}"
-                                  HeadersVisibility="Column" Margin="0,8,0,0">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="方向" Binding="{Binding DirectionText, FallbackValue=输入}"
-                                                    Width="56" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="块" Binding="{Binding BlockText, FallbackValue=1}"
-                                                    Width="44" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="点号" Binding="{Binding BitText, FallbackValue=0(X0)}"
-                                                    Width="100" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="角色" Binding="{Binding RoleText, FallbackValue=预留}"
-                                                    Width="130" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="仓位" Binding="{Binding SlotText, FallbackValue=—}"
-                                                    Width="76" IsReadOnly="True"/>
-                                <DataGridTextColumn Header="功能名" Binding="{Binding Raw.FunctionName}"
-                                                    Width="*" IsReadOnly="True"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </DockPanel>
-                </Border>
-
-                <!-- 右列：编辑面板 + 保存 -->
-                <DockPanel Grid.RowSpan="2" Grid.Column="2">
-                    <Border DockPanel.Dock="Top" Style="{StaticResource FreshCardBorder}" Padding="10">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="绑定编辑（选中行）"/>
-                            <UniformGrid Columns="2" Margin="0,8,0,0">
-                                <TextBlock Text="块号：" VerticalAlignment="Center"/>
-                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditBlock, FallbackValue=1}"/>
-                                <TextBlock Text="位号：" VerticalAlignment="Center"/>
-                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditBit, FallbackValue=0}"/>
-                                <TextBlock Text="方向：" VerticalAlignment="Center"/>
-                                <CheckBox IsChecked="{Binding EditIsInput, FallbackValue=True}"
-                                          Content="输入点" VerticalAlignment="Center"/>
-                                <TextBlock Text="角色：" VerticalAlignment="Center"/>
-                                <!-- 角色下拉：显示走中文（DisplayMemberPath=Text），值走英文枚举
-                                     （SelectedValuePath=Value → EditRole），与左侧表格角色列同源 -->
-                                <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding RoleOptions, FallbackValue={x:Null}}"
-                                          DisplayMemberPath="Text" SelectedValuePath="Value"
-                                          SelectedValue="{Binding EditRole}"/>
-                                <TextBlock Text="架号：" VerticalAlignment="Center"/>
-                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditRack, FallbackValue=0}"/>
-                                <TextBlock Text="层号：" VerticalAlignment="Center"/>
-                                <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditLevel, FallbackValue=0}"/>
-                            </UniformGrid>
-                            <TextBlock Text="功能名（中文，对照 IO 表）" Margin="0,8,0,2"/>
-                            <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditFunction}"
-                                     Height="44" AcceptsReturn="True" TextWrapping="Wrap"/>
-                            <Button Tag="{StaticResource Geo.Check}" Style="{StaticResource FreshButton}" Margin="0,8,0,0"
-                                    Content="应用修改到选中行" Command="{Binding ApplyBindingCommand}"/>
-                            <Button Tag="{StaticResource Geo.Trash}" Style="{StaticResource FreshButton}" Margin="0,8,0,0"
-                                    Content="删除该绑定行" Command="{Binding DeleteBindingCommand}"/>
-                            <!-- 连通测试（V0.0.41 补 UI 死命令）：单台测当前选中设备、
-                                 全部逐台跑——测试期间两钮齐灰（IsTesting），不冻界面 -->
-                            <UniformGrid Columns="2" Margin="0,10,0,0">
-                                <Button Style="{StaticResource FreshButton}" Content="测试连接"
-                                        Command="{Binding TestConnectionCommand}" Margin="0,0,4,0"
-                                        ToolTip="直测当前选中设备（IP/端口/寄存器读回），不存盘"/>
-                                <Button Style="{StaticResource FreshButton}" Content="测试全部"
-                                        Command="{Binding TestAllCommand}" Margin="4,0,0,0"
-                                        ToolTip="逐台测试全部耦合器，结果进下方列表"/>
-                            </UniformGrid>
-                        </StackPanel>
-                    </Border>
+                <!-- 右列：绑定表（直编）+ 加删行 + 测试 + 保存 -->
+                <DockPanel Grid.Column="1">
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}"
+                               Text="点位绑定（表格直接编辑：角色下拉/块/架/层/功能名，改完点保存）"/>
+                    <!-- 当前设备归属提示（V0.0.41）：多台耦合器部署排障时，
+                         这屏绑定属于哪台设备一眼定位（名称/IP 随左栏选中联动） -->
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding CurrentDeviceText, FallbackValue=当前设备：—}"
+                               Foreground="{DynamicResource Brush.Fresh.FgDim}" Margin="0,0,0,4"/>
+                    <!-- 按钮行：加删行（表格编辑配套）+ 连通测试（V0.0.41 补 UI 死命令：
+                         测试期间两钮齐灰 IsTesting，不冻界面） -->
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,4,0,4">
+                        <Button Tag="{StaticResource Geo.Plus}" Style="{StaticResource FreshButton}" Content="＋ 添加行"
+                                Command="{Binding AddBindingCommand}" Margin="0,0,8,0" Width="110"
+                                ToolTip="给当前设备加一行预留位（块1·位3·输入），在表格里接着改角色/架/层"/>
+                        <Button Tag="{StaticResource Geo.Trash}" Style="{StaticResource FreshButton}" Content="－ 删除选中行"
+                                Command="{Binding DeleteBindingCommand}" Margin="0,0,24,0" Width="110"
+                                ToolTip="删除当前选中行（未保存前关窗可找回）"/>
+                        <Button Style="{StaticResource FreshButton}" Content="测试连接" Width="110" Margin="0,0,8,0"
+                                Command="{Binding TestConnectionCommand}"
+                                ToolTip="直测当前选中设备（IP/端口/寄存器读回），不存盘"/>
+                        <Button Style="{StaticResource FreshButton}" Content="测试全部" Width="110"
+                                Command="{Binding TestAllCommand}"
+                                ToolTip="逐台测试全部耦合器，结果进下方列表"/>
+                    </StackPanel>
+                    <!-- 绑定表（V0.0.45 直编）：方向/角色=下拉（中文文案与落盘英文枚举
+                         同源转换），块/架/层=数字直填（填错弹回原值），功能名=文本；
+                         点号列只读（X/Y 前缀随方向刷新）——全部写穿 Raw，保存前校验统一拦 -->
+                    <DataGrid ItemsSource="{Binding Bindings, FallbackValue={x:Null}}"
+                              SelectedItem="{Binding SelectedBinding}"
+                              HeadersVisibility="Column" AutoGenerateColumns="False"
+                              CanUserAddRows="False" CanUserDeleteRows="False"
+                              Margin="0,2,0,0">
+                        <DataGrid.Columns>
+                            <DataGridComboBoxColumn Header="方向"
+                                                    SelectedValueBinding="{Binding IsInput}"
+                                                    SelectedValuePath="Value" DisplayMemberPath="Text"
+                                                    ItemsSource="{x:Static vm:PointTableViewModel.DirectionOptions}"
+                                                    Width="82"/>
+                            <DataGridTextColumn Header="块" Binding="{Binding Block}" Width="46"/>
+                            <DataGridTextColumn Header="点号" Binding="{Binding BitText, Mode=OneWay}"
+                                                IsReadOnly="True" Width="88"/>
+                            <DataGridComboBoxColumn Header="角色"
+                                                    SelectedValueBinding="{Binding Role}"
+                                                    SelectedValuePath="Value" DisplayMemberPath="Text"
+                                                    ItemsSource="{x:Static vm:PointTableViewModel.RoleOptions}"
+                                                    Width="134"/>
+                            <DataGridTextColumn Header="架号" Binding="{Binding Rack}" Width="54"/>
+                            <DataGridTextColumn Header="层号" Binding="{Binding Level}" Width="54"/>
+                            <DataGridTextColumn Header="功能名" Binding="{Binding FunctionName}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
                     <!-- 测试结果列表（测试全部逐台出结果：时间/设备/IP/OK·NG/原因） -->
-                    <Border DockPanel.Dock="Top" Style="{StaticResource FreshCardBorder}" Padding="10" Margin="0,8,0,0">
+                    <Border DockPanel.Dock="Bottom" Style="{StaticResource FreshCardBorder}" Padding="10" Margin="0,8,0,0">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}" Text="测试结果（最近 50 条）"/>
                             <DataGrid DockPanel.Dock="Top" ItemsSource="{Binding TestResults, FallbackValue={x:Null}}"
-                                      Height="190" Margin="0,8,0,0" IsReadOnly="True"
+                                      Height="170" Margin="0,8,0,0" IsReadOnly="True"
                                       HeadersVisibility="Column">
                                 <!-- 列宽合计 276 ≤ 右栏可用 358（旧版 300>250 被裁，"结果"列
                                      只剩半字）；消息长文悬停展开（顶栏"短词+悬停全文"同款口径） -->

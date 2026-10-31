@@ -2,9 +2,12 @@
 // PointTableViewModel：点表配置窗编排（"点点鼠标完成 IO 端点配置"的核心）
 //
 // 干什么：
-//   ① 加载 config/pointtable.json → 设备列表 + 选中设备的绑定网格；
-//   ② 一键"生成缺省模板"（IP+架数+层数 → IoPointTableStore.BuildDefaultTemplate）；
-//   ③ 绑定行选中 → 编辑面板（块/位/方向/角色/架/层/功能名）点"应用修改"落行；
+//   ① 加载 config/pointtable.json → 设备列表 + 选中设备的绑定网格
+//      （V0.0.45 修：切换设备设备名/IP/高级参数随选中回显 SyncDeviceEditor）；
+//   ② 一键"生成缺省模板"/"批量生成机台耦合器"（IoPointTableStore 两生成器）；
+//   ③ **绑定表直编**（V0.0.45 起，绑定编辑面板已删）：行内直接改 方向/块/
+//      角色/架/层/功能名（PointBindingRow 写穿 Raw 所见即所得），加删行走
+//      AddBindingCommand/DeleteBindingCommand（双边同步 Raw 集合与行集合）；
 //   ④ 保存前 PointTableValidator 全量校验（有误绝不落盘，弹错当场拦）；
 //   ⑤ "测试连接"后台 Task 直测（IP/端口/寄存器读回）不冻界面。
 // 事件流向：保存成功 → CloseDialog（VM 不 new Window，关窗经 DialogResult；
@@ -17,7 +20,13 @@ using CureLine.ViewModels;
 
 namespace CureStation.ViewModels;
 
-/// <summary>绑定行包装：网格列显示（角色中文/方向中文）+ 编辑面板互写出入口。</summary>
+/// <summary>绑定表行：网格直编列（写穿 Raw）+ 只读派生文本（点号/仓位）。</summary>
+/// <summary>
+/// 绑定表行（V0.0.45 起表格直编）：可编辑属性**写穿 Raw**（所见即所得，无独立
+/// 编辑面板草稿——物理点唯一/语义键唯一冲突由保存前校验统一拦，行内不重复拦）；
+/// 派生文本（点号/仓位）随编辑即时刷新。Bit/点号只读（点号是块内物理位置，改它
+/// 等于换点——加删行才是正路）。
+/// </summary>
 public sealed class PointBindingRow : ViewModelBase
 {
     public IoPointBinding Raw { get; }
@@ -29,23 +38,25 @@ public sealed class PointBindingRow : ViewModelBase
         _owner = owner;
     }
 
-    public string BlockText => Raw.Block.ToString();
+    // ---- 行内可编辑列（写穿 Raw） ----
+    public int Block { get => Raw.Block; set => Raw.Block = value; }
+    public bool IsInput { get => Raw.IsInput; set { Raw.IsInput = value; RefreshDisplay(); } }
+    public IoPointRole Role { get => Raw.Role; set { Raw.Role = value; RefreshDisplay(); } }
+    public int Rack { get => Raw.Rack; set { Raw.Rack = value; Raise(nameof(SlotText)); } }
+    public int Level { get => Raw.Level; set { Raw.Level = value; Raise(nameof(SlotText)); } }
+    public string FunctionName { get => Raw.FunctionName; set => Raw.FunctionName = value ?? ""; }
+
+    // ---- 只读派生列 ----
     public string BitText => $"{Raw.Bit} ({(Raw.IsInput ? "X" : "Y")}{Raw.Bit:X1})";
-    public string DirectionText => Raw.IsInput ? "输入" : "输出";
-    public string RoleText => IoPointRoleInfo.ToText(Raw.Role);
     public string SlotText => Raw.Role == IoPointRole.Reserved
         ? "—" : $"架{Raw.Rack}层{Raw.Level}";
 
-    /// <summary>选中行变更 → 编辑面板回显（窗侧 SelectedIndex 变化调）。</summary>
+    /// <summary>方向/角色变化 → 派生文本刷新（点号 X/Y 前缀与仓位显隐随之）。</summary>
     public void RefreshDisplay()
     {
         Raise(nameof(BitText));
-        Raise(nameof(RoleText));
         Raise(nameof(SlotText));
-        Raise(nameof(DirectionText));
     }
-
-    public void NotifyChangedFromEditor() => RefreshDisplay();
 }
 
 public sealed class PointTableViewModel : ViewModelBase
@@ -65,6 +76,12 @@ public sealed class PointTableViewModel : ViewModelBase
             .Select(r => new RoleOption(r, IoPointRoleInfo.ToText(r)))
             .ToArray();
 
+    /// <summary>方向下拉数据源（表格直编列；SelectedValue=bool 走 IsInput 写穿）。</summary>
+    public sealed record DirectionOption(bool Value, string Text);
+
+    public static IReadOnlyList<DirectionOption> DirectionOptions { get; } =
+        new DirectionOption[] { new(true, "输入(DI)"), new(false, "输出(DO)") };
+
     public ObservableCollection<IoCouplerDevice> Devices { get; } = new();
 
     private IoCouplerDevice? _selectedDevice;
@@ -75,8 +92,10 @@ public sealed class PointTableViewModel : ViewModelBase
         {
             if (Set(ref _selectedDevice, value))
             {
+                SyncDeviceEditor();   // V0.0.45 修：设备名/IP/高级参数随选中设备回显（此前漏调，切换后编辑区停在上台设备的值）
                 ReloadBindings();
                 Raise(nameof(CurrentDeviceText));
+                AddBindingCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -90,10 +109,9 @@ public sealed class PointTableViewModel : ViewModelBase
         set
         {
             // 表格选中行变化（DataGrid SelectedItem 双向绑定驱动；换设备/删行也走这）
-            // → 编辑面板立刻回显该行（"选中谁就编辑谁"）。
-            // 值没变不回显（Set 返回 false）：不打断用户正在编辑的草稿。
+            // —— V0.0.45 表格直编后选中行只服务"删除选中行"按钮的可用性。
             if (Set(ref _selectedBinding, value))
-                SyncEditorFromSelected();
+                DeleteBindingCommand.RaiseCanExecuteChanged();
         }
     }
 
@@ -133,22 +151,6 @@ public sealed class PointTableViewModel : ViewModelBase
     public string BatchIpFirstText { get => _batchIpFirst; set => Set(ref _batchIpFirst, value); }
     private string _batchIpStep = "1";
     public string BatchIpStepText { get => _batchIpStep; set => Set(ref _batchIpStep, value); }
-
-    // ---- 编辑面板（选中绑定行回显可改）----
-    private string _editBlock = "1";
-    public string EditBlock { get => _editBlock; set => Set(ref _editBlock, value); }
-    private string _editBit = "0";
-    public string EditBit { get => _editBit; set => Set(ref _editBit, value); }
-    private bool _editIsInput = true;
-    public bool EditIsInput { get => _editIsInput; set => Set(ref _editIsInput, value); }
-    private IoPointRole _editRole = IoPointRole.Reserved;
-    public IoPointRole EditRole { get => _editRole; set => Set(ref _editRole, value); }
-    private string _editRack = "0";
-    public string EditRack { get => _editRack; set => Set(ref _editRack, value); }
-    private string _editLevel = "0";
-    public string EditLevel { get => _editLevel; set => Set(ref _editLevel, value); }
-    private string _editFunction = "";
-    public string EditFunction { get => _editFunction; set => Set(ref _editFunction, value); }
 
     // 设备级编辑
     private string _deviceName = "IO耦合器1";
@@ -190,7 +192,7 @@ public sealed class PointTableViewModel : ViewModelBase
     public RelayCommand RemoveDeviceCommand { get; }
     public RelayCommand GenerateTemplateCommand { get; }
     public RelayCommand GenerateMachineCommand { get; }
-    public RelayCommand ApplyBindingCommand { get; }
+    public RelayCommand AddBindingCommand { get; }
     public RelayCommand DeleteBindingCommand { get; }
     public RelayCommand TestConnectionCommand { get; }
     public RelayCommand TestAllCommand { get; }
@@ -203,7 +205,7 @@ public sealed class PointTableViewModel : ViewModelBase
         RemoveDeviceCommand = new RelayCommand(RemoveDevice, () => SelectedDevice != null);
         GenerateTemplateCommand = new RelayCommand(GenerateTemplate);
         GenerateMachineCommand = new RelayCommand(GenerateMachine);
-        ApplyBindingCommand = new RelayCommand(ApplyBinding, () => SelectedBinding != null);
+        AddBindingCommand = new RelayCommand(AddBinding, () => SelectedDevice != null);
         DeleteBindingCommand = new RelayCommand(DeleteBinding, () => SelectedBinding != null);
         TestConnectionCommand = new RelayCommand(TestConnection, () => !IsTesting);
         TestAllCommand = new RelayCommand(TestAll, () => !IsTesting);
@@ -217,8 +219,7 @@ public sealed class PointTableViewModel : ViewModelBase
         Devices.Clear();
         foreach (var d in IoPointTableStore.Load()?.Devices ?? new())
             Devices.Add(d);
-        SelectedDevice = Devices.FirstOrDefault();
-        SyncDeviceEditor();
+        SelectedDevice = Devices.FirstOrDefault();   // setter 联动 SyncDeviceEditor+ReloadBindings
     }
 
     /// <summary>把选中设备回显到设备编辑区（选中变化/Save 均调）。</summary>
@@ -264,22 +265,8 @@ public sealed class PointTableViewModel : ViewModelBase
         Bindings.Clear();
         foreach (var b in SelectedDevice?.Bindings ?? new())
             Bindings.Add(new PointBindingRow(b, this));
-        // 缺省选中第一行给编辑面板一个起点（setter 联动 SyncEditorFromSelected 回显）
+        // 缺省选中第一行（"删除选中行"按钮的定位起点）
         SelectedBinding = Bindings.FirstOrDefault();
-    }
-
-    private void SyncEditorFromSelected()
-    {
-        if (SelectedBinding == null)
-            return;
-        var r = SelectedBinding.Raw;
-        EditBlock = r.Block.ToString();
-        EditBit = r.Bit.ToString();
-        EditIsInput = r.IsInput;
-        EditRole = r.Role;
-        EditRack = r.Rack.ToString();
-        EditLevel = r.Level.ToString();
-        EditFunction = r.FunctionName;
     }
 
     private void AddDevice()
@@ -290,8 +277,7 @@ public sealed class PointTableViewModel : ViewModelBase
             Ip = DeviceIp,
         };
         Devices.Add(device);
-        SelectedDevice = device;
-        SyncDeviceEditor();
+        SelectedDevice = device;   // setter 联动 SyncDeviceEditor+ReloadBindings
     }
 
     private void RemoveDevice()
@@ -302,9 +288,14 @@ public sealed class PointTableViewModel : ViewModelBase
         SelectedDevice = null;
         Devices.Remove(d);
         SelectedDevice = Devices.FirstOrDefault();
-        SyncDeviceEditor();
         if (SelectedDevice == null)
+        {
             Bindings.Clear();
+            // 全删后 setter 没触发（null→null），编辑区/提示手动清一次
+            DeviceName = "";
+            DeviceIp = "";
+            Raise(nameof(CurrentDeviceText));
+        }
     }
 
     /// <summary>一键缺省模板：按 IP/起始架号/架数/层数生成本选中设备的全套绑定（覆盖原绑定）。</summary>
@@ -349,27 +340,33 @@ public sealed class PointTableViewModel : ViewModelBase
             "\n建议保存后到现场核对 IP 与首辅点位。", "缺省模板已生成");
     }
 
-    /// <summary>编辑面板 → 选中行（回写 Raw + 行显示刷新）。数字非法保持原值并提示。</summary>
-    private void ApplyBinding()
+    /// <summary>
+    /// 表格【＋添加行】：往选中设备加一行预留位（块1·位3·输入·预留——缺省值
+    /// 最接近"生成器没铺到的预留位"场景），Raw 集合与行集合双边同步加，选中
+    /// 新行（用户接着在表格里直改角色/架/层）。
+    /// </summary>
+    private void AddBinding()
     {
-        if (SelectedBinding?.Raw == null)
+        if (SelectedDevice == null)
             return;
-        var r = SelectedBinding.Raw;
-
-        r.Block = ParseInt(EditBlock, r.Block, "块号");
-        r.Bit = ParseInt(EditBit, r.Bit, "位号");
-        r.IsInput = EditIsInput;
-        r.Role = EditRole;
-        r.Rack = ParseInt(EditRack, r.Rack, "架号");
-        r.Level = ParseInt(EditLevel, r.Level, "层号");
-        r.FunctionName = EditFunction;
-        SelectedBinding.RefreshDisplay();
-
-        // 保持原值时只提示一次（保存前校验还会兜底拦最后一道）
-        static int ParseInt(string text, int fallback, string what) =>
-            int.TryParse(text, out var v) ? v : fallback;
+        var binding = new IoPointBinding
+        {
+            Block = 1,
+            Bit = 3,
+            IsInput = true,
+            Role = IoPointRole.Reserved,
+            Rack = 1,
+            Level = 1,
+            FunctionName = "",
+        };
+        SelectedDevice.Bindings.Add(binding);
+        var row = new PointBindingRow(binding, this);
+        Bindings.Add(row);
+        SelectedBinding = row;
     }
 
+    /// <summary>表格【－删除选中行】：Raw 集合与行集合双边同步删（保存前不落盘，
+    /// 误删可关窗不保存找回）。</summary>
     private void DeleteBinding()
     {
         if (SelectedBinding == null || SelectedDevice == null)
@@ -377,7 +374,7 @@ public sealed class PointTableViewModel : ViewModelBase
         SelectedDevice.Bindings.Remove(SelectedBinding.Raw);
         int index = Bindings.IndexOf(SelectedBinding);
         Bindings.Remove(SelectedBinding);
-        // 选中替代行（或清空）：setter 联动 SyncEditorFromSelected 已回显
+        // 选中替代行（或清空）：保持"删除选中行"按钮状态联动
         SelectedBinding = Bindings.Count > 0
             ? Bindings[Math.Clamp(index, 0, Bindings.Count - 1)]
             : null;
@@ -475,10 +472,10 @@ public sealed class PointTableViewModel : ViewModelBase
         ? "当前设备：（未选中）"
         : $"当前设备：{SelectedDevice.Name}（{SelectedDevice.Ip}:{SelectedDevice.Port}）";
 
-    /// <summary>保存：先全量校验（错弹框不落盘），再写 pointtable.json。</summary>
+    /// <summary>保存：先全量校验（错弹框不落盘），再写 pointtable.json。
+    /// V0.0.45 表格直编后绑定行已实时写穿 Raw，无"编辑面板未应用"丢值问题。</summary>
     private void Save()
     {
-        FlushSelectedToRaw();
         FlushDeviceEditor();
         var validation = PointTableValidator.Validate(BuildConfig());
         if (!validation.Ok)
@@ -488,14 +485,6 @@ public sealed class PointTableViewModel : ViewModelBase
         }
         IoPointTableStore.Save(BuildConfig());
         CloseDialog = true;
-    }
-
-    /// <summary>编辑面板未"应用"直接点保存时，把编辑值刷进选中行再校验（防丢）。</summary>
-    private void FlushSelectedToRaw()
-    {
-        if (SelectedBinding?.Raw == null)
-            return;
-        ApplyBinding();
     }
 
     private void FlushDeviceEditor() => SyncDeviceFromEditor();
