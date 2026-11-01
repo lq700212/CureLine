@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>CIM 整线网关 · 方案 C 定稿设计（双主题）</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   CIM 主窗业务化 · 方案 C 定稿设计稿（2026-11-02）
+   主题变量 = CimGateway/Themes/Light.xaml | Dark.xaml 语义键真值：
+   Light=G2 浅色 / Dark=G1 深空，实施时同名语义键一一对应。
+   视觉思路来源 galaxy（E:\Project\galaxy，来源表见页尾 §5）。
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  --radius:10px; --radius-s:6px;
+  --mono:Consolas,"Cascadia Mono",monospace;
+}
+body[data-theme="light"]{
+  --WindowBgA:#EAF1FA; --WindowBgB:#F5F8FC;          /* Brush.WindowBg 渐变 */
+  --HeaderGradA:#1E90FF; --HeaderGradB:#3AA9F7;      /* Brush.HeaderGrad */
+  --TopbarFg:#FFFFFF; --HeaderSubFg:#EAF5FF;         /* Brush.TopbarFg / HeaderSubFg */
+  --HeaderChipBg:rgba(255,255,255,.20);              /* Brush.HeaderChipBg(#33FFFFFF) */
+  --TopbarBorder:rgba(255,255,255,0);                /* Light 下缘无边 */
+  --GhostBg:rgba(255,255,255,.18); --GhostBorder:rgba(255,255,255,.50);
+  --GhostFg:#FFFFFF; --GhostHoverBg:rgba(255,255,255,.30);
+  --FgStrong:#17334F; --FgMid:#52739C; --FgDim:#7A8CA0;
+  --PanelBg:#FFFFFF; --PanelBorder:#CBD9E6;
+  --CardBg:#FFFFFF; --CardBorder:rgba(190,210,235,.55); --CardBorderHover:#8FC1EC;
+  --Accent:#1E90FF; --AccentDeep:#1873CC; --AccentSoft:#E3F0FC;
+  --FgOnAccent:#FFFFFF;
+  --StateIdle:#C3CBD3; --StateRed:#D32F2F; --StateYellow:#F59E0B; --StateGreen:#43A047;
+  --DangerBg:#FDECEA; --OkBg:#E8F5E9; --WarnBg:#FFF6E5;
+  --DangerFg:#C62828; --OkFg:#2E7D32; --WarnFg:#B26A00;
+  --InputBg:#F7FAFD; --InputBorder:#C9D8E6; --InputFocus:#1E90FF;
+  --CodeBg:#12253B; --CodeFg:#D7E7F7; --CodeDim:#7E9BBF;
+  --RowHover:#F2F7FB; --RowFailBg:#FDF3F2;
+  --Shadow:0 2px 10px rgba(23,51,79,.10); --ShadowLift:0 8px 22px rgba(23,51,79,.16);
+}
+body[data-theme="dark"]{
+  --WindowBgA:#1B2A45; --WindowBgB:#0E1626;          /* 径向渐变（左上角起） */
+  --HeaderGradA:#0E1626; --HeaderGradB:#101A2C;      /* 深空顶栏 + 蓝下缘线 */
+  --TopbarFg:#EAF3FF; --HeaderSubFg:#9DB8DC;
+  --HeaderChipBg:rgba(255,255,255,.13);
+  --TopbarBorder:rgba(120,160,220,.25);              /* #4078A0DC */
+  --GhostBg:rgba(27,39,64,.90); --GhostBorder:rgba(51,72,107,.95);
+  --GhostFg:#9DB8DC; --GhostHoverBg:rgba(34,52,90,.95);
+  --FgStrong:#EAF3FF; --FgMid:#9DB8DC; --FgDim:#7E9BBF;
+  --PanelBg:#12203A; --PanelBorder:#1F3350;
+  --CardBg:rgba(255,255,255,.055); --CardBorder:rgba(148,180,225,.16); --CardBorderHover:rgba(148,180,225,.32);
+  --Accent:#4FC3F7; --AccentDeep:#2E8FE0; --AccentSoft:rgba(56,86,180,.30);
+  --FgOnAccent:#04121F;
+  --StateIdle:#3A4A63; --StateRed:#FF1744; --StateYellow:#FFB300; --StateGreen:#00E676;
+  --DangerBg:rgba(255,23,68,.10); --OkBg:rgba(0,230,118,.10); --WarnBg:rgba(255,179,0,.10);
+  --DangerFg:#FF6B81; --OkFg:#00E676; --WarnFg:#FFB300;
+  --InputBg:rgba(10,20,38,.55); --InputBorder:#2A3E5F; --InputFocus:#4FC3F7;
+  --CodeBg:#0A1424; --CodeFg:#C9DCF0; --CodeDim:#7E9BBF;
+  --RowHover:rgba(79,195,247,.06); --RowFailBg:rgba(255,23,68,.08);
+  --Shadow:0 2px 12px rgba(0,0,0,.35); --ShadowLift:0 8px 24px rgba(0,0,0,.5);
+}
+*{ margin:0; padding:0; box-sizing:border-box; }
+body{ font-family:"Segoe UI","Microsoft YaHei",sans-serif; color:var(--FgStrong);
+      background:radial-gradient(1200px 700px at 18% 8%,var(--WindowBgA),var(--WindowBgB));
+      background-attachment:fixed; padding:24px 34px 70px; transition:color .25s; }
+h1{ font-size:21px; color:var(--FgStrong); }
+.sub{ font-size:12.5px; color:var(--FgMid); margin:5px 0 0; line-height:1.7; }
+.sub b{ color:var(--Accent); }
+section{ margin-top:44px; }
+.shead{ display:flex; align-items:baseline; gap:12px; margin-bottom:4px; }
+.shead h2{ font-size:17px; }
+.snum{ font-size:11px; font-weight:700; color:var(--FgOnAccent); background:var(--Accent);
+       border-radius:5px; padding:2px 8px; letter-spacing:.5px; }
+.sdesc{ font-size:12.5px; color:var(--FgMid); line-height:1.7; margin-bottom:14px; max-width:1150px; }
+.sdesc b{ color:var(--FgStrong); }
+.src{ font-size:11px; color:var(--FgDim); background:var(--CardBg); border:1px dashed var(--CardBorder);
+      border-radius:5px; padding:3px 9px; display:inline-block; margin-top:6px; }
+
+/* ───── 设计稿工具条（sticky 主题切换） ───── */
+.hud{ position:sticky; top:0; z-index:99; display:flex; align-items:center; gap:14px;
+      padding:10px 16px; margin-bottom:6px; border-radius:12px;
+      background:var(--PanelBg); border:1px solid var(--PanelBorder); box-shadow:var(--Shadow); }
+.hud .t{ font-size:13px; font-weight:700; }
+.hud .hint{ font-size:11.5px; color:var(--FgDim); }
+.hud .right{ margin-left:auto; display:flex; align-items:center; gap:9px; font-size:12px; color:var(--FgMid); }
+
+/* ───── galaxy 风格开关（主题切换） ───── */
+.sw{ position:relative; width:52px; height:26px; flex-shrink:0; cursor:pointer; }
+.sw input{ position:absolute; inset:0; opacity:0; cursor:pointer; z-index:2; }
+.sw .tk{ position:absolute; inset:0; border-radius:13px; background:var(--InputBg);
+         border:1px solid var(--InputBorder); transition:.25s; }
+.sw .tk:before{ content:""; position:absolute; width:18px; height:18px; border-radius:50%;
+         top:3px; left:3px; background:var(--StateIdle); transition:.25s; }
+.sw input:checked + .tk{ background:var(--AccentSoft); border-color:var(--Accent); }
+.sw input:checked + .tk:before{ left:29px; background:var(--Accent); box-shadow:0 0 8px var(--Accent); }
+.sw .moon,.sw .sun{ position:absolute; top:5px; font-size:12px; line-height:1; z-index:1; }
+.sw .sun{ left:8px; } .sw .moon{ right:7px; }
+
+/* ═════════ 模拟窗通用骨架 ═════════ */
+.mock{ background:transparent; }
+.win{ border-radius:12px; overflow:hidden; box-shadow:var(--ShadowLift);
+      border:1px solid var(--PanelBorder); max-width:1240px; }
+
+/* 品牌顶栏（三窗共用） */
+.topbar{ display:flex; align-items:center; gap:10px; height:46px; padding:0 14px;
+  background:linear-gradient(90deg,var(--HeaderGradA),var(--HeaderGradB));
+  border-bottom:1px solid var(--TopbarBorder); color:var(--TopbarFg); }
+body[data-theme="dark"] .topbar{ background:linear-gradient(90deg,#0E1626,#101A2C 55%,#13223C); }
+.chip{ background:var(--HeaderChipBg); border-radius:4px; padding:3px 8px;
+       font-size:11.5px; font-weight:800; letter-spacing:.5px; color:var(--TopbarFg); }
+.ttl{ font-size:14px; font-weight:600; color:var(--TopbarFg); }
+.clk{ font-size:11.5px; color:var(--HeaderSubFg); }
+.tbtns{ margin-left:auto; display:flex; gap:6px; align-items:center; }
+.tbtn{ padding:5px 13px; border-radius:4px; font-size:12px; color:var(--GhostFg);
+       background:var(--GhostBg); border:1px solid var(--GhostBorder); cursor:default; }
+.tbtn:hover{ background:var(--GhostHoverBg); }
+.tbtn.acc{ background:var(--Accent); border-color:var(--Accent); color:var(--FgOnAccent); font-weight:600; }
+.sys{ width:28px; text-align:center; padding:5px 0; font-size:11px; }
+
+/* ───── S1 整线汇总条 ───── */
+.sumbar{ display:flex; align-items:stretch; gap:0; margin:10px 12px 0; border-radius:10px;
+         background:var(--PanelBg); border:1px solid var(--PanelBorder); overflow:hidden; }
+.stat{ flex:1; padding:10px 16px 9px; border-right:1px solid var(--PanelBorder); min-width:120px; }
+.stat:last-child{ border-right:none; }
+.stat .k{ font-size:10.5px; color:var(--FgDim); letter-spacing:.4px; margin-bottom:3px; }
+.stat .v{ font-size:19px; font-weight:800; color:var(--FgStrong); line-height:1.15; font-variant-numeric:tabular-nums; }
+.stat .v small{ font-size:11.5px; font-weight:600; color:var(--FgDim); margin-left:2px; }
+.stat .d{ font-size:10.5px; color:var(--FgDim); margin-top:2px; }
+.stat .v .dot{ display:inline-block; width:9px; height:9px; border-radius:50%; margin:0 3px 1px 0; }
+.dot.g{ background:var(--StateGreen); box-shadow:0 0 7px var(--StateGreen); }
+.dot.r{ background:var(--StateRed); box-shadow:0 0 7px var(--StateRed); }
+.dot.y{ background:var(--StateYellow); box-shadow:0 0 7px var(--StateYellow); }
+.dot.gr{ background:var(--StateIdle); }
+.v .ok{ color:var(--OkFg); } .v .err{ color:var(--DangerFg); }
+.combo{ display:inline-flex; align-items:center; gap:8px; border:1px solid var(--InputBorder);
+        background:var(--InputBg); border-radius:6px; padding:6px 11px; font-size:12px; color:var(--FgStrong); }
+.combo:after{ content:"▾"; font-size:9px; color:var(--FgDim); }
+
+/* ───── 卡片网格（S2） ───── */
+.grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:9px; padding:11px 12px 14px; }
+.card{ background:var(--CardBg); border:1px solid var(--CardBorder); border-radius:var(--radius);
+       padding:10px 11px 9px; min-height:248px; display:flex; flex-direction:column;
+       transition:.18s; }
+.card:hover{ border-color:var(--CardBorderHover); box-shadow:var(--ShadowLift); transform:translateY(-1px); }
+.card.down{ border-color:var(--StateRed); }
+.chead{ display:flex; align-items:center; gap:8px; padding-bottom:8px; border-bottom:1px solid var(--PanelBorder); }
+.cname{ font-size:13px; font-weight:700; color:var(--FgStrong); flex:1; overflow:hidden;
+        text-overflow:ellipsis; white-space:nowrap; }
+.lamp{ width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.cstat{ font-size:10.5px; color:var(--FgDim); flex-shrink:0; font-variant-numeric:tabular-nums; }
+.cstat b.ok{ color:var(--OkFg); } .cstat b.err{ color:var(--DangerFg); }
+.apis{ margin-top:7px; flex:1; }
+.arow{ display:flex; align-items:center; gap:7px; padding:4px 5px; font-size:11.5px; border-radius:5px; }
+.arow:hover{ background:var(--RowHover); }
+.arow.fail{ background:var(--RowFailBg); }
+.acode{ width:44px; flex-shrink:0; font-family:var(--mono); font-size:10px; color:var(--Accent);
+        background:var(--AccentSoft); border-radius:4px; text-align:center; padding:2px 0; }
+.aname{ flex:1; color:var(--FgMid); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.anum{ width:30px; text-align:right; color:var(--FgDim); font-variant-numeric:tabular-nums; font-size:11px; }
+.anum.b{ color:var(--FgStrong); font-weight:700; }
+.arow.fail .aname,.arow.fail .anum{ color:var(--DangerFg); }
+.adot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-left:2px; }
+.amsg{ margin-top:7px; padding:6px 8px; border-radius:6px; font-size:10.5px; border:1px solid transparent;
+       color:var(--FgDim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; background:var(--InputBg); }
+.amsg.warn{ color:var(--DangerFg); background:var(--DangerBg); border-color:var(--StateRed); }
+.amsg.ok{ color:var(--OkFg); background:var(--OkBg); border-color:transparent; }
+
+/* ───── S3 单机视图 ───── */
+.detail{ display:flex; gap:10px; margin:0 12px 12px; }
+.dtable{ flex:1.35; background:var(--CardBg); border:1px solid var(--CardBorder); border-radius:10px; padding:12px; }
+.dlog{ flex:1; background:var(--CardBg); border:1px solid var(--CardBorder); border-radius:10px; padding:12px; }
+.dh{ font-size:12.5px; font-weight:700; color:var(--FgStrong); margin-bottom:9px; display:flex; align-items:center; gap:8px; }
+.dh .chip{ font-size:10px; padding:2px 7px; }
+table.tb{ width:100%; border-collapse:collapse; font-size:11.5px; }
+.tb th{ text-align:left; color:var(--FgDim); font-weight:600; padding:5px 7px;
+        border-bottom:1px solid var(--PanelBorder); font-size:10.5px; letter-spacing:.3px; }
+.tb td{ padding:6px 7px; color:var(--FgStrong); border-bottom:1px solid var(--PanelBorder); font-variant-numeric:tabular-nums; }
+.tb tr:last-child td{ border-bottom:none; }
+.tb td.mono{ font-family:var(--mono); font-size:10.5px; }
+.tb td.dim{ color:var(--FgDim); }
+.tb tr:hover td{ background:var(--RowHover); }
+.tb tr.fail td{ background:var(--RowFailBg); color:var(--DangerFg); }
+.lstream{ font-size:11px; color:var(--FgMid); }
+.lstream div{ display:flex; gap:8px; padding:5px 2px; border-bottom:1px solid var(--PanelBorder); align-items:baseline; }
+.lstream .ts{ font-family:var(--mono); font-size:10px; color:var(--FgDim); flex-shrink:0; }
+.lstream .lv{ width:7px; height:7px; border-radius:50%; flex-shrink:0; align-self:center; }
+.lstream .ng{ color:var(--DangerFg); } .lstream .ok{ color:var(--OkFg); }
+
+/* ═════════ 弹窗骨架 ═════════ */
+.mods{ display:grid; grid-template-columns:repeat(2,1fr); gap:20px; }
+.modal{ background:var(--PanelBg); border:1px solid var(--PanelBorder); border-radius:12px;
+        box-shadow:var(--ShadowLift); overflow:hidden; }
+.mhead{ display:flex; align-items:center; gap:9px; padding:12px 16px; border-bottom:1px solid var(--PanelBorder); }
+.mhead .mt{ font-size:13.5px; font-weight:700; }
+.mhead .x{ margin-left:auto; color:var(--FgDim); font-size:13px; width:24px; height:24px;
+           border-radius:5px; text-align:center; line-height:24px; border:1px solid transparent; }
+/* 弹窗标题条底=PanelBg，chip 不能用顶栏白系（白字白底不可见）——改 AccentSoft/Accent 变体 */
+.mhead .chip{ background:var(--AccentSoft); color:var(--Accent); font-weight:700; }
+.mhead .x:hover{ background:var(--DangerBg); color:var(--DangerFg); }
+.mbody{ padding:16px; }
+.mfoot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px;
+        border-top:1px solid var(--PanelBorder); background:var(--InputBg); }
+.span2{ grid-column:span 2; }
+.note{ font-size:10.5px; color:var(--FgDim); line-height:1.6; }
+
+/* 表单件 */
+.frow{ display:flex; gap:12px; margin-bottom:11px; align-items:center; }
+.fcol{ flex:1; }
+label.fl{ display:block; font-size:11px; color:var(--FgDim); margin-bottom:4px; letter-spacing:.3px; }
+.inp{ width:100%; background:var(--InputBg); border:1px solid var(--InputBorder); border-radius:6px;
+      padding:8px 11px; font-size:12.5px; color:var(--FgStrong); outline:none;
+      box-shadow:0 6px 14px -12px var(--FgStrong); }
+.inp:focus{ border-color:var(--InputFocus); border-bottom-width:2px; }
+.inp.err{ border-color:var(--StateRed); }
+.inp.mono{ font-family:var(--mono); font-size:11.5px; }
+select.inp{ appearance:none; }
+.ferr{ font-size:10.5px; color:var(--DangerFg); margin-top:4px; }
+.fok{ font-size:10.5px; color:var(--OkFg); margin-top:4px; }
+.btn{ padding:8px 18px; border-radius:6px; font-size:12.5px; cursor:default; border:1px solid transparent; }
+.btn.pri{ background:var(--Accent); color:var(--FgOnAccent); font-weight:700; box-shadow:0 4px 12px -4px var(--Accent); }
+.btn.pri:hover{ background:var(--AccentDeep); }
+.btn.ghost{ background:transparent; border-color:var(--InputBorder); color:var(--FgMid); }
+.btn.ghost:hover{ border-color:var(--Accent); color:var(--Accent); }
+.btn.danger{ background:transparent; border-color:var(--StateRed); color:var(--DangerFg); }
+.btn.sm{ padding:5px 12px; font-size:11.5px; }
+.mini{ padding:4px 10px; font-size:10.5px; border-radius:5px; border:1px solid var(--Accent);
+       color:var(--Accent); background:transparent; white-space:nowrap; }
+.tgl{ position:relative; display:inline-block; width:34px; height:18px; flex-shrink:0; vertical-align:middle; }
+.tgl .tk{ position:absolute; inset:0; border-radius:9px; background:var(--StateIdle); opacity:.55; }
+.tgl .tk:after{ content:""; position:absolute; width:12px; height:12px; border-radius:50%;
+                background:#fff; top:3px; left:3px; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+.tgl.on .tk{ background:var(--Accent); opacity:1; }
+.tgl.on .tk:after{ left:19px; }
+
+/* 配置表 */
+.cfgtab{ width:100%; border-collapse:collapse; font-size:11.5px; }
+.cfgtab th{ text-align:left; padding:6px 8px; color:var(--FgDim); font-weight:600; font-size:10.5px;
+            border-bottom:1px solid var(--PanelBorder); }
+.cfgtab td{ padding:6px 8px; border-bottom:1px solid var(--PanelBorder); }
+.cfgtab .inp{ padding:5px 9px; font-size:11.5px; }
+.cfgtab tr:hover td{ background:var(--RowHover); }
+.apichips{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+.achip{ font-family:var(--mono); font-size:10.5px; padding:4px 10px; border-radius:12px;
+        border:1px solid var(--InputBorder); color:var(--FgMid); }
+.achip.on{ background:var(--Accent); border-color:var(--Accent); color:var(--FgOnAccent); font-weight:700; }
+.achip .st{ display:inline-block; width:6px; height:6px; border-radius:50%; margin-left:5px; vertical-align:1px; }
+
+/* 调试窗 */
+.dbg{ display:flex; gap:14px; }
+.dbgL{ flex:1; } .dbgR{ flex:1.1; display:flex; flex-direction:column; }
+.json{ background:var(--CodeBg); border:1px solid var(--PanelBorder); border-radius:8px; padding:12px 14px;
+       font-family:var(--mono); font-size:10.8px; line-height:1.65; color:var(--CodeFg);
+       flex:1; overflow:hidden; white-space:pre; }
+.json .jk{ color:#7FD1F7; } .json .js{ color:#9BD99B; } .json .jd{ color:var(--CodeDim); }
+
+/* 日志窗 */
+.lvbar{ display:flex; gap:8px; align-items:center; margin-bottom:11px; }
+.logtab{ font-size:11.5px; }
+.logtab td{ padding:6px 8px; }
+.lvl{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:2px; }
+
+/* 报警窗 */
+.alarm{ border-left:4px solid var(--StateRed); }
+.alarm .ic{ width:34px; height:34px; border-radius:9px; background:var(--DangerBg);
+            display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.alarm .ic:before{ content:"!"; font-size:18px; font-weight:900; color:var(--DangerFg); }
+
+/* toast 规范 */
+.toasts{ display:flex; flex-direction:column; gap:10px; max-width:420px; }
+.toast{ display:flex; gap:11px; padding:12px 14px; border-radius:9px; background:var(--PanelBg);
+        border:1px solid var(--PanelBorder); border-left:4px solid; box-shadow:var(--Shadow); }
+.toast .tt{ font-size:12.5px; font-weight:700; margin-bottom:2px; }
+.toast .tx{ font-size:11px; color:var(--FgMid); line-height:1.5; }
+.toast.ok{ border-left-color:var(--StateGreen); } .toast.err{ border-left-color:var(--StateRed); }
+
+.specgrid{ display:flex; gap:26px; flex-wrap:wrap; align-items:flex-start; }
+.spec{ background:var(--PanelBg); border:1px solid var(--PanelBorder); border-radius:10px; padding:14px 16px; }
+.spec h4{ font-size:12px; color:var(--FgDim); margin-bottom:10px; letter-spacing:.3px; }
+.srcall{ margin-top:26px; background:var(--PanelBg); border:1px solid var(--PanelBorder);
+         border-radius:10px; padding:14px 18px; max-width:1240px; }
+.srcall h3{ font-size:13.5px; margin-bottom:8px; }
+.srcall li{ font-size:12px; color:var(--FgMid); line-height:2; list-style:none; }
+.srcall li b{ color:var(--FgStrong); font-family:var(--mono); font-size:11px; background:var(--AccentSoft);
+              color:var(--Accent); padding:1px 7px; border-radius:4px; }
+</style>
+</head>
+<body data-theme="light">
+
+<!-- ═════════ 设计稿工具条 ═════════ -->
+<div class="hud">
+  <span class="t">CIM 整线网关 · 方案 C 定稿设计</span>
+  <span class="hint">主窗（S1 汇总条 + S2 卡片业务化）+ 单机视图（S3）+ 6 功能弹窗 + 组件规范｜双主题一键切换｜变量 = Themes/Light.xaml·Dark.xaml 语义键真值</span>
+  <div class="right">
+    <span>浅色 G2</span>
+    <label class="sw"><input type="checkbox" onchange="document.body.dataset.theme=this.checked?'dark':'light'">
+      <span class="tk"></span></label>
+    <span>深色 G1</span>
+  </div>
+</div>
+<div class="sub">适用：CimGateway（程序②）。改动范围＝<b>内容区</b>（顶栏壳/门禁/主题机制零改动）；协议红线（触发→组包→POST→回写、STATUS=2/MSG=NG、DATA 无补零、分帧 125/123、失败不重传）零改动。全部数据为演示值。</div>
+
+<!-- ═════════ §1 主窗 ═════════ -->
+<section>
+  <div class="shead"><span class="snum">§1</span><h2>主窗 · 整线过账全景（S1 汇总条 + S2 卡片业务化）</h2></div>
+  <div class="sdesc">
+    顶栏壳保持现状（chip CIM + 标题 + 时钟 + 连接/日志/登录 + 设置▾ + 系统三钮）。内容区两件新事：
+    <b>S1 汇总条</b>——五个统计格（视图 / 在线 / 今日过账 / MES 端点 / 扫描周期），MES 状态点只反映
+    <b>最近一次报文结果</b>；<b>S2 卡片业务化</b>——每卡 = 头行（名+心跳灯+今日三数）+ 6 接口状态微表
+    （触发/成功/失败/最后结果点）+ 底部最新消息（点击开分机台日志窗），卡片日志 ListBox 移除。
+  </div>
+  <div class="mock"><div class="win">
+    <div class="topbar">
+      <span class="chip">CIM</span><span class="ttl">CIM通信网关</span><span class="clk">2026/11/02 10:24:36</span>
+      <div class="tbtns"><span class="tbtn">连接设备</span><span class="tbtn">日志</span><span class="tbtn">登录</span><span class="tbtn">设置 ▾</span><span class="tbtn sys">─</span><span class="tbtn sys">□</span><span class="tbtn sys">✕</span></div>
+    </div>
+    <div class="sumbar">
+      <div class="stat"><div class="k">视图</div><div class="v" style="font-size:13px;font-weight:600"><span class="combo">全部机台</span></div></div>
+      <div class="stat"><div class="k">在线 / 启用</div><div class="v">4<span style="color:var(--FgDim)">/</span>6<small>台</small></div><div class="d">2 台未启用</div></div>
+      <div class="stat"><div class="k">今日过账</div><div class="v"><span class="ok">118</span> <small style="color:var(--FgDim)">成功</small>　<span class="err">4</span> <small style="color:var(--FgDim)">失败</small></div><div class="d">触发 126 次 · 进程内累计，重启清零</div></div>
+      <div class="stat"><div class="k">MES 端点</div><div class="v" style="font-size:13.5px;font-family:var(--mono)"><span class="dot g"></span>192.168.120.129:5012</div><div class="d">最近报文 10:24:31 · STATUS=1</div></div>
+      <div class="stat"><div class="k">扫描周期</div><div class="v">200<small>ms</small></div><div class="d">配置值 · 单机视图见实测</div></div>
+    </div>
+    <div class="grid">
+      <div class="card"><div class="chead"><span class="cname">机台1</span><span class="lamp dot g"></span><span class="cstat">触发 <b class="ok">64</b> · 失败 <b class="err">1</b></span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">12</span><span class="anum b">12</span><span class="anum">0</span><span class="adot dot g"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">3</span><span class="anum b">3</span><span class="anum">0</span><span class="adot dot g"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">45</span><span class="anum b">44</span><span class="anum">1</span><span class="adot dot g"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">2</span><span class="anum b">2</span><span class="anum">0</span><span class="adot dot g"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">2</span><span class="anum b">2</span><span class="anum">0</span><span class="adot dot g"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+        </div>
+        <div class="amsg ok">MES上传成功: API0030 · 10:24:31</div></div>
+      <div class="card"><div class="chead"><span class="cname">机台2</span><span class="lamp dot g"></span><span class="cstat">触发 <b class="ok">41</b> · 失败 <b class="err">0</b></span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">28</span><span class="anum b">28</span><span class="anum">0</span><span class="adot dot g"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">11</span><span class="anum b">11</span><span class="anum">0</span><span class="adot dot g"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">1</span><span class="anum b">1</span><span class="anum">0</span><span class="adot dot g"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">1</span><span class="anum b">1</span><span class="anum">0</span><span class="adot dot g"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+        </div>
+        <div class="amsg ok">MES上传成功: API0027 · 10:22:08</div></div>
+      <div class="card"><div class="chead"><span class="cname">机台3</span><span class="lamp dot y"></span><span class="cstat">触发 <b class="ok">12</b> · 失败 <b class="err">3</b></span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow fail"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">9</span><span class="anum b">7</span><span class="anum">2</span><span class="adot dot r"></span></div>
+          <div class="arow fail"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">3</span><span class="anum b">2</span><span class="anum">1</span><span class="adot dot r"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+        </div>
+        <div class="amsg warn">MES网络异常/超时: API0030 · 10:24:02</div></div>
+      <div class="card"><div class="chead"><span class="cname">机台4</span><span class="lamp dot g"></span><span class="cstat">触发 <b class="ok">0</b> · 失败 <b class="err">0</b></span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+        </div>
+        <div class="amsg">已连接，等待触发 · 10:01:44</div></div>
+      <div class="card"><div class="chead"><span class="cname">机台5</span><span class="lamp dot g"></span><span class="cstat">触发 <b class="ok">9</b> · 失败 <b class="err">0</b></span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">9</span><span class="anum b">9</span><span class="anum">0</span><span class="adot dot g"></span></div>
+        </div>
+        <div class="amsg ok">MES上传成功: API0033 · 10:19:57</div></div>
+      <div class="card down"><div class="chead"><span class="cname">机台6</span><span class="lamp dot r"></span><span class="cstat">断连 · 5s 节流重连</span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum b">0</span><span class="anum">0</span><span class="adot dot gr"></span></div>
+        </div>
+        <div class="amsg warn">连接机台失败,192.168.1.16 · 09:58:12</div></div>
+      <div class="card"><div class="chead"><span class="cname">机台7</span><span class="lamp dot gr"></span><span class="cstat">未启用</span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">—</span><span class="anum b">—</span><span class="anum">—</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">—</span><span class="anum b">—</span><span class="anum">—</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">—</span><span class="anum b">—</span><span class="anum">—</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">—</span><span class="anum b">—</span><span class="anum">—</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">—</span><span class="anum b">—</span><span class="anum">—</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">—</span><span class="anum b">—</span><span class="anum">—</span><span class="adot dot gr"></span></div>
+        </div>
+        <div class="amsg">已配置为不连接本工站</div></div>
+      <div class="card"><div class="chead"><span class="cname">机台8</span><span class="lamp dot gr"></span><span class="cstat">未启用</span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">—</span><span class="anum b">—</span><span class="anum">—</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">—</span><span class="anum b">—</span><span class="anum">—</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">—</span><span class="anum b">—</span><span class="anum">—</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">—</span><span class="anum b">—</span><span class="anum">—</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">—</span><span class="anum b">—</span><span class="anum">—</span><span class="adot dot gr"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">—</span><span class="anum b">—</span><span class="anum">—</span><span class="adot dot gr"></span></div>
+        </div>
+        <div class="amsg">已配置为不连接本工站</div></div>
+    </div>
+  </div></div>
+  <div class="src">galaxy 思路：stat 三层结构（标题/值/描述）← Cards/Yaya12085_silent-donkey-69.html；卡片 hover 抬升+边框亮 ← Cards 目录通用手法</div>
+</section>
+
+<!-- ═════════ §2 单机视图 ═════════ -->
+<section>
+  <div class="shead"><span class="snum">§2</span><h2>单机视图（S3：视图切单台时）</h2></div>
+  <div class="sdesc">汇总条随选中机台联动；左=<b>接口明细大表</b>（最后 STATUS/MSG、最后触发时间、报文耗时），
+    右=<b>最近触发流</b>（原卡片日志的新家）。同一数据源的两个视图，无新事件。</div>
+  <div class="mock"><div class="win" style="padding-bottom:2px">
+    <div class="topbar">
+      <span class="chip">CIM</span><span class="ttl">CIM通信网关</span><span class="clk">2026/11/02 10:24:36</span>
+      <div class="tbtns"><span class="tbtn">连接设备</span><span class="tbtn">日志</span><span class="tbtn">登录</span><span class="tbtn">设置 ▾</span><span class="tbtn sys">─</span><span class="tbtn sys">□</span><span class="tbtn sys">✕</span></div>
+    </div>
+    <div class="sumbar">
+      <div class="stat"><div class="k">视图</div><div class="v" style="font-size:13px;font-weight:600"><span class="combo">3号-机台3</span></div></div>
+      <div class="stat"><div class="k">机台3 · 192.168.1.13</div><div class="v" style="font-size:13.5px"><span class="dot y"></span>在线 · 有失败</div><div class="d">实测扫描 203 ms</div></div>
+      <div class="stat"><div class="k">今日过账</div><div class="v"><span class="ok">9</span> <small style="color:var(--FgDim)">成功</small>　<span class="err">3</span> <small style="color:var(--FgDim)">失败</small></div><div class="d">触发 12 次</div></div>
+      <div class="stat"><div class="k">MES 端点</div><div class="v" style="font-size:13.5px;font-family:var(--mono)"><span class="dot r"></span>192.168.120.129:5012</div><div class="d">最近报文 10:24:02 · 超时</div></div>
+      <div class="stat"><div class="k">操作</div><div class="v" style="font-size:12px;font-weight:600;display:flex;gap:6px;margin-top:2px"><span class="mini">查看全部日志</span><span class="mini">MES 调试</span></div></div>
+    </div>
+    <div class="detail">
+      <div class="dtable">
+        <div class="dh">接口明细<span class="chip">6 接口</span><span style="margin-left:auto;font-size:10.5px;color:var(--FgDim)">最后 STATUS / 最后触发 / 耗时</span></div>
+        <table class="tb">
+          <tr><th>接口</th><th>语义</th><th>触发</th><th>成功</th><th>失败</th><th>最后 STATUS</th><th>最后触发</th><th>耗时</th></tr>
+          <tr><td class="mono">0027</td><td>固化时间</td><td>0</td><td>0</td><td>0</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td></tr>
+          <tr><td class="mono">0028</td><td>报警异常</td><td>0</td><td>0</td><td>0</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td></tr>
+          <tr class="fail"><td class="mono">0030</td><td>进出站</td><td>9</td><td>7</td><td>2</td><td class="mono">2 / NG</td><td>10:24:02</td><td>超时</td></tr>
+          <tr><td class="mono">0031</td><td>物料绑定</td><td>3</td><td>2</td><td>1</td><td class="mono">1 / OK</td><td>10:12:40</td><td>86 ms</td></tr>
+          <tr><td class="mono">0032</td><td>物料上传</td><td>0</td><td>0</td><td>0</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td></tr>
+          <tr><td class="mono">0033</td><td>测试记录</td><td>0</td><td>0</td><td>0</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td></tr>
+        </table>
+      </div>
+      <div class="dlog">
+        <div class="dh">最近触发流<span class="chip">实时</span></div>
+        <div class="lstream">
+          <div><span class="ts">10:24:02</span><span class="lv dot r"></span><span class="ng">MES网络异常/超时: API0030</span></div>
+          <div><span class="ts">10:24:02</span><span class="lv dot gr"></span><span>检测到 MES 触发, 机台 ID: 2, API: API0030</span></div>
+          <div><span class="ts">10:12:40</span><span class="lv dot g"></span><span class="ok">MES上传成功: API0031</span></div>
+          <div><span class="ts">10:12:40</span><span class="lv dot gr"></span><span>检测到 MES 触发, 机台 ID: 2, API: API0031</span></div>
+          <div><span class="ts">10:11:52</span><span class="lv dot r"></span><span class="ng">MES返回NG: API0031</span></div>
+          <div><span class="ts">10:09:15</span><span class="lv dot gr"></span><span>连接机台成功,192.168.1.13</span></div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</section>
+
+<!-- ═════════ §3 弹窗族 ═════════ -->
+<section>
+  <div class="shead"><span class="snum">§3</span><h2>功能弹窗族（统一圆角自绘骨架：标题条 + 内容 + 按钮区）</h2></div>
+  <div class="sdesc">与项目"全部弹窗统一圆角自绘骨架"口径一致（WindowStyle=None + 品牌标题条）。以下 6 窗按实际窗体绘制。</div>
+  <div class="mods">
+
+    <!-- 登录窗 -->
+    <div class="modal">
+      <div class="mhead"><span class="chip">CIM</span><span class="mt">登录</span><span class="x">✕</span></div>
+      <div class="mbody">
+        <div class="frow"><div class="fcol">
+          <label class="fl">账号</label>
+          <select class="inp"><option>admin</option><option>dev</option></select>
+        </div></div>
+        <div class="frow"><div class="fcol">
+          <label class="fl">密码</label>
+          <input class="inp" type="password" value="123456789">
+        </div></div>
+        <div class="frow" style="justify-content:space-between">
+          <span style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--FgMid)"><span class="tgl on"><span class="tk"></span></span>记住密码（DPAPI 密文存 ini，永无明文）</span>
+          <span class="note">PBKDF2 存储</span>
+        </div>
+      </div>
+      <div class="mfoot"><span class="note" style="margin-right:auto;align-self:center">users 表 admin / dev 两级</span><span class="btn pri">登 录</span></div>
+    </div>
+
+    <!-- 修改密码窗 -->
+    <div class="modal">
+      <div class="mhead"><span class="mt">修改密码</span><span class="x">✕</span></div>
+      <div class="mbody">
+        <div class="frow"><div class="fcol">
+          <label class="fl">旧密码（必验）</label>
+          <input class="inp" type="password" value="123456">
+        </div></div>
+        <div class="frow"><div class="fcol">
+          <label class="fl">新密码（≥6 位）</label>
+          <input class="inp" type="password" value="cuRe2026">
+          <div class="fok">强度合格</div>
+        </div></div>
+        <div class="frow"><div class="fcol">
+          <label class="fl">确认新密码</label>
+          <input class="inp err" type="password" value="cuRe2027">
+          <div class="ferr">两次输入不一致</div>
+        </div></div>
+      </div>
+      <div class="mfoot"><span class="btn ghost">取消</span><span class="btn pri">确认修改</span></div>
+    </div>
+
+    <!-- 网关配置窗 · 机台连接页 -->
+    <div class="modal span2">
+      <div class="mhead"><span class="mt">网关配置</span><span class="chip">dev 专属</span>
+        <span style="margin-left:18px;display:flex;gap:14px;font-size:12px;color:var(--FgMid)">
+          <b style="color:var(--Accent);border-bottom:2px solid var(--Accent);padding-bottom:3px">机台连接</b>
+          <span style="padding-bottom:3px">接口地址</span>
+        </span><span class="x">✕</span></div>
+      <div class="mbody">
+        <div class="frow" style="margin-bottom:9px">
+          <span style="font-size:12px;color:var(--FgMid)">扫描周期(ms)</span>
+          <span class="combo" style="min-width:90px">200</span>
+          <span style="margin-left:auto;display:flex;gap:8px">
+            <span class="btn ghost sm">全部测试</span>
+            <span class="btn ghost sm">恢复缺省</span>
+          </span>
+        </div>
+        <table class="cfgtab">
+          <tr><th style="width:44px">启用</th><th>机台名（[StationNames] 配置化）</th><th>IP</th><th style="width:76px">端口</th><th style="width:92px">测试连接</th><th>最近结果</th></tr>
+          <tr><td><span class="tgl on"><span class="tk"></span></span></td><td><input class="inp" value="机台1" style="width:150px"></td><td><input class="inp mono" value="192.168.1.11" style="width:130px"></td><td><input class="inp mono" value="502"></td><td><span class="mini">测试</span></td><td style="color:var(--OkFg);font-size:11px">● 成功 12 ms</td></tr>
+          <tr><td><span class="tgl on"><span class="tk"></span></span></td><td><input class="inp" value="机台2" style="width:150px"></td><td><input class="inp mono" value="192.168.1.12" style="width:130px"></td><td><input class="inp mono" value="502"></td><td><span class="mini">测试</span></td><td style="color:var(--OkFg);font-size:11px">● 成功 11 ms</td></tr>
+          <tr><td><span class="tgl on"><span class="tk"></span></span></td><td><input class="inp" value="机台3" style="width:150px"></td><td><input class="inp mono" value="192.168.1.13" style="width:130px"></td><td><input class="inp mono" value="502"></td><td><span class="mini">测试</span></td><td style="color:var(--DangerFg);font-size:11px">● 连接失败（重试）</td></tr>
+          <tr><td><span class="tgl on"><span class="tk"></span></span></td><td><input class="inp" value="机台6" style="width:150px"></td><td><input class="inp mono" value="192.168.1.16" style="width:130px"></td><td><input class="inp mono" value="502"></td><td><span class="mini">测试</span></td><td style="color:var(--FgDim);font-size:11px">○ 未测</td></tr>
+          <tr><td><span class="tgl"><span class="tk"></span></span></td><td><input class="inp" value="机台7" style="width:150px;opacity:.55"></td><td><input class="inp mono" value="192.168.1.17" style="width:130px;opacity:.55"></td><td><input class="inp mono" value="502" style="opacity:.55"></td><td><span class="mini" style="opacity:.4">测试</span></td><td class="note">未启用</td></tr>
+        </table>
+        <div class="note" style="margin-top:9px">※ 仅示意 5 行，实际 8 行；TimeoutMs=300 多台串行快失败（现场语义）。</div>
+      </div>
+      <div class="mfoot"><span class="note" style="margin-right:auto;align-self:center">保存即热生效：Dispose 旧 Manager → InitMulti 重建 → 后台重连（不重启程序）</span><span class="btn ghost">取消</span><span class="btn pri">保存</span></div>
+    </div>
+
+    <!-- 网关配置窗 · 接口地址页 -->
+    <div class="modal span2">
+      <div class="mhead"><span class="mt">网关配置 · 接口地址</span><span class="chip">6 接口 × 地址束</span><span class="x">✕</span></div>
+      <div class="mbody">
+        <div class="apichips">
+          <span class="achip">0027<span class="st dot gr"></span></span>
+          <span class="achip">0028<span class="st dot gr"></span></span>
+          <span class="achip on">0030<span class="st" style="background:var(--StateGreen)"></span></span>
+          <span class="achip">0031<span class="st dot gr"></span></span>
+          <span class="achip">0032<span class="st dot gr"></span></span>
+          <span class="achip">0033<span class="st dot gr"></span></span>
+          <span class="note" style="align-self:center;margin-left:6px">chip 右点 = 该接口今日最近结果（同卡片口径）</span>
+        </div>
+        <table class="cfgtab">
+          <tr><th style="width:120px">地址束项</th><th>值（R/D 寄存器地址 · 剥前缀取数字 = 协议地址）</th><th style="width:46%">口径说明</th></tr>
+          <tr><td>触发地址</td><td><input class="inp mono" value="R1500" style="width:120px"></td><td class="note">=1 触发，软件清 0（一次扫描只处理一个触发）</td></tr>
+          <tr><td>URL</td><td><input class="inp mono" value="http://192.168.120.129:5012/api/Api0030" style="width:340px"></td><td class="note">[MES] Url_API0030 · 与程序①共用键</td></tr>
+          <tr><td>DATA</td><td><input class="inp mono" value="R17900" style="width:120px"></td><td class="note">799 字节分帧写（FC10 ≤123 寄存器/帧）</td></tr>
+          <tr><td>MSG</td><td><input class="inp mono" value="R17960" style="width:120px"></td><td class="note">回写 MES 消息，空值写 " " 占位</td></tr>
+          <tr><td>STATUS</td><td><input class="inp mono" value="R17950" style="width:120px"></td><td class="note">1=成功 / 2=失败（writeFail）</td></tr>
+          <tr><td>完成</td><td><input class="inp mono" value="R17951" style="width:120px"></td><td class="note">=1 通知设备取结果</td></tr>
+          <tr><td>DATA 分段偏移</td><td><input class="inp mono" value="30 / 60" style="width:120px"></td><td class="note">0030 三段：OUT_RESULT / OUT_REMARK / OUT_NEXTOP，无补零</td></tr>
+        </table>
+      </div>
+      <div class="mfoot"><span class="note" style="margin-right:auto;align-self:center">终版地址表（D/R + W68）到位后改配置即可，代码零改动</span><span class="btn pri">保存</span></div>
+    </div>
+
+    <!-- MES 调试窗 -->
+    <div class="modal span2">
+      <div class="mhead"><span class="mt">MES 接口调试</span><span class="chip">手动上传 = 真实报文</span><span class="x">✕</span></div>
+      <div class="mbody">
+        <div class="apichips">
+          <span class="achip">0027</span><span class="achip">0028</span><span class="achip on">0030 进出站</span>
+          <span class="achip">0031</span><span class="achip">0032</span><span class="achip">0033</span>
+          <span class="note" style="align-self:center;margin-left:6px">16 记忆字段按接口自动取用（0033 专有 11 字段仅此窗）</span>
+        </div>
+        <div class="dbg">
+          <div class="dbgL">
+            <div class="frow"><div class="fcol"><label class="fl">RC_NO 途程单号</label><input class="inp mono" value="ROUTE-A01"></div>
+              <div class="fcol"><label class="fl">ACTION 进出标志</label><select class="inp"><option>I · 进站</option><option>O · 出站</option></select></div></div>
+            <div class="frow"><div class="fcol"><label class="fl">BC_NO 条码（板级）</label><input class="inp mono" value="BC202611020013"></div>
+              <div class="fcol"><label class="fl">PT_NO 制程代码</label><input class="inp mono" value="PT10"></div></div>
+            <div class="frow"><div class="fcol"><label class="fl">MAC_NO 机台编号</label><input class="inp mono" value="M03"></div>
+              <div class="fcol"><label class="fl">MAC_LOC_NO 位置号</label><input class="inp mono" value="L03"></div></div>
+            <div class="frow"><div class="fcol"><label class="fl">SP_MEMO 员工工号</label><input class="inp mono" value="SP0266"></div>
+              <div class="fcol"><label class="fl">IN_DATETIME 时间</label><input class="inp mono" value="2026-11-02 10:24:02"></div></div>
+          </div>
+          <div class="dbgR">
+            <label class="fl">请求预览（组包与真实触发同源）</label>
+            <div class="json">{
+  <span class="jk">"RC_NO"</span>: <span class="js">"ROUTE-A01"</span>,
+  <span class="jk">"ACTION"</span>: <span class="js">"I"</span>,
+  <span class="jk">"BC_NO"</span>: <span class="js">"BC202611020013"</span>,
+  <span class="jk">"PT_NO"</span>: <span class="js">"PT10"</span>,
+  <span class="jk">"SP_MEMO"</span>: <span class="js">"SP0266"</span>,
+  <span class="jk">"MAC_NO"</span>: <span class="js">"M03"</span>,
+  <span class="jk">"MAC_LOC_NO"</span>: <span class="js">"L03"</span>,
+  <span class="jk">"TL_EL_NO"</span>: <span class="js">" "</span>,
+  <span class="jk">"IN_DATETIME"</span>: <span class="js">"2026-11-02 10:24:02"</span>,
+  <span class="jk">"CHECK_RESULT"</span>: <span class="js">"1"</span>,
+  <span class="jk">"PLANT"</span>: <span class="js">"YJ"</span>
+}  <span class="jd">// 0030 = 单对象 {}；0027/28/33 = 数组 []</span></div>
+            <div class="frow" style="margin:10px 0 0">
+              <span class="note" style="align-self:center">返回：<b style="color:var(--OkFg)">STATUS=1</b> · MSG=OK · 86 ms</span>
+              <span class="btn pri sm" style="margin-left:auto">上传</span>
+              <span class="btn ghost sm">保存参数到本地</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MES 日志窗 -->
+    <div class="modal span2">
+      <div class="mhead"><span class="mt">MES 交互实时日志</span><span class="x">✕</span></div>
+      <div class="mbody">
+        <div class="lvbar">
+          <span class="combo" style="min-width:150px">全部机台（-1）</span>
+          <input class="inp" style="max-width:220px" placeholder="关键字过滤…">
+          <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+            <span class="note">逐条详单同步写 Logs/*.log</span>
+            <span class="btn danger sm">清空</span>
+          </span>
+        </div>
+        <table class="cfgtab logtab">
+          <tr><th style="width:86px">时间</th><th style="width:70px">机台</th><th style="width:110px">事件</th><th>详情</th></tr>
+          <tr><td class="mono">10:24:31</td><td>机台1</td><td><span class="lvl dot g"></span>上传成功</td><td class="mono">API0030 · STATUS=1 · 86 ms</td></tr>
+          <tr><td class="mono">10:24:02</td><td>机台3</td><td><span class="lvl dot r"></span>网络异常</td><td class="mono" style="color:var(--DangerFg)">API0030 · MES网络异常/超时</td></tr>
+          <tr><td class="mono">10:24:02</td><td>机台3</td><td><span class="lvl dot gr"></span>触发</td><td class="mono">Station Trigger · ID:2 · API0030</td></tr>
+          <tr><td class="mono">10:22:08</td><td>机台2</td><td><span class="lvl dot g"></span>上传成功</td><td class="mono">API0027 · STATUS=1 · 74 ms</td></tr>
+          <tr><td class="mono">10:19:57</td><td>机台5</td><td><span class="lvl dot g"></span>上传成功</td><td class="mono">API0033 · STATUS=1 · 132 ms</td></tr>
+          <tr><td class="mono">10:12:40</td><td>机台3</td><td><span class="lvl dot g"></span>上传成功</td><td class="mono">API0031 · STATUS=1 · 86 ms</td></tr>
+          <tr><td class="mono">10:09:15</td><td>机台3</td><td><span class="lvl dot gr"></span>连接</td><td class="mono">连接机台成功,192.168.1.13</td></tr>
+        </table>
+        <div class="note" style="margin-top:9px">连续失败只记边沿（防刷屏，铁律 4）；行含"存图上报+图片路径"时点击开图（S6 挂起项，去留待 W68）。</div>
+      </div>
+    </div>
+
+    <!-- 报警窗 -->
+    <div class="modal alarm">
+      <div class="mhead"><span class="ic"></span>
+        <span><span class="mt" style="display:block;color:var(--DangerFg)">MES 返回 NG：API0030 进出站</span>
+        <span class="note">机台3（192.168.1.13） · 2026-11-02 10:24:02</span></span>
+        <span class="x">✕</span></div>
+      <div class="mbody">
+        <div class="json" style="flex:none;max-height:130px"><span class="jk">"STATUS"</span>: <span class="js">"0"</span>,
+<span class="jk">"MSG"</span>:    <span class="js">"设备号不存在"</span>,
+<span class="jk">"DATA"</span>:    <span class="js">""</span>  <span class="jd">// 已回写机台 STATUS=2 / MSG=NG</span></div>
+        <div class="note" style="margin-top:10px">失败不重传：结果已回写设备寄存器，由现场作业侧决定是否重触发（防 MES 重复记账）。
+          详细报文见【日志窗】；连续失败不重复弹窗（只记边沿）。</div>
+      </div>
+      <div class="mfoot"><span class="btn ghost sm">打开日志窗</span><span class="btn pri sm">知道了</span></div>
+    </div>
+
+    <!-- toast 规范 -->
+    <div class="modal">
+      <div class="mhead"><span class="mt">轻提示 toast（顶栏过账状态变化的伴随反馈）</span><span class="x">✕</span></div>
+      <div class="mbody toasts">
+        <div class="toast ok"><div><div class="tt">出站过账成功</div><div class="tx">机台1 · API0030 O · BC202611020013 · 86 ms</div></div></div>
+        <div class="toast err"><div><div class="tt">出站过账失败</div><div class="tx">机台3 · API0030 · MES网络异常/超时 —— 已回写 STATUS=2，不重传</div></div></div>
+        <div class="note">失败只 toast + 顶栏状态，不弹模态不重传（与程序①口径一致）；弹窗级告警仅 MES 返回 NG 时出报警窗。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ §4 组件规范小样 ═════════ -->
+<section>
+  <div class="shead"><span class="snum">§4</span><h2>组件规范小样（XAML 转译基准）</h2></div>
+  <div class="specgrid">
+    <div class="spec"><h4>按钮族（对齐 GhostButton / FreshButton 系）</h4>
+      <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
+        <span class="btn pri">主操作</span><span class="btn ghost">幽灵</span>
+        <span class="btn danger">危险（清空）</span>
+        <span class="btn ghost" style="opacity:.4">禁用</span><span class="mini">行内小钮</span>
+      </div></div>
+    <div class="spec"><h4>输入框（聚焦 = 底边 2px Accent）</h4>
+      <div style="display:flex;flex-direction:column;gap:9px;width:220px">
+        <input class="inp" value="常态"><input class="inp" style="border-color:var(--InputFocus);border-bottom-width:2px" value="聚焦">
+        <input class="inp err" value="校验错误"></div></div>
+    <div class="spec"><h4>开关 / 状态点</h4>
+      <div style="display:flex;gap:14px;align-items:center;font-size:12px;color:var(--FgMid)">
+        <span class="tgl on"><span class="tk"></span></span><span class="tgl"><span class="tk"></span></span>
+        <span class="dot g" style="display:inline-block;width:10px;height:10px;border-radius:50%"></span>
+        <span class="dot y" style="display:inline-block;width:10px;height:10px;border-radius:50%"></span>
+        <span class="dot r" style="display:inline-block;width:10px;height:10px;border-radius:50%"></span>
+        <span class="dot gr" style="display:inline-block;width:10px;height:10px;border-radius:50%"></span>
+      </div>
+      <div class="note" style="margin-top:9px">绿=在线/成功　黄=有失败　红=断连/NG　灰=待机/未触发（Brush.State* 同名映射）</div></div>
+    <div class="spec"><h4>接口码 chip</h4>
+      <div style="display:flex;gap:7px"><span class="acode" style="width:auto;padding:2px 10px">0027</span>
+      <span class="acode" style="width:auto;padding:2px 10px">0030</span></div>
+      <div class="note" style="margin-top:9px">等宽字体 + AccentSoft 底；行内失败态整行淡红底（RowFailBg）</div></div>
+  </div>
+</section>
+
+<!-- ═════════ §5 galaxy 来源标注 ═════════ -->
+<section>
+  <div class="shead"><span class="snum">§5</span><h2>galaxy 来源标注（E:\Project\galaxy 本地库）</h2></div>
+  <div class="srcall">
+    <h3>参考样例 → 用途（取形状与交互思路，配色全部换主题语义键，禁止照抄样例硬编码色值）</h3>
+    <ul>
+      <li><b>Cards/Yaya12085_silent-donkey-69.html</b> — 汇总条 stat 三层结构（k 标签 / v 大值 / d 描述），用于 §1 汇总条五个统计格</li>
+      <li><b>Inputs/alexruix_evil-parrot-25.html</b> — 输入框聚焦底边 2px 强调 + 下沉投影，用于 §3 全部表单与 §4 输入规范</li>
+      <li><b>Toggle-switches/Admin12121_strong-penguin-65.html</b> — 胶囊开关（滑块位移+点亮光晕），用于启用勾选/记住密码/主题切换</li>
+      <li><b>Notifications/devsleonardo_red-goat-27.html</b> — 通知卡"图标+主文案+副文案"构图，演化为报警窗左缘红条 + 图标方块与 toast 规范</li>
+      <li>Buttons / Cards 目录通用手法 — 幽灵按钮描边悬停增亮、卡片 hover 抬升+边框亮（§1 卡片、§4 按钮族）</li>
+    </ul>
+  </div>
+</section>
+
+</body>
+</html>

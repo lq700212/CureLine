@@ -15,6 +15,17 @@ using CureLine.Core.Infrastructure;
 
 namespace CureLine.Core.Mes;
 
+/// <summary>
+/// 结构化日志条目（V0.0.51 主窗业务化新增，观测用）：日志窗表格化三列
+/// （时间/事件级别/详情）的数据源。Formatted 与落盘格式逐字一致——
+/// 历史缓存（字符串）经 TryParseEntry 还原成条目，实时流走 EntryAdded 事件。
+/// </summary>
+public sealed record MesLogEntry(DateTime Time, string Title, string Message, int StationId)
+{
+    /// <summary>落盘/缓存行的原文格式（与 WriteLog 写文件逐字一致，勿改）。</summary>
+    public string Formatted => $"[{Time:yyyy-MM-dd HH:mm:ss.fff}] [{Title}] {Message}";
+}
+
 public static class MesLogger
 {
     private static readonly object LockObj = new();
@@ -32,6 +43,12 @@ public static class MesLogger
     /// 注意：在工作线程触发，UI 订阅方必须切回 UI 线程再操作控件。
     /// </summary>
     public static event Action<string, int>? LogAdded;
+
+    /// <summary>
+    /// 结构化日志事件（与 LogAdded 同点成对触发，同一行两路通知）：
+    /// 日志窗表格化按条目渲染；工作线程触发，UI 订阅方必须封送。
+    /// </summary>
+    public static event Action<MesLogEntry>? EntryAdded;
 
     /// <summary>
     /// 8 台设备名（V0.0.32 起走配置：AppConfig.Load 从 ini [StationNames] 节读入，
@@ -53,7 +70,8 @@ public static class MesLogger
 
     public static void WriteLog(string title, string content, int stationId)
     {
-        string logTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+        DateTime now = DateTime.Now;
+        string logTime = now.ToString("yyyy-MM-dd HH:mm:ss.fff");
         string formatted = $"[{logTime}] [{title}] {content}";
 
         lock (LockObj)
@@ -98,6 +116,35 @@ public static class MesLogger
         }
 
         LogAdded?.Invoke(formatted, stationId);
+        EntryAdded?.Invoke(new MesLogEntry(now, title, content, stationId));
+    }
+
+    /// <summary>
+    /// 缓存行原文 → 结构化条目（日志窗打开时批量还原历史）。
+    /// 格式固定为 "[yyyy-MM-dd HH:mm:ss.fff] [title] message"；解析失败
+    /// （手改文件/旧格式）返回 null，调用方按纯文本行兜底显示。
+    /// </summary>
+    public static MesLogEntry? TryParseEntry(string formatted, int stationId = -1)
+    {
+        if (string.IsNullOrEmpty(formatted) || formatted[0] != '[')
+            return null;
+        int closeTime = formatted.IndexOf(']', 1);
+        if (closeTime < 0)
+            return null;
+        if (!DateTime.TryParseExact(formatted.Substring(1, closeTime - 1),
+                "yyyy-MM-dd HH:mm:ss.fff", null,
+                System.Globalization.DateTimeStyles.None, out DateTime time))
+            return null;
+        // 第二段 "[title]"（title 本体按约定不含 ']'——WriteLog 侧保证）
+        int openTitle = formatted.IndexOf('[', closeTime);
+        int closeTitle = formatted.IndexOf(']', openTitle + 1);
+        if (openTitle < 0 || closeTitle < 0)
+            return null;
+        string title = formatted.Substring(openTitle + 1, closeTitle - openTitle - 1);
+        string message = closeTitle + 1 < formatted.Length
+            ? formatted.Substring(closeTitle + 1).TrimStart()
+            : string.Empty;
+        return new MesLogEntry(time, title, message, stationId);
     }
 
     /// <summary>取单机历史缓存副本（日志窗打开时一次性加载）。</summary>
@@ -105,6 +152,29 @@ public static class MesLogger
     {
         lock (LockObj)
             return new List<string>(SingleCache);
+    }
+
+    /// <summary>
+    /// 取全量历史（单机缓存 + 全部机台缓存按行首时间戳排序合并）——
+    /// 全量日志窗（stationId=-1）用：机台日志落分机台缓存，"-1 全部机台"
+    /// 语义要看到全部。行格式 "[yyyy-MM-dd HH:mm:ss.fff] ..." 固定，字符串序
+    /// 即时间序；解析不出时间戳的残行排最后保原序。
+    /// </summary>
+    public static List<string> GetAllCachedLogs()
+    {
+        lock (LockObj)
+        {
+            var all = new List<string>(SingleCache);
+            foreach (var kv in StationCaches)
+                all.AddRange(kv.Value);
+            all.Sort((a, b) =>
+            {
+                string ka = a.Length > 24 && a[0] == '[' ? a.Substring(1, 23) : "9999-12-31 23:59:59.999";
+                string kb = b.Length > 24 && b[0] == '[' ? b.Substring(1, 23) : "9999-12-31 23:59:59.999";
+                return string.CompareOrdinal(ka, kb);
+            });
+            return all;
+        }
     }
 
     /// <summary>取某机台历史缓存副本（多机日志窗用）。</summary>

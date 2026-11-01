@@ -30,6 +30,14 @@ using CureLine.Core.Mes;
 
 namespace CureLine.Core.Modes;
 
+/// <summary>
+/// 单次接口过账的观测快照（只读，纯 UI 统计用）：StationId=机台号 0..7，
+/// ApiCode="API0030" 等，Ok=status==1，Status=MES 返回/失败恒"2"，
+/// Message=简明结果（成功"STATUS=1"/NG 原因/失败 logMsg），ElapsedMs=处理耗时。
+/// </summary>
+public sealed record ApiResult(
+    int StationId, string ApiCode, bool Ok, string Status, string Message, long ElapsedMs);
+
 public class StationGateway : IDisposable
 {
     private readonly int _stationId;
@@ -42,10 +50,16 @@ public class StationGateway : IDisposable
     public event Action<int, string>? StationLog;
     /// <summary>心跳灯翻转（UI 切灯色）。</summary>
     public event Action<int, bool>? Heartbeat;
-    /// <summary>0 号机扫描周期上报（UI 显示"扫描周期: x ms"，老项目仅 id=0）。</summary>
+    /// <summary>扫描周期实测上报（UI 显示"扫描周期: x ms"；V0.0.51 起每台都报——
+    /// 原只 0 号机是老项目 UI 显示限制，事件层放开后单机视图可显示本台实测）。</summary>
     public event Action<int, long>? ScanElapsed;
     /// <summary>MES 报警（UI 弹报警窗）。</summary>
     public event Action<string, string>? AlarmRaised;
+    /// <summary>接口触发命中（观测：PollTriggers 扫到触发字=1 并清 0 时发，HandleApi 处理前）。</summary>
+    public event Action<int, string>? ApiTriggered;
+    /// <summary>接口过账完成（观测，不动协议）：HandleApi 各出口（成功/NG/失败）各发一次，
+    /// UI 据此做 6 接口状态微表与整线统计——回写寄存器的协议口径与事件无关。</summary>
+    public event Action<ApiResult>? ApiDone;
 
     /// <param name="stationFactory">按机台号建 IStationClient（真机 Modbus，模拟直接 new）。</param>
     public StationGateway(int stationId, Func<int, IStationClient> stationFactory)
@@ -107,8 +121,7 @@ public class StationGateway : IDisposable
                 // 崩了整台机无声停扫，比弹框更糟，故吞单次异常保活）。
             }
             sw.Stop();
-            if (_stationId == 0)
-                ScanElapsed?.Invoke(_stationId, sw.ElapsedMilliseconds);
+            ScanElapsed?.Invoke(_stationId, sw.ElapsedMilliseconds);
             // 周期读静态值（V0.0.22 配置化 [setting] ScanIntervalMs，缺省 200；
             // Math.Max 兜底：配置窗保存钳制 50~5000，此处再兜一层防 0 空转）。
             Thread.Sleep(Math.Max(AppConfig.ScanIntervalMs, 20));
@@ -143,6 +156,7 @@ public class StationGateway : IDisposable
         if (activeIndex < 0)
             return;
 
+        ApiTriggered?.Invoke(_stationId, activeApi);
         var addrs = MesConfig.ApiAddresses[activeIndex];
         // 后台处理，不堵扫描（老项目 Task.Run 原注）。
         Task.Run(() => HandleApi(activeApi, activeTrg, activeUrl, addrs));
@@ -151,8 +165,19 @@ public class StationGateway : IDisposable
     internal void HandleApi(
         string apiCode, string trgAddr, string url, MesConfig.ApiAddressSet addrs)
     {
+        // 观测计时：从进入处理起算（读数→组包校验→POST→回写），ApiDone 带出。
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         MesLogger.WriteLog("Station Trigger",
             $"检测到 MES 触发, 机台 ID: {_stationId}, API: {apiCode}", _stationId);
+
+        // 失败统一出口：WriteFail（协议回写原样：STATUS=2/MSG=NG/DATA=" "/完成=1/触发复0）
+        // + ApiDone 观测事件（UI 统计用）。局部函数避免四处重复两行。
+        void Fail(string logMsg, string respEcho)
+        {
+            WriteFail(logMsg, trgAddr, addrs, respEcho);
+            ApiDone?.Invoke(new ApiResult(_stationId, apiCode, false, "2",
+                logMsg, sw.ElapsedMilliseconds));
+        }
 
         var (ok, raw) = _station.ReadString(addrs.StationData, (ushort)MesConfig.DataLength);
         string json = ok ? (raw ?? string.Empty).Replace("\0", string.Empty).Trim() : string.Empty;
@@ -161,21 +186,20 @@ public class StationGateway : IDisposable
         bool parsed = ValidateJson(apiCode, json);
         if (!parsed)
         {
-            WriteFail($"{LanguageService.Tr("MES反序列化失败")}: {apiCode}",
-                trgAddr, addrs, "JSON 校验失败");
+            Fail($"{LanguageService.Tr("MES反序列化失败")}: {apiCode}",
+                "JSON 校验失败");
             return;
         }
         if (string.IsNullOrEmpty(url))
         {
-            WriteFail($"URL 未配置: {apiCode}", trgAddr, addrs, "URL 未配置");
+            Fail($"URL 未配置: {apiCode}", "URL 未配置");
             return;
         }
 
         bool httpOk = MesHttpClient.PostJson(url, json, out string resp, _stationId);
         if (!httpOk)
         {
-            WriteFail($"{LanguageService.Tr("MES网络异常/超时")}: {apiCode}",
-                trgAddr, addrs, resp);
+            Fail($"{LanguageService.Tr("MES网络异常/超时")}: {apiCode}", resp);
             return;
         }
 
@@ -184,8 +208,7 @@ public class StationGateway : IDisposable
             var respObj = JsonConvert.DeserializeObject<MesModels.BaseResponse>(resp);
             if (respObj == null)
             {
-                WriteFail($"{LanguageService.Tr("MES返回数据解析为空")}: {apiCode}",
-                    trgAddr, addrs, resp);
+                Fail($"{LanguageService.Tr("MES返回数据解析为空")}: {apiCode}", resp);
                 return;
             }
             string status = string.IsNullOrEmpty(respObj.STATUS) ? " " : respObj.STATUS;
@@ -239,18 +262,21 @@ public class StationGateway : IDisposable
             {
                 StationLog?.Invoke(_stationId,
                     $"{LanguageService.Tr("MES上传成功")}: {apiCode}");
+                ApiDone?.Invoke(new ApiResult(_stationId, apiCode, true, "1",
+                    "STATUS=1", sw.ElapsedMilliseconds));
             }
             else
             {
                 StationLog?.Invoke(_stationId,
                     $"{LanguageService.Tr("MES返回NG")}: {apiCode}");
                 AlarmRaised?.Invoke(resp, MesLogger.GenLogName(_stationId));
+                ApiDone?.Invoke(new ApiResult(_stationId, apiCode, false, status,
+                    $"{LanguageService.Tr("MES返回NG")}: {apiCode}", sw.ElapsedMilliseconds));
             }
         }
         catch (Exception ex)
         {
-            WriteFail($"{LanguageService.Tr("MES返回数据解析异常")}: {ex.Message}",
-                trgAddr, addrs, resp);
+            Fail($"{LanguageService.Tr("MES返回数据解析异常")}: {ex.Message}", resp);
         }
     }
 
@@ -355,6 +381,10 @@ public class MultiMachineManager : IDisposable
     public event Action<string, string>? AlarmRaised;
     /// <summary>某机台连接失败（UI 将其心跳灯置红，老项目 LabelPLClive=Red 语义）。</summary>
     public event Action<int>? StationBroken;
+    /// <summary>接口触发命中（各机台网关透传，观测用）。</summary>
+    public event Action<int, string>? ApiTriggered;
+    /// <summary>接口过账完成（各机台网关透传，观测用）。</summary>
+    public event Action<ApiResult>? ApiDone;
 
     public MultiMachineManager(Func<int, IStationClient> plcFactory)
     {
@@ -383,6 +413,8 @@ public class MultiMachineManager : IDisposable
             gw.Heartbeat += (id, b) => Heartbeat?.Invoke(id, b);
             gw.ScanElapsed += (id, ms) => ScanElapsed?.Invoke(id, ms);
             gw.AlarmRaised += (m, n) => AlarmRaised?.Invoke(m, n);
+            gw.ApiTriggered += (id, api) => ApiTriggered?.Invoke(id, api);
+            gw.ApiDone += r => ApiDone?.Invoke(r);
             if (gw.Connect(out _))
             {
                 gw.Start();

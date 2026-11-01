@@ -18,7 +18,7 @@ public partial class MesLogWindow : Window
         ViewModel = new MesLogViewModel(stationId);
         DataContext = ViewModel;
         InitializeComponent();
-        ViewModel.Lines.CollectionChanged += (_, e) =>
+        ViewModel.LogRows.CollectionChanged += (_, e) =>
         {
             if (e.Action == NotifyCollectionChangedAction.Add
                 && BoxLogs.Items.Count > 0)

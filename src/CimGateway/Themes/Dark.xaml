@@ -52,6 +52,7 @@
     <SolidColorBrush x:Key="Brush.StateRed" Color="#FF1744"/>
     <SolidColorBrush x:Key="Brush.StateYellow" Color="#FFB300"/>
     <SolidColorBrush x:Key="Brush.StateGreen" Color="#00E676"/>
+    <SolidColorBrush x:Key="Brush.FailRowBg" Color="#26FF1744"/>
 
     <!-- ══════════ 顶栏按钮（HTML .btn #1B2740 底 #33486B 边 #9DB8DC 字；高亮钮=蓝玻璃亮字） ══════════ -->
     <SolidColorBrush x:Key="Brush.GhostBg" Color="#FF1B2740"/>
@@ -90,6 +91,10 @@
     <!-- 窗体骨架（深空窗底 / 关闭钮悬停红沿用 Win32 惯例双主题同值） -->
     <SolidColorBrush x:Key="Brush.Fresh.WinBg" Color="#FF0F1B30"/>
     <SolidColorBrush x:Key="Brush.Fresh.CloseHoverBg" Color="#E81123"/>
+    <!-- 代码块（调试窗报文预览/返回区、报警窗报文区：深底等宽） -->
+    <SolidColorBrush x:Key="Brush.Fresh.CodeBg" Color="#0A1424"/>
+    <SolidColorBrush x:Key="Brush.Fresh.CodeFg" Color="#C9DCF0"/>
+    <SolidColorBrush x:Key="Brush.Fresh.CodeDim" Color="#7E9BBF"/>
     <!-- 变体面板 -->
     <SolidColorBrush x:Key="Brush.Fresh.PanelBorder" Color="#FF1F3350"/>
     <SolidColorBrush x:Key="Brush.Fresh.SubCardBg" Color="#FF142238"/>

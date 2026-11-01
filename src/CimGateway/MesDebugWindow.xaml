@@ -56,18 +56,26 @@
                                 Margin="8,0,0,0" Command="{Binding SwitchLanguageCommand}"
                                 Style="{StaticResource FreshButton}"/>
                     </StackPanel>
-                    <!-- MES 返回信息（只读多行区：FreshInput 框体 + Height 覆盖） -->
+                    <!-- MES 返回信息（只读多行区：V0.0.51 换等宽代码块观感 Fresh.CodeBg） -->
                     <Label Content="{Binding RespLabel, FallbackValue='MES 返回信息:'}" DockPanel.Dock="Bottom"
                            Padding="0,0,0,2"/>
                     <TextBox Text="{Binding Response, Mode=OneWay}" DockPanel.Dock="Bottom"
-                             Style="{StaticResource FreshInput}" Height="110" Margin="0,0,0,8"
-                             IsReadOnly="True" TextWrapping="Wrap"
+                             Height="110" Margin="0,0,0,8" IsReadOnly="True" TextWrapping="Wrap"
+                             FontFamily="Consolas" FontSize="11.5"
+                             Background="{DynamicResource Brush.Fresh.CodeBg}"
+                             Foreground="{DynamicResource Brush.Fresh.CodeFg}"
+                             BorderBrush="{DynamicResource Brush.Fresh.PanelBorder}" BorderThickness="1"
+                             Padding="12,8"
                              VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
                     <Label Content="{Binding PreviewLabel, FallbackValue='发送报文预览:'}" DockPanel.Dock="Bottom"
                            Padding="0,0,0,2"/>
                     <TextBox Text="{Binding Preview, Mode=OneWay}" DockPanel.Dock="Bottom"
-                             Style="{StaticResource FreshInput}" Height="52" Margin="0,0,0,8"
-                             IsReadOnly="True" TextWrapping="Wrap"
+                             Height="52" Margin="0,0,0,8" IsReadOnly="True" TextWrapping="Wrap"
+                             FontFamily="Consolas" FontSize="11.5"
+                             Background="{DynamicResource Brush.Fresh.CodeBg}"
+                             Foreground="{DynamicResource Brush.Fresh.CodeFg}"
+                             BorderBrush="{DynamicResource Brush.Fresh.PanelBorder}" BorderThickness="1"
+                             Padding="12,8"
                              VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
                     <!-- 字段表单（WrapPanel 流式，按接口显隐） -->
                     <ScrollViewer VerticalScrollBarVisibility="Auto">

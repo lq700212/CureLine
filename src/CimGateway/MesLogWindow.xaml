@@ -20,10 +20,12 @@
                             ResizeBorderThickness="6"/>
     </shell:WindowChrome.WindowChrome>
     <!--日志窗（MVVM：行集合走 MesLogViewModel，本文件纯绑定）。
-        滚动到底部是纯视图行为，View 订阅集合变化调 ScrollIntoView。
-        日志流 ListBox 走 App.xaml 隐式主题样式（CardBg 融底 + 胶囊滚动条，
-        深浅主题跟随）；清空=破坏性操作走危险色钮。
-        设计时 DataContext 为空，按钮文本取 FallbackValue 占位（仅预览，运行时走真值）。-->
+        V0.0.51 表格化重做（还原设计稿 §3）：三列=时间(等宽)/事件(级别点+标题)/详情(等宽)，
+        ListBox+ItemTemplate 保留隐式主题样式与虚拟化；级别点 Level 三态
+        （Ok 绿/Err 红/Info 灰，缺省 Setter 写进 Style 防触发器死区）。
+        滚动到底部是纯视图行为，View 订阅集合变化调 ScrollIntoView；
+        清空=破坏性操作走危险色钮。
+        设计时 DataContext 为空，列头/按钮文本取 FallbackValue 占位（仅预览）。-->
     <Grid Margin="14">
         <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
                 BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
@@ -48,8 +50,58 @@
                             Command="{Binding SwitchLanguageCommand}"
                             Style="{StaticResource FreshButton}"/>
                 </StackPanel>
-                <ListBox x:Name="BoxLogs" FontSize="12" ItemsSource="{Binding Lines}"
-                         Margin="16,12,16,0">
+                <!-- 表头（与行模板同列宽：时间 84 / 事件 148 / 详情 *） -->
+                <Grid DockPanel.Dock="Top" Margin="20,10,20,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="84"/>
+                        <ColumnDefinition Width="148"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="时间" FontSize="10.5" Foreground="{DynamicResource Brush.Fresh.FgDim}"/>
+                    <TextBlock Grid.Column="1" Text="事件" FontSize="10.5" Foreground="{DynamicResource Brush.Fresh.FgDim}"/>
+                    <TextBlock Grid.Column="2" Text="详情" FontSize="10.5" Foreground="{DynamicResource Brush.Fresh.FgDim}"/>
+                </Grid>
+                <ListBox x:Name="BoxLogs" FontSize="12" ItemsSource="{Binding LogRows}"
+                         Margin="16,2,16,0" HorizontalContentAlignment="Stretch">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="2,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="84"/>
+                                    <ColumnDefinition Width="148"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Time, FallbackValue='--:--:--'}"
+                                           FontFamily="Consolas" FontSize="11"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Brush.Fresh.FgDim}"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Ellipse Width="7" Height="7" VerticalAlignment="Center">
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Setter Property="Fill" Value="{DynamicResource Brush.StateIdle}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Level, FallbackValue=Info}" Value="Ok">
+                                                        <Setter Property="Fill" Value="{DynamicResource Brush.StateGreen}"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Level, FallbackValue=Info}" Value="Err">
+                                                        <Setter Property="Fill" Value="{DynamicResource Brush.StateRed}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
+                                    <TextBlock Text="{Binding Title, FallbackValue='LOG'}" FontSize="11.5"
+                                               Margin="6,0,0,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Brush.Fresh.FgStrong}"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="{Binding Message, FallbackValue=''}"
+                                           FontFamily="Consolas" FontSize="11" TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" Margin="8,0,0,0"
+                                           Foreground="{DynamicResource Brush.Fresh.FgMid}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
                     <ListBox.ItemsPanel>
                         <ItemsPanelTemplate>
                             <VirtualizingStackPanel/>

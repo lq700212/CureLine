@@ -147,4 +147,76 @@ public class MultiGatewayTests : IDisposable
         Assert.Equal("NG", _plc.PeekString("R17810"));
         Assert.Equal(" ", _plc.PeekString("R17900"));
     }
+
+    // ---- 观测事件（V0.0.51 主窗业务化：ApiTriggered/ApiDone，协议回写不受影响）----
+
+    [Fact(DisplayName = "成功链路发Triggered+ApiDone(ok)且协议回写不变")]
+    public void Gateway_ApiObserved_Success()
+    {
+        string json = JsonConvert.SerializeObject(new MesModels.Api0030Request
+        {
+            RC_NO = "R1", ACTION = "I", BC_NO = "B1;",
+            IN_DATETIME = "2026-09-21 10:00:00.000", CHECK_RESULT = "0",
+        });
+        _plc.PresetString("R17001", json);
+        _plc.PresetWord("R17000", 1);
+
+        string? triggeredApi = null;
+        ApiResult? done = null;
+        using var gw = Gw();
+        gw.ApiTriggered += (id, api) => triggeredApi = $"{id}:{api}";
+        gw.ApiDone += r => done = r;
+
+        gw.PollTriggers();
+
+        WaitFor(() => done != null, "ApiDone 未触发");
+        Assert.Equal("0:API0030", triggeredApi);
+        Assert.True(done!.Ok);
+        Assert.Equal("1", done.Status);
+        Assert.Equal(0, done.StationId);
+        Assert.True(done.ElapsedMs >= 0);
+        // 观测不代替协议：回写链照旧完整
+        WaitFor(() => _plc.PeekWord("R17800") == 1, "完成位未置1");
+        Assert.Equal("1", _plc.PeekString("R17801"));
+    }
+
+    [Fact(DisplayName = "失败出口发ApiDone(fail,status=2)")]
+    public void Gateway_ApiObserved_WriteFail()
+    {
+        _plc.PresetString("R17001", "{not json");
+        _plc.PresetWord("R17000", 1);
+        ApiResult? done = null;
+        using var gw = Gw();
+        gw.ApiDone += r => done = r;
+
+        gw.PollTriggers();
+
+        WaitFor(() => done != null, "ApiDone 未触发");
+        Assert.False(done!.Ok);
+        Assert.Equal("2", done.Status);
+        Assert.Contains("API0030", done.Message);
+    }
+
+    [Fact(DisplayName = "MES拒绝发ApiDone(fail,status=回显值)")]
+    public void Gateway_ApiObserved_MesReject()
+    {
+        _nextResp = "{\"STATUS\":\"0\",\"MSG\":\"no such barcode\",\"DATA\":null}";
+        string json = JsonConvert.SerializeObject(new MesModels.Api0030Request
+        {
+            RC_NO = "R1", ACTION = "I", BC_NO = "B9;",
+            IN_DATETIME = "2026-09-21 10:00:00.000", CHECK_RESULT = "0",
+        });
+        _plc.PresetString("R17001", json);
+        _plc.PresetWord("R17000", 1);
+        ApiResult? done = null;
+        using var gw = Gw();
+        gw.ApiDone += r => done = r;
+
+        gw.PollTriggers();
+
+        WaitFor(() => _plc.PeekWord("R17800") == 1, "完成位未置1");
+        WaitFor(() => done != null, "ApiDone 未触发");
+        Assert.False(done!.Ok);
+        Assert.Equal("0", done.Status);
+    }
 }

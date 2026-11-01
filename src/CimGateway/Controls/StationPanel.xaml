@@ -3,58 +3,182 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
              xmlns:vm="clr-namespace:CimGateway.ViewModels"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:StationPanelViewModel, IsDesignTimeCreatable=False}"
-             MinWidth="280" MinHeight="380">
-    <!--机台面板（MVVM：状态走 StationPanelViewModel，DataContext 由父项继承）。
-        双击日志行开窗走命令；单击选中即全文（SelectedLine setter 回调）。
-        卡片取色走主题字典（Brush.CardBg/CardBorder/FgStrong——G2 白卡/G1 玻璃卡随主题换皮）；
-        心跳灯 LampColor 是 VM 的状态字符串（"Lime"在线/"Red"断连/"Green"待机），
-        此处 DataTrigger 映射到主题状态点键（Brush.State*），深浅主题自动跟随。
-        设计时 DataContext 为空，名称/灯色取 FallbackValue 占位（仅预览，运行时走真值）。-->
+             MinWidth="280" MinHeight="250">
+    <!--机台卡片（MVVM：状态走 StationPanelViewModel，DataContext 由父项继承）。
+        V0.0.51 主窗业务化重做（一比一还原 docs/UI设计_CIM主窗业务化_方案C定稿.html §1）：
+        头行=机台名+心跳灯+今日三数徽标；6 接口状态微表（触发/成功/失败/最后结果点，
+        失败行淡红底）；底部最新消息一行（点击开分机台日志窗，双击保留同链）。
+        卡片日志 ListBox 已删（日志归 MesLogWindow，单机视图触发流绑 VM.LogLines）。
+        卡片取色走主题字典（Brush.CardBg/CardBorder/FgStrong）；
+        灯色 LampColor 是 VM 状态串（Lime 在线/Green 待机/Red 断连/Yellow 今日有失败/
+        Gray 未连或未启用），DataTrigger 映射主题 Brush.State*（缺省 Setter 写进 Style，
+        防触发器死区——本地值优先级高于触发器的坑见 AGENTS XAML 纪律⑥）。
+        设计时 DataContext 为空，名称/灯色/文案取 FallbackValue 占位（仅预览）。-->
     <UserControl.InputBindings>
         <MouseBinding MouseAction="LeftDoubleClick"
                       Command="{Binding OpenLogCommand}"/>
     </UserControl.InputBindings>
     <Border BorderBrush="{DynamicResource Brush.CardBorder}" BorderThickness="1"
-            CornerRadius="10" Margin="3" Padding="8" Background="{DynamicResource Brush.CardBg}">
+            CornerRadius="10" Margin="3" Padding="10,9,10,9" Background="{DynamicResource Brush.CardBg}">
         <Border.Style>
             <Style TargetType="Border">
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.CardBorder}"/>
+                <Setter Property="Background" Value="{DynamicResource Brush.CardBg}"/>
                 <Style.Triggers>
                     <Trigger Property="IsMouseOver" Value="True">
                         <Setter Property="BorderBrush" Value="{DynamicResource Brush.CardBorderHover}"/>
                     </Trigger>
+                    <!-- 断连卡红边（设计稿 .card.down） -->
+                    <DataTrigger Binding="{Binding LampColor, FallbackValue=Gray}" Value="Red">
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.StateRed}"/>
+                    </DataTrigger>
                 </Style.Triggers>
             </Style>
         </Border.Style>
-        <DockPanel>
-            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" VerticalAlignment="Center"
-                        Margin="0,0,0,6">
-                <TextBlock Text="{Binding Name, FallbackValue='橡胶装配PCB设备'}" FontSize="14" FontWeight="Bold"
-                           VerticalAlignment="Center"
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 头行：机台名 + 心跳灯（紧跟名）+ 今日三数徽标（右端） -->
+            <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,7">
+                <TextBlock Text="{Binding Name, FallbackValue='机台1'}" FontSize="13" FontWeight="Bold"
+                           VerticalAlignment="Center" ToolTip="{Binding Name}"
                            Foreground="{DynamicResource Brush.FgStrong}"/>
-                <!-- 通讯心跳灯：状态字符串→主题点色映射（缺省=StateIdle 灰待机） -->
-                <Ellipse Width="11" Height="11" Margin="8,0,0,0" VerticalAlignment="Center"
-                         ToolTip="通讯心跳">
+                <Ellipse Width="10" Height="10" Margin="7,0,0,0"
+                         VerticalAlignment="Center" ToolTip="通讯心跳">
                     <Ellipse.Style>
                         <Style TargetType="Ellipse">
                             <Setter Property="Fill" Value="{DynamicResource Brush.StateIdle}"/>
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding LampColor, FallbackValue=Green}" Value="Lime">
+                                <DataTrigger Binding="{Binding LampColor, FallbackValue=Gray}" Value="Lime">
                                     <Setter Property="Fill" Value="{DynamicResource Brush.StateGreen}"/>
                                 </DataTrigger>
-                                <DataTrigger Binding="{Binding LampColor, FallbackValue=Green}" Value="Red">
+                                <DataTrigger Binding="{Binding LampColor, FallbackValue=Gray}" Value="Green">
+                                    <Setter Property="Fill" Value="{DynamicResource Brush.StateGreen}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding LampColor, FallbackValue=Gray}" Value="Red">
                                     <Setter Property="Fill" Value="{DynamicResource Brush.StateRed}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding LampColor, FallbackValue=Gray}" Value="Yellow">
+                                    <Setter Property="Fill" Value="{DynamicResource Brush.StateYellow}"/>
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </Ellipse.Style>
                 </Ellipse>
-            </StackPanel>
-            <ListBox ItemsSource="{Binding LogLines}" SelectedItem="{Binding SelectedLine}"
-                     HorizontalContentAlignment="Left" FontSize="12" />
-        </DockPanel>
+                <!-- 今日三数：触发 N · 失败 M（右端；失败数着色需拆行，徽标整体灰字
+                     + 断连/失败由灯色与消息行表达，保持单行简洁） -->
+                <TextBlock DockPanel.Dock="Right"
+                           Text="{Binding HeadBadge, FallbackValue='触发 0 · 失败 0'}"
+                           FontSize="10.5" Foreground="{DynamicResource Brush.FgDim}"
+                           VerticalAlignment="Center"/>
+            </DockPanel>
+
+            <!-- 6 接口状态微表 -->
+            <ItemsControl Grid.Row="1" ItemsSource="{Binding ApiStats}" VerticalAlignment="Top">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border x:Name="RowBd" CornerRadius="5" Padding="5,3" Margin="0,0,0,1"
+                                Background="Transparent">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="46"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="34"/>
+                                    <ColumnDefinition Width="36"/>
+                                    <ColumnDefinition Width="34"/>
+                                    <ColumnDefinition Width="14"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" CornerRadius="4" Padding="0,2"
+                                        Background="{DynamicResource Brush.AccentSoft}" HorizontalAlignment="Left">
+                                    <TextBlock Text="{Binding Code, FallbackValue='0027'}" FontSize="10"
+                                               FontFamily="Consolas" Foreground="{DynamicResource Brush.Accent}"
+                                               HorizontalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Grid.Column="1" Text="{Binding Name, FallbackValue='固化时间'}"
+                                           FontSize="11.5" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Brush.FgMid}"/>
+                                <TextBlock Grid.Column="2" Text="{Binding Triggered, FallbackValue=0}"
+                                           FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Brush.FgDim}"/>
+                                <TextBlock Grid.Column="3" Text="{Binding Ok, FallbackValue=0}"
+                                           FontSize="11" FontWeight="Bold" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Brush.FgStrong}"/>
+                                <TextBlock Grid.Column="4" Text="{Binding Fail, FallbackValue=0}"
+                                           FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Brush.FgDim}"/>
+                                <!-- 最后结果点：Ok 绿 / Fail 红 / Idle 灰（缺省 Setter 防死区） -->
+                                <Ellipse Grid.Column="5" Width="8" Height="8" HorizontalAlignment="Right"
+                                         VerticalAlignment="Center">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{DynamicResource Brush.StateIdle}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding LampKind, FallbackValue=Idle}" Value="Ok">
+                                                    <Setter Property="Fill" Value="{DynamicResource Brush.StateGreen}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding LampKind, FallbackValue=Idle}" Value="Fail">
+                                                    <Setter Property="Fill" Value="{DynamicResource Brush.StateRed}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                            </Grid>
+                        </Border>
+                        <DataTemplate.Triggers>
+                            <!-- 失败行淡红底（Brush.FailRowBg 两主题异值） -->
+                            <DataTrigger Binding="{Binding LampKind, FallbackValue=Idle}" Value="Fail">
+                                <Setter TargetName="RowBd" Property="Background"
+                                        Value="{DynamicResource Brush.FailRowBg}"/>
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- 底部最新消息一行：点击开分机台日志窗；三态底色（Ok 绿/Warn 红/Info 灰） -->
+            <Button Grid.Row="2" Command="{Binding OpenLogCommand}" Cursor="Hand"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                    Margin="0,7,0,0" ToolTip="打开本机台 MES 日志窗">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="MsgBd" CornerRadius="6" Padding="8,6"
+                                Background="{TemplateBinding Background}">
+                            <TextBlock Text="{Binding LatestMessage, FallbackValue='等待连接…'}"
+                                       FontSize="10.5" TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource Brush.FgDim}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="MsgBd" Property="Opacity" Value="0.82"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Style.Triggers>
+                            <!-- LatestKind 三态消息底色：Warn 红 / Ok 绿 / 缺省 Info 灰 -->
+                            <DataTrigger Binding="{Binding LatestKind, FallbackValue=Info}" Value="Warn">
+                                <Setter Property="Background" Value="{DynamicResource Brush.FailRowBg}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding LatestKind, FallbackValue=Info}" Value="Ok">
+                                <Setter Property="Background" Value="{DynamicResource Brush.AccentSoft}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </Grid>
     </Border>
 </UserControl>

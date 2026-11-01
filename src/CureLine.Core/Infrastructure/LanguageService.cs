@@ -2,10 +2,10 @@
 // LanguageService：中英切换词典（复刻自老项目 Module1.Tr，单机版 + 多机版合并）
 //
 // 干什么：Tr(中文) → 按 CurrentLanguage 返回中文/英文，全界面共用。
-// 为什么合并：单机版 50+ 词条（固化/库位系）与多机版 60+ 词条（设备名/上报系）
+// 为什么合并：单机版 50+ 词条（固化/库位系）与多机版 60+ 词条（机台/上报系）
 //   有重叠也有各自独有；融合版必须两套都认识，否则切 Mode 后满屏中文回退。
-//   已知瑕疵原样继承并标注：多机版把"橡胶装配PCB设备"译成和"外壳穿线"同一英文
-//   （复制粘贴错误），此处修正，加注说明。
+//   老项目把第 1 台设备名错译成第 2 台英文的瑕疵已随 V0.0.51 缺省机台名
+//   中性化一并删除（老产线名不再是缺省值，词条无消费方）。
 // 切换后 UI 刷新由各窗体 UpdateUI 负责（WPF 用 INotifyPropertyChanged + 资源重取）。
 // =========================================================================
 
@@ -112,15 +112,17 @@ public static class LanguageService
         ["图片文件不存在"] = "Image file not found",
         ["图片路径不存在,请查看详细日志"] = "Image path invalid, check logs",
         ["图片查看"] = "Image View",
-        // 8 台设备名（注意：老项目把第 1 台错译成第 2 台英文，此处已修正）
-        ["橡胶装配PCB设备"] = "Rubber Assembly PCB Equipment",
-        ["外壳穿线半自动机构"] = "Shell threading semi-automatic mechanism",
-        ["焊锡_2D检测_涂胶半自动机构"] = "Soldering_2D Inspection_Semi-Automatic Gluing Mechanism",
-        ["外壳组件保压机构"] = "Shell Component Pressure-Holding Mechanism",
-        ["外壳组件点胶_打标二维码设备"] = "Shell Component Dispensing and QR Code Marking Equipment",
-        ["点胶固化收料机"] = "Glue Dispensing Curing and Material Collection Machine",
-        ["测试线体-激光-基板焊接_打标_贴圆片体机"] = "Test Line - Laser - Substrate Welding_Marking_Pasting Disc Machine",
-        ["测试线体-光效测试压力测试设备"] = "Test Line - Light Effect Test Pressure Testing Equipment",
+        // 8 台机台缺省名（V0.0.51 中性化"机台1~8"——老产线 8 设备名词条随缺省名
+        // 一并删除（改干净改彻底）；现场在 [StationNames] 配置真名后，面板名直出
+        // 不走 Tr（配置值即显示值），无需为现场名补词条）
+        ["机台1"] = "Machine 1",
+        ["机台2"] = "Machine 2",
+        ["机台3"] = "Machine 3",
+        ["机台4"] = "Machine 4",
+        ["机台5"] = "Machine 5",
+        ["机台6"] = "Machine 6",
+        ["机台7"] = "Machine 7",
+        ["机台8"] = "Machine 8",
         // 多机网关流程
         ["MES上传成功"] = "MES upload success",
         ["MES返回NG"] = "MES returned NG",
@@ -129,6 +131,38 @@ public static class LanguageService
         ["MES反序列化失败"] = "MES deserialize failed",
         ["MES返回数据解析为空"] = "MES response empty",
         ["MES返回数据解析异常"] = "MES response parse error",
+        // 6 接口语义短名（V0.0.51 卡片微表/单机明细表，与客户手册接口清单同源）
+        ["固化时间"] = "Curing Time",
+        ["报警异常"] = "Alarm/Abnormal",
+        ["进出站"] = "Board In/Out",
+        ["物料绑定"] = "Material Binding",
+        ["物料上传"] = "Material Upload",
+        ["测试记录"] = "Test Record",
+        // 整线汇总条/单机视图（V0.0.51 主窗业务化）
+        ["未触发"] = "Never Triggered",
+        ["配置值"] = "configured",
+        ["未启用"] = "Disabled",
+        ["触发"] = "Trig",
+        ["失败"] = "Fail",
+        ["在线"] = "Online",
+        ["启用"] = "Enabled",
+        ["今日过账"] = "Today",
+        ["查看全部日志"] = "All Logs",
+        ["MES 调试"] = "MES Debug",
+        ["最近报文"] = "Last posting",
+        ["扫描周期"] = "Scan cycle",
+        ["视图:"] = "View:",
+        ["全部机台"] = "All Stations",
+        ["接口明细"] = "API Details",
+        ["最近触发流"] = "Recent Triggers",
+        ["状态"] = "Status",
+        ["成功"] = "OK",
+        ["次"] = "runs",
+        ["实时"] = "LIVE",
+        ["操作"] = "Actions",
+        ["进程内累计，重启清零"] = "in-process count, reset on restart",
+        ["单机视图见实测"] = "see per-station actual in single view",
+        ["最后 STATUS / 最后触发 / 耗时"] = "Last STATUS / Last trigger / Elapsed",
         // API0033 不良明细字段（调试窗扩展，老项目无，新增）
         ["板号SN"] = "Board SN",
         ["顶底层"] = "Top/Bottom",

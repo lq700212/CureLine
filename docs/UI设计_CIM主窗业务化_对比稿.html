@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>CIM 主窗业务化 · 方案对比稿（2026-11-02）</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Segoe UI","Microsoft YaHei",sans-serif; background:#EEF1F5; color:#2b3442; padding:28px 34px 60px; }
+  h1 { font-size:22px; color:#1F4E79; margin-bottom:6px; }
+  .sub { font-size:13px; color:#66707e; margin-bottom:20px; line-height:1.7; }
+  .sub b { color:#1F4E79; }
+  section { margin-bottom:50px; }
+  .head { display:flex; align-items:baseline; gap:12px; margin-bottom:6px; }
+  .head h2 { font-size:18px; color:#233; }
+  .tag { font-size:12px; padding:3px 10px; border-radius:10px; }
+  .tag-base { background:#ECEFF1; color:#546E7A; }
+  .tag-low { background:#E3F2FD; color:#1565C0; }
+  .tag-mid { background:#FFF3E0; color:#E65100; }
+  .desc { font-size:13px; color:#5b6673; line-height:1.7; margin-bottom:12px; max-width:1150px; }
+  .desc b { color:#1F4E79; }
+  .desc .pts { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .desc .pts span { font-size:12px; background:#fff; border:1px solid #d6dee8; border-radius:4px; padding:3px 8px; }
+  .mockwrap { background:#D9DEE4; border:1px solid #b9c2cc; border-radius:10px; padding:14px; max-width:1240px; }
+  .win { background:#F4F7FA; border-radius:8px; overflow:hidden; box-shadow:0 2px 10px rgba(20,40,80,.14); }
+  .caption { font-size:12px; color:#7a8794; margin:8px 2px 0; line-height:1.6; }
+
+  /* ───── 模拟窗口 · 品牌顶栏（三方案共用） ───── */
+  .topbar { display:flex; align-items:center; gap:10px; height:44px; padding:0 14px;
+            background:linear-gradient(90deg,#2E7CD6,#1F5FBF); color:#fff; }
+  .chip { background:rgba(255,255,255,.22); border-radius:4px; padding:3px 8px; font-size:11.5px; font-weight:800; letter-spacing:.5px; }
+  .ttl { font-size:14px; font-weight:600; }
+  .clk { font-size:11.5px; opacity:.85; }
+  .btns { margin-left:auto; display:flex; gap:6px; align-items:center; }
+  .btn { padding:5px 12px; background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.35);
+         border-radius:4px; font-size:12px; color:#fff; }
+  .sys { width:26px; text-align:center; padding:5px 0; font-size:11px; }
+
+  /* ───── 筛选条 / 汇总条 ───── */
+  .filter { display:flex; align-items:center; gap:12px; padding:9px 12px; font-size:12.5px; color:#54646f; }
+  .combo { border:1px solid #C5D3E0; border-radius:4px; background:#fff; padding:5px 12px; color:#33424e; min-width:150px; }
+  .combo:after { content:" ▾"; color:#8899a6; }
+  .scan { color:#8899a6; }
+
+  /* ───── 汇总条（方案 C） ───── */
+  .sumbar { display:flex; align-items:center; gap:14px; margin:9px 12px 0; padding:8px 14px;
+            background:#fff; border:1px solid #D8E1EA; border-radius:8px; font-size:12.5px; color:#41505c; flex-wrap:wrap; }
+  .sumbar .lab { color:#8494a2; }
+  .sumbar .v { font-weight:700; color:#22303c; }
+  .sep { width:1px; height:16px; background:#DDE5EC; }
+  .pill { padding:2px 10px; border-radius:10px; font-size:12px; font-weight:600; }
+  .pill.ok { background:#E8F5E9; color:#2E7D32; }
+  .pill.err { background:#FBE9E7; color:#C62828; }
+  .mesdot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:0; }
+  .mesdot.g { background:#4CAF50; } .mesdot.r { background:#E53935; } .mesdot.gr { background:#B0BEC5; }
+
+  /* ───── 卡片网格 ───── */
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; padding:10px 12px 14px; }
+  .card { background:#fff; border:1px solid #D8E1EA; border-radius:10px; padding:9px 10px; min-height:252px;
+          display:flex; flex-direction:column; }
+  .card.down { border-color:#EFB8B5; }
+  .chead { display:flex; align-items:center; gap:7px; padding-bottom:7px; border-bottom:1px solid #EDF2F6; }
+  .cname { font-size:13px; font-weight:700; color:#26414f; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lamp { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .lamp.g { background:#43A047; } .lamp.r { background:#E53935; } .lamp.gr { background:#B0BEC5; }
+  .cstat { font-size:11px; color:#6b7a87; flex-shrink:0; }
+  .cstat b.ok { color:#2E7D32; } .cstat b.err { color:#C62828; }
+
+  /* ───── 接口微表（方案 B/C） ───── */
+  .apis { margin-top:7px; flex:1; }
+  .arow { display:flex; align-items:center; gap:6px; padding:4px 2px; font-size:11.5px; border-radius:4px; }
+  .arow:hover { background:#F2F7FB; }
+  .acode { width:52px; flex-shrink:0; font-family:Consolas,monospace; font-size:10.5px; color:#4A6572;
+           background:#EEF3F8; border-radius:3px; text-align:center; padding:1.5px 0; }
+  .aname { flex:1; color:#54646f; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .anum { width:34px; text-align:right; color:#7c8b98; font-variant-numeric:tabular-nums; }
+  .anum b { color:#33424e; font-weight:600; }
+  .adot { width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-left:3px; }
+  .adot.g { background:#4CAF50; } .adot.r { background:#E53935; } .adot.gr { background:#CFD8DC; }
+  .arow.fail .aname, .arow.fail .anum { color:#C62828; }
+  .amsg { margin-top:7px; padding-top:7px; border-top:1px dashed #E4EBF1; font-size:11px; color:#8a99a6;
+          overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .amsg.warn { color:#C62828; }
+
+  /* ───── 方案 A 现状：日志卡 ───── */
+  .logbox { margin-top:7px; flex:1; background:#FBFCFD; border:1px solid #EEF2F5; border-radius:6px;
+            padding:5px 7px; font-size:11px; color:#7c8b98; overflow:hidden; }
+  .logbox div { padding:2.5px 0; border-bottom:1px solid #F3F6F9; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .logbox .ok { color:#3E8E46; } .logbox .ng { color:#C62828; }
+
+  /* 痛点标注 */
+  .pin { display:inline-block; width:15px; height:15px; border-radius:50%; background:#E53935; color:#fff;
+         font-size:10px; line-height:15px; text-align:center; vertical-align:1px; margin-left:4px; }
+  .painlist { margin:10px 2px 0; font-size:12.5px; color:#5b6673; line-height:1.9; max-width:1150px; }
+  .painlist b { color:#C62828; }
+
+  /* ───── 单机视图小样（方案 C 附图） ───── */
+  .detail { display:flex; gap:10px; margin:0 12px 12px; }
+  .dtable { flex:1.2; background:#fff; border:1px solid #D8E1EA; border-radius:8px; padding:10px; }
+  .dlog { flex:1; background:#fff; border:1px solid #D8E1EA; border-radius:8px; padding:10px; }
+  .dh { font-size:12.5px; font-weight:700; color:#26414f; margin-bottom:8px; }
+  table { width:100%; border-collapse:collapse; font-size:11.5px; }
+  th { text-align:left; color:#8494a2; font-weight:600; padding:4px 6px; border-bottom:1px solid #E4EBF1; }
+  td { padding:5px 6px; color:#41505c; border-bottom:1px solid #F3F6F9; font-variant-numeric:tabular-nums; }
+  td.mono { font-family:Consolas,monospace; font-size:11px; }
+
+  /* ───── 对比表 ───── */
+  .cmp { width:100%; max-width:1240px; border-collapse:collapse; background:#fff; border:1px solid #D8E1EA;
+         border-radius:8px; overflow:hidden; font-size:13px; }
+  .cmp th { background:#F2F6FA; color:#26414f; padding:9px 12px; text-align:left; font-size:12.5px; }
+  .cmp td { padding:9px 12px; border-top:1px solid #EEF2F6; color:#41505c; line-height:1.6; }
+  .cmp .rec { color:#1F4E79; font-weight:700; }
+  .foot { font-size:12px; color:#8494a2; margin-top:18px; line-height:1.8; max-width:1150px; }
+</style>
+</head>
+<body>
+
+<h1>CIM 主窗业务化 · 方案对比稿</h1>
+<div class="sub">
+  程序② CimGateway 主窗内容区改造对比（顶栏/主题/门禁三方案完全一致，不在对比范围）。<br>
+  配套设计条目：<b>docs/UI设计_CIM主窗业务化_20261102.md</b>（S1~S6）｜数据为演示值｜
+  <b>对比稿色值仅为示意，实施配色一律走 Themes/ 主题语义键</b>。
+</div>
+
+<!-- ═══════════════ 方案 A · 现状基线 ═══════════════ -->
+<section>
+  <div class="head"><h2>方案 A · 现状基线（8 卡 = 名 + 灯 + 日志流）</h2><span class="tag tag-base">现状</span></div>
+  <div class="desc">
+    老项目 Form1 的 1:1 复刻形态：卡片只有机台名、心跳灯和一个日志 ListBox——
+    <b>展示"通讯在不在"，不展示"账过没过成"</b>。空闲时整屏近乎空白。
+  </div>
+  <div class="mockwrap"><div class="win">
+    <div class="topbar">
+      <span class="chip">CIM</span><span class="ttl">CIM通信网关</span><span class="clk">2026/11/02 10:24:36</span>
+      <div class="btns"><span class="btn">连接设备</span><span class="btn">日志</span><span class="btn">登录</span><span class="btn">设置 ▾</span><span class="btn sys">─</span><span class="btn sys">□</span><span class="btn sys">✕</span></div>
+    </div>
+    <div class="filter"><span>视图:</span><span class="combo">全部机台</span><span class="scan">扫描周期: 203 ms</span></div>
+    <div class="grid">
+      <div class="card"><div class="chead"><span class="cname">机台1</span><span class="lamp g"></span><span class="cstat">触发 <b class="ok">64</b> · 失败 <b class="err">1</b></span></div>
+        <div class="logbox"><div class="ok">MES上传成功: API0030</div><div>检测到 MES 触发, 机台 ID: 0, API: API0030</div><div class="ok">MES上传成功: API0027</div><div>连接机台成功,192.168.1.11</div><div class="ng">MES返回NG: API0030</div><div>检测到 MES 触发, 机台 ID: 0, API: API0027</div></div></div>
+      <div class="card"><div class="chead"><span class="cname">机台2</span><span class="lamp g"></span><span class="cstat">触发 <b class="ok">41</b> · 失败 <b class="err">0</b></span></div>
+        <div class="logbox"><div class="ok">MES上传成功: API0027</div><div>检测到 MES 触发, 机台 ID: 1, API: API0027</div><div class="ok">MES上传成功: API0032</div><div>连接机台成功,192.168.1.12</div></div></div>
+      <div class="card"><div class="chead"><span class="cname">机台3</span><span class="lamp g"></span><span class="cstat">触发 <b class="ok">12</b> · 失败 <b class="err">3</b></span></div>
+        <div class="logbox"><div class="ng">MES网络异常/超时: API0030</div><div>检测到 MES 触发, 机台 ID: 2, API: API0030</div><div class="ng">MES返回NG: API0031</div><div class="ok">MES上传成功: API0031</div><div>连接机台成功,192.168.1.13</div></div></div>
+      <div class="card"><div class="chead"><span class="cname">机台4</span><span class="lamp gr"></span><span class="cstat">触发 <b class="ok">0</b> · 失败 <b class="err">0</b></span></div>
+        <div class="logbox"><div>连接机台成功,192.168.1.14</div></div></div>
+      <div class="card"><div class="chead"><span class="cname">机台5</span><span class="lamp g"></span><span class="cstat">触发 <b class="ok">9</b> · 失败 <b class="err">0</b></span></div>
+        <div class="logbox"><div class="ok">MES上传成功: API0033</div><div>检测到 MES 触发, 机台 ID: 4, API: API0033</div><div>连接机台成功,192.168.1.15</div></div></div>
+      <div class="card"><div class="chead"><span class="cname">机台6</span><span class="lamp r"></span><span class="cstat">触发 <b class="ok">0</b> · 失败 <b class="err">0</b></span></div>
+        <div class="logbox"><div class="ng">连接机台失败,192.168.1.16</div></div></div>
+      <div class="card"><div class="chead"><span class="cname">机台7</span><span class="lamp gr"></span><span class="cstat">已配置为不连接</span></div>
+        <div class="logbox"><div>已配置为不连接本工站</div></div></div>
+      <div class="card"><div class="chead"><span class="cname">机台8</span><span class="lamp gr"></span><span class="cstat">已配置为不连接</span></div>
+        <div class="logbox"><div>已配置为不连接本工站</div></div></div>
+    </div>
+  </div>
+  <div class="painlist">
+    <b>①</b> 6 接口在主窗零可视化，成败埋在日志文本里<span class="pin">1</span>&nbsp;&nbsp;
+    <b>②</b> 卡片日志与日志窗重复，单击全文还是 MsgBox 旧语义<span class="pin">2</span>&nbsp;&nbsp;
+    <b>③</b> 无整线汇总：在线数/今日成败要逐卡数<span class="pin">3</span>&nbsp;&nbsp;
+    <b>④</b> "扫描周期"只是 0 号机实测，语义含糊<span class="pin">4</span>
+  </div>
+  <div class="caption">方案 A＝现状还原（演示数据）。机台名按 S4 中性化口径显示"机台1~8"，现缺省为老产线 8 台设备名。</div>
+  </div>
+</section>
+
+<!-- ═══════════════ 方案 B · 卡片业务化 ═══════════════ -->
+<section>
+  <div class="head"><h2>方案 B · 卡片业务化（6 接口状态微表 + 最新消息）</h2><span class="tag tag-mid">中等工作量</span></div>
+  <div class="desc">
+    核心条目 <b>S2</b>：卡片从"日志流"改"<b>过账面板</b>"——头行（名+灯+今日三数徽标）+
+    <b>6 接口各一行的状态微表</b>（触发/成功/失败/最后结果点）+ 底部一行最新消息（悬停全文，点击开分机台日志窗）。
+    卡片 ListBox 移除，日志归日志窗。数据源＝Core 新增 <b>ApiDone/ApiTriggered</b> 观测事件（不动协议）。
+  </div>
+  <div class="mockwrap"><div class="win">
+    <div class="topbar">
+      <span class="chip">CIM</span><span class="ttl">CIM通信网关</span><span class="clk">2026/11/02 10:24:36</span>
+      <div class="btns"><span class="btn">连接设备</span><span class="btn">日志</span><span class="btn">登录</span><span class="btn">设置 ▾</span><span class="btn sys">─</span><span class="btn sys">□</span><span class="btn sys">✕</span></div>
+    </div>
+    <div class="filter"><span>视图:</span><span class="combo">全部机台</span><span class="scan">扫描周期: 200 ms（配置值）</span></div>
+    <div class="grid">
+      <div class="card"><div class="chead"><span class="cname">机台1</span><span class="lamp g"></span><span class="cstat">触发 <b class="ok">64</b> · 失败 <b class="err">1</b></span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">12</span><span class="anum"><b>12</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">3</span><span class="anum"><b>3</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">45</span><span class="anum"><b>44</b></span><span class="anum">1</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">2</span><span class="anum"><b>2</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">2</span><span class="anum"><b>2</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+        </div>
+        <div class="amsg">MES上传成功: API0030 · 10:24:31</div></div>
+      <div class="card"><div class="chead"><span class="cname">机台2</span><span class="lamp g"></span><span class="cstat">触发 <b class="ok">41</b> · 失败 <b class="err">0</b></span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">28</span><span class="anum"><b>28</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">11</span><span class="anum"><b>11</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">1</span><span class="anum"><b>1</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">1</span><span class="anum"><b>1</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+        </div>
+        <div class="amsg">MES上传成功: API0027 · 10:22:08</div></div>
+      <div class="card"><div class="chead"><span class="cname">机台3</span><span class="lamp g"></span><span class="cstat">触发 <b class="ok">12</b> · 失败 <b class="err">3</b></span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow fail"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">9</span><span class="anum"><b>7</b></span><span class="anum">2</span><span class="adot r"></span></div>
+          <div class="arow fail"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">3</span><span class="anum"><b>2</b></span><span class="anum">1</span><span class="adot r"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+        </div>
+        <div class="amsg warn">MES网络异常/超时: API0030 · 10:24:02</div></div>
+      <div class="card"><div class="chead"><span class="cname">机台4</span><span class="lamp gr"></span><span class="cstat">触发 <b class="ok">0</b> · 失败 <b class="err">0</b></span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+        </div>
+        <div class="amsg">已连接，等待触发 · 10:01:44</div></div>
+      <div class="card"><div class="chead"><span class="cname">机台5</span><span class="lamp g"></span><span class="cstat">触发 <b class="ok">9</b> · 失败 <b class="err">0</b></span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">9</span><span class="anum"><b>9</b></span><span class="anum">0</span><span class="adot g"></span></div>
+        </div>
+        <div class="amsg">MES上传成功: API0033 · 10:19:57</div></div>
+      <div class="card down"><div class="chead"><span class="cname">机台6</span><span class="lamp r"></span><span class="cstat">断连</span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+        </div>
+        <div class="amsg warn">连接机台失败,192.168.1.16 · 09:58:12</div></div>
+      <div class="card"><div class="chead"><span class="cname">机台7</span><span class="lamp gr"></span><span class="cstat">未启用</span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+        </div>
+        <div class="amsg">已配置为不连接本工站</div></div>
+      <div class="card"><div class="chead"><span class="cname">机台8</span><span class="lamp gr"></span><span class="cstat">未启用</span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+        </div>
+        <div class="amsg">已配置为不连接本工站</div></div>
+    </div>
+  </div>
+  <div class="caption">方案 B＝S2 卡片业务化。每台 6 接口状态一眼可见（机台3 的 0030/0031 红点即失败定位）；未触发的 0033 灰点表达"没账过"而非"过成了"。今日三数徽标放头行右侧，失败数红字。</div>
+  </div>
+</section>
+
+<!-- ═══════════════ 方案 C · B + 整线汇总条 + 单机视图 ═══════════════ -->
+<section>
+  <div class="head"><h2>方案 C · 方案 B + 整线汇总条 + 单机视图增强</h2><span class="tag tag-mid">中等工作量（推荐）</span></div>
+  <div class="desc">
+    在方案 B 基础上加 <b>S1 整线汇总条</b>（在线 N/M、今日触发/成功/失败、MES 端点最近报文状态、
+    扫描周期配置值）+ <b>S3 单机视图增强</b>（视图切单台时：左接口明细大表 + 右触发流）。
+    <b>整线过账软件的"整线"语义由汇总条补齐</b>，与程序①顶栏过账状态对等的观测面。
+  </div>
+  <div class="mockwrap"><div class="win">
+    <div class="topbar">
+      <span class="chip">CIM</span><span class="ttl">CIM通信网关</span><span class="clk">2026/11/02 10:24:36</span>
+      <div class="btns"><span class="btn">连接设备</span><span class="btn">日志</span><span class="btn">登录</span><span class="btn">设置 ▾</span><span class="btn sys">─</span><span class="btn sys">□</span><span class="btn sys">✕</span></div>
+    </div>
+    <div class="sumbar">
+      <span><span class="lab">视图:</span> <span class="combo" style="min-width:110px">全部机台</span></span>
+      <span class="sep"></span>
+      <span><span class="lab">在线</span> <span class="v">4/6</span> 台启用</span>
+      <span class="sep"></span>
+      <span><span class="lab">今日</span> <span class="pill ok">成功 118</span> <span class="pill err">失败 4</span> <span class="lab">触发</span> <span class="v">126</span></span>
+      <span class="sep"></span>
+      <span><span class="mesdot g"></span><span class="lab">MES</span> <span class="v">192.168.120.129:5012</span> <span class="lab">最近报文 10:24:31</span></span>
+      <span class="sep"></span>
+      <span><span class="lab">扫描周期</span> <span class="v">200 ms</span></span>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(4,1fr);">
+      <div class="card"><div class="chead"><span class="cname">机台1</span><span class="lamp g"></span><span class="cstat">触发 <b class="ok">64</b> · 失败 <b class="err">1</b></span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">12</span><span class="anum"><b>12</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0028</span><span class="aname">报警异常</span><span class="anum">3</span><span class="anum"><b>3</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">45</span><span class="anum"><b>44</b></span><span class="anum">1</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">2</span><span class="anum"><b>2</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">2</span><span class="anum"><b>2</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+        </div>
+        <div class="amsg">MES上传成功: API0030 · 10:24:31</div></div>
+      <div class="card"><div class="chead"><span class="cname">机台3</span><span class="lamp g"></span><span class="cstat">触发 <b class="ok">12</b> · 失败 <b class="err">3</b></span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow fail"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">9</span><span class="anum"><b>7</b></span><span class="anum">2</span><span class="adot r"></span></div>
+          <div class="arow fail"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">3</span><span class="anum"><b>2</b></span><span class="anum">1</span><span class="adot r"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+        </div>
+        <div class="amsg warn">MES网络异常/超时: API0030 · 10:24:02</div></div>
+      <div class="card down"><div class="chead"><span class="cname">机台6</span><span class="lamp r"></span><span class="cstat">断连</span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+        </div>
+        <div class="amsg warn">连接机台失败,192.168.1.16 · 09:58:12</div></div>
+      <div class="card"><div class="chead"><span class="cname">机台2</span><span class="lamp g"></span><span class="cstat">触发 <b class="ok">41</b> · 失败 <b class="err">0</b></span></div>
+        <div class="apis">
+          <div class="arow"><span class="acode">0027</span><span class="aname">固化时间</span><span class="anum">28</span><span class="anum"><b>28</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0030</span><span class="aname">进出站</span><span class="anum">11</span><span class="anum"><b>11</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0031</span><span class="aname">物料绑定</span><span class="anum">1</span><span class="anum"><b>1</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0032</span><span class="aname">物料上传</span><span class="anum">1</span><span class="anum"><b>1</b></span><span class="anum">0</span><span class="adot g"></span></div>
+          <div class="arow"><span class="acode">0033</span><span class="aname">测试记录</span><span class="anum">0</span><span class="anum"><b>0</b></span><span class="anum">0</span><span class="adot gr"></span></div>
+        </div>
+        <div class="amsg">MES上传成功: API0027 · 10:22:08</div></div>
+    </div>
+    <!-- 单机视图小样（S3）：视图下拉选单台时的布局 -->
+    <div class="sumbar" style="margin-top:0">
+      <span><span class="lab">视图:</span> <span class="combo" style="min-width:150px">3号-机台3</span></span>
+      <span class="lab">— 单机视图：左接口明细 / 右最近触发流（S3）</span>
+    </div>
+    <div class="detail">
+      <div class="dtable">
+        <div class="dh">接口明细 · 机台3（192.168.1.13）</div>
+        <table>
+          <tr><th>接口</th><th>语义</th><th>触发</th><th>成功</th><th>失败</th><th>最后 STATUS</th><th>最后触发</th><th>耗时</th></tr>
+          <tr><td class="mono">0027</td><td>固化时间</td><td>0</td><td>0</td><td>0</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td class="mono">0030</td><td>进出站</td><td>9</td><td>7</td><td>2</td><td class="mono" style="color:#C62828">2 / NG</td><td>10:24:02</td><td>—(超时)</td></tr>
+          <tr><td class="mono">0031</td><td>物料绑定</td><td>3</td><td>2</td><td>1</td><td class="mono">1 / OK</td><td>10:12:40</td><td>86 ms</td></tr>
+          <tr><td class="mono">0032</td><td>物料上传</td><td>0</td><td>0</td><td>0</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td class="mono">0033</td><td>测试记录</td><td>0</td><td>0</td><td>0</td><td>—</td><td>—</td><td>—</td></tr>
+        </table>
+      </div>
+      <div class="dlog">
+        <div class="dh">最近触发流</div>
+        <div class="logbox" style="border:none;background:transparent;padding:0">
+          <div class="ng">MES网络异常/超时: API0030 · 10:24:02</div>
+          <div>检测到 MES 触发, 机台 ID: 2, API: API0030 · 10:24:02</div>
+          <div class="ok">MES上传成功: API0031 · 10:12:40</div>
+          <div>检测到 MES 触发, 机台 ID: 2, API: API0031 · 10:12:40</div>
+          <div class="ng">MES返回NG: API0031 · 10:11:52</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="caption">方案 C＝S1+S2+S3。MES 状态点口径：<b>只反映最近一次报文结果</b>（绿=STATUS=1 / 红=失败或NG / 灰=从未触发），不做心跳 ping；今日统计为进程内累计、重启清零（对账以日志为准）。</div>
+  </div>
+</section>
+
+<!-- ═══════════════ 对比与建议 ═══════════════ -->
+<section>
+  <div class="head"><h2>方案对比与建议</h2></div>
+  <table class="cmp">
+    <tr><th style="width:110px">方案</th><th>内容</th><th style="width:170px">改动范围</th><th style="width:90px">量级</th><th style="width:330px">定位</th></tr>
+    <tr>
+      <td><b>A 现状</b></td>
+      <td>8 卡日志流（老 Form1 复刻）</td>
+      <td>—</td>
+      <td>—</td>
+      <td>通讯网关视角，过账零可视化</td>
+    </tr>
+    <tr>
+      <td><b>B 卡片业务化</b></td>
+      <td>S2：6 接口微表 + 最新消息行；S4：机台名中性化</td>
+      <td>Core 加观测事件 + StationPanel 重排 + 两 VM</td>
+      <td>中</td>
+      <td>每台过成情况一眼可见</td>
+    </tr>
+    <tr>
+      <td><b>C ＝B+汇总</b></td>
+      <td>S1 整线汇总条 + S3 单机视图增强 + S5 周期口径</td>
+      <td>主窗筛选条升级 + 单机模板</td>
+      <td>中</td>
+      <td><span class="rec">推荐：补齐"整线"语义，与程序①观测面对等</span></td>
+    </tr>
+  </table>
+  <div class="painlist">
+    建议：<b>方案 C</b>，分两批落地——第一批 <b>S4 机台名中性化 + S1 汇总条 + S2 卡片业务化</b>
+    （不等 W68 终版，模拟数据即可成形）；第二批 <b>S3 单机增强 + S5 周期口径</b> 随 P2.2 联调；
+    <b>S6（0028 存图链去留）挂起</b>待 W68 拍板。全程零改协议与回写口径。
+  </div>
+  <div class="foot">
+    说明：① 本稿全部为演示数据，非现场实测；② 配色仅为示意，实施走 <b>Brush.* / Brush.Fresh.*</b> 主题语义键（深浅主题同名异值）；③ 卡片 MinWidth=280、4 列网格与现状一致，最小窗宽 960 不变；
+    ④ 协议红线（触发→组包→POST→回写、STATUS=2/MSG=NG、DATA 拆包无补零、分帧 125/123、失败不重传）零改动。
+  </div>
+</section>
+
+</body>
+</html>

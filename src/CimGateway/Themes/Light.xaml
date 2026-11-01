@@ -54,6 +54,7 @@
     <SolidColorBrush x:Key="Brush.StateRed" Color="#D32F2F"/>    <!-- 断连/报警 -->
     <SolidColorBrush x:Key="Brush.StateYellow" Color="#F59E0B"/> <!-- 暂态黄 -->
     <SolidColorBrush x:Key="Brush.StateGreen" Color="#43A047"/>  <!-- 在线/心跳正常 -->
+    <SolidColorBrush x:Key="Brush.FailRowBg" Color="#FDF3F2"/>   <!-- 接口失败行淡红底（V0.0.51 主窗业务化） -->
 
     <!-- ══════════ 顶栏按钮（HTML .btn→半透明白玻璃 4px 圆角；高亮钮=白底蓝字） ══════════ -->
     <SolidColorBrush x:Key="Brush.GhostBg" Color="#2EFFFFFF"/>
@@ -93,6 +94,10 @@
     <!-- 窗体骨架（弹窗 WindowStyle=None 自绘：窗底 / 关闭钮悬停红） -->
     <SolidColorBrush x:Key="Brush.Fresh.WinBg" Color="#F2F7FC"/>
     <SolidColorBrush x:Key="Brush.Fresh.CloseHoverBg" Color="#E81123"/>
+    <!-- 代码块（调试窗报文预览/返回区、报警窗报文区：深底等宽，两主题同值深空底） -->
+    <SolidColorBrush x:Key="Brush.Fresh.CodeBg" Color="#12253B"/>
+    <SolidColorBrush x:Key="Brush.Fresh.CodeFg" Color="#D7E7F7"/>
+    <SolidColorBrush x:Key="Brush.Fresh.CodeDim" Color="#7E9BBF"/>
     <!-- 变体面板（分区底边 + 子卡只读框） -->
     <SolidColorBrush x:Key="Brush.Fresh.PanelBorder" Color="#D7E4F2"/>
     <SolidColorBrush x:Key="Brush.Fresh.SubCardBg" Color="#FBFDFF"/>

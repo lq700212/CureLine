@@ -180,7 +180,7 @@
 | `src/CureStation/` | **程序①固化程控**（新 exe）：30 仓位主窗 + IO 点表配置窗 + 工艺策略窗 + 工单信息窗 + 用户管理窗 + 登录窗（`ViewModels/` 各窗 VM）+ 自建 `DialogService.cs` |
 | `src/CimGateway/MainWindow.*` | 主窗：多机网关视图、视图筛选（替代 Form2/Form6；单机视图与"运行模式"菜单已随单机链路删除；Phase 2 演化 CimGateway）；**V0.0.31 无边框自绘**（品牌顶栏=标题条 44：chip"CIM"+标题+时钟 / 按钮组 / 系统三钮，最大化 RootGrid 垫边）+【深色/浅色】主题钮；**V0.0.39 顶栏精简**：连接设备/日志/登录留顶栏，调试/网关设置/修改密码/快捷方式/中英切换/主题收"设置 ▾"下拉（ToggleButton+Popup：StaysOpen=False 点外自关 + IsOpen↔IsChecked 双向绑定 + 菜单项点击 code-behind OnMenuClick 收合；门禁/VM 文案零改动） |
 | `src/CimGateway/Themes/` | **程序②双主题**（V0.0.31，与程序①同构不同文件——主题键板是程序私有资产不下沉）：Light/Dark 语义键同名异值字典（只保留本程序有消费者的键）+ `ThemeManager`（ParseTheme 非法回 Light + 测试态防御）；ini `[setting] Theme` 同名键两程序各自 exe 独立生效；`CimGatewayThemeTests` 锁两字典键集合全等 |
-| `src/CimGateway/Controls/StationPanel.*` | 机台面板复用件（MVVM View，VM 由主窗注入，8 实例）；V0.0.31 走主题卡键 + 心跳灯 DataTrigger 映射 State*（VM 仍给 "Lime"/"Red"/"Green" 状态名不变） |
+| `src/CimGateway/Controls/StationPanel.*` | 机台过账卡片（V0.0.51 业务化重做）：头行名+灯（四态 Gray/Green/Lime/Red/Yellow）+ 今日三数 + 6 接口微表（`ApiStatRow`，失败行 FailRowBg）+ 最新消息行；日志 ListBox 已删（触发流在 `LogLines` 供单机视图） |
 | `src/CimGateway/ViewModels/` | 主程序各窗 VM（`IDialogService` 基建 + 各窗 VM，主窗 VM 含视图筛选/门禁 + 主题切换） |
 | `src/CimGateway/MesDebugWindow.*` | 调试窗：5 接口表单 + API0033 扩展 + 预览上传 |
 | `src/CimGateway/MesLogWindow.*` | 日志窗（-1 全部机台 / >=0 分机台，关窗退订；清空钮=危险色） |
@@ -311,6 +311,7 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   改动必同步 `PointTableTests` 的地址断言。
 - `TryEnsureConnected` 建连是同步等待（最多 `TimeoutMs`=3s），会阻塞
   轮询线程一拍——骨架期可接受，P2 提速再改异步。
+- **程序② 主窗业务化语义（V0.0.51 起，全在 `MainWindowViewModel`/`StationPanelViewModel` + `MultiMachineGateway` 观测事件）**：① 统计口径=进程内观测累计、重启清零（对账以日志为准，不落盘不做第二本账）；② MES 状态点只反映最近一次报文结果（不做心跳 ping——无触发时"连通"是假象）；③ 卡片灯四态优先级 Red>Gray(未启用)>Yellow(今日有失败)>Lime/Green——Yellow 是观测增强，通讯语义零改动；④ "未启用"态来自"已配置为不连接本工站"日志关键词（AddLog 内聚判定，中英双语关键词）；⑤ 日志窗全量窗（-1）收**全部机台**日志（旧口径只收无主日志与"全部机台"语义不符、窗恒空——已修正勿回改）；`GetAllCachedLogs` 合并 8 台缓存按行首时间戳排序（格式固定字符串序=时间序）；⑥ 演示触发器仅 Simulate=1（随机台随机接口预置最小 JSON+触发字，走真机同链路），真机零影响勿在生产代码调用；⑦ 新 UI 文案一律走 `Tr()`+词典（本次补 6 接口短名+汇总条共 20 余条）；⑧ XAML 触发器死区坑全中招预防：灯色/点色/消息底色的缺省值全部写进 Style Setter。
 - **主窗仓位网格（V0.0.19 起，V0.0.20 加双架分组）**：① 10×3 最小下限
   （`BuildSlots` 的 `Math.Max` 垫底，常量与 `SlotLocationCode` 同源）——
   点表只配 1 架也铺 30 张卡，属展示口径勿当 bug 报；② 集合**行优先**

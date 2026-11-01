@@ -32,6 +32,8 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly IDialogService _dialogs;
     private MultiMachineManager? _multi;
     private readonly bool _useSim;
+    private readonly object _simLock = new();
+    private readonly List<SimulatedStationClient> _simClients = new();  // 演示触发器用
     private bool _disposed;
     private readonly System.Timers.Timer _clock = new(1000);
 
@@ -46,6 +48,14 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     private string _clockText = "";
     private string _connectText = "";
     private bool _connectEnabled = true;
+
+    // ---- 整线汇总（S1，观测口径：进程内累计、重启清零，对账以 MES 日志为准）----
+    private readonly long[] _scanMs = new long[8];   // 各机台实测扫描周期（单机视图用）
+    private int _todayTriggered;
+    private int _todayOk;
+    private int _todayFail;
+    private bool? _mesLastOk;                        // 最近一次报文结果（null=从未触发）
+    private string _mesLastTime = "";
 
     public MainWindowViewModel(IDialogService? dialogs = null)
     {
@@ -65,6 +75,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             ViewOptions.Add($"{i + 1}号-{MesLogger.StationNames[i]}");
 
         InitMulti();
+        RefreshSummary();   // 汇总条初始态（配置值/端点/零计数）
 
         _clock.Elapsed += (_, _) => UiInvoke(() =>
             ClockText = DateTime.Now.ToString("G"));
@@ -158,6 +169,9 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     {
         ConnectText = Tr("连接设备");
         RefreshAll();
+        foreach (var s in Stations)
+            s.RefreshTexts();   // 卡片接口短名/徽标随语言重设
+        RefreshSummary();
     }
 
     private static string Tr(string zh) => LanguageService.Tr(zh);
@@ -241,7 +255,11 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             old.Dispose();      // 停旧网关线程 + 关旧 TCP（新连接另起，不共 socket）
             InitMulti();        // 新 Manager：factory 读已刷新的 AppConfig
             ConnectMulti();     // 后台逐台连（阻塞网络 IO 在 Task 内）
-            LocalLog(Tr("连接已按新配置重建（保存即生效）"), -1);
+            UiInvoke(() =>
+            {
+                RefreshSummary();   // 端点/配置值可能已改，汇总条即时对齐
+                LocalLog(Tr("连接已按新配置重建（保存即生效）"), -1);
+            });
         });
     }
 
@@ -335,18 +353,94 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void InitMulti()
     {
+        lock (_simLock)
+            _simClients.Clear();
         _multi = new MultiMachineManager(id =>
-            _useSim ? new SimulatedStationClient()
-                    : new ModbusStationClient());
+        {
+            if (!_useSim)
+                return new ModbusStationClient();
+            var sim = new SimulatedStationClient();
+            lock (_simLock)
+                _simClients.Add(sim);
+            return sim;
+        });
         _multi.StationLog += (id, m) => LocalLog(m, id);
         _multi.Heartbeat += (id, on) => UiInvoke(() =>
             Stations[id].SetLive(on, false));
         _multi.StationBroken += id => UiInvoke(() =>
             Stations[id].SetLive(false, true));
+        // 实测扫描周期按台记账（V0.0.51 起全台上报）：单机视图显示本台实测，
+        // 汇总条显示配置值——老项目只显示 0 号机实测的口径由 UI 取数方式取代。
         _multi.ScanElapsed += (id, ms) => UiInvoke(() =>
-            ScanCycleText = $"{Tr("扫描周期: ")}{ms} ms");
+        {
+            if (id >= 0 && id < 8)
+                _scanMs[id] = ms;
+            if (!IsAllView)
+                Raise(nameof(SingleScanText));
+        });
         _multi.AlarmRaised += (m, n) => UiInvoke(() => _dialogs.ShowAlarm(m, n));
+        // 观测事件分发（Core 后台线程触发，先更新面板模型再统一刷新汇总）：
+        _multi.ApiTriggered += (id, api) => UiInvoke(() =>
+        {
+            if (id < 0 || id >= 8)
+                return;
+            Stations[id].OnApiTriggered(api);
+            _todayTriggered++;
+            RefreshSummary();
+        });
+        _multi.ApiDone += r => UiInvoke(() =>
+        {
+            if (r.StationId < 0 || r.StationId >= 8)
+                return;
+            Stations[r.StationId].OnApiDone(r);
+            if (r.Ok) _todayOk++; else _todayFail++;
+            _mesLastOk = r.Ok;
+            _mesLastTime = DateTime.Now.ToString("HH:mm:ss");
+            RefreshSummary();
+        });
+        StartDemoTriggers();
     }
+
+    // ================= 演示触发器（仅 Simulate=1，真机零影响） =================
+    //
+    // 模拟客户端是纯内存被动件，触发字不会自己置 1——演示模式（Simulate=1）
+    // 下后台每 7s 随机挑一台、随机挑一个接口，预置最小合法 JSON 到 DATA 区并把
+    // 触发字置 1，走与真机完全相同的"扫触发→组包→POST→回写→观测事件"链路
+    // （手册"模拟 8 机台网关含触发回写全链路"的实装）。预置 JSON 只求能通过
+    // ValidateJson 反序列化（字段缺省 null 即可），MES 语义字段由现场对账看。
+
+    private void StartDemoTriggers()
+    {
+        if (!_useSim)
+            return;
+        Task.Run(async () =>
+        {
+            var rnd = new Random();
+            while (!_disposed)
+            {
+                await Task.Delay(7000);
+                SimulatedStationClient? sim;
+                lock (_simLock)
+                {
+                    if (_simClients.Count == 0)
+                        continue;
+                    sim = _simClients[rnd.Next(_simClients.Count)];
+                }
+                int idx = rnd.Next(MesConfig.ApiCodes.Length);
+                string trg = MesConfig.GetTrigger(MesConfig.ApiCodes[idx]);
+                if (string.IsNullOrEmpty(trg))
+                    continue;
+                sim.PresetString(MesConfig.ApiAddresses[idx].StationData, DemoJson(idx));
+                sim.PresetWord(trg, 1);
+            }
+        });
+    }
+
+    /// <summary>演示用最小 JSON：数组接口（0027/28/33）单元素数组，对象接口单对象。</summary>
+    private static string DemoJson(int apiIndex) =>
+        (apiIndex == 0 || apiIndex == 1 || apiIndex == 5)
+            ? "[{\"RC_NO\":\"DEMO\"}]"
+            : "{\"RC_NO\":\"DEMO\"}";
 
     /// <summary>
     /// 连接全部机台（老项目 Button1_Click 循环语义；逐台 Connect 是阻塞
@@ -364,6 +458,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 LocalLog($"连接完成：成功 {ok} 台，跳过 {skipped} 台", -1);
                 SetConnectUi(false, Tr("连接设备"));
+                RefreshSummary();   // 在线/启用数在连接完成后定形
             });
         });
     }
@@ -380,6 +475,125 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         for (int i = 0; i < 8; i++)
             Stations[i].Visible = _selectedViewIndex == 0 || _selectedViewIndex - 1 == i;
         GridColumns = _selectedViewIndex == 0 ? 4 : 1;
+        Raise(nameof(IsAllView));
+        Raise(nameof(IsSingleView));
+        Raise(nameof(SinglePanel));
+        RefreshSummary();
+    }
+
+    // ================= 整线汇总条（S1）+ 单机视图（S3） =================
+    //
+    // 设计稿：docs/UI设计_CIM主窗业务化_方案C定稿.html §1/§2。口径红线：
+    // ① 统计=进程内观测累计，重启清零，对账以 MES 日志窗/日志文件为准；
+    // ② MES 端点状态点只反映最近一次报文结果，不做心跳 ping（无触发时的
+    //    "连通"是假象）；③ 扫描周期：汇总条=配置值，单机视图=该台实测。
+
+    /// <summary>当前是"全部机台"视图（8 卡网格）——单机视图的显隐开关。</summary>
+    public bool IsAllView => _selectedViewIndex == 0;
+
+    /// <summary>当前是单机视图（XAML 切 Visibility）。</summary>
+    public bool IsSingleView => _selectedViewIndex != 0;
+
+    /// <summary>单机视图选中的面板（未选=0 号占位，视图不渲染其内容）。</summary>
+    public StationPanelViewModel SinglePanel =>
+        Stations[Math.Clamp(_selectedViewIndex - 1, 0, 7)];
+
+    public string ScanIntervalText => $"{AppConfig.ScanIntervalMs} ms";
+
+    /// <summary>扫描周期数值（汇总条 Run 绑数字部分，单位在 XAML）。</summary>
+    public string ScanIntervalMsText => AppConfig.ScanIntervalMs.ToString();
+
+    // ---- 汇总条/单机视图文案（Tr 派生属性：RefreshAll 时自动重读换语言） ----
+    public string TrOnline => $"{Tr("在线")} / {Tr("启用")}";
+    public string TrToday => Tr("今日过账");
+    public string TrOk => $" {Tr("成功")}";
+    public string TrFail => $" {Tr("失败")}";
+    public string TrTrig => Tr("触发");
+    public string TrLastPosting => $"{Tr("最近报文")} ";
+    public string TrScan => Tr("扫描周期");
+    public string TrConfigured => $"{Tr("配置值")} · {Tr("单机视图见实测")}";
+    public string TrAllLogs => Tr("查看全部日志");
+    public string TrMesDebug => Tr("MES 调试");
+    public string TrApiDetails => Tr("接口明细");
+    public string TrDetailHint => Tr("最后 STATUS / 最后触发 / 耗时");
+    public string TrTriggerStream => Tr("最近触发流");
+    public string TrLive => Tr("实时");
+    public string TrOps => Tr("操作");
+
+    /// <summary>今日过账副行："触发 N 次 · 进程内累计，重启清零"（观测口径）。</summary>
+    public string TodayDetail =>
+        $"{Tr("触发")} {_todayTriggered} {Tr("次")} · {Tr("进程内累计，重启清零")}";
+
+    /// <summary>启用机台数（"已配置为不连接"的面板剔除；未知态按启用计）。</summary>
+    public int EnabledCount => Stations.Count(s => s.Enabled != false);
+
+    /// <summary>在线机台数（启用且未断连——灯非 Red 的启用台）。</summary>
+    public int OnlineCount =>
+        Stations.Count(s => s.Enabled != false && s.LampColor != "Red");
+
+    public int TodayTriggered => _todayTriggered;
+    public int TodayOk => _todayOk;
+    public int TodayFail => _todayFail;
+
+    /// <summary>MES 端点 host:port（取 API0030 主接口 URL 解析；未配置显示 —）。</summary>
+    public string MesEndpoint
+    {
+        get
+        {
+            string url = MesConfig.GetUrl("API0030");
+            if (Uri.TryCreate(url, UriKind.Absolute, out var u))
+                return $"{u.Host}:{u.Port}";
+            return url.Length > 0 ? url : "—";
+        }
+    }
+
+    /// <summary>最近报文时间（HH:mm:ss；从未触发显示"未触发"）。</summary>
+    public string MesLastText => _mesLastOk == null
+        ? Tr("未触发") : $"{_mesLastTime}";
+
+    /// <summary>MES 状态点键：Ok / Fail / Idle（XAML 触发器映射 State* 点色）。</summary>
+    public string MesLampKind => _mesLastOk == null ? "Idle" : _mesLastOk == true ? "Ok" : "Fail";
+
+    /// <summary>单机视图：机台标题（"3号-机台3"，与视图筛选下拉同口径）。</summary>
+    public string SingleTitle => IsAllView ? "" : ViewOptions[_selectedViewIndex];
+
+    /// <summary>单机视图：该台 IP（配置值）。</summary>
+    public string SingleIp => AppConfig.StationIps[Math.Clamp(_selectedViewIndex - 1, 0, 7)];
+
+    /// <summary>单机视图：该台实测扫描周期（尚无实测显示 —）。</summary>
+    public string SingleScanText
+    {
+        get
+        {
+            long ms = _scanMs[Math.Clamp(_selectedViewIndex - 1, 0, 7)];
+            return ms > 0 ? $"{ms} ms" : "—";
+        }
+    }
+
+    /// <summary>单机视图：该台今日成功/失败合计（取面板模型，事件驱动已更新）。</summary>
+    public int SingleTodayOk => SinglePanel.ApiStats.Sum(s => s.Ok);
+    public int SingleTodayFail => SinglePanel.ApiStats.Sum(s => s.Fail);
+    public int SingleTodayTriggered => SinglePanel.TotalTriggered;
+
+    /// <summary>汇总条与单机视图的派生文本统一刷新（观测事件/视图切换后调）。</summary>
+    private void RefreshSummary()
+    {
+        ScanCycleText = $"{Tr("扫描周期: ")}{AppConfig.ScanIntervalMs} ms（{Tr("配置值")}）";
+        Raise(nameof(EnabledCount));
+        Raise(nameof(OnlineCount));
+        Raise(nameof(TodayTriggered));
+        Raise(nameof(TodayOk));
+        Raise(nameof(TodayFail));
+        Raise(nameof(MesEndpoint));
+        Raise(nameof(MesLastText));
+        Raise(nameof(MesLampKind));
+        Raise(nameof(SingleTitle));
+        Raise(nameof(SingleIp));
+        Raise(nameof(SingleScanText));
+        Raise(nameof(SingleTodayOk));
+        Raise(nameof(SingleTodayFail));
+        Raise(nameof(SingleTodayTriggered));
+        Raise(nameof(ScanIntervalText));
     }
 
     /// <summary>

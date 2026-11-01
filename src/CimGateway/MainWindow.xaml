@@ -115,6 +115,43 @@
             <Setter Property="Background" Value="{DynamicResource Brush.CardBorder}"/>
             <Setter Property="Margin" Value="12,5"/>
         </Style>
+
+        <!-- ══════════════ 整线汇总条（V0.0.51 S1，还原设计稿 §1/§2 五格 stat） ══════════════ -->
+        <!-- 汇总格：右缘细分隔；内三层=k 标签(10.5 灰)/v 大值(19 粗)/d 描述(10.5 灰) -->
+        <Style x:Key="SumStat" TargetType="Border">
+            <Setter Property="Padding" Value="16,9,16,8"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.PanelBorder}"/>
+            <Setter Property="BorderThickness" Value="0,0,1,0"/>
+        </Style>
+        <Style x:Key="SumK" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.FgDim}"/>
+            <Setter Property="Margin" Value="0,0,0,3"/>
+        </Style>
+        <Style x:Key="SumV" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="19"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.FgStrong}"/>
+        </Style>
+        <Style x:Key="SumD" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.FgDim}"/>
+            <Setter Property="Margin" Value="0,2,0,0"/>
+        </Style>
+        <!-- 汇总/明细状态点：Ok 绿 / Fail 红 / Idle 灰（缺省 Setter 防触发器死区） -->
+        <Style x:Key="SumPoint" TargetType="Ellipse">
+            <Setter Property="Width" Value="9"/>
+            <Setter Property="Height" Value="9"/>
+            <Setter Property="Fill" Value="{DynamicResource Brush.StateIdle}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding MesLampKind, FallbackValue=Idle}" Value="Ok">
+                    <Setter Property="Fill" Value="{DynamicResource Brush.StateGreen}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding MesLampKind, FallbackValue=Idle}" Value="Fail">
+                    <Setter Property="Fill" Value="{DynamicResource Brush.StateRed}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
     <!--主窗（MVVM：状态走 MainWindowViewModel，本文件纯绑定）。
         多机视图 = 多机版 Form1（单机视图与"运行模式"已随单机链路删除，P2.1）。
@@ -247,26 +284,198 @@
             </Grid>
         </Border>
 
-        <!-- ================= 多机视图 ================= -->
+        <!-- ================= 内容区（两态：全部机台网格 / 单机视图） ================= -->
         <Grid Grid.Row="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <!-- 筛选条：视图下拉（只看某几台）+ 扫描周期（卡片上方轻量一行） -->
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10,8,10,0"
-                        VerticalAlignment="Center">
-                <Label Content="{Binding DataContext.ViewLabel, FallbackValue='视图:',
-                            RelativeSource={RelativeSource AncestorType=Window}}"
-                       VerticalAlignment="Center"/>
-                <ComboBox ItemsSource="{Binding ViewOptions}"
-                          SelectedIndex="{Binding SelectedViewIndex}"
-                          Style="{StaticResource FreshCombo}"
-                          Width="220" Margin="6,0,0,0"/>
-                <Label Content="{Binding ScanCycleText, FallbackValue='扫描周期: -- ms'}" Margin="16,0,0,0"
-                       VerticalAlignment="Center"/>
-            </StackPanel>
-            <ItemsControl Grid.Row="1" ItemsSource="{Binding Stations}" Margin="6,8">
+
+            <!-- ── S1 整线汇总条（全部机台视图）：五格 stat ──
+                 视图 | 在线/启用 | 今日过账 | MES 端点 | 扫描周期。
+                 口径：统计=进程内累计重启清零；MES 点=最近一次报文结果（不做心跳 ping）；
+                 扫描周期=配置值（单机视图才显示该台实测）。 -->
+            <Border Grid.Row="0" Margin="10,9,10,0" CornerRadius="10"
+                    Background="{DynamicResource Brush.PanelBg}"
+                    BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1"
+                    Visibility="{Binding IsAllView, Converter={StaticResource BoolToVisibilityConverter},
+                                 FallbackValue=Visible}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="17*"/>
+                        <ColumnDefinition Width="13*"/>
+                        <ColumnDefinition Width="21*"/>
+                        <ColumnDefinition Width="24*"/>
+                        <ColumnDefinition Width="13*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SumStat}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SumK}" Text="{Binding ViewLabel, FallbackValue='视图:'}"/>
+                            <ComboBox ItemsSource="{Binding ViewOptions}"
+                                      SelectedIndex="{Binding SelectedViewIndex}"
+                                      Style="{StaticResource FreshCombo}" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Style="{StaticResource SumStat}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SumK}" Text="{Binding TrOnline, FallbackValue='在线 / 启用'}"/>
+                            <TextBlock Style="{StaticResource SumV}">
+                                <Run Text="{Binding OnlineCount, Mode=OneWay, FallbackValue=0}"/>
+                                <Run Text="/" Foreground="{DynamicResource Brush.FgDim}"/>
+                                <Run Text="{Binding EnabledCount, Mode=OneWay, FallbackValue=8}"/>
+                                <Run Text=" 台" FontSize="11.5" FontWeight="Normal"
+                                     Foreground="{DynamicResource Brush.FgDim}"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="2" Style="{StaticResource SumStat}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SumK}" Text="{Binding TrToday, FallbackValue='今日过账'}"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource SumV}"
+                                           Text="{Binding TodayOk, FallbackValue=0}"
+                                           Foreground="{DynamicResource Brush.StateGreen}"/>
+                                <TextBlock Text="{Binding TrOk, FallbackValue=' 成功'}" FontSize="11.5"
+                                           VerticalAlignment="Bottom" Margin="2,0,12,2"
+                                           Foreground="{DynamicResource Brush.FgDim}"/>
+                                <TextBlock Style="{StaticResource SumV}"
+                                           Text="{Binding TodayFail, FallbackValue=0}"
+                                           Foreground="{DynamicResource Brush.StateRed}"/>
+                                <TextBlock Text="{Binding TrFail, FallbackValue=' 失败'}" FontSize="11.5"
+                                           VerticalAlignment="Bottom" Margin="2,0,0,2"
+                                           Foreground="{DynamicResource Brush.FgDim}"/>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource SumD}"
+                                       Text="{Binding TodayDetail, FallbackValue='触发 0 次 · 进程内累计，重启清零'}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="3" Style="{StaticResource SumStat}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SumK}" Text="MES"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse Style="{StaticResource SumPoint}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding MesEndpoint, FallbackValue='192.168.120.129:5012'}"
+                                           FontFamily="Consolas" FontSize="13.5" FontWeight="Bold"
+                                           VerticalAlignment="Center" Margin="6,0,0,0"
+                                           Foreground="{DynamicResource Brush.FgStrong}"/>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource SumD}">
+                                <Run Text="{Binding TrLastPosting, Mode=OneWay, FallbackValue='最近报文 '}"/>
+                                <Run Text="{Binding MesLastText, Mode=OneWay, FallbackValue='未触发'}"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="4" Style="{StaticResource SumStat}" BorderThickness="0">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SumK}" Text="{Binding TrScan, FallbackValue='扫描周期'}"/>
+                            <TextBlock Style="{StaticResource SumV}">
+                                <Run Text="{Binding ScanIntervalMsText, Mode=OneWay, FallbackValue=200}"/>
+                                <Run Text=" ms" FontSize="11.5" FontWeight="Normal"
+                                     Foreground="{DynamicResource Brush.FgDim}"/>
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource SumD}"
+                                       Text="{Binding TrConfigured, FallbackValue='配置值 · 单机视图见实测'}"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- ── 单机视图汇总条（S3）：视图 | 机台信息 | 该台今日 | MES 端点 | 操作 ── -->
+            <Border Grid.Row="0" Margin="10,9,10,0" CornerRadius="10"
+                    Background="{DynamicResource Brush.PanelBg}"
+                    BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1"
+                    Visibility="{Binding IsSingleView, Converter={StaticResource BoolToVisibilityConverter},
+                                 FallbackValue=Collapsed}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="17*"/>
+                        <ColumnDefinition Width="21*"/>
+                        <ColumnDefinition Width="19*"/>
+                        <ColumnDefinition Width="24*"/>
+                        <ColumnDefinition Width="17*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SumStat}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SumK}" Text="{Binding ViewLabel, FallbackValue='视图:'}"/>
+                            <ComboBox ItemsSource="{Binding ViewOptions}"
+                                      SelectedIndex="{Binding SelectedViewIndex}"
+                                      Style="{StaticResource FreshCombo}" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Style="{StaticResource SumStat}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SumK}" Text="{Binding SingleTitle, FallbackValue='3号-机台3'}"/>
+                            <TextBlock Style="{StaticResource SumV}" FontSize="13.5">
+                                <Run Text="{Binding SingleIp, Mode=OneWay, FallbackValue='192.168.1.13'}"
+                                     FontFamily="Consolas"/>
+                            </TextBlock>
+                            <TextBlock Style="{StaticResource SumD}">
+                                <Run Text="{Binding TrScan, Mode=OneWay, FallbackValue='扫描周期'}"/>
+                                <Run Text=" 实测 "/>
+                                <Run Text="{Binding SingleScanText, Mode=OneWay, FallbackValue='—'}"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="2" Style="{StaticResource SumStat}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SumK}" Text="{Binding TrToday, FallbackValue='今日过账'}"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource SumV}"
+                                           Text="{Binding SingleTodayOk, FallbackValue=0}"
+                                           Foreground="{DynamicResource Brush.StateGreen}"/>
+                                <TextBlock Text="{Binding TrOk, FallbackValue=' 成功'}" FontSize="11.5"
+                                           VerticalAlignment="Bottom" Margin="2,0,12,2"
+                                           Foreground="{DynamicResource Brush.FgDim}"/>
+                                <TextBlock Style="{StaticResource SumV}"
+                                           Text="{Binding SingleTodayFail, FallbackValue=0}"
+                                           Foreground="{DynamicResource Brush.StateRed}"/>
+                                <TextBlock Text="{Binding TrFail, FallbackValue=' 失败'}" FontSize="11.5"
+                                           VerticalAlignment="Bottom" Margin="2,0,0,2"
+                                           Foreground="{DynamicResource Brush.FgDim}"/>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource SumD}">
+                                <Run Text="{Binding TrTrig, Mode=OneWay, FallbackValue='触发'}"/>
+                                <Run Text="{Binding SingleTodayTriggered, Mode=OneWay, FallbackValue=0}"/>
+                                <Run Text=" 次"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="3" Style="{StaticResource SumStat}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SumK}" Text="MES"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse Style="{StaticResource SumPoint}" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding MesEndpoint, FallbackValue='192.168.120.129:5012'}"
+                                           FontFamily="Consolas" FontSize="13.5" FontWeight="Bold"
+                                           VerticalAlignment="Center" Margin="6,0,0,0"
+                                           Foreground="{DynamicResource Brush.FgStrong}"/>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource SumD}">
+                                <Run Text="{Binding TrLastPosting, Mode=OneWay, FallbackValue='最近报文 '}"/>
+                                <Run Text="{Binding MesLastText, Mode=OneWay, FallbackValue='未触发'}"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="4" Style="{StaticResource SumStat}" BorderThickness="0">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SumK}" Text="{Binding TrOps, FallbackValue='操作'}"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                <Button Content="{Binding TrAllLogs, FallbackValue='查看全部日志'}"
+                                        Command="{Binding ShowLogCommand}"
+                                        Style="{StaticResource FreshButton}" Height="30" Margin="0,0,8,0"/>
+                                <Button Content="{Binding TrMesDebug, FallbackValue='MES 调试'}"
+                                        Command="{Binding ShowDebugCommand}"
+                                        Style="{StaticResource FreshButton}" Height="30"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- ── 8 卡网格（全部机台视图，S2 卡片业务化） ── -->
+            <ItemsControl Grid.Row="1" ItemsSource="{Binding Stations}" Margin="6,9"
+                          Visibility="{Binding IsAllView, Converter={StaticResource BoolToVisibilityConverter},
+                                       FallbackValue=Visible}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <UniformGrid Columns="{Binding DataContext.GridColumns, FallbackValue=4,
@@ -280,6 +489,148 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+
+            <!-- ── 单机视图（S3）：左接口明细大表 + 右最近触发流（同一数据源两个视图） ── -->
+            <Grid Grid.Row="1" Margin="10,9,10,10"
+                  Visibility="{Binding IsSingleView, Converter={StaticResource BoolToVisibilityConverter},
+                               FallbackValue=Collapsed}"
+                  Grid.IsSharedSizeScope="True">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="13*"/>
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="10*"/>
+                </Grid.ColumnDefinitions>
+                <!-- 接口明细大表：绑 SinglePanel.ApiStats（8 列） -->
+                <Border Grid.Column="0" CornerRadius="10" Padding="12"
+                        Background="{DynamicResource Brush.CardBg}"
+                        BorderBrush="{DynamicResource Brush.CardBorder}" BorderThickness="1">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,9">
+                            <TextBlock Text="{Binding TrApiDetails, FallbackValue='接口明细'}"
+                                       FontSize="12.5" FontWeight="Bold" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Brush.FgStrong}"/>
+                            <TextBlock DockPanel.Dock="Right" FontSize="10.5" VerticalAlignment="Center"
+                                       Text="{Binding TrDetailHint, FallbackValue='最后 STATUS / 最后触发 / 耗时'}"
+                                       Foreground="{DynamicResource Brush.FgDim}"/>
+                        </DockPanel>
+                        <!-- 表头 -->
+                        <Grid Grid.Row="1" VerticalAlignment="Top">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0" Margin="0,0,0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="46"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="38"/>
+                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="38"/>
+                                    <ColumnDefinition Width="74"/>
+                                    <ColumnDefinition Width="64"/>
+                                    <ColumnDefinition Width="64"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="接口" FontSize="10.5" Foreground="{DynamicResource Brush.FgDim}"/>
+                                <TextBlock Grid.Column="1" Text="语义" FontSize="10.5" Foreground="{DynamicResource Brush.FgDim}"/>
+                                <TextBlock Grid.Column="2" Text="触发" FontSize="10.5" Foreground="{DynamicResource Brush.FgDim}"/>
+                                <TextBlock Grid.Column="3" Text="成功" FontSize="10.5" Foreground="{DynamicResource Brush.FgDim}"/>
+                                <TextBlock Grid.Column="4" Text="失败" FontSize="10.5" Foreground="{DynamicResource Brush.FgDim}"/>
+                                <TextBlock Grid.Column="5" Text="STATUS" FontSize="10.5" Foreground="{DynamicResource Brush.FgDim}"/>
+                                <TextBlock Grid.Column="6" Text="最后触发" FontSize="10.5" Foreground="{DynamicResource Brush.FgDim}"/>
+                                <TextBlock Grid.Column="7" Text="耗时" FontSize="10.5" Foreground="{DynamicResource Brush.FgDim}"/>
+                            </Grid>
+                            <ItemsControl Grid.Row="1" ItemsSource="{Binding SinglePanel.ApiStats}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border x:Name="DetailRowBd" CornerRadius="5" Padding="0,5"
+                                                Background="Transparent">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="46"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="38"/>
+                                                    <ColumnDefinition Width="40"/>
+                                                    <ColumnDefinition Width="38"/>
+                                                    <ColumnDefinition Width="74"/>
+                                                    <ColumnDefinition Width="64"/>
+                                                    <ColumnDefinition Width="64"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border CornerRadius="4" Padding="0,2" HorizontalAlignment="Left"
+                                                        Background="{DynamicResource Brush.AccentSoft}">
+                                                    <TextBlock Text="{Binding Code, FallbackValue='0027'}" FontSize="10"
+                                                               FontFamily="Consolas" Foreground="{DynamicResource Brush.Accent}"
+                                                               HorizontalAlignment="Center"/>
+                                                </Border>
+                                                <TextBlock Grid.Column="1" Text="{Binding Name, FallbackValue='固化时间'}"
+                                                           FontSize="11.5" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Brush.FgMid}"/>
+                                                <TextBlock Grid.Column="2" Text="{Binding Triggered, FallbackValue=0}"
+                                                           FontSize="11.5" HorizontalAlignment="Left" Margin="10,0,0,0"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Brush.FgStrong}"/>
+                                                <TextBlock Grid.Column="3" Text="{Binding Ok, FallbackValue=0}"
+                                                           FontSize="11.5" HorizontalAlignment="Left" Margin="10,0,0,0"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Brush.FgStrong}"/>
+                                                <TextBlock Grid.Column="4" Text="{Binding Fail, FallbackValue=0}"
+                                                           FontSize="11.5" HorizontalAlignment="Left" Margin="10,0,0,0"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Brush.FgStrong}"/>
+                                                <TextBlock Grid.Column="5" Text="{Binding LastStatusText, FallbackValue='—'}"
+                                                           FontSize="10.5" FontFamily="Consolas" Margin="8,0,0,0"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Brush.FgStrong}"/>
+                                                <TextBlock Grid.Column="6" Text="{Binding LastTime, FallbackValue='—'}"
+                                                           FontSize="10.5" FontFamily="Consolas" Margin="6,0,0,0"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Brush.FgMid}"/>
+                                                <TextBlock Grid.Column="7" Text="{Binding LastElapsed, FallbackValue='—'}"
+                                                           FontSize="10.5" FontFamily="Consolas" Margin="6,0,0,0"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Brush.FgMid}"/>
+                                            </Grid>
+                                        </Border>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding LampKind, FallbackValue=Idle}" Value="Fail">
+                                                <Setter TargetName="DetailRowBd" Property="Background"
+                                                        Value="{DynamicResource Brush.FailRowBg}"/>
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Grid>
+                    </Grid>
+                </Border>
+                <!-- 最近触发流：原卡片日志内容的新家（VM.LogLines，上限 100） -->
+                <Border Grid.Column="2" CornerRadius="10" Padding="12"
+                        Background="{DynamicResource Brush.CardBg}"
+                        BorderBrush="{DynamicResource Brush.CardBorder}" BorderThickness="1">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,9">
+                            <TextBlock Text="{Binding TrTriggerStream, FallbackValue='最近触发流'}"
+                                       FontSize="12.5" FontWeight="Bold" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Brush.FgStrong}"/>
+                            <Border DockPanel.Dock="Right" CornerRadius="4" Padding="7,2"
+                                    Background="{DynamicResource Brush.AccentSoft}" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding TrLive, FallbackValue='实时'}" FontSize="10"
+                                           Foreground="{DynamicResource Brush.Accent}"/>
+                            </Border>
+                        </DockPanel>
+                        <ListBox Grid.Row="1" ItemsSource="{Binding SinglePanel.LogLines}"
+                                 FontSize="11.5" BorderThickness="0"
+                                 Background="Transparent"/>
+                    </Grid>
+                </Border>
+            </Grid>
         </Grid>
     </Grid>
 </Window>

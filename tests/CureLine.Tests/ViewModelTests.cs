@@ -8,6 +8,7 @@
 
 using CureLine.Core.Infrastructure;
 using CureLine.Core.Security;
+using CureLine.Core.Modes;
 using CureLine.Tests.Mocks;
 using CimGateway.ViewModels;
 using CureLine.ViewModels;
@@ -143,5 +144,88 @@ public class ViewModelTests : IDisposable
         Assert.True(vm.NeedOldPassword);
         vm.SelectedUser = "admin";
         Assert.False(vm.NeedOldPassword);
+    }
+
+    // ---- 卡片业务化（V0.0.51 S2：6 接口微表计数 + 四态灯 + 未启用态）----
+
+    [Fact(DisplayName = "卡片VM接口行计数与灯语义")]
+    public void StationPanel_ApiStats_CountersAndLamp()
+    {
+        var vm = new StationPanelViewModel(0, _ => { }, _ => { });
+        Assert.Equal(6, vm.ApiStats.Count);
+        Assert.Equal(new[] { "0027", "0028", "0030", "0031", "0032", "0033" },
+            vm.ApiStats.Select(s => s.Code).ToArray());
+        Assert.All(vm.ApiStats, s => Assert.Equal("Idle", s.LampKind));
+        Assert.Equal("Gray", vm.LampColor); // 初始未连
+
+        vm.SetLive(true, false);            // 在线（Lime）
+        Assert.Equal("Lime", vm.LampColor);
+
+        vm.OnApiTriggered("API0030");
+        Assert.Equal(1, vm.ApiStats[2].Triggered);
+        Assert.Equal(1, vm.TotalTriggered);
+
+        vm.OnApiDone(new ApiResult(0, "API0030", true, "1", "STATUS=1", 86));
+        Assert.Equal(1, vm.ApiStats[2].Ok);
+        Assert.Equal("Ok", vm.ApiStats[2].LampKind);
+        Assert.Equal("1 / OK", vm.ApiStats[2].LastStatusText);
+        Assert.Equal(0, vm.TotalFail);
+        Assert.Equal("Lime", vm.LampColor); // 无失败仍在线色
+
+        vm.OnApiDone(new ApiResult(0, "API0031", false, "0", "MES返回NG: API0031", 40));
+        Assert.Equal(1, vm.ApiStats[3].Fail);
+        Assert.Equal("Fail", vm.ApiStats[3].LampKind);
+        Assert.Equal("2 / NG", vm.ApiStats[3].LastStatusText);
+        Assert.Equal(1, vm.TotalFail);
+        Assert.Equal("Yellow", vm.LampColor); // 今日有失败 → 黄
+        Assert.Contains("触发 1", vm.HeadBadge);
+        Assert.Contains("失败 1", vm.HeadBadge);
+
+        vm.SetLive(false, true);            // 断连 → 红（优先级最高）
+        Assert.Equal("Red", vm.LampColor);
+    }
+
+    [Fact(DisplayName = "卡片VM未启用态与最新消息三态")]
+    public void StationPanel_DisabledAndLatestMessage()
+    {
+        var vm = new StationPanelViewModel(0, _ => { }, _ => { });
+        // 未启用：配置跳过日志 → Enabled=false、灰灯、"未启用"徽标
+        vm.AddLog(LanguageService.Tr("已配置为不连接本工站"));
+        Assert.False(vm.Enabled);
+        Assert.Equal("Gray", vm.LampColor);
+        Assert.Equal(LanguageService.Tr("未启用"), vm.HeadBadge);
+        Assert.Equal("Info", vm.LatestKind);
+
+        // 启用台：连接成功 → Ok 消息；上传成功 → Ok；NG → Warn
+        vm.AddLog(LanguageService.Tr("连接机台成功") + ",192.168.1.11");
+        Assert.True(vm.Enabled);
+        Assert.Equal("Ok", vm.LatestKind);
+        vm.AddLog(LanguageService.Tr("MES上传成功") + ": API0030");
+        Assert.Equal("Ok", vm.LatestKind);
+        vm.AddLog(LanguageService.Tr("MES返回NG") + ": API0030");
+        Assert.Equal("Warn", vm.LatestKind);
+        Assert.Equal(4, vm.LogLines.Count); // 触发流同源累计（含未启用那条）
+    }
+
+    [Fact(DisplayName = "主窗VM汇总条初始态与单机视图切换")]
+    public void MainVm_Summary_InitialStateAndSingleView()
+    {
+        var fake = new FakeDialogService();
+        using var vm = new MainWindowViewModel(fake);
+        Assert.True(vm.IsAllView);
+        Assert.False(vm.IsSingleView);
+        Assert.Equal(0, vm.TodayOk);
+        Assert.Equal(0, vm.TodayFail);
+        Assert.Equal("Idle", vm.MesLampKind);        // 从未触发=灰
+        Assert.Equal(LanguageService.Tr("未触发"), vm.MesLastText);
+        Assert.True(vm.MesEndpoint.Length > 0);       // 端点文本可显示（URL 空=占位"—"）
+        Assert.Equal("200", vm.ScanIntervalMsText);   // 配置值缺省 200
+
+        vm.SelectedViewIndex = 3;                     // 切单机视图
+        Assert.False(vm.IsAllView);
+        Assert.True(vm.IsSingleView);
+        Assert.Equal(vm.ViewOptions[3], vm.SingleTitle);
+        Assert.Equal(AppConfig.StationIps[2], vm.SingleIp);
+        Assert.Equal("—", vm.SingleScanText);         // 尚无实测
     }
 }

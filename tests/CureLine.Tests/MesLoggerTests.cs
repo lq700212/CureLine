@@ -95,9 +95,54 @@ public class MesLoggerTests
     [Fact(DisplayName = "GenLogName越界回退")]
     public void GenLogName_OutOfRange_FallsBack()
     {
-        Assert.Equal("橡胶装配PCB设备", MesLogger.GenLogName(0));
+        Assert.Equal("机台1", MesLogger.GenLogName(0)); // V0.0.51 缺省名中性化
         Assert.Equal(8, MesLogger.StationNames.Length);
         Assert.Equal("Station99", MesLogger.GenLogName(99));
         Assert.Equal("Station-1", MesLogger.GenLogName(-1));
+    }
+
+    // ---- 结构化条目（V0.0.51 日志窗表格化数据源）----
+
+    [Fact(DisplayName = "EntryAdded与LogAdded成对触发且条目可还原原文")]
+    public void EntryAdded_Fires_PairsWithLogAdded()
+    {
+        using var scope = new TestScope();
+        MesLogEntry? entry = null;
+        string? raw = null;
+        void OnEntry(MesLogEntry e) => entry = e;
+        void OnRaw(string m, int s) => raw = m;
+        MesLogger.EntryAdded += OnEntry;
+        MesLogger.LogAdded += OnRaw;
+        try
+        {
+            MesLogger.WriteLog("UT", "结构化内容", 3);
+            Assert.NotNull(entry);
+            Assert.Equal("UT", entry!.Title);
+            Assert.Equal("结构化内容", entry.Message);
+            Assert.Equal(3, entry.StationId);
+            Assert.NotNull(raw);
+            Assert.Equal(raw, entry.Formatted); // 原文与落盘格式逐字一致
+        }
+        finally
+        {
+            MesLogger.EntryAdded -= OnEntry;
+            MesLogger.LogAdded -= OnRaw;
+        }
+    }
+
+    [Fact(DisplayName = "TryParseEntry往返解析+坏行返回null")]
+    public void TryParseEntry_Roundtrip_AndRejects()
+    {
+        var src = new MesLogEntry(
+            new DateTime(2026, 11, 2, 10, 24, 31, 123), "Send FAIL", "网络超时: API0030", 2);
+        var parsed = MesLogger.TryParseEntry(src.Formatted, 2);
+        Assert.NotNull(parsed);
+        Assert.Equal(src.Time, parsed!.Time);
+        Assert.Equal(src.Title, parsed.Title);
+        Assert.Equal(src.Message, parsed.Message);
+
+        Assert.Null(MesLogger.TryParseEntry("不是格式化行"));
+        Assert.Null(MesLogger.TryParseEntry("[2026-13-99 99:99:99.999] [T] bad time"));
+        Assert.Null(MesLogger.TryParseEntry(""));
     }
 }
