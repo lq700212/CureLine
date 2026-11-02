@@ -202,6 +202,16 @@
                             IsEnabled="{Binding ConnectEnabled}"
                             Command="{Binding ConnectMultiCommand}" Margin="0,0,6,0"
                             ToolTip="连接全部机台（逐台后台建连，不冻界面）"/>
+                    <!-- 模拟触发（V0.0.52）：仅 Simulate=1 渲染——单击注入一次 mock 触发，
+                         机台×接口轮转，走真机同款全链路（MES 由内置桩应答）；
+                         真机模式整个不渲染，演示件不进生产界面 -->
+                    <Button Tag="{StaticResource Geo.Posting}" Style="{StaticResource GhostButton}"
+                            Content="{Binding BtnMockText, FallbackValue='模拟触发'}"
+                            Command="{Binding MockTriggerCommand}" Margin="0,0,6,0"
+                            Visibility="{Binding IsSimulateMode,
+                                        Converter={StaticResource BoolToVisibilityConverter},
+                                        FallbackValue=Collapsed}"
+                            ToolTip="模拟模式专用：注入一次 mock 触发（机台×接口轮转，连点 6 下覆盖 6 接口），走 触发→组包→POST→回写 真机同款链路"/>
                     <Button Tag="{StaticResource Geo.Log}" Style="{StaticResource GhostButton}"
                             Content="{Binding BtnLogText, FallbackValue='日志'}"
                             Command="{Binding ShowLogCommand}" Margin="0,0,6,0"

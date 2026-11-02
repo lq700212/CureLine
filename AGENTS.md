@@ -108,7 +108,7 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 395/395（V0.0.49 全量；P3 期分版增量与 V0.0.19~V0.0.20
+   `dotnet test` 409/409（V0.0.52 全量；P3 期分版增量与 V0.0.19~V0.0.20
    各轮增量明细见各版本 CHANGELOG，V0.0.33~37 增量未逐版回填此括号——
    基线此后只增不减，V0.0.49 因删改密面板与旧权限窗用例净减 4、
    自愈播种防回归 +2）；禁止交付编译不过/测试不过的代码。
@@ -214,7 +214,7 @@
 | `src/CureLine.Core/Modes/MultiMachineGateway.cs` | 多机网关：触发→JSON→POST→回写 + Manager（Modbus 底座已接，业务零改动） |
 | `src/CureLine.Core/Comms/ModbusStationClient.cs` | **真机底座（P2 新增）**：`IStationClient` 的 Modbus TCP 实现——地址="剥 R/D 取数字"=协议地址、字符串 2 字节/寄存器 big-endian、分帧 125/123，三语义集中一处 |
 | `src/CureLine.Core/Comms/`（机台侧） | `IStationClient` + 真机 `ModbusStationClient` + 模拟 `SimulatedStationClient` + 连通测试 `StationConnectionTester`（V0.0.32 去 PLC 化命名，三菱客户端已删；kaleidoscope 外部类型 PlcMasterConfig 等保留原名） |
-| `src/CureLine.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段） |
+| `src/CureLine.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段）+ `MockMesServer`（内置模拟 MES 桩，仅 Simulate=1 且 URL 空/占位时接管，自配 URL 透传） |
 | `src/CureLine.Core/Data/CureRecordStore.cs` | `cure_record` 表 CRUD（V0.0.32 由 PLCtable 改名，项目未上线无兼容包袱）+ `ComputeStats` 纯统计 |
 | `src/CureLine.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/机台连接配置（`StationConfig.cs`：StationConfigStore/Validator） |
 | `tests/CureLine.Tests/` | 395 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
@@ -226,7 +226,8 @@
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build CureLine.slnx --nologo
-# 全量测试（395/395 全绿，串行，约 20s；含本地 HttpListener 桩 MES 端到端）
+# 全量测试（409/409 全绿，串行，约 20s；含本地 HttpListener 桩 MES 端到端
+#   + 模拟链路 VM 全链路用例：按钮→注入→扫触发→POST 内置桩→回写→观测）
 dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
 # 子模块改动后（VS MSBuild，net472，原样沿用上游命令）
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
@@ -311,7 +312,23 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   改动必同步 `PointTableTests` 的地址断言。
 - `TryEnsureConnected` 建连是同步等待（最多 `TimeoutMs`=3s），会阻塞
   轮询线程一拍——骨架期可接受，P2 提速再改异步。
-- **程序② 主窗业务化语义（V0.0.51 起，全在 `MainWindowViewModel`/`StationPanelViewModel` + `MultiMachineGateway` 观测事件）**：① 统计口径=进程内观测累计、重启清零（对账以日志为准，不落盘不做第二本账）；② MES 状态点只反映最近一次报文结果（不做心跳 ping——无触发时"连通"是假象）；③ 卡片灯四态优先级 Red>Gray(未启用)>Yellow(今日有失败)>Lime/Green——Yellow 是观测增强，通讯语义零改动；④ "未启用"态来自"已配置为不连接本工站"日志关键词（AddLog 内聚判定，中英双语关键词）；⑤ 日志窗全量窗（-1）收**全部机台**日志（旧口径只收无主日志与"全部机台"语义不符、窗恒空——已修正勿回改）；`GetAllCachedLogs` 合并 8 台缓存按行首时间戳排序（格式固定字符串序=时间序）；⑥ 演示触发器仅 Simulate=1（随机台随机接口预置最小 JSON+触发字，走真机同链路），真机零影响勿在生产代码调用；⑦ 新 UI 文案一律走 `Tr()`+词典（本次补 6 接口短名+汇总条共 20 余条）；⑧ XAML 触发器死区坑全中招预防：灯色/点色/消息底色的缺省值全部写进 Style Setter。
+- **程序② 主窗业务化语义（V0.0.51 起，全在 `MainWindowViewModel`/`StationPanelViewModel` + `MultiMachineGateway` 观测事件）**：① 统计口径=进程内观测累计、重启清零（对账以日志为准，不落盘不做第二本账）；② MES 状态点只反映最近一次报文结果（不做心跳 ping——无触发时"连通"是假象）；③ 卡片灯四态优先级 Red>Gray(未启用)>Yellow(今日有失败)>Lime/Green——Yellow 是观测增强，通讯语义零改动；④ "未启用"态来自"已配置为不连接本工站"日志关键词（AddLog 内聚判定，中英双语关键词）；⑤ 日志窗全量窗（-1）收**全部机台**日志（旧口径只收无主日志与"全部机台"语义不符、窗恒空——已修正勿回改）；`GetAllCachedLogs` 合并 8 台缓存按行首时间戳排序（格式固定字符串序=时间序）；⑥ 演示触发器仅 Simulate=1（随机台随机接口预置最小 JSON+触发字，走真机同链路），真机零影响勿在生产代码调用；⑦ 新 UI 文案一律走 `Tr()`+词典（本次补 6 接口短名+汇总条共 20 余条）；⑧ XAML 触发器死区坑全中招预防：灯色/点色/消息底色的缺省值全部写进 Style Setter；
+⑨ **模拟触发按钮 + 内置模拟 MES 桩（V0.0.52，全在 `MockMesServer`+VM）**：顶栏
+「模拟触发」仅 `Simulate=1` 渲染（真机模式 Visibility 折叠、命令也有 `_useSim`
+双保险），单击注入一击=预置 JSON+触发字置 1，机台×接口按 `_mockTick` 轮转
+（连点 6 下覆盖 6 接口），未连接时代替用户连接（`_simClients` 空且
+`ConnectEnabled` 才触发）、连接中忽略；`_simClients` 是 (Id,Client) 元组表
+（卡片日志归属要机台号），别退回裸客户端表；**桩接管规则**：`Simulate=1` 且
+URL 为空或含占位主机 `192.168.120.129`（=MockMesServer.PlaceholderHost，即
+config.sample.ini 缺省样例）才指向内置桩（端口 5012~5021 逐试，全败回 null
+退"URL 未配置"失败链），**自配 URL 一律透传**、桩地址只填内存静态值不写
+config.ini（网关配置窗保存会 AppConfig.Load 刷回 ini 原值，故
+RestartConnections 后要重调 FillPlaceholderUrls）；桩 NG 规则：报文
+`RC_NO="NG"` 回 STATUS=2/MSG=NG（演示拒绝→报警窗）；Simulate=1 下 VM 构造
+即自动连接（演示开箱即亮）；⑩ **测试静态隔离红线**：直接改写 MesConfig/
+AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔离把
+`http://x/30` 泄漏给后续测试，模拟链路用例首当其冲半数概率挂——已补）；模拟
+链路用例装配显式清空 6 URL，超时转储带计数+失败原因+Http Error 原文。
 - **主窗仓位网格（V0.0.19 起，V0.0.20 加双架分组）**：① 10×3 最小下限
   （`BuildSlots` 的 `Math.Max` 垫底，常量与 `SlotLocationCode` 同源）——
   点表只配 1 架也铺 30 张卡，属展示口径勿当 bug 报；② 集合**行优先**

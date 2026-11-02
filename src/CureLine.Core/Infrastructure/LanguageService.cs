@@ -163,6 +163,11 @@ public static class LanguageService
         ["进程内累计，重启清零"] = "in-process count, reset on restart",
         ["单机视图见实测"] = "see per-station actual in single view",
         ["最后 STATUS / 最后触发 / 耗时"] = "Last STATUS / Last trigger / Elapsed",
+        // 模拟触发按钮 + 内置模拟 MES（V0.0.52，仅 Simulate=1 出现）
+        ["模拟触发"] = "Mock Trigger",
+        ["模拟模式：MES 由内置桩应答"] = "Simulate mode: MES answered by built-in mock",
+        ["内置模拟 MES 启动失败，报文按未配置处理"] =
+            "Built-in mock MES failed to start; postings treated as unconfigured",
         // API0033 不良明细字段（调试窗扩展，老项目无，新增）
         ["板号SN"] = "Board SN",
         ["顶底层"] = "Top/Bottom",

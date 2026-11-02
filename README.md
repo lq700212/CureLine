@@ -64,7 +64,11 @@ MES 多机网关（八机 Modbus TCP 统一底座）：触发 → JSON → POST 
 MES 端点最近报文状态 · 扫描周期）+ 8 机台过账卡片（6 接口状态微表：
 触发/成功/失败/最后结果点，失败行淡红底）+ 视图切单台看接口明细大表
 与最近触发流；日志窗表格化三列（时间/事件级别点/详情）；报警窗红左缘
-代码块观感；`Simulate=1` 演示模式自动随机触发全链路（真机零影响）。
+代码块观感。**模拟演示（`Simulate=1`，真机零影响）**：开机自动连接
+8 模拟机台，每 7s 自动随机触发 + 顶栏「模拟触发」按钮手动注入
+（机台×接口轮转，连点 6 下覆盖 6 接口）；URL 为空/样例占位时内置模拟
+MES 桩自动应答（自配 URL 透传），触发→组包→POST→回写→观测全链路
+无需任何外部依赖即可演示。
 配置窗两页（机台连接/接口地址）保存即自动重连，全程无需重启。
 
 ![程序②主窗](docs/images/gw-main.png)
@@ -89,7 +93,8 @@ dotnet build CureLine.slnx --nologo
 dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
 
 # 4. 模拟联调（无真机）：把 exe 同目录 config/config.ini 里 [setting] Simulate=1
-#    - CimGateway 直起即模拟 8 机台跑全流程
+#    - CimGateway 直起即模拟 8 机台自动连接，每 7s 自动触发 + 顶栏「模拟触发」
+#      按钮手动注入；MES URL 未配置时内置模拟桩自动应答（全链路自洽演示）
 #    - CureStation 直起即 Mock 总线按仓位流转演示（主窗设置下拉可即时切换）
 ```
 

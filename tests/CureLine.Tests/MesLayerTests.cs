@@ -7,12 +7,16 @@ using Newtonsoft.Json;
 using CureLine.Core.Infrastructure;
 using CureLine.Core.Mes;
 using CureLine.Core.Modes;
+using CureLine.Tests.Mocks;
 
 namespace CureLine.Tests;
 
 public class MesLayerTests : IDisposable
 {
     private readonly string _tmp;
+    // TestScope 快照/恢复 MesConfig 等静态——本类直接改写 UrlApi0030/TriggerApi0033，
+    // 无隔离会泄漏给后续所有测试（曾把 URL 脏值带进模拟链路用例，V0.0.52 补齐）。
+    private readonly TestScope _scope = new();
 
     public MesLayerTests()
     {
@@ -22,6 +26,7 @@ public class MesLayerTests : IDisposable
 
     public void Dispose()
     {
+        _scope.Dispose();
         try { Directory.Delete(_tmp, true); } catch { }
     }
 

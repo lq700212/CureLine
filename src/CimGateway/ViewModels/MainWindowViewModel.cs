@@ -33,7 +33,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     private MultiMachineManager? _multi;
     private readonly bool _useSim;
     private readonly object _simLock = new();
-    private readonly List<SimulatedStationClient> _simClients = new();  // 演示触发器用
+    private readonly List<(int Id, SimulatedStationClient Client)> _simClients = new(); // 演示触发/模拟触发按钮用（带机台号，卡片日志归属用）
     private bool _disposed;
     private readonly System.Timers.Timer _clock = new(1000);
 
@@ -83,6 +83,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         ClockText = DateTime.Now.ToString("G");
 
         ConnectMultiCommand = new RelayCommand(ConnectMulti, () => ConnectEnabled);
+        MockTriggerCommand = new RelayCommand(FireMockTrigger);
         ShowLogCommand = new RelayCommand(() => _dialogs.ShowMesLog(-1));
         ShowDebugCommand = new RelayCommand(() => _dialogs.ShowMesDebug());
         ShowGatewayCommand = new RelayCommand(ShowGateway);
@@ -97,6 +98,23 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 
         RefreshTexts();
         LocalLog(Tr("软件启动"), -1);
+
+        // 模拟模式（Simulate=1）演示三件套：内置 MES 桩接管占位 URL → 开机自动
+        // 连接全部模拟机台（演示开箱即亮，不用再手点"连接设备"）。真机模式零改动。
+        if (_useSim)
+        {
+            string? mockUrl = MockMesServer.EnsureStarted();
+            if (mockUrl != null)
+            {
+                MockMesServer.FillPlaceholderUrls();
+                LocalLog($"{Tr("模拟模式：MES 由内置桩应答")} ({mockUrl})", -1);
+            }
+            else
+            {
+                LocalLog(Tr("内置模拟 MES 启动失败，报文按未配置处理"), -1);
+            }
+            ConnectMulti();
+        }
     }
 
     // ================= 登录态 + 菜单 =================
@@ -118,6 +136,13 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     public string ViewLabel => Tr("视图:");
     public string BtnLogText => Tr("日志");
     public string BtnDebugText => Tr("调试");
+
+    /// <summary>模拟模式开关（config.ini [setting] Simulate=1）——顶栏"模拟触发"
+    /// 按钮的显隐依据；真机模式恒 false，按钮整个不渲染（演示件不进生产界面）。</summary>
+    public bool IsSimulateMode => _useSim;
+
+    /// <summary>模拟触发按钮文案。</summary>
+    public string BtnMockText => Tr("模拟触发");
     public string BtnGatewayText => Tr("网关设置");
     public string BtnChangePwdText => Tr("修改密码");
     public string BtnShortcutText => Tr("快捷方式");
@@ -254,6 +279,10 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         {
             old.Dispose();      // 停旧网关线程 + 关旧 TCP（新连接另起，不共 socket）
             InitMulti();        // 新 Manager：factory 读已刷新的 AppConfig
+            // 模拟模式：配置保存会 AppConfig.Load() 把 URL 静态值刷回 ini 原值
+            // （占位样例地址），此处把内置桩的接管补回去（幂等）。
+            if (_useSim)
+                MockMesServer.FillPlaceholderUrls();
             ConnectMulti();     // 后台逐台连（阻塞网络 IO 在 Task 内）
             UiInvoke(() =>
             {
@@ -311,6 +340,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     public RelayCommand ConnectMultiCommand { get; }
+    public RelayCommand MockTriggerCommand { get; }
 
     /// <summary>
     /// 本机操作日志：落盘 LocalLogService 全量；机台消息上对应面板，
@@ -361,7 +391,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
                 return new ModbusStationClient();
             var sim = new SimulatedStationClient();
             lock (_simLock)
-                _simClients.Add(sim);
+                _simClients.Add((id, sim));
             return sim;
         });
         _multi.StationLog += (id, m) => LocalLog(m, id);
@@ -401,13 +431,16 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         StartDemoTriggers();
     }
 
-    // ================= 演示触发器（仅 Simulate=1，真机零影响） =================
+    // ================= 演示触发（仅 Simulate=1，真机零影响） =================
     //
-    // 模拟客户端是纯内存被动件，触发字不会自己置 1——演示模式（Simulate=1）
-    // 下后台每 7s 随机挑一台、随机挑一个接口，预置最小合法 JSON 到 DATA 区并把
-    // 触发字置 1，走与真机完全相同的"扫触发→组包→POST→回写→观测事件"链路
-    // （手册"模拟 8 机台网关含触发回写全链路"的实装）。预置 JSON 只求能通过
-    // ValidateJson 反序列化（字段缺省 null 即可），MES 语义字段由现场对账看。
+    // 模拟客户端是纯内存被动件，触发字不会自己置 1——两条注入路径都只做"预置
+    // 最小合法 JSON 到 DATA 区 + 触发字置 1"，之后走与真机完全相同的"扫触发→
+    // 组包→POST→回写→观测事件"链路（MES 侧由内置桩应答，见 MockMesServer）。
+    // ① 自动：后台每 7s 随机挑一台、随机挑一个接口（开箱即动的演示观感）；
+    // ② 手动：顶栏"模拟触发"按钮（V0.0.52），单击注入一次，机台×接口按计数器
+    //    轮转——连点 6 下必覆盖全部 6 个接口，适合逐接口演示与串联自检。
+
+    private int _mockTick;   // 手动注入轮转计数（机台 = tick/接口数 推进，接口 = tick%6）
 
     private void StartDemoTriggers()
     {
@@ -419,21 +452,64 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
             while (!_disposed)
             {
                 await Task.Delay(7000);
-                SimulatedStationClient? sim;
+                (int Id, SimulatedStationClient Client) pick;
                 lock (_simLock)
                 {
                     if (_simClients.Count == 0)
                         continue;
-                    sim = _simClients[rnd.Next(_simClients.Count)];
+                    pick = _simClients[rnd.Next(_simClients.Count)];
                 }
-                int idx = rnd.Next(MesConfig.ApiCodes.Length);
-                string trg = MesConfig.GetTrigger(MesConfig.ApiCodes[idx]);
-                if (string.IsNullOrEmpty(trg))
-                    continue;
-                sim.PresetString(MesConfig.ApiAddresses[idx].StationData, DemoJson(idx));
-                sim.PresetWord(trg, 1);
+                InjectMockTrigger(pick.Client, pick.Id, rnd.Next(MesConfig.ApiCodes.Length));
             }
         });
+    }
+
+    /// <summary>
+    /// 顶栏"模拟触发"按钮：单击注入一次 mock 触发。未连接过（点了连接设备前）
+    /// 时代替用户先连（与开机自动连接同链）；连接进行中则忽略本击（防双重连接）。
+    /// </summary>
+    private void FireMockTrigger()
+    {
+        if (!_useSim)
+            return;
+        (int Id, SimulatedStationClient Client) pick;
+        lock (_simLock)
+        {
+            if (_simClients.Count == 0)
+            {
+                if (ConnectEnabled)
+                    ConnectMulti();   // 一次点击 = 连接 + 下次点击注入（连接是后台的）
+                return;
+            }
+            pick = _simClients[_mockTick % _simClients.Count];
+        }
+        InjectMockTrigger(pick.Client, pick.Id, _mockTick % MesConfig.ApiCodes.Length);
+        _mockTick++;
+    }
+
+    /// <summary>
+    /// 注入一击：预置演示 JSON + 触发字置 1，并往该机台卡片触发流记一条
+    /// "模拟触发: API00xx"（注入→消化全程在卡片日志可见，串联自检用）。
+    /// 接口触发地址未配置时顺延到下一个已配置接口（防"点了没反应"）。
+    /// </summary>
+    private void InjectMockTrigger(SimulatedStationClient sim, int stationId, int apiIndex)
+    {
+        int idx = apiIndex;
+        for (int n = 0; n < MesConfig.ApiCodes.Length; n++)
+        {
+            int cand = (apiIndex + n) % MesConfig.ApiCodes.Length;
+            if (!string.IsNullOrEmpty(MesConfig.GetTrigger(MesConfig.ApiCodes[cand])))
+            {
+                idx = cand;
+                break;
+            }
+        }
+        string trg = MesConfig.GetTrigger(MesConfig.ApiCodes[idx]);
+        if (string.IsNullOrEmpty(trg))
+            return;   // 6 接口全没配触发地址（不可能的配置，兜底静默）
+        sim.PresetString(MesConfig.ApiAddresses[idx].StationData, DemoJson(idx));
+        sim.PresetWord(trg, 1);
+        LocalLog($"{Tr("模拟触发")}: {MesConfig.ApiCodes[idx]}", stationId);
     }
 
     /// <summary>演示用最小 JSON：数组接口（0027/28/33）单元素数组，对象接口单对象。</summary>
@@ -584,6 +660,7 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         Raise(nameof(TodayTriggered));
         Raise(nameof(TodayOk));
         Raise(nameof(TodayFail));
+        Raise(nameof(TodayDetail));   // 副行"触发 N 次"是派生文本，漏 Raise 会停在初始 0（目检抓到）
         Raise(nameof(MesEndpoint));
         Raise(nameof(MesLastText));
         Raise(nameof(MesLampKind));

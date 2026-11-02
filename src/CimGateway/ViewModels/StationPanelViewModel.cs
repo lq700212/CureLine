@@ -100,10 +100,17 @@ public class ApiStatRow : ViewModelBase
     }
 
     /// <summary>过账完成：累计 + 记最后结果（ok 带耗时，失败按状态词给"超时/NG"）。</summary>
+    private string _lastMessage = "";
+
+    /// <summary>最近一次结果原文（失败原因可读化："MES网络异常/超时: API0030" 等；
+    /// 单机明细/排障转储用）。</summary>
+    public string LastMessage { get => _lastMessage; private set => Set(ref _lastMessage, value); }
+
     public void OnDone(bool ok, string status, string message, long elapsedMs)
     {
         if (ok) Ok++; else Fail++;
         LastOk = ok;
+        LastMessage = message;
         LastTime = DateTime.Now.ToString("HH:mm:ss");
         LastElapsed = ok ? $"{elapsedMs} ms"
             : message.Contains("超时") || message.Contains("timeout") ? "超时"
