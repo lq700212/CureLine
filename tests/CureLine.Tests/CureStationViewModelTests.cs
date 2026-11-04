@@ -1944,7 +1944,7 @@ public class CureStationViewModelTests
         Assert.Equal(11, vm.SlotPreviewItems.Count(i => i.Level == 1));
     }
 
-    // ---------- 时间单位切换（V0.0.53：时/分/秒；存储恒为分钟） ----------
+    // ---------- 时间单位切换（V0.0.53；V0.0.56 秒档删除，只留 时/分） ----------
 
     [Fact]
     public void PolicyVm_TimeUnitSwitch_ConvertsEditorCanvasLegendAndFloating()
@@ -1964,6 +1964,7 @@ public class CureStationViewModelTests
         Assert.Equal("跟随层/全局：< 60 分钟", vm.LegendGreenText);
         Assert.Equal("每层覆盖（分钟，空=用全局）", vm.LevelHeaderText);
         Assert.Contains("分钟", vm.GlobalMinutesToolTip);
+        Assert.Equal(1, vm.TimeUnitIndex);
 
         // 切小时：120 分钟 = 2 小时——编辑区/画布/浮层/图例/标题全换
         vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Hours;
@@ -1976,14 +1977,7 @@ public class CureStationViewModelTests
         Assert.Equal("每层覆盖（小时，空=用全局）", vm.LevelHeaderText);
         Assert.Contains("小时", vm.SelectionInputToolTip);
         Assert.Equal(0, vm.TimeUnitIndex);
-
-        // 切秒：2 小时 = 7200 秒
-        vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Seconds;
-        Assert.Equal("7200", vm.EditGlobalMinutes);
-        Assert.Equal("7200", Cell(vm, 1, 1).MinutesText);
-        Assert.Contains("当前 7200 秒", vm.SelectionSummaryText);
-        Assert.Equal("跟随层/全局：< 3600 秒", vm.LegendGreenText);
-        Assert.Equal(2, vm.TimeUnitIndex);
+        Assert.Equal(["时", "分"], vm.TimeUnitOptions);   // 下拉两档：秒已删
 
         // 回分钟：无损
         vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Minutes;
@@ -2014,11 +2008,6 @@ public class CureStationViewModelTests
         Assert.Equal(45, Cell(vm, 1, 2).Minutes);
         Assert.Equal(20, Cell(vm, 3, 2).Minutes);
 
-        vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Seconds;
-        Assert.Equal("5400", vm.EditGlobalMinutes);
-        Assert.Equal("2700", vm.EditLevel2Min);
-        Assert.Equal("1200", vm.SlotRows[0].Minutes);
-
         vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Minutes;
         Assert.Equal("90", vm.EditGlobalMinutes);
         Assert.Equal("45", vm.EditLevel2Min);
@@ -2043,41 +2032,30 @@ public class CureStationViewModelTests
     }
 
     [Fact]
-    public void PolicyVm_TimeUnitSeconds_RoundsToWholeMinutes()
-    {
-        using var scope = new TestScope();
-        EnsureConfigDir();
-        var fake = new FakeCureDialogService();
-        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
-        vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Seconds;
-        vm.EditGlobalMinutes = "90";       // 1.5 分钟 → 2 分钟（计时精度分钟，四舍五入）
-
-        vm.SaveCommand.Execute(null);
-
-        var loaded = CuringPolicyStore.Load();
-        Assert.Equal(2, loaded!.Policies.First(p => p.Name == "自定义").GlobalMinutes);
-    }
-
-    [Fact]
     public void PolicyVm_TimeUnit_RememberedInIni_InvalidFallsBackToMinutes()
     {
         using var scope = new TestScope();
         EnsureConfigDir();
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
-        vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Seconds;
-        Assert.Equal("Seconds", IniFile.ReadStr(
+        vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Hours;
+        Assert.Equal("Hours", IniFile.ReadStr(
             AppPaths.ConfigIni, "setting", "PolicyTimeUnit", ""));
 
-        // 关窗再打开沿用记忆单位（120 分钟按秒回显 7200）
+        // 关窗再打开沿用记忆单位（120 分钟按小时回显 2）
         var reopened = new CureStation.ViewModels.CuringPolicyViewModel(fake);
-        Assert.Equal(CureStation.ViewModels.PolicyTimeUnit.Seconds, reopened.TimeUnit);
-        Assert.Equal("7200", reopened.EditGlobalMinutes);
+        Assert.Equal(CureStation.ViewModels.PolicyTimeUnit.Hours, reopened.TimeUnit);
+        Assert.Equal("2", reopened.EditGlobalMinutes);
 
-        // 非法值自愈回分钟
+        // 非法值（含旧版存量 "Seconds"，档已删）自愈回分钟
         IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Bogus");
         var bad = new CureStation.ViewModels.CuringPolicyViewModel(fake);
         Assert.Equal(CureStation.ViewModels.PolicyTimeUnit.Minutes, bad.TimeUnit);
+
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Seconds");
+        var legacy = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        Assert.Equal(CureStation.ViewModels.PolicyTimeUnit.Minutes, legacy.TimeUnit);
+        Assert.Equal("120", legacy.EditGlobalMinutes);
     }
 
     [Fact]

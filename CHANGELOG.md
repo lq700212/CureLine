@@ -2,6 +2,33 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.56（2026-11-04，策略窗时间单位：删秒档 + 主窗时长字面同步）
+
+用户拍板两条：① 没有"秒级"的固化工艺，策略窗单位只留 **时/分**；② 策略窗
+切了小时，主窗不能再显示"多少分"——时长字面必须同拍换（此前两窗各显示各的）。
+
+- **秒档删除**：`PolicyTimeUnit` 枚举收成 Hours/Minutes（下拉/换算/图例/
+  ToolTip 全清"秒"分支）。ini 存量值 `Seconds` 不在新枚举内，开机自愈回
+  Minutes（与 PointBitStyle 同款；无兼容包袱）。
+- **单位中枢 DurationUnit**：新建 `src/CureStation/ViewModels/DurationUnit.cs`——
+  两窗共享的静态真源：`Change()`（策略窗唯一入口）= 落盘 config.ini
+  `[setting] PolicyTimeUnit` 记忆 + 广播 `Changed`；`Text/BigText/Suffix`
+  三个纯函数决定"分钟用文字怎么说"。策略窗开窗走 `LoadFromIni()` 重读
+  （以盘上为准）。
+- **主窗同步（不等 500ms 拍）**：MainViewModel 订阅 `Changed` → 全部卡片
+  `RefreshUnitText()`（数值/进度不动、只换字面；状态词"剩X"用最近一拍
+  Curing 快照缓存重拼）+ 统计条"⚡码·剩X"重拼。卡片大数字/副文改绑
+  `RemainDisplay`/`RemainSuffix`/`TotalDisplay` 三个派生文本。
+- **小时口径**（用户拍板"智能省略零段"）：2 小时→"2小时"、1.5 小时→
+  "1小时28分"、不足 1 小时→"47分"（0 段省略）；0 兜底"0分"。
+- **文本拼装上移收口**（随单位走 UI，Core 恒为分钟数据）：删 Core
+  `SlotStatus.StateText`（唯一消费者=卡片状态行，改由 RackSlotViewModel 缓存
+  快照自拼）；`SlotStatistics.NextClose` 改返最小项 `SlotStatItem?`（不再
+  内嵌"⚡…分"拼串，文本在主 VM 拼）。
+- **测试净 +5**（442/442）：删秒取整用例；单位切换/记忆用例改双档（含旧版
+  `Seconds` 自愈回归）；新增 DurationUnit 格式表、Change 落盘广播、卡片两
+  口径文本、主窗开窗联动共 6 例；TestScope 增单位快照/重读/恢复隔离。
+
 ## V0.0.55（2026-11-04，策略窗：画布全选应用升格为改全局）
 
 修复策略窗"全局时长不同步"（用户实测反馈）：画布框选全部格子统一应用时长后，

@@ -29,8 +29,8 @@
          V0.0.44 布局重排（用户拍板：画布能直接改后，原"策略编辑面板+每仓位覆盖表"
          两个区域整体删除）——
          左：策略库（预置策略带【预置】标记，激活一个生效）+ 每层覆盖折叠（高级）；
-         右上：参数条（策略名/全局时长+时间单位 时·分·秒/光栅门控/断电续算，
-         长说明收 ToolTip；单位只换显示口径，存储恒为分钟，V0.0.53）；
+         右上：参数条（策略名/全局时长+时间单位 时·分/光栅门控/断电续算，
+         长说明收 ToolTip；单位只换显示口径，存储恒为分钟，V0.0.56 秒档删除）；
          右主：仓位时长画布（全宽，主编辑区，傻瓜式）——左键单击选格直接浮层输
          时长、左键拖框批量选（橡皮筋透明只描边，Ctrl 叠加）、Ctrl+单击加选/减选、
          中键平移、滚轮缩放、双击空白复位、右键适应图像、Esc 清选择；普通格=
@@ -158,7 +158,7 @@
                             <ComboBox Style="{StaticResource FreshCombo}" Width="64" VerticalAlignment="Center"
                                       ItemsSource="{Binding TimeUnitOptions, FallbackValue={x:Null}}"
                                       SelectedIndex="{Binding TimeUnitIndex, FallbackValue=1}"
-                                      ToolTip="页面时间单位（时/分/秒）——仅显示与输入换算，底层计时精度为分钟，选择即记忆"/>
+                                      ToolTip="页面时间单位（时/分）——仅显示与输入换算，底层计时精度为分钟，选择即记忆并同步主窗显示"/>
                             <CheckBox IsChecked="{Binding EditGrillGate, FallbackValue=False}"
                                       Content="光栅门控" Margin="18,0,0,0"
                                       ToolTip="开=左右光栅都灭且托盘在架才开计时（防人手在架内就计时）；关（缺省）=托盘到位即开计时，没绑光栅的仓位门控自动放行。"/>
@@ -214,7 +214,7 @@
                             <ColumnDefinition Width="*"/>
                             <!-- 图例列宽 236：图例改为"色块+可换行文本"两列后，210 会把
                                  "120 ~ 179 分钟"折成两行（V0.0.53 目检修）；236 保证
-                                 分钟/时/秒三档最长文案单行可读，画布 680 定宽仍放得下。 -->
+                                 分钟/时两档最长文案单行可读，画布 680 定宽仍放得下。 -->
                             <ColumnDefinition Width="236"/>
                         </Grid.ColumnDefinitions>
                         <Border x:Name="CanvasHost" Grid.Column="0" Background="{DynamicResource Brush.Fresh.CanvasBg}"

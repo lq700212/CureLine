@@ -40,13 +40,15 @@
         退出钮已删（系统 ✕ 与其走同一条退出链）；演示开启态靠下拉项强调色 +
         连接短词的"演示"字样提示；
       - 统计胶囊行（行 1）：HTML .g2-stat/.g1-stat 直译——五态白/玻璃胶囊
-        （空闲/计时中/待门控/待取件/占用报警）+ ⚡剩余最短虚线胶囊（NextCloseText 格式锁定）；
+        （空闲/计时中/待门控/待取件/占用报警）+ ⚡剩余最短虚线胶囊（格式"⚡码·剩X"，
+        X 由 DurationUnit 按显示单位出：分钟"N分"/小时"X小时Y分·省零段"）；
       - 固化架分组（行 2 fill）：双架纵向堆两组职守不变（组标题条 grpbar=Brush.Ribbon*
         系列，单架 1 组无标题条；组内 10×3 UniformGrid 行优先）；
       - 工单双卡（行 3）：HTML .g2-wo/.g1-wo 直译——R/L 各"工位 · 单号"+过账角标 +
         渐变进度条（R=蓝/L=紫）+ "已产出 N / 总"（拆分由 WoQtySplitConverter，VM 零改）；
-      - 仓位卡 = 设计图三段式（top=库位码+状态胶囊 / mid=状态词+副文 或 大数字"47 分"+副文
-        "共 X 分·已固化 Y%"+进度条 / foot=状态点+层名+托盘）；状态浸染底/描边全靠主题字典
+      - 仓位卡 = 设计图三段式（top=库位码+状态胶囊 / mid=状态词+副文 或 大数字+副文
+        "共 X·已固化 Y%"+进度条 / foot=状态点+层名+托盘）；时长字面随显示单位走
+        DurationUnit（分钟="47"+尾"分"、"共 120 分"；小时="1小时28分"、"共 2小时"）；状态浸染底/描边全靠主题字典
         Kind 同名触发器换色（非空闲卡彩边加厚 1.5）；Alarm 脉动挂 mid 文本（HTML pulseG1/G2，
         V0.0.25 对比稿手法保留）；灯点由状态胶囊顶替（V0.0.35 设计图复刻）。
       - 展示文本绑定一律 FallbackValue（设计时纪律）；运行态数据不设固定宽高
@@ -68,7 +70,8 @@
         </Style>
 
         <!-- 仓位卡模板（设计图三段式直译，2026-10-30）：top=Code+状态胶囊 / mid=状态词+副文
-             或 大数字(26)+副文"共 X 分·已固化 Y%"+进度条 / foot=状态点+层名+托盘；状态底
+             或 大数字(26)+副文"共 X·已固化 Y%"+进度条 / foot=状态点+层名+托盘；时长文本随
+             显示单位走 DurationUnit（V0.0.56 策略窗切时/分主窗同步）；状态底
              Tint*/描边 SlotBorder*/光斑 CardGlow* 与 Kind 触发器同名分流（非空闲卡边加厚
              1.5），旧 5px 头带与灯点已随设计图退役；投影 Fx.CardShadow（Alarm 切红光圈） -->
         <DataTemplate x:Key="SlotCard">
@@ -353,7 +356,8 @@
                                     </TextBlock.Style>
                                 </TextBlock>
                             </StackPanel>
-                            <!-- 大数字视图：47 分 + 共 120 分·已固化 61% + 进度条（设计图三行左对齐） -->
+                            <!-- 大数字视图：小时"1小时28分"/分钟"47"+尾"分" + "共 2小时/共 120 分"·已固化 61% + 进度条（设计图三行左对齐；
+                                 时长字面随 DurationUnit 显示单位联动，V0.0.56） -->
                             <StackPanel>
                                 <StackPanel.Style>
                                     <Style TargetType="StackPanel">
@@ -370,16 +374,16 @@
                                     </Style>
                                 </StackPanel.Style>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding RemainMin, FallbackValue=0}" FontSize="26" FontWeight="ExtraBold"
+                                    <TextBlock Text="{Binding RemainDisplay, FallbackValue=47}" FontSize="26" FontWeight="ExtraBold"
                                                Foreground="{DynamicResource Brush.NumCuring}" VerticalAlignment="Bottom"/>
-                                    <TextBlock Text="分" FontSize="11" FontWeight="Medium"
+                                    <TextBlock Text="{Binding RemainSuffix, FallbackValue=分}" FontSize="11" FontWeight="Medium"
                                                Foreground="{DynamicResource Brush.NumCuring}"
                                                VerticalAlignment="Bottom" Margin="4,0,0,3"/>
                                 </StackPanel>
                                 <TextBlock FontSize="10.5" Margin="0,3,0,0"
                                            Foreground="{DynamicResource Brush.NumSmall}">
-                                    <Run Text="共 "/><Run Text="{Binding TotalMin, Mode=OneWay, FallbackValue=0}"/>
-                                    <Run Text=" 分 · 已固化 "/><Run Text="{Binding ProgressPct, Mode=OneWay, FallbackValue=0}"/>
+                                    <Run Text="共 "/><Run Text="{Binding TotalDisplay, Mode=OneWay, FallbackValue=120 分}"/>
+                                    <Run Text=" · 已固化 "/><Run Text="{Binding ProgressPct, Mode=OneWay, FallbackValue=0}"/>
                                     <Run Text="%"/>
                                 </TextBlock>
                                 <!-- 进度条：6px 圆角槽 + 状态黄填充（Rectangle 整宽 ScaleTransform 压缩，

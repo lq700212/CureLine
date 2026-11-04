@@ -44,10 +44,12 @@ public static class SlotStatistics
     }
 
     /// <summary>
-    /// "⚡剩余最短"提示：计时中最小 RemainMin 的仓位（RemainMin>0 才算——
-    /// 剩 0 分即该放行了属 Done 由状态机推进）。无计时回"暂无计时"。
+    /// "⚡剩余最短"的输入：计时中 RemainMin 最小的仓位（RemainMin>0 才算——
+    /// 剩 0 分即该放行了属 Done 由状态机推进）。无计时回 null。
+    /// 文本拼装（"⚡码·剩N小时M分/剩N分"，随显示单位换算）在程序①主 VM 做——
+    /// Core 只给数据，不该掺 UI 单位口径。
     /// </summary>
-    public static string NextClose(IEnumerable<SlotStatItem> items, string prefix = "⚡")
+    public static SlotStatItem? NextClose(IEnumerable<SlotStatItem> items)
     {
         SlotStatItem? best = null;
         foreach (var it in items)
@@ -57,6 +59,6 @@ public static class SlotStatistics
             if (best == null || it.RemainMin < best.RemainMin)
                 best = it;
         }
-        return best == null ? "暂无计时" : $"{prefix}{best.Code}·剩{best.RemainMin}分";
+        return best;
     }
 }

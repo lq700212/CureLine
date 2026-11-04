@@ -1,0 +1,118 @@
+// =========================================================================
+// DurationUnit：固化时长"显示单位"中枢（策略窗 ↔ 主窗共享，程序①私有）
+//
+// 干什么：策略窗右上"单位"下拉（时/分）的状态真源——一处保存，两窗同步：
+//   ① 策略窗 Change() 切单位 → 落盘 config.ini [setting] PolicyTimeUnit 记忆
+//      + 广播 Changed → 主窗立即按新单位重写卡片/统计条的时长文本（不等 500ms 拍）；
+//   ② 重启/开窗时 LoadFromIni（或取静态 Current）回上次选择；
+//   ③ Text/BigText/Suffix 三个纯格式化函数供两窗拼文本——存储、状态机计时、
+//      过账报文恒为分钟，本类只决定"多少分钟用文字怎么说"。
+// 为什么做静态中枢：单位是程序①全局 UI 口径，策略窗与主窗两个独立 VM 要同拍
+//   （用户拍板"策略里切了，主界面也要同步"）；静态单例 + 事件是两 VM 之间最轻
+//   的握手方式（先例：CuringMesPosterHolder 静态桥接、ThemeManager 静态主题）。
+//
+// 秒档删除（用户拍板）：没有秒级的固化工艺，PolicyTimeUnit 只留 时/分 两档——
+//   ini 存量 "Seconds" 值不在新枚举内，LoadFromIni 非法值自愈回 Minutes。
+//
+// 线程纪律：Change/LoadFromIni/恢复 一律 UI 线程调（Changed 订阅方是 VM 集合
+//   刷新，与主窗 500ms 拍同线程口径）；Text/BigText/Suffix 纯函数任意线程可调。
+// =========================================================================
+
+using System.Globalization;
+using CureLine.Core.Infrastructure;
+
+namespace CureStation.ViewModels;
+
+/// <summary>
+/// 固化时长显示单位（仅界面展示/输入口径；存储与状态机恒为分钟）。
+/// 顺序即下拉顺序：时 → 分，TimeUnitIndex 直接取整数值。
+/// </summary>
+public enum PolicyTimeUnit
+{
+    Hours = 0,
+    Minutes = 1,
+}
+
+public static class DurationUnit
+{
+    /// <summary>单位记忆 ini 键（config.ini [setting]，程序①专用 UI 键）。</summary>
+    private const string TimeUnitIniKey = "PolicyTimeUnit";
+
+    private static PolicyTimeUnit _current = ReadIni();
+
+    /// <summary>当前显示单位（切换走 Change，勿直接赋值）。</summary>
+    public static PolicyTimeUnit Current => _current;
+
+    /// <summary>单位切换广播（Change 时触发；订阅方=主窗 VM 立即重刷时长文本）。UI 线程触发。</summary>
+    public static event Action? Changed;
+
+    /// <summary>
+    /// 切换单位（策略窗唯一入口）：落盘记忆 + 置状态 + 广播。
+    /// 收敛在 Hub 一处——策略窗/主窗不再各自读写 ini，防口径分叉。
+    /// </summary>
+    public static void Change(PolicyTimeUnit unit)
+    {
+        if (unit == _current)
+            return;
+        _current = unit;
+        IniFile.Write(AppPaths.ConfigIni, "setting", TimeUnitIniKey, unit.ToString());
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// 重读记忆单位（测试 TestScope 切临时目录后用；生产启动静态初始化已读一次）。
+    /// 缺键/非法值/旧版 "Seconds"（档已删）一律回 Minutes 自愈。
+    /// </summary>
+    public static void LoadFromIni() => _current = ReadIni();
+
+    /// <summary>测试恢复：静默置回快照值（不写盘、不广播）。public 是因测试工程
+    /// 无程序① InternalsVisibleTo——生产代码勿调（正常切换走 Change）。</summary>
+    public static void RecallForTest(PolicyTimeUnit unit) => _current = unit;
+
+    private static PolicyTimeUnit ReadIni()
+    {
+        string text = IniFile.ReadStr(AppPaths.ConfigIni, "setting", TimeUnitIniKey,
+            nameof(PolicyTimeUnit.Minutes));
+        return Enum.TryParse<PolicyTimeUnit>(text, ignoreCase: true, out var unit) &&
+               Enum.IsDefined(unit)
+            ? unit
+            : PolicyTimeUnit.Minutes;
+    }
+
+    // ---------- 分钟数 → 显示文本（纯函数） ----------
+    //
+    // 小时口径规则（用户拍板"智能省略零段"）：
+    //   ≥60 且有余 → "X小时Y分"（1小时28分）；整小时 → "X小时"（2小时）；
+    //   不足 1 小时 → "Y分"（47分）；0 → "0分"（不变量兜底）。
+    // 分钟口径：保持旧显示（大数字纯数字 + "分"后缀、副文"N 分"）。
+
+    /// <summary>
+    /// 带单位整串（状态行"剩 X"、统计条"剩 X"、副文中段）。
+    /// 分钟口径带"分"；小时口径按"X小时Y分/…/Y分"整串。
+    /// </summary>
+    public static string Text(int minutes) => Current == PolicyTimeUnit.Hours
+        ? HourText(minutes)
+        : $"{minutes}分";
+
+    /// <summary>
+    /// 卡片大数字段（26 号字体）：分钟口径=纯数字（"分"由小字体后缀块出）；
+    /// 小时口径=带单位整串（后缀块空串退场，"X小时Y分"整体上大字号）。
+    /// </summary>
+    public static string BigText(int minutes) => Current == PolicyTimeUnit.Hours
+        ? HourText(minutes)
+        : minutes.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>大数字单位后缀（11 号字体块）：分钟="分"；小时=""（整串已带单位）。</summary>
+    public static string Suffix => Current == PolicyTimeUnit.Hours ? "" : "分";
+
+    /// <summary>小时口径整串："X小时Y分" / 整小时"X小时" / 不足 1 小时"Y分"。</summary>
+    private static string HourText(int minutes)
+    {
+        if (minutes <= 0)
+            return "0分";
+        int hours = minutes / 60, rest = minutes % 60;
+        if (hours == 0)
+            return $"{rest}分";
+        return rest > 0 ? $"{hours}小时{rest}分" : $"{hours}小时";
+    }
+}

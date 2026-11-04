@@ -46,17 +46,12 @@ public enum SlotPhase
 }
 
 /// <summary>仓位状态机快照（record 不可变，锁内构造后随便传）。</summary>
-public sealed record SlotStatus(SlotPhase Phase, int TotalMinutes, int RemainMinutes)
-{
-    /// <summary>中文状态文本（界面卡片直接绑）。</summary>
-    public string StateText => Phase switch
-    {
-        SlotPhase.WaitingGate => "待门控",
-        SlotPhase.Curing => RemainMinutes > 0 ? $"计时中 剩{RemainMinutes}分" : "计时中",
-        SlotPhase.Done => "放行",
-        _ => "空闲",
-    };
-}
+/// <remarks>
+/// 旧版 StateText（"计时中 剩X分"中文拼串）已删：文本随显示单位（时/分）换算，
+/// 属 UI 口径——拼装收在程序① RackSlotViewModel.Refresh（缓存快照自己拼），
+/// Core 恒为分钟数据（Phase/TotalMinutes/RemainMinutes）。
+/// </remarks>
+public sealed record SlotStatus(SlotPhase Phase, int TotalMinutes, int RemainMinutes);
 
 public sealed class SlotCuringMachine : IDisposable
 {

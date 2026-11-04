@@ -15,6 +15,7 @@
 
 using CureLine.Core.Infrastructure;
 using CureLine.Core.Mes;
+using CureStation.ViewModels;
 
 namespace CureLine.Tests.Mocks;
 
@@ -33,6 +34,7 @@ public sealed class TestScope : IDisposable
     private readonly string?[] _plcIps = new string?[8];
     private readonly int[] _stationPorts = new int[8];
     private readonly string[] _stationNames = new string[8]; // V0.0.32 机台名静态
+    private readonly PolicyTimeUnit _displayUnit;            // V0.0.56 显示单位静态（DurationUnit）
     private bool _disposed;
 
     /// <summary>本用例专属临时目录（ini/db/日志全放这里）。</summary>
@@ -65,12 +67,14 @@ public sealed class TestScope : IDisposable
         Array.Copy(AppConfig.StationIps, _plcIps, 8);
         Array.Copy(AppConfig.StationPorts, _stationPorts, 8);
         Array.Copy(AppConfig.StationNames, _stationNames, 8);
+        _displayUnit = DurationUnit.Current;   // V0.0.56 单位快照（DurationUnit.Current 静态）
 
         // ---- 隔离：落盘全部重定向到临时目录 ----
         TempDir = Path.Combine(Path.GetTempPath(),
             "PlcBridge_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(TempDir);
         AppPaths.BaseDir = TempDir;
+        DurationUnit.LoadFromIni();   // 静态单位重读 ini（临时目录无键回 Minutes——防上例残留）
         MesLogger.ClearForTests();
     }
 
@@ -113,6 +117,7 @@ public sealed class TestScope : IDisposable
             AppConfig.StationIps[i] = _plcIps[i]!;
         Array.Copy(_stationPorts, AppConfig.StationPorts, 8);
         Array.Copy(_stationNames, AppConfig.StationNames, 8);
+        DurationUnit.RecallForTest(_displayUnit);   // V0.0.56 单位静态恢复（不写盘不广播）
         AppPaths.BaseDir = _baseDir;
         MesLogger.ClearForTests();
         try { Directory.Delete(TempDir, true); } catch { }

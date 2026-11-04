@@ -25,15 +25,16 @@
 //   SelectionMinutesText 回车应用=ApplySelectionCommand（逐格写覆盖行）；
 //   缩放/平移交互仍在 View 层（RenderTransform 属 View 关切，
 //   见 CuringPolicyWindow.xaml.cs）。
-// 时间单位（V0.0.53，用户要求：页面可切 时/分/秒，全部时间文本跟换）：
+// 时间单位（V0.0.53 起，用户要求：页面可切 时/分，全部时间文本跟换；V0.0.56
+//   起秒档删除——用户拍板"没有秒级的固化"，且主窗卡片/统计条随单位同步换）：
 //   **只换显示/输入口径，存储与状态机恒为分钟**（CuringPolicy.GlobalMinutes/
 //   LevelMinutes/SlotMinutes 的 int 分钟语义不动——状态机/持久化/过账零影响）。
 //   切换时把编辑区与仓位行文本按旧单位解析成分钟、再按新单位重写（多步无损：
-//   时=分钟/60，秒=分钟×60；小时显示 0.#### 精度足够整分钟往返）。
-//   解析统一走 TryParseDisplay（支持小数、AwayFromZero 四舍五入到整分钟）；
-//   秒模式输入 30 秒=0.5 分→1 分（计时精度是分钟，UI 提示口径同此）。
-//   选择记忆在 config.ini [setting] PolicyTimeUnit（程序①专用 UI 键，非法回
-//   Minutes，与 PointBitStyle 同款自愈）。
+//   时=分钟/60；小时显示 0.#### 精度足够整分钟往返）。
+//   解析统一走 TryParseDisplay（支持小数、AwayFromZero 四舍五入到整分钟）。
+//   单位真源在 DurationUnit 静态中枢（本程序集共享）：Change() 落盘记忆
+//   config.ini [setting] PolicyTimeUnit + 广播主窗立即重刷时长文本；非法值/
+//   旧版 "Seconds" 自愈回 Minutes（与 PointBitStyle 同款自愈）。
 // 怎么改：新增策略字段 = CuringPolicy 加属性 + 编辑区加控件 + BuildDraft
 //   /ApplyDraft 两处同步 + Validator 加规则；预览分档改 PreviewTiers。
 // =========================================================================
@@ -42,21 +43,9 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Globalization;
 using CureLine.Core.Curing;
-using CureLine.Core.Infrastructure;
 using CureLine.ViewModels;
 
 namespace CureStation.ViewModels;
-
-/// <summary>
-/// 策略窗时间单位（仅界面显示/输入口径；存储与状态机恒为分钟）。
-/// 顺序即下拉顺序：时 → 分 → 秒（用户指定），TimeUnitIndex 直接取整数值。
-/// </summary>
-public enum PolicyTimeUnit
-{
-    Hours = 0,
-    Minutes = 1,
-    Seconds = 2,
-}
 
 /// <summary>每仓位覆盖行（DataGrid 可编辑三列；保存时解析回 SlotMinutes）。</summary>
 public sealed class SlotMinuteRow : ViewModelBase
@@ -121,15 +110,14 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     private readonly IDialogService _dialogs;
     private string _activeName = "";
 
-    /// <summary>时间单位 ini 键（config.ini [setting]，程序①专用 UI 键）。</summary>
-    private const string TimeUnitIniKey = "PolicyTimeUnit";
-
     private PolicyTimeUnit _timeUnit = PolicyTimeUnit.Minutes;
 
     /// <summary>
-    /// 页面时间单位（时/分/秒）：只换显示/输入口径，策略存储与状态机恒为分钟。
-    /// 切换时把编辑区/仓位行文本按旧单位换算成分钟再按新单位重写（无损往返），
-    /// 并落盘记忆（下次打开沿用；非法值开机回 Minutes）。
+    /// 页面时间单位（时/分）：只换显示/输入口径，策略存储与状态机恒为分钟。
+    /// 切换时把编辑区/仓位行文本按旧单位换算成分钟再按新单位重写（无损往返）；
+    /// 单位真源与记忆落盘在 DurationUnit 静态中枢（Change() 写 ini + 广播，
+    /// 主窗卡片/统计条立即按新单位重拼文本）——本字段与之同步，setter 是
+    /// 唯一写点，开窗时从 DurationUnit.Current 取初值。
     /// </summary>
     public PolicyTimeUnit TimeUnit
     {
@@ -153,39 +141,29 @@ public sealed class CuringPolicyViewModel : ViewModelBase
             Raise(nameof(LegendRedText));
             RescaleEditorTexts(oldUnit);   // 编辑区/仓位行文本换单位（分钟值不变）
             RebuildPreview();              // 画布数字/ToolTip/浮层摘要随单位刷新
-            IniFile.Write(AppPaths.ConfigIni, "setting", TimeUnitIniKey, TimeUnit.ToString());
+            DurationUnit.Change(value);    // 落盘记忆 + 广播主窗同步（放最后：本窗全就绪再通知）
         }
     }
 
-    /// <summary>下拉选中索引（枚举值即顺序：0=时 1=分 2=秒）。</summary>
+    /// <summary>下拉选中索引（枚举值即顺序：0=时 1=分）。</summary>
     public int TimeUnitIndex
     {
         get => (int)TimeUnit;
         set
         {
-            if (value is >= (int)PolicyTimeUnit.Hours and <= (int)PolicyTimeUnit.Seconds)
+            if (value is >= (int)PolicyTimeUnit.Hours and <= (int)PolicyTimeUnit.Minutes)
                 TimeUnit = (PolicyTimeUnit)value;
         }
     }
 
-    /// <summary>下拉选项（顺序与枚举一致）。</summary>
-    public IReadOnlyList<string> TimeUnitOptions { get; } = ["时", "分", "秒"];
+    /// <summary>下拉选项（顺序与枚举一致；秒档已删——没有秒级的固化）。</summary>
+    public IReadOnlyList<string> TimeUnitOptions { get; } = ["时", "分"];
 
-    /// <summary>输入框后缀短词：时/分/秒。</summary>
-    public string TimeUnitSuffix => TimeUnit switch
-    {
-        PolicyTimeUnit.Hours => "时",
-        PolicyTimeUnit.Seconds => "秒",
-        _ => "分",
-    };
+    /// <summary>输入框后缀短词：时/分。</summary>
+    public string TimeUnitSuffix => TimeUnit == PolicyTimeUnit.Hours ? "时" : "分";
 
-    /// <summary>描述性文案单位名：小时/分钟/秒（图例/ToolTip/Expander 用）。</summary>
-    public string TimeUnitName => TimeUnit switch
-    {
-        PolicyTimeUnit.Hours => "小时",
-        PolicyTimeUnit.Seconds => "秒",
-        _ => "分钟",
-    };
+    /// <summary>描述性文案单位名：小时/分钟（图例/ToolTip/Expander 用）。</summary>
+    public string TimeUnitName => TimeUnit == PolicyTimeUnit.Hours ? "小时" : "分钟";
 
     /// <summary>每层覆盖折叠区标题（单位随切换）。</summary>
     public string LevelHeaderText => $"每层覆盖（{TimeUnitName}，空=用全局）";
@@ -220,12 +198,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     /// <summary>分钟 → 当前单位的简短显示（图例用，0.##）。</summary>
     private string FormatMinutesShort(int minutes)
     {
-        double value = TimeUnit switch
-        {
-            PolicyTimeUnit.Hours => minutes / 60.0,
-            PolicyTimeUnit.Seconds => minutes * 60.0,
-            _ => minutes,
-        };
+        double value = TimeUnit == PolicyTimeUnit.Hours ? minutes / 60.0 : minutes;
         return value.ToString("0.##", CultureInfo.CurrentCulture);
     }
 
@@ -421,7 +394,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         var text = (SelectionMinutesText ?? "").Trim();
         if (text.Length == 0)
             return;
-        // 按当前单位解析（支持小数）；底层仍是整分钟，秒值按四舍五入到分钟。
+        // 按当前单位解析（支持小数）；底层仍是整分钟。
         if (!TryParseDisplay(text, TimeUnit, out var minutes) || minutes < 1)
         {
             _dialogs.ShowMessage($"固化时长需为 ≥1 分钟（当前单位：{TimeUnitName}）。", "设置时长");
@@ -510,7 +483,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         // 点表配了更多架就铺更多，与主窗展示一致。
         RackCount = Math.Max(CureLine.Core.Curing.SlotLocationCode.RacksPerRow, rackCount);
         LevelCount = Math.Max(CureLine.Core.Curing.SlotLocationCode.Levels, levelCount);
-        _timeUnit = LoadTimeUnitFromIni();   // 记忆上次单位（非法/缺键=分钟）；加载策略前定好口径
+        LoadTimeUnit();   // 单位真源在 DurationUnit 中枢（含 ini 记忆自愈）；加载策略前定好口径
         AddPolicyCommand = new RelayCommand(AddPolicy);
         RemovePolicyCommand = new RelayCommand(RemovePolicy, () => SelectedPolicy != null);
         SaveCommand = new RelayCommand(Save);
@@ -541,34 +514,26 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     private void OnSlotRowPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         => RebuildPreview();
 
-    /// <summary>读上次选择的时间单位（[setting] PolicyTimeUnit；缺键/非法/未定义枚举回分钟）。</summary>
-    private static PolicyTimeUnit LoadTimeUnitFromIni()
+    /// <summary>读上次选择的时间单位：先重读 ini（盘上为准），再取 DurationUnit 中枢值——
+    /// 静态中枢在进程内只初始化一次，外部/MES 改过 ini 或测试手改后开新窗必须重读。</summary>
+    private void LoadTimeUnit()
     {
-        string text = IniFile.ReadStr(AppPaths.ConfigIni, "setting", TimeUnitIniKey,
-            nameof(PolicyTimeUnit.Minutes));
-        return Enum.TryParse<PolicyTimeUnit>(text, ignoreCase: true, out var unit) &&
-               Enum.IsDefined(unit)
-            ? unit
-            : PolicyTimeUnit.Minutes;
+        DurationUnit.LoadFromIni();
+        _timeUnit = DurationUnit.Current;
     }
 
     // ---------- 时间单位换算（显示文本 ↔ 分钟） ----------
 
-    /// <summary>分钟 → 当前单位显示文本（时=÷60，秒=×60；0.#### 精度保证整分钟无损往返）。</summary>
+    /// <summary>分钟 → 当前单位显示文本（时=÷60；0.#### 精度保证整分钟无损往返）。</summary>
     private string FormatMinutes(int minutes)
     {
-        double value = TimeUnit switch
-        {
-            PolicyTimeUnit.Hours => minutes / 60.0,
-            PolicyTimeUnit.Seconds => minutes * 60.0,
-            _ => minutes,
-        };
+        double value = TimeUnit == PolicyTimeUnit.Hours ? minutes / 60.0 : minutes;
         return value.ToString("0.####", CultureInfo.CurrentCulture);
     }
 
     /// <summary>
-    /// 当前单位文本 → 分钟（支持小数；四舍五入到整分钟——状态机计时精度是分钟，
-    /// 秒模式输入 30 秒=0.5 分按 1 分计）。NaN/无穷/超 int 范围一律算格式错。
+    /// 当前单位文本 → 分钟（支持小数；四舍五入到整分钟——状态机计时精度是分钟）。
+    /// NaN/无穷/超 int 范围一律算格式错。
     /// </summary>
     private static bool TryParseDisplay(string? text, PolicyTimeUnit unit, out int minutes)
     {
@@ -576,12 +541,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         if (!double.TryParse((text ?? "").Trim(), NumberStyles.Float,
                 CultureInfo.CurrentCulture, out var value))
             return false;
-        double m = unit switch
-        {
-            PolicyTimeUnit.Hours => value * 60.0,
-            PolicyTimeUnit.Seconds => value / 60.0,
-            _ => value,
-        };
+        double m = unit == PolicyTimeUnit.Hours ? value * 60.0 : value;
         if (double.IsNaN(m) || double.IsInfinity(m) || m is < int.MinValue or > int.MaxValue)
             return false;
         minutes = (int)Math.Round(m, MidpointRounding.AwayFromZero);

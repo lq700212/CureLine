@@ -96,6 +96,37 @@ public sealed class RackSlotViewModel : ViewModelBase
         private set => Set(ref _remainMin, value);
     }
 
+    // ---------- 时长显示文本（随显示单位：V0.0.56 策略窗切时/分主窗同步） ----------
+    //
+    // 分钟口径保持旧显示："47" + 后缀"分"、副文"共 120 分"；小时口径整串
+    // "X小时Y分"（智能省略零段：2小时 / 0小时47分→47分），后缀退场空串。
+    // 数值源仍是分钟（RemainMin/TotalMin），文本在 ApplyKind 一拍内同步落。
+
+    private string _remainDisplay = "0";
+    /// <summary>卡片大数字文本（分钟口径=纯数字；小时口径="X小时Y分"整串）。</summary>
+    public string RemainDisplay
+    {
+        get => _remainDisplay;
+        private set => Set(ref _remainDisplay, value);
+    }
+
+    private string _remainSuffix = "分";
+    /// <summary>大数字单位后缀（分钟="分"；小时=""——整串已带单位）。</summary>
+    public string RemainSuffix
+    {
+        get => _remainSuffix;
+        private set => Set(ref _remainSuffix, value);
+    }
+
+    private string _totalDisplay = "0 分";
+    /// <summary>卡内副文中段："共 {文本} · 已固化 N%"（分钟="120 分"；小时="2小时"）。
+    /// TotalMin=0 的卡片走状态字视图不显示，数值仍落缺省（不变量兜底）。</summary>
+    public string TotalDisplay
+    {
+        get => _totalDisplay;
+        private set => Set(ref _totalDisplay, value);
+    }
+
     private int _totalMin;
     /// <summary>本仓锁定总时长分钟（>0 才有精确计时数据）。</summary>
     public int TotalMin
@@ -149,15 +180,18 @@ public sealed class RackSlotViewModel : ViewModelBase
             ? Math.Clamp((int)Math.Round(100.0 * (TotalMin - RemainMin) / TotalMin,
                 MidpointRounding.AwayFromZero), 0, 100)
             : 0;
+        SyncDisplayTexts();
     }
 
     /// <summary>
     /// 一拍快照刷新（调用方 500ms 定时；数据从语义键直查快照）。
     /// machineStatus=状态机状态（非空闲时展示口径以状态机为准——剩余分钟数
-    /// 灯色反推不出来）；空闲/没动过的仓位走灯色反推口径（与骨架期一致）。
+    /// 灯色反推不出来）。状态词"计时中 剩X"在此按当前显示单位拼装
+    /// （旧版取 Core SlotStatus.StateText——已随单位综合上移 UI 删除）。
     /// </summary>
     public void Refresh(PointTableSnapshot snapshot, bool hasTable, SlotStatus? machineStatus = null)
     {
+        _lastCuring = machineStatus is { Phase: SlotPhase.Curing } c ? c : null;
         if (!hasTable)
         {
             SlotStateText = "未配置";
@@ -179,7 +213,7 @@ public sealed class RackSlotViewModel : ViewModelBase
             : green == true ? "绿灯" : "灭";
         SlotStateText = machineStatus switch
         {
-            { Phase: SlotPhase.Curing } => machineStatus.StateText, // "计时中 剩X分"
+            { Phase: SlotPhase.Curing } st => DescribeCuring(st),
             { Phase: SlotPhase.Done } => "放行",
             { Phase: SlotPhase.WaitingGate } => "待门控",
             _ => mapState(tray, red, yellow, green),                 // 空闲走灯色反推
@@ -205,6 +239,37 @@ public sealed class RackSlotViewModel : ViewModelBase
     private static string mapState(bool? tray, bool? red, bool? yellow, bool? green) =>
         red == true ? "占用" : yellow == true ? "计时中" : green == true ? "放行"
             : tray == true ? "待判定" : "空闲";
+
+    /// <summary>最近一拍的 Curing 状态（单位切换时重拼"剩X"用；非 Curing=null）。</summary>
+    private SlotStatus? _lastCuring;
+
+    /// <summary>
+    /// Curing 状态词（旧版 Core StateText 版式等价）："计时中 剩{文本}"（剩余>0，
+    /// 文本随显示单位：分钟"45分"/小时"1小时28分"），纯"计时中"（无精确剩余）。
+    /// </summary>
+    private string DescribeCuring(SlotStatus status) =>
+        status.RemainMinutes > 0 ? $"计时中 剩{DurationUnit.Text(status.RemainMinutes)}" : "计时中";
+
+    /// <summary>
+    /// 显示单位切换（策略窗 Change 广播后的重写路径）：只重写字面——数值
+    /// （Remain/Total/进度）不动；"剩X"状态词用 _lastCuring 缓存重拼，其余
+    /// 场景 500ms 下一拍自愈。须在 UI 线程调（与 Refresh 同口径）。
+    /// </summary>
+    public void RefreshUnitText()
+    {
+        if (_lastCuring is { } s && s.RemainMinutes > 0)
+            SlotStateText = DescribeCuring(s);
+        SyncDisplayTexts();
+    }
+
+    /// <summary>按当前显示单位落三个文本属性（数值源恒分钟；ApplyKind 与单位切换共用）。</summary>
+    private void SyncDisplayTexts()
+    {
+        bool isHours = DurationUnit.Current == PolicyTimeUnit.Hours;
+        RemainDisplay = DurationUnit.BigText(RemainMin);
+        RemainSuffix = isHours ? "" : "分";
+        TotalDisplay = isHours ? DurationUnit.Text(TotalMin) : $"{TotalMin} 分";
+    }
 }
 
 /// <summary>
@@ -569,6 +634,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             Interval = TimeSpan.FromMilliseconds(500),
         };
         _refreshTimer.Tick += (_, _) => RefreshSlots();
+        // 显示单位（时/分）联动（V0.0.56）：策略窗 DurationUnit.Change 切单位时
+        // 广播——不等 500ms 拍，立即重刷卡片时长文本与统计条"⚡剩X"。事件在
+        // UI 线程触发（策略窗 ComboBox 绑定链），订阅方同 RefreshSlots 线程口径。
+        DurationUnit.Changed += OnDisplayUnitChanged;
 
         // 单线过账装配（P3.2 后半）：读 [CuringMes] 配置 → 建过账服务 →
         // 顶栏状态随 PostingChanged 刷新（后台线程回调，UiInvoke 封送）。
@@ -772,6 +841,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         RefreshWorkOrder();
     }
 
+    /// <summary>
+    /// 策略窗切显示单位（时↔分）的同步刷：卡片时长文本立即按新单位重写 +
+    /// 统计条"⚡剩X"重拼。不动数值与总线/状态机（只字面换口径），UI 线程调用。
+    /// </summary>
+    private void OnDisplayUnitChanged()
+    {
+        foreach (var slot in Slots)
+            slot.RefreshUnitText();
+        RefreshStats();
+    }
+
     private void OpenPointTable()
     {
         // 点表配置=开发者专属（V0.0.49：admin 也不会在下拉里见到此项）。
@@ -936,6 +1016,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        DurationUnit.Changed -= OnDisplayUnitChanged;   // 退订单位广播（防悬挂订阅）
         _refreshTimer.Stop();
         lock (_busLock)
         {
@@ -949,8 +1030,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     // ---------- 顶部统计条 + 下部工单带（方案 D 信息带，2026-10-29） ----------
 
     /// <summary>
-    /// 卡片集合 → 统计条：五态计数 + ⚡剩余最短。纯函数收在 Core 的
-    /// SlotStatistics（可测，主 VM 只做搬运）；500ms 同拍，UI 线程。
+    /// 卡片集合 → 统计条：五态计数 + ⚡剩余最短。计数纯函数收在 Core 的
+    /// SlotStatistics（可测，主 VM 只做搬运）；"⚡码·剩X"文本在此拼——剩余
+    /// 数随显示单位走 DurationUnit（Core NextClose 只选最小项，不掺 UI 口径）。
+    /// 500ms 同拍 + 单位切换广播双入口，UI 线程。
     /// </summary>
     private void RefreshStats()
     {
@@ -961,7 +1044,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         GateCount = gate;
         DoneCount = done;
         AlarmCount = alarm;
-        NextCloseText = SlotStatistics.NextClose(items, prefix: "⚡");
+        var next = SlotStatistics.NextClose(items);
+        NextCloseText = next == null ? "暂无计时" : $"⚡{next.Code}·剩{DurationUnit.Text(next.RemainMin)}";
     }
 
     /// <summary>

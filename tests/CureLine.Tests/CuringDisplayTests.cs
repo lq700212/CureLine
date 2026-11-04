@@ -8,8 +8,10 @@
 using System.Globalization;
 using CureLine.Core.Comms;
 using CureLine.Core.Curing;
+using CureLine.Core.Infrastructure;
 using CureStation;
 using CureStation.ViewModels;
+using CureLine.Tests.Mocks;
 using Xunit;
 
 namespace CureLine.Tests;
@@ -42,14 +44,14 @@ public class CuringDisplayTests
         Assert.Equal((2, 1, 1, 1, 1), (idle, curing, gate, done, alarm));
     }
 
-    [Fact(DisplayName = "NextClose：无计时提示文本")]
+    [Fact(DisplayName = "NextClose：无计时 → null（文案在主 VM 拼）")]
     public void NextClose_NoCuring()
     {
         var items = new[] { new SlotStatItem("Idle", 0, "A01"), new SlotStatItem("Done", 0, "A02") };
-        Assert.Equal("暂无计时", SlotStatistics.NextClose(items));
+        Assert.Null(SlotStatistics.NextClose(items));
     }
 
-    [Fact(DisplayName = "NextClose：取剩余最短（纯文本带⚡与库位码）")]
+    [Fact(DisplayName = "NextClose：取剩余最短仓位（纯数据，文本随显示单位在 UI 拼）")]
     public void NextClose_PicksMinimum()
     {
         var items = new[]
@@ -59,7 +61,135 @@ public class CuringDisplayTests
             new SlotStatItem("Curing", 88, "C02"),
             new SlotStatItem("Idle", 0, "C03"),
         };
-        Assert.Equal("⚡B07·剩12分", SlotStatistics.NextClose(items));
+        var best = SlotStatistics.NextClose(items);
+        Assert.NotNull(best);
+        Assert.Equal("B07", best.Code);
+        Assert.Equal(12, best.RemainMin);
+    }
+
+    // ---------- DurationUnit 显示单位（V0.0.56 策略窗切时/分主窗同步） ----------
+
+    /// <summary>临时目录下补建 config/（WritePrivateProfileString 不自动建目录）。</summary>
+    private static void EnsureConfigDir() =>
+        Directory.CreateDirectory(AppPaths.ConfigDir);
+
+    [Fact(DisplayName = "DurationUnit：分钟口径=旧显示（N分/纯数字/尾'分'）")]
+    public void DurationUnit_Minutes_KeepsLegacyFormat()
+    {
+        using var scope = new TestScope();
+        DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);
+        Assert.Equal("45分", DurationUnit.Text(45));
+        Assert.Equal("120分", DurationUnit.Text(120));
+        Assert.Equal("45", DurationUnit.BigText(45));   // 大数字=纯数字，"分"由后缀出
+        Assert.Equal("分", DurationUnit.Suffix);
+    }
+
+    [Fact(DisplayName = "DurationUnit：小时口径=智能省略零段（X小时第Y分/整X小时/不足1小时Y分）")]
+    public void DurationUnit_Hours_SmartOmitZeroSegment()
+    {
+        using var scope = new TestScope();
+        DurationUnit.RecallForTest(PolicyTimeUnit.Hours);
+        Assert.Equal("2小时", DurationUnit.Text(120));      // 整小时省"0分"
+        Assert.Equal("1小时28分", DurationUnit.Text(88));   // 88 分 = 1 时 28 分
+        Assert.Equal("47分", DurationUnit.Text(47));        // 不足 1 小时省"0小时"
+        Assert.Equal("0分", DurationUnit.Text(0));          // 不变量兜底
+        Assert.Equal("2小时", DurationUnit.BigText(120));
+        Assert.Equal("" , DurationUnit.Suffix);             // 整串已带单位，后缀退场
+    }
+
+    [Fact(DisplayName = "DurationUnit：Change 落盘 ini 记忆 + 触发广播")]
+    public void DurationUnit_Change_PersistsAndRaises()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);
+        int raised = 0;
+        void OnChanged() => raised++;
+        DurationUnit.Changed += OnChanged;
+        try
+        {
+            DurationUnit.Change(PolicyTimeUnit.Hours);
+            Assert.Equal(PolicyTimeUnit.Hours, DurationUnit.Current);
+            Assert.Equal("Hours", IniFile.ReadStr(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", ""));
+            Assert.Equal(1, raised);
+
+            DurationUnit.Change(PolicyTimeUnit.Hours);   // 同值不触发（幂等）
+            Assert.Equal(1, raised);
+        }
+        finally
+        {
+            DurationUnit.Changed -= OnChanged;
+            DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);
+        }
+    }
+
+    // ---------- 卡片时长文本（随显示单位） ----------
+
+    [Fact(DisplayName = "卡片文本：分钟口径保持旧显示（'47'+尾'分'、副文'120 分'）")]
+    public void CardText_Minutes_Legacy()
+    {
+        using var scope = new TestScope();
+        DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);
+        var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
+        slot.Refresh(PointTableSnapshot.Empty, true, new SlotStatus(SlotPhase.Curing, 120, 47));
+
+        Assert.Equal("47", slot.RemainDisplay);
+        Assert.Equal("分", slot.RemainSuffix);
+        Assert.Equal("120 分", slot.TotalDisplay);
+        Assert.Equal("计时中 剩47分", slot.SlotStateText);
+    }
+
+    [Fact(DisplayName = "卡片文本：小时口径整串+状态词'剩1小时15分'（RefreshUnitText 只换字面）")]
+    public void CardText_Hours_SyncsOnUnitNameOnly()
+    {
+        using var scope = new TestScope();
+        DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);
+        var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
+        slot.Refresh(PointTableSnapshot.Empty, true, new SlotStatus(SlotPhase.Curing, 120, 75));
+
+        // 切小时（模拟策略窗广播）→ 立即重刷：数值不动、字面全换
+        Assert.Equal(120, slot.TotalMin);   // 前置锚点
+        DurationUnit.RecallForTest(PolicyTimeUnit.Hours);
+        slot.RefreshUnitText();
+
+        Assert.Equal("1小时15分", slot.RemainDisplay);  // 75 分 = 1 时 15 分
+        Assert.Equal("", slot.RemainSuffix);
+        Assert.Equal("2小时", slot.TotalDisplay);
+        Assert.Equal("计时中 剩1小时15分", slot.SlotStateText);   // 缓存快照重拼
+        Assert.Equal(120, slot.TotalMin);   // 数值未动
+        Assert.Equal(38, slot.ProgressPct); // 进度未动 ((120-75)/120=37.5% → 38 AwayFromZero)
+
+        // 回分钟无损
+        DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);
+        slot.RefreshUnitText();
+        Assert.Equal("75", slot.RemainDisplay);
+        Assert.Equal("分", slot.RemainSuffix);
+        Assert.Equal("120 分", slot.TotalDisplay);
+    }
+
+    [Fact(DisplayName = "主窗联动：策略窗 Change(时) → 卡片/统计条文本立即同步 + ini 落盘")]
+    public void MainVm_DisplayUnitChange_ImmediatelyResyncesTexts()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);
+        var fake = new FakeCureDialogService();
+        using var vm = new MainViewModel(fake);
+
+        // 手动点亮一张卡（生产链路是 500ms 拍走同方法 Refresh，此处直调同口径）
+        var slot = vm.Slots.First(s => s.Rack == 1 && s.Level == 1);
+        slot.Refresh(PointTableSnapshot.Empty, true, new SlotStatus(SlotPhase.Curing, 120, 75));
+        Assert.Equal("75", slot.RemainDisplay);   // 前置锚点：分钟口径
+
+        // 策略窗唯一入口 Change=写 ini 记忆 + 广播 → 主窗订阅立即重刷（不等 500ms）
+        DurationUnit.Change(PolicyTimeUnit.Hours);
+
+        Assert.Equal("1小时15分", slot.RemainDisplay);   // 75 分 = 1 时 15 分
+        Assert.Equal("", slot.RemainSuffix);
+        Assert.Contains("剩1小时15分", vm.NextCloseText);  // 统计条同口（⚡码·剩X）
+        Assert.Equal("Hours", IniFile.ReadStr(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", ""));
+
+        DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);  // 收尾还原（TestScope Dispose 双保险）
     }
 
     // ---------- RackSlotViewModel.Kind 映射 ----------
