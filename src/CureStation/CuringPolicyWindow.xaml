@@ -12,6 +12,7 @@
         Height="760" Width="1280"
         WindowStartupLocation="CenterScreen" MinWidth="1080" MinHeight="660"
         PreviewKeyDown="OnWindowPreviewKeyDown"
+        PreviewMouseDown="OnWindowPreviewMouseDown"
         WindowStyle="None" Background="Transparent" AllowsTransparency="True"
         Foreground="{DynamicResource Brush.Fresh.FgMid}"
         Icon="Assets/app.ico"

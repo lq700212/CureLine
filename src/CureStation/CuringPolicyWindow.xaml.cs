@@ -213,6 +213,39 @@ public partial class CuringPolicyWindow : Window
         e.Handled = true;
     }
 
+    // ---------- 窗口级焦点口径（用户拍板：非输入框区域点击，输入框一律失焦） ----------
+
+    /// <summary>
+    /// 窗口任意处按下鼠标：点击的不是输入框自身区域 → 清掉键盘焦点。
+    /// 为什么：WPF 缺省只把焦点转给"下一个可聚焦控件"，点参数条空白/画布/
+    /// 卡片空白等不可聚焦区域时输入框会一直带着光标（回车还落在输入框里）。
+    /// 怎么做：隧道事件最先于一切命中处理执行——命中链上有 TextBox（策略名/
+    /// 全局时长/每层覆盖/浮层时长框）不干预（正常输入聚焦）；其余区域先
+    /// Keyboard.ClearFocus → 可聚焦控件（按钮/复选/下拉/列表项）随后会在
+    /// 自己的 MouseDown 处理里把焦点抢回去（tunnel 先于 bubble，互不冲突），
+    /// 不可聚焦区域则输入框彻底失焦。不设 e.Handled——画布点选/框选/标题条
+    /// 拖动等后续逻辑零影响。下拉项/右键菜单虽在 Popup 里，隧道事件沿逻辑树
+    /// 照样经过窗口，口径一致。
+    /// </summary>
+    private void OnWindowPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is DependencyObject d && FindSelfOrAncestor<TextBox>(d) != null)
+            return;                 // 点在输入框自身（文本区/边框）→ 正常聚焦
+        Keyboard.ClearFocus();      // 其他区域一律先失焦；可聚焦控件随后自行抢回
+    }
+
+    /// <summary>沿视觉树向上找 T 类型祖先（含自身）。命中源可能是 TextBox 内部的
+    /// TextBoxView/ScrollViewer，逐层爬到 TextBox 才算"点了输入框"；
+    /// Popup 内元素沿自身可视链爬不到窗口也无妨（爬到头回 null=不豁免）。</summary>
+    private static T? FindSelfOrAncestor<T>(DependencyObject? start)
+        where T : DependencyObject
+    {
+        for (var d = start; d != null; d = System.Windows.Media.VisualTreeHelper.GetParent(d))
+            if (d is T hit)
+                return hit;
+        return null;
+    }
+
     /// <summary>Esc 清除选择（浮层随 HasSelection 关闭）。</summary>
     private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
     {
