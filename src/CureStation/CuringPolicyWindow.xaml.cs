@@ -231,6 +231,14 @@ public partial class CuringPolicyWindow : Window
     {
         if (e.OriginalSource is DependencyObject d && FindSelfOrAncestor<TextBox>(d) != null)
             return;                 // 点在输入框自身（文本区/边框）→ 正常聚焦
+        // 先推源再清焦点（用户反馈 V0.0.59）：Keyboard.ClearFocus 只清键盘焦点，
+        // 逻辑焦点不动，TextBox 的 LostFocus 类处理（绑定推源）不会触发——点画布/
+        // 参数条空白后"全局时长/层覆盖"的新值滞留在输入框里，画布格子仍显旧值。
+        // 补一发 UpdateSource：新值进 VM → setter 里的 RebuildPreview 立即按新值
+        // 重建画布（纯内存展示，不落盘不激活，存盘仍只有保存/激活按钮的职责）；
+        // 输入中途（焦点未走）视图保持稳定，与"点击别处才更新"的节奏一致。
+        if (FocusManager.GetFocusedElement(this) is TextBox editing)
+            editing.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
         Keyboard.ClearFocus();      // 其他区域一律先失焦；可聚焦控件随后自行抢回
     }
 
