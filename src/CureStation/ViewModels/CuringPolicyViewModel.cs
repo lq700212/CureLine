@@ -409,6 +409,10 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     /// 浮层【应用】：把输入时长写到全部选中格的 SlotRows 覆盖行（有则改无则增，
     /// 行匹配宽松化——表里手填可能带空格；写入用规范数字文本）。空输入静默忽略
     /// （浮层保持打开，误触回车不弹框）；非数字/≤0 弹框拦。
+    /// 例外——**全选应用升格为改全局**：选中格铺满整个画布（架×层一个不少）时，
+    /// "把每格都设成同一个值"在数据语义上就等于设全局（上层=len 层=len），
+    /// 此时同步编辑区全局时长框 + 清掉全部仓位/层覆盖行，数据归一（否则 30 条
+    /// 冗余覆盖行把值盖住，全局框还是旧值，用户看到的两处数字对不上）。
     /// </summary>
     private void ApplySelection()
     {
@@ -421,6 +425,19 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         if (!TryParseDisplay(text, TimeUnit, out var minutes) || minutes < 1)
         {
             _dialogs.ShowMessage($"固化时长需为 ≥1 分钟（当前单位：{TimeUnitName}）。", "设置时长");
+            return;
+        }
+        // 全选升格为改全局：同步编辑区（全局框通知会自动 RebuildPreview——
+        // 覆盖清掉后所有格子回层/全局口径），再清仓位/层覆盖行，数据归一。
+        if (_selectedKeys.Count == RackCount * LevelCount)
+        {
+            EditGlobalMinutes = FormatMinutes(minutes);
+            EditLevel1Min = "";
+            EditLevel2Min = "";
+            EditLevel3Min = "";
+            EditLevel4Min = "";
+            SlotRows.Clear();   // 集合通知链会自动重建预览，此处不必再调 RebuildPreview
+            SelectionMinutesText = "";
             return;
         }
         foreach (var key in _selectedKeys)

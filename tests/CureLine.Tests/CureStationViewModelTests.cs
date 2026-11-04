@@ -743,6 +743,83 @@ public class CureStationViewModelTests
     }
 
     [Fact]
+    public void PolicyVm_CanvasApplySelectAll_PromotesToGlobal()
+    {
+        // 画布全选应用 = 改全局（用户实测报障：全选格子应用时长后，标题栏全局框
+        // 不同步——V0.0.55 起"每格同值"在语义上就等价设全局，数据归一不铺覆盖行）。
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        // 先制造"全局 120 + 两处覆盖（仓位行 + 手填 SlotRow）"的脏状态
+        vm.EditGlobalMinutes = "120";
+        vm.EditLevel2Min = "90";
+        vm.SlotRows.Add(new CureStation.ViewModels.SlotMinuteRow
+        {
+            Rack = "3",
+            Level = "2",
+            Minutes = "20",
+        });
+        Assert.Equal(90, Cell(vm, 1, 2).Minutes);      // 层覆盖生效中
+
+        // 框选全部格子（整画布铺满）统一应用 1440 分（=24 时）
+        vm.ReplaceSelection(vm.SlotPreviewItems);
+        Assert.Equal(vm.RackCount * vm.LevelCount, vm.SlotPreviewItems.Count(x => x.IsSelected));
+        vm.SelectionMinutesText = "1440";
+        vm.ApplySelectionCommand.Execute(null);
+
+        // 编辑区全局框同步（24 时=1440 分），层覆盖框清空
+        Assert.Equal("1440", vm.EditGlobalMinutes);
+        Assert.Equal("", vm.EditLevel2Min);
+        // 仓位覆盖清光（含手填 3-2 行），数据归一不再有特殊格
+        Assert.Empty(vm.SlotRows);
+        Assert.All(vm.SlotPreviewItems, x => { Assert.Equal(1440, x.Minutes); Assert.False(x.IsSpecial); });
+        // 选择保持 + 输入清空（同单格应用的手感）
+        Assert.True(vm.HasSelection);
+        Assert.Equal("", vm.SelectionMinutesText);
+    }
+
+    [Fact]
+    public void PolicyVm_CanvasApplySelectAll_HoursUnits_SyncsGlobalBox()
+    {
+        // 全选升格走 FormatMinutes：小时单位下全局框应写"24"（单位显示口径），
+        // 底层仍归一为 1440 分钟——两处数字一致且入库存分钟。
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Hours;   // 页面口径=时
+
+        vm.ReplaceSelection(vm.SlotPreviewItems.ToList());
+        vm.SelectionMinutesText = "24";
+        vm.ApplySelectionCommand.Execute(null);
+
+        Assert.Equal("24", vm.EditGlobalMinutes);      // 全局框=24 时（与画布同口径）
+        Assert.All(vm.SlotPreviewItems, x => Assert.Equal(1440, x.Minutes));   // 底层分钟
+        Assert.Empty(vm.SlotRows);
+    }
+
+    [Fact]
+    public void PolicyVm_CanvasApplyPartial_NeverTouchesGlobal()
+    {
+        // 非全选（≤ 格子总数）照旧写仓位覆盖行，全局框不动——升格只认"铺满画布"。
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        vm.EditGlobalMinutes = "120";
+
+        vm.ReplaceSelection(new[] { Cell(vm, 3, 2), Cell(vm, 7, 1) });
+        vm.SelectionMinutesText = "60";
+        vm.ApplySelectionCommand.Execute(null);
+
+        Assert.Equal("120", vm.EditGlobalMinutes);     // 全局不动
+        Assert.Single(vm.SlotRows, r => r.Rack == "3" && r.Level == "2");
+        Assert.Single(vm.SlotRows, r => r.Rack == "7" && r.Level == "1");
+        Assert.Equal(60, Cell(vm, 3, 2).Minutes);
+    }
+
+    [Fact]
     public void PolicyVm_IsSpecial_TrueOnlyForOverrideSlots_EvenWhenEqual()
     {
         using var scope = new TestScope();

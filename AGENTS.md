@@ -108,10 +108,10 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 434/434（V0.0.54 全量；V0.0.53 及以前各轮增量明细见各版本
+   `dotnet test` 437/437（V0.0.55 全量；V0.0.53 及以前各轮增量明细见各版本
    CHANGELOG，V0.0.33~37 增量未逐版回填此括号——基线此后只增不减，
    V0.0.49 因删改密面板与旧权限窗用例净减 4、自愈播种防回归 +2，
-   V0.0.54 软件授权 +18）；禁止交付编译不过/测试不过的代码。
+   V0.0.54 软件授权 +18，V0.0.55 策略窗全选升格 +3）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
    **`LicenseSignKey.dat`（软件激活签名私钥）** 只留厂商签发工具目录，已
@@ -480,7 +480,12 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   选择真源=VM `_selectedKeys` 键集合（格子对象每次 RebuildPreview 全新
   重建引用，选中态按键恢复——勿依赖 item.IsSelected 自身）；浮层应用=
   `ApplySelectionCommand` 逐格写 SlotRows（有则改无则增）→ 行通知自动
-  重建；浮层焦点必须 `Dispatcher.BeginInvoke`（鼠标 up 内同步 Focus 被
+  重建；**全选应用=改全局（V0.0.55 用户反馈）**：选中格铺满画布（架×层
+  一个不少）时【应用】升格为设全局时长——同步编辑区全局框 + 清空仓位/层
+  覆盖（"每格同值"语义上就是全局，否则 30 条冗余覆盖把值盖住、全局框停
+  旧值看着"不同步"）；非全选照旧写仓位覆盖行、全局不动（用例锁定
+  `PolicyVm_CanvasApplySelectAll_PromotesToGlobal` 等 3 例）；
+  浮层焦点必须 `Dispatcher.BeginInvoke`（鼠标 up 内同步 Focus 被
   WPF 点击聚焦覆盖）。缩放/平移/命中矩形在 View 层（TransformToVisual
   宽高乘 scale），业务零耦合（CuringPolicyWindow.xaml.cs）。
 - **IO 通讯测试窗语义（V0.0.20 三轮，全在 `IoTestViewModel`）**：① 通道
