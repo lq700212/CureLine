@@ -210,7 +210,7 @@
 | `src/CureLine.Core/Comms/IoBus.cs` | `IPointTableBus` + 真机 `ModbusPointTableBus`（逐块读写/RMW 写 DO/5s 重连）+ 演示 `MockPointTableBus` |
 | `src/CureLine.Core/Comms/IoCouplerConnectionTester.cs` | IO 耦合器连通测试（三态文案，先测再存） |
 | **程序①（策略预置 + IO 测试，V0.0.20 三轮新增）** | |
-| `src/CureStation/ViewModels/CuringPolicyViewModel.cs` | 策略窗编排：预置库（IsPreset）/套用为自定义/三拦截/先改副本/可视化预览数据（`SlotPreviewItem` 四档色键） |
+| `src/CureStation/ViewModels/CuringPolicyViewModel.cs` | 策略窗编排：预置库（IsPreset）/套用目标可选/三拦截/先改副本/「自定义」恒存在（防删+自愈）/改名跟随/可视化预览数据（`SlotPreviewItem` 四档色键）/生效中徽标（`ActiveName`） |
 | `src/CureStation/ViewModels/IoTestViewModel.cs` + `IoTestWindow.*` | IO 通讯测试窗：点表驱动仓位卡网格（DI 只读灯/DO 点击钮）+ 一键遍历跑马灯 + 共享总线（关窗 Detach） |
 | **Core 共享（软件授权家族，V0.0.54 新增）** | |
 | `src/CureLine.Core/Security/LicenseCodec.cs` | **授权编解码单一事实源**（主程序 + 签发工具链接同一份）：双产品设备码（CureLine `CURE` / HJVision `HUAJI`）、挑战值、payload 布局、Crockford Base32、内置公钥验签。payload `[14..15]` 产品 ID（`0x434C`/`0xFFFF`）是两产品隔离的唯一依据，验签后必须由 `LicenseGate` 比对 |
@@ -365,10 +365,14 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   红灯状态机不写（留异常语义）；② 计时状态**缺省不持久化**——断电/重启后托盘在架
   的仓位重新计时（宁可重计也不放行没固化够的货）；**策略勾 `PersistMinutes`
   才持久化**（`config/curingstate.json`，状态变化即全量重写，重启按记录续算，
-  断电时间计入固化时长；CuringStateStore，删文件即回退重计）；③ 策略热切换只
-  影响新到位的仓位，进行中的按开计时那一刻锁定的时长走完（持久化恢复也用
-  记录里的锁定时长，不用当前策略）；④ WaitingGate 不落盘——没开计时，重启
-  重走门控。改流程先改 `SlotCuringMachine` 头注释与 `SlotCuringMachineTests` 断言。
+  断电时间计入固化时长；CuringStateStore，删文件即回退重计）；③ 策略热切换：
+  新到位仓位开计时现取当前策略（激活即热更）；在制仓位默认按开计时那一刻
+  锁定的时长走完，**宿主收口调 `ApplyPolicyHotChange`（V0.0.58）做单向热更
+  ——只延不缩**：新解析值比锁定值大才延长并同步重写 curingstate.json，调小
+  一律不动（调小立即生效=自动放行没固化够的货，工艺红线；Gate/Done 不参与）；
+  持久化恢复也用记录里的锁定时长（热更延长后记录同步更新）；④ WaitingGate
+  不落盘——没开计时，重启重走门控。改流程先改 `SlotCuringMachine` 头注释与
+  `SlotCuringMachineTests` 断言。
 - **权限门禁语义（V0.0.49 三级角色起生效，全在 `OperatorStore` +
   `MainViewModel.Gate` 一处）**：① 账号体系两程序各自独立——程序①
   `operators` 表三级 `OperatorRole`（Operator 操作员 < Admin 管理员 <
@@ -472,16 +476,27 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   用户会误判"添加策略没保存"**（V0.0.53 用户实测反馈的根因）；失败路径不发
   RequestClose。落盘走 `TrySave`（异常弹可见原因），且先落盘成功才
   `ApplyDraftToSelected`（写盘失败不污染内存策略）。
-- **策略预置/套用语义（V0.0.20 三轮起，全在 `CuringPolicy.IsPreset` +
-  `CuringPolicyViewModel`）**：① 预置策略（IsPreset=true，出厂模板）可选中
-  查看/编辑，但保存/激活/删除一律 VM 层拦下——唯一出口【套用为自定义策略】
-  （编辑内容**整体替换**写入"自定义"并激活，不残留旧覆盖行）；② **激活只认
-  自定义**（BuildDefaultBook 激活名="自定义"且"自定义"排 Policies[0]——
-  ResolveActive 兜底回它，激活名失效时程控不停摆）；③ 老版本 JSON 无
-  IsPreset 字段反序列化 false=全按自定义，兼容零迁移；④ 保存链=先改副本：
+- **策略预置/套用语义（V0.0.20 三轮起；V0.0.57 用户拍板「自定义恒显 +
+  套用目标可选 + 开窗即显生效策略」，全在 `CuringPolicy.IsPreset` +
+  `CuringPolicyViewModel`）**：① **「自定义」恒存在**（唯一系统缺省策略）：
+  删除一律拦（弹提示给出路）+ 载入库缺它时自愈补回（缺省 120 分钟插队首，
+  与 BuildDefaultBook 同口径；只补内存，保存时自然落盘）——预置模板有
+  缺省落点、激活名失效时 ResolveActive 兜底回它，程控不停摆；② 预置策略
+  （IsPreset=true，出厂模板）可选中查看/编辑，但保存/激活/删除一律 VM 层
+  拦下——唯一出口【套用所选模板】，**套用目标可选（V0.0.57）**：底部
+  "套用目标"下拉=全部非预置策略（「自定义」+用户自建），缺省「自定义」；
+  编辑内容**整体替换**写入目标并**激活目标**（不残留旧覆盖行）；名单/选中
+  由 `SyncApplyTargets` 在载入/增删/保存/套用后重算（目标被删兜底回
+  「自定义」，永指向存在的策略）；③ 非预置策略可自由【激活并生效】任意
+  一条；**改名跟随**：仅保存被改名的策略恰是当前生效策略时，激活名同步
+  换新名（否则激活名悬挂、重启 ResolveActive 兜底回缺省 120，现场时长
+  凭空变）；④ 打开窗口缺省选中当前生效策略（ResolveActive），列表项
+  "生效中"徽标=本项名==`ActiveName`（INPC 属性 + XAML MultiBinding +
+  `StringEqualsConverter` 比对——Core 模型不背 UI 态）；⑤ 老版本 JSON 无
+  IsPreset 字段反序列化 false=全按自定义，兼容零迁移；⑥ 保存链=先改副本：
   BuildDraftFromEditor 产草稿→**草稿替换选中项进库校验**→过了才
   ApplyDraftToSelected+落盘（改名撞车不污染原对象，对齐 AgingTestSystem
-  大扫荡教训）；⑤ 可视化画布（**V0.0.43 起是主编辑区，"点格子直接改"；
+  大扫荡教训）；⑦ 可视化画布（**V0.0.43 起是主编辑区，"点格子直接改"；
   V0.0.44 起策略编辑面板与每仓位覆盖行表整体删除**——职能全被画布+浮层
   替代，四项参数（名/全局/门控/断电续算）收一行参数条、每层覆盖折叠进
   左列，`AddSlotRow/RemoveSlotRow/SelectedSlotRow` 链已删勿加回，
@@ -508,7 +523,16 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   `PolicyVm_CanvasApplySelectAll_PromotesToGlobal` 等 3 例）；
   浮层焦点必须 `Dispatcher.BeginInvoke`（鼠标 up 内同步 Focus 被
   WPF 点击聚焦覆盖）。缩放/平移/命中矩形在 View 层（TransformToVisual
-  宽高乘 scale），业务零耦合（CuringPolicyWindow.xaml.cs）。
+  宽高乘 scale），业务零耦合（CuringPolicyWindow.xaml.cs）；
+  ⑧ **保存即三重热更反馈（V0.0.58，收口在 `MainViewModel.LoadPolicyBook`）**：
+  保存返回 true → 主窗重读策略库 → ① 顶栏 `PolicyText` 带全局时长
+  （"策略：自定义 · 全局120分"，随显示单位换口径——`RefreshPolicyText`
+  是 LoadPolicyBook 与 OnDisplayUnitChanged 双入口，勿再散写）；
+  ② `SlotCuringMachine.ApplyPolicyHotChange` 在制单向上调（状态机四键③）；
+  ③ 空闲卡"计划 X"预览下一拍（≤500ms）立见新值（`RackSlotViewModel.PlanText`，
+  仅 Idle 有值、策略未知="计划 —"，非空闲态不给——托盘在架/灯在亮有各自
+  副文或无计划语义）。此前"改全局时长主界面没更新"的观感根因=②不可行
+  （在制调小=放行未固化货，工艺红线）+①③缺反馈，勿回退顶栏纯名字口径。
 - **IO 通讯测试窗语义（V0.0.20 三轮，全在 `IoTestViewModel`）**：① 通道
   清单完全来自点表（Role≠Reserved、架层>0），仓位卡补占位保持三格齐整
   （Exists=false 不响应点击）——**换项目零代码**，勿写死通道表；② 共享

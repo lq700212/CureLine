@@ -88,6 +88,26 @@ public sealed class RackSlotViewModel : ViewModelBase
         private set => Set(ref _kind, value);
     }
 
+    private int _planMinutes;
+    /// <summary>最近一拍"空闲计划时长"分钟（策略三级解析值；非空闲拍不更新）。
+    /// 缓存它而不是在属性里存文本——单位切换时 RefreshUnitText 重拼"计划 X"。</summary>
+    private string _planText = "";
+    /// <summary>
+    /// 空闲卡计划时长预览（V0.0.58）："计划 2小时"/"计划 120 分"（随显示单位
+    /// 走 DurationUnit）；策略未知时"计划 —"。只在 Kind=Idle 的拍有值，其它态
+    /// 清空（XAML 以 Kind=Idle 触发器控显隐，文本空行不出现）。
+    /// </summary>
+    public string PlanText
+    {
+        get => _planText;
+        private set => Set(ref _planText, value);
+    }
+
+    /// <summary>"计划 X"文本拼装（分钟口径"N分"；小时口径 HourText 智能省略零段）。</summary>
+    private static string FormatPlan(int planMinutes) => planMinutes > 0
+        ? $"计划 {DurationUnit.Text(planMinutes)}"
+        : "计划 —";
+
     private int _remainMin;
     /// <summary>剩余固化分钟（状态机 Curing 精确值；灯色反推=0）。</summary>
     public int RemainMin
@@ -206,6 +226,9 @@ public sealed class RackSlotViewModel : ViewModelBase
                 MidpointRounding.AwayFromZero), 0, 100)
             : 0;
         SyncDisplayTexts();
+        // 空闲计划预览（V0.0.58）：只对 Idle 态给"计划 X"字面（策略三级解析值），
+        // 其它态清空——XAML 以 Kind=Idle 触发器控显隐，非空闲卡不出现该行。
+        PlanText = kind == "Idle" ? FormatPlan(_planMinutes) : "";
     }
 
     /// <summary>
@@ -214,8 +237,10 @@ public sealed class RackSlotViewModel : ViewModelBase
     /// 灯色反推不出来）。状态词"计时中 剩X"在此按当前显示单位拼装
     /// （旧版取 Core SlotStatus.StateText——已随单位综合上移 UI 删除）。
     /// </summary>
-    public void Refresh(PointTableSnapshot snapshot, bool hasTable, SlotStatus? machineStatus = null)
+    public void Refresh(PointTableSnapshot snapshot, bool hasTable, SlotStatus? machineStatus = null,
+        int planMinutes = 0)
     {
+        _planMinutes = planMinutes;   // 缓存本拍策略解析值（ApplyKind 落 Idle 字面 / 单位切换重拼用）
         _lastCuring = machineStatus is { Phase: SlotPhase.Curing } c ? c : null;
         if (!hasTable)
         {
@@ -284,6 +309,9 @@ public sealed class RackSlotViewModel : ViewModelBase
     {
         if (_lastCuring is { } s && s.RemainMinutes > 0)
             SlotStateText = DescribeCuring(s);
+        // 空闲计划预览随显示单位换口径（"计划 2小时"↔"计划 120 分"——用
+        // 最近一拍缓存的 _planMinutes 重拼，不等 500ms 拍；非 Idle 态清空兜底）。
+        PlanText = Kind == "Idle" ? FormatPlan(_planMinutes) : "";
         SyncDisplayTexts();
     }
 
@@ -712,7 +740,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// <summary>
     /// 工艺策略装载：缺/坏 → 缺省库落盘自愈（静默不弹框——策略有缺省值可直接跑，
     /// 与点表"要用户改 IP"不同，不打扰操作员；自愈原因进操作日志）。
-    /// 激活名同步到顶栏 PolicyText。
+    /// 激活名同步到顶栏 PolicyText；随后做一次"在制固化时长单向上调"热更收口
+    /// （V0.0.58，见 SlotCuringMachine.ApplyPolicyHotChange）——策略窗保存返回
+    /// 即把新时长应用到进行中的仓位（只延不缩），不等每个仓位自然结续到点。
     /// </summary>
     private void LoadPolicyBook()
     {
@@ -726,7 +756,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 LocalLogService.Write(r);
         }
         _policyBook = book;
-        PolicyText = $"策略：{book.ResolveActive()?.Name ?? "无"}";
+        RefreshPolicyText();
+        _machine?.ApplyPolicyHotChange();   // 在制单向热更收口（启动时无在制，幂等）
+    }
+
+    /// <summary>顶栏策略段：激活名 + 全局时长（随显示单位时/分换口径；
+    /// LoadPolicyBook 装载与 OnDisplayUnitChanged 单位切换双入口）。</summary>
+    private void RefreshPolicyText()
+    {
+        var active = _policyBook?.ResolveActive();
+        PolicyText = active == null ? "策略：无"
+            : $"策略：{active.Name} · 全局{DurationUnit.Text(active.GlobalMinutes)}";
     }
 
     /// <summary>状态机取当前激活策略（每次托盘到位现取——策略窗激活后热切换生效）。</summary>
@@ -860,10 +900,14 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private void RefreshSlots()
     {
         var snapshot = _bus?.LatestSnapshot;
+        // 空闲卡"计划 X"预览（V0.0.58）：激活策略每拍现取 + 仓位三级解析
+        // （仓位>层>全局）——策略窗热更后下一拍（≤500ms）空闲卡立见新时长。
+        var planPolicy = GetActivePolicy();
         foreach (var slot in Slots)
         {
             var status = _machine?.GetStatus(slot.Rack, slot.Level);
-            slot.Refresh(snapshot ?? PointTableSnapshot.Empty, snapshot != null, status);
+            slot.Refresh(snapshot ?? PointTableSnapshot.Empty, snapshot != null, status,
+                planPolicy?.ResolveMinutes(slot.Rack, slot.Level) ?? 0);
         }
         // 统计条 + 工单带同拍刷（挂在同一 500ms tick 内，不另起定时器；UI 线程）。
         RefreshStats();
@@ -879,6 +923,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         foreach (var slot in Slots)
             slot.RefreshUnitText();
         RefreshStats();
+        RefreshPolicyText();   // 顶栏"全局 X"段随显示单位换口径（V0.0.58）
     }
 
     private void OpenPointTable()

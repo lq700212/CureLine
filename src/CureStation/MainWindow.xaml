@@ -355,6 +355,23 @@
                                         </Style>
                                     </TextBlock.Style>
                                 </TextBlock>
+                                <!-- 空闲计划预览（V0.0.58）：仅 Idle 态显示"计划 X"（激活策略三级解析：
+                                     仓位>层>全局，随 DurationUnit 显示单位同拍换口径）；缺省 Collapsed
+                                     进 Setter（V0.0.46 触发器死区口诀），文本绑 VM PlanText（策略未知="计划 —"）；
+                                     非空闲态（托盘在架/灯在亮/未配置）不出现——那几态有各自副文或无计划语义 -->
+                                <TextBlock Text="{Binding PlanText, FallbackValue=计划 —}" FontSize="10.5" Margin="0,4,0,0"
+                                           Foreground="{DynamicResource Brush.NumSmall}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Idle">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </StackPanel>
                             <!-- 大数字视图：数字 26 号 + 单位字 11 号（与"分"后缀同字号）交替；
                                  分钟"47|分"、小时"1|小时|28|分"（第二组显隐由 RemainHasTail）+

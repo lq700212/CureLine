@@ -208,6 +208,42 @@ public class CuringDisplayTests
         DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);  // 收尾还原（TestScope Dispose 双保险）
     }
 
+    [Fact(DisplayName = "卡片文本：空闲计划预览（仅 Idle 有值、单位切换重拼、非空闲清空/策略未知='计划 —'）")]
+    public void CardText_PlanText_IdleOnly()
+    {
+        using var scope = new TestScope();
+        DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);
+        try
+        {
+            var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
+
+            // 空闲拍：计划=激活策略三级解析值（1440 分，小时口径="24小时"）
+            DurationUnit.RecallForTest(PolicyTimeUnit.Hours);
+            slot.Refresh(PointTableSnapshot.Empty, true, null, 1440);
+            Assert.Equal("Idle", slot.Kind);
+            Assert.Equal("计划 24小时", slot.PlanText);
+
+            // 单位切换：RefreshUnitText 一拍内重拼（缓存分钟数值，不等 500ms 拍）
+            DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);
+            slot.RefreshUnitText();
+            Assert.Equal("计划 1440分", slot.PlanText);
+
+            // 非空闲拍（状态机 Curing 精确值接管）：计划预览清空（XAML 以 Kind=Idle 控显隐）
+            slot.Refresh(PointTableSnapshot.Empty, true, new SlotStatus(SlotPhase.Curing, 120, 47), 1440);
+            Assert.Equal("Curing", slot.Kind);
+            Assert.Equal("", slot.PlanText);
+
+            // 策略未知（planMinutes=0）：显示"计划 —"占位（防空文本行）
+            var slot2 = new RackSlotViewModel { Rack = 1, Level = 2 };
+            slot2.Refresh(PointTableSnapshot.Empty, true, null, 0);
+            Assert.Equal("计划 —", slot2.PlanText);
+        }
+        finally
+        {
+            DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);
+        }
+    }
+
     // ---------- RackSlotViewModel.Kind 映射 ----------
 
     [Fact(DisplayName = "Kind：状态机计时中带精确剩余与进度")]

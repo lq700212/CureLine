@@ -4,13 +4,21 @@
 // 干什么：策略列表（增删选）+ 参数条（名称/全局时长/光栅门控/断电续算，
 //   V0.0.44 起"每仓位覆盖行表"已删——画布取代其全部职能）+ 仓位时长画布
 //   （主编辑区：点格子/框选直接设时长，见下）+ 「激活并生效」/「仅保存」/
-//   「套用为自定义策略」。三级覆盖口径见 CuringPolicy 顶注释（仓位 > 层 > 全局）。
-// 预置/自定义口径（V0.0.20，对齐 AgingTestSystem 配方管理的"模板+即改即落"）：
-//   预置策略（IsPreset=true，出厂模板）——可选中查看/编辑参数、可【套用为
-//   自定义策略】（把编辑内容写入"自定义"策略并激活）；不能直接保存/激活/
-//   删除（激活只认自定义——预置是起点模板，保证出厂推荐永远能回溯）。
-//   自定义策略——原有全套（仅保存/激活/删除/新增）。
-//   打开窗口缺省选中激活策略；缺省库激活名="自定义"（新现场开窗即自定义）。
+//   「套用所选模板」（套用目标可选）。三级覆盖口径见 CuringPolicy 顶注释
+//   （仓位 > 层 > 全局）。
+// 预置/自定义口径（V0.0.20 对齐 AgingTestSystem 配方管理"模板+即改即落"；
+//   V0.0.57 用户拍板三条：自定义恒显 + 套用目标可选 + 开窗即显生效策略）：
+//   预置策略（IsPreset=true，出厂模板）——可选中查看/编辑参数、可【套用所选
+//   模板】（编辑内容**整体替换**写入套用目标并激活目标）；不能直接保存/
+//   激活/删除（预置是起点模板，保证出厂推荐永远能回溯）。
+//   自定义策略——全套（仅保存/激活/删除/新增）；**「自定义」恒存在**（唯一
+//   系统缺省策略）：删除一律拦 + 载入库缺它时自愈补回（缺省 120 分钟插队首，
+//   激活名失效时 ResolveActive 兜底回它，程控永不悬空）。
+//   套用目标（V0.0.57）：预置选中时出现"套用目标"下拉，名单=全部非预置策略
+//   （自定义 + 用户自建），缺省选"自定义"（旧口径）；套用=落库目标 + 激活
+//   目标（ActiveName=目标名）。
+//   打开窗口缺省选中当前生效策略（ResolveActive）+ 列表徽标标出它
+//   （ActiveName 属性给 XAML 多值绑定比对，见 StringEqualsConverter）。
 // 编辑模式：与点表配置窗同款——选中即回显编辑区，保存前把编辑区构建成
 //   草稿（BuildDraftFromEditor，数字解析失败进 errors），校验通过才把草稿
 //   拷入选中对象（先改副本防脏：校验失败原对象不受污染，对齐
@@ -104,11 +112,69 @@ public sealed class SlotPreviewItem : ViewModelBase
 
 public sealed class CuringPolicyViewModel : ViewModelBase
 {
-    /// <summary>套用目标：自定义策略的固定名（预置编辑内容套用到它身上）。</summary>
+    /// <summary>系统缺省策略的固定名（恒存在：防删 + 自愈补回；套用目标缺省值）。</summary>
     public const string CustomName = "自定义";
 
     private readonly IDialogService _dialogs;
     private string _activeName = "";
+
+    /// <summary>
+    /// 当前生效策略名（列表"生效中"徽标的比对真源）。三个写点：载入库（盘上
+    /// 激活名）、套用（激活目标策略）、激活并生效。INPC 通知给策略库列表
+    /// 徽标的多值绑定（StringEqualsConverter 逐项与自身 Name 比对），变更即
+    /// 整列徽标重判。
+    /// </summary>
+    public string ActiveName
+    {
+        get => _activeName;
+        private set => Set(ref _activeName, value);
+    }
+
+    // ---------- 套用目标（V0.0.57：预置模板可落到"自定义"或用户自建策略） ----------
+
+    /// <summary>
+    /// 套用目标名单 = 全部非预置策略名（「自定义」+ 用户自建）。SyncApplyTargets()
+    /// 在载入库/增删策略/套用后重算（保序去重），XAML 下拉绑它（名单动态变化）。
+    /// </summary>
+    public IReadOnlyList<string> ApplyTargets { get; private set; } = [CustomName];
+
+    private string _applyTargetName = CustomName;
+
+    /// <summary>
+    /// 套用目标（下拉选中项）：预置模板的落点。缺省「自定义」（旧口径），用户
+    /// 可切到自己新建的策略。目标被删/不存在时由 SyncApplyTargets 兜底回
+    /// 「自定义」——套用永远不会指向一个不存在的策略。
+    /// </summary>
+    public string ApplyTargetName
+    {
+        get => _applyTargetName;
+        set => Set(ref _applyTargetName, value);
+    }
+
+    /// <summary>
+    /// 重算套用目标名单与选中：名单=非预置策略名（Trim + 忽略大小写去重）；
+    /// 选中尽量维持（按名匹配），失效（目标被删/被改名）回「自定义」，连
+    /// 「自定义」都不在（用户改过它的名）取名单首项。调用点：载入库、增/
+    /// 删策略、套用成功（preferred 传刚套用的目标名）。
+    /// </summary>
+    private void SyncApplyTargets(string? preferred = null)
+    {
+        ApplyTargets = Policies.Where(p => !p.IsPreset)
+            .Select(p => (p.Name ?? "").Trim())
+            .Where(n => n.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        Raise(nameof(ApplyTargets));
+        var want = (preferred ?? _applyTargetName ?? "").Trim();
+        var keep = ApplyTargets.FirstOrDefault(t =>
+            string.Equals(t, want, StringComparison.OrdinalIgnoreCase));
+        _applyTargetName = keep
+            ?? (ApplyTargets.FirstOrDefault(t =>
+                    string.Equals(t, CustomName, StringComparison.OrdinalIgnoreCase)) is { } custom
+                ? custom
+                : ApplyTargets.FirstOrDefault() ?? CustomName);
+        Raise(nameof(ApplyTargetName));
+    }
 
     private PolicyTimeUnit _timeUnit = PolicyTimeUnit.Minutes;
 
@@ -287,7 +353,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     // 重建引用，选中态由按键恢复（SyncSelectionFlags）；View 层只做鼠标→格子翻译
     // （命中/框选/Ctrl 叠加），选择与写值全在 VM（可测）。浮层输入（SelectionMinutesText）
     // 回车/应用 = ApplySelectionCommand：逐格写 SlotRows（有则改无则增）→ 行通知自动
-    // 重建预览（数字/四档色/特殊蓝即刷）。预置策略走同一编辑区草稿，套用为自定义时落库。
+    // 重建预览（数字/四档色/特殊蓝即刷）。预置策略走同一编辑区草稿，套用所选模板时落库。
 
     private readonly HashSet<string> _selectedKeys = new();
 
@@ -461,7 +527,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     public RelayCommand RemovePolicyCommand { get; }
     public RelayCommand SaveCommand { get; }
     public RelayCommand ActivateCommand { get; }
-    public RelayCommand ApplyToCustomCommand { get; }
+    public RelayCommand ApplyTemplateCommand { get; }
     public RelayCommand ApplySelectionCommand { get; }
     public RelayCommand ClearSelectionOverrideCommand { get; }
 
@@ -488,7 +554,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         RemovePolicyCommand = new RelayCommand(RemovePolicy, () => SelectedPolicy != null);
         SaveCommand = new RelayCommand(Save);
         ActivateCommand = new RelayCommand(Activate, () => SelectedPolicy != null);
-        ApplyToCustomCommand = new RelayCommand(ApplyToCustom, () => SelectedPolicy != null);
+        ApplyTemplateCommand = new RelayCommand(ApplyTemplate, () => SelectedPolicy != null);
         ApplySelectionCommand = new RelayCommand(ApplySelection, () => HasSelection);
         ClearSelectionOverrideCommand = new RelayCommand(ClearSelectionOverride, () => HasSelection);
 
@@ -574,11 +640,21 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     private void LoadFromDisk()
     {
         var book = CuringPolicyStore.Load() ?? CuringPolicyStore.BuildDefaultBook();
+        // 自愈：「自定义」是系统缺省策略必须恒存在（用户拍板 V0.0.57）——老盘面
+        // 删过它/手工改 JSON 删过它，载入时补回缺省（全局 120 分钟），插队首与
+        // BuildDefaultBook 口径一致。只补内存不落盘：套用/保存时自然写回；幂等，
+        // 缺了就补、在就不动（用户对"自定义"的参数修改不会被覆盖）。
+        if (!book.Policies.Any(p => !p.IsPreset && string.Equals(
+                (p.Name ?? "").Trim(), CustomName, StringComparison.OrdinalIgnoreCase)))
+            book.Policies.Insert(0, new CuringPolicy { Name = CustomName, IsPreset = false });
         Policies.Clear();
         foreach (var p in book.Policies)
             Policies.Add(p);
-        _activeName = book.ActiveName;
-        SelectedPolicy = book.ResolveActive(); // 缺省选中激活策略（新库=“自定义”）
+        ActiveName = book.ActiveName;
+        // 缺省选中当前生效策略（需求：打开页面即看到"在用"的那条；ResolveActive
+        // 激活名失效时回队首——自愈保证首项必是「自定义」）。
+        SelectedPolicy = book.ResolveActive();
+        SyncApplyTargets();
     }
 
     // ---------- 编辑区同步 ----------
@@ -745,6 +821,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         var policy = new CuringPolicy { Name = $"策略{Policies.Count + 1}" };
         Policies.Add(policy);
         SelectedPolicy = policy;
+        SyncApplyTargets();   // 新建的非预置策略进套用目标名单（可当预置模板的落点）
     }
 
     private void RemovePolicy()
@@ -753,7 +830,17 @@ public sealed class CuringPolicyViewModel : ViewModelBase
             return;
         if (SelectedPolicy.IsPreset)
         {
-            _dialogs.ShowMessage("预置策略是出厂模板，不能删除。\n如需按它定制，请【套用为自定义策略】后修改。",
+            _dialogs.ShowMessage("预置策略是出厂模板，不能删除。\n如需按它定制，请【套用所选模板】后修改。",
+                "删除失败");
+            return;
+        }
+        // 「自定义」恒存在（用户拍板 V0.0.57）：它是系统缺省策略——预置模板的
+        // 缺省落点、激活名失效时的程控兜底，删了上面两条都断；拦下并提示出路。
+        if (string.Equals((SelectedPolicy.Name ?? "").Trim(), CustomName,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _dialogs.ShowMessage(
+                "「自定义」是系统缺省策略，不能删除（保证程控随时兜底生效、预置模板有缺省落点）。\n需要其他策略请【＋添加策略】新建。",
                 "删除失败");
             return;
         }
@@ -761,6 +848,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         SelectedPolicy = null;
         Policies.Remove(p);
         SelectedPolicy = Policies.FirstOrDefault();
+        SyncApplyTargets();   // 被删项若在套用目标名单里，选中回退「自定义」
     }
 
     private void Save() => SaveCore(activate: false);
@@ -768,11 +856,13 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     private void Activate() => SaveCore(activate: true);
 
     /// <summary>
-    /// 套用为自定义策略（预置策略专用出口）：把编辑区内容写入"自定义"策略
-    /// （不存在则创建，存在则覆盖更新——对齐 AgingTestSystem 重名询问语义，
-    /// 这里目标名固定=自定义，直接覆盖并提示），落盘并激活"自定义"。
+    /// 套用所选模板（预置策略专用出口，V0.0.57 目标可选）：把编辑区内容写入
+    /// 下拉选中的目标策略（「自定义」或用户自建——不存在则创建，存在则整体
+    /// 覆盖更新，不残留旧覆盖行），落盘并激活目标策略。目标解析：下拉名 Trim
+    /// 匹配库内非预置策略；下拉名失效（被删/口径差异）回退「自定义」按存在性
+    /// 套用——永不会指向不存在的策略。
     /// </summary>
-    private void ApplyToCustom()
+    private void ApplyTemplate()
     {
         if (SelectedPolicy == null || !SelectedPolicy.IsPreset)
             return;
@@ -783,15 +873,18 @@ public sealed class CuringPolicyViewModel : ViewModelBase
             _dialogs.ShowMessage(string.Join("\r\n", errors), "套用失败（数字格式）");
             return;
         }
-        draft.Name = CustomName;
+        var targetName = (ApplyTargetName ?? "").Trim();
+        if (targetName.Length == 0)
+            targetName = CustomName;
+        draft.Name = targetName;
         draft.IsPreset = false;
         var book = new CuringPolicyBook { Policies = [.. Policies] };
         var existing = book.Policies.FirstOrDefault(p =>
-            string.Equals((p.Name ?? "").Trim(), CustomName, StringComparison.OrdinalIgnoreCase)
+            string.Equals((p.Name ?? "").Trim(), targetName, StringComparison.OrdinalIgnoreCase)
             && !p.IsPreset);
         if (existing != null)
         {
-            // 覆盖"自定义"既有参数（预置模板的参数整体替换，不残留旧覆盖行）
+            // 覆盖目标策略既有参数（预置模板的参数整体替换，不残留旧覆盖行）
             existing.GlobalMinutes = draft.GlobalMinutes;
             existing.GrillGate = draft.GrillGate;
             existing.PersistMinutes = draft.PersistMinutes;
@@ -802,7 +895,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         {
             book.Policies.Add(draft);
         }
-        book.ActiveName = CustomName;
+        book.ActiveName = targetName;   // 套用即激活目标（保存并生效一条链）
         var validation = CuringPolicyValidator.ValidateBook(book);
         if (!validation.Ok)
         {
@@ -811,14 +904,15 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         }
         if (!TrySave(book))
             return;
-        _activeName = book.ActiveName;
-        // 刷新列表与选中（自定义是库内对象的新状态——重建集合保 UI 同步）
+        ActiveName = book.ActiveName;
+        // 刷新列表与选中（目标是库内对象的新状态——重建集合保 UI 同步）
         Policies.Clear();
         foreach (var p in book.Policies)
             Policies.Add(p);
         SelectedPolicy = Policies.First(p =>
-            string.Equals((p.Name ?? "").Trim(), CustomName, StringComparison.OrdinalIgnoreCase)
+            string.Equals((p.Name ?? "").Trim(), targetName, StringComparison.OrdinalIgnoreCase)
             && !p.IsPreset);
+        SyncApplyTargets(preferred: targetName);   // 名单/选中刷新（目标可能刚创建）
         CloseDialog = true;   // 主窗统一提示（与保存/激活同一条链）
         RequestClose?.Invoke(true);
     }
@@ -856,8 +950,8 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         if (SelectedPolicy.IsPreset)
         {
             _dialogs.ShowMessage(activate
-                ? "预置策略不能直接激活（激活只认自定义策略）。\n请先【套用为自定义策略】，再激活它。"
-                : "预置策略不能直接保存（出厂模板保持原样）。\n请用【套用为自定义策略】把修改落到自定义策略。",
+                ? "预置策略不能直接激活（预置只是出厂模板）。\n请先【套用所选模板】落到目标策略（默认自定义，也可选您新建的策略），再激活它。"
+                : "预置策略不能直接保存（出厂模板保持原样）。\n请用【套用所选模板】把修改落到目标策略。",
                 "预置策略");
             return;
         }
@@ -871,7 +965,16 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         var book = new CuringPolicyBook();
         foreach (var p in Policies)
             book.Policies.Add(ReferenceEquals(p, SelectedPolicy) ? draft : p);
-        book.ActiveName = activate ? draft.Name : _activeName;
+        // 激活分支=草稿名（激活即生效新名）。仅保存分支的**改名跟随**（V0.0.57）：
+        // 被改名策略恰是当前生效策略时，激活名同步换新名——否则激活名指向已
+        // 不存在的旧名，重启 ResolveActive 兜底回队首（自愈的缺省「自定义」），
+        // 现场生效时长会凭空跳回 120。
+        book.ActiveName = activate
+            ? draft.Name
+            : string.Equals((SelectedPolicy.Name ?? "").Trim(), ActiveName.Trim(),
+                    StringComparison.OrdinalIgnoreCase)
+                ? draft.Name
+                : ActiveName.Trim();
         var validation = CuringPolicyValidator.ValidateBook(book);
         if (!validation.Ok)
         {
@@ -882,7 +985,8 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         if (!TrySave(book))
             return;
         ApplyDraftToSelected(draft);
-        _activeName = book.ActiveName;
+        ActiveName = book.ActiveName;
+        SyncApplyTargets();   // 套用目标名单刷新（新建/改名后的库面）；选中维持
         CloseDialog = true;
         // 关窗经 RequestClose → DialogResult=true → 主窗 LoadPolicyBook + 统一提示。
         // （V0.0.53 前 CloseDialog 无人消费：窗口不关、ShowDialog 恒 false，

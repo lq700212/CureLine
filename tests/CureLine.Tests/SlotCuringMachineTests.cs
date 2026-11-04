@@ -273,6 +273,123 @@ public class SlotCuringMachineTests
         }
     }
 
+    [Fact]
+    public void PolicyHotChange_ExtendsInFlightCuring()
+    {
+        // 宿主收口（策略窗保存后 ApplyPolicyHotChange）：在制单向上调——
+        // 旧锁定 60 分已过 30 分，热更后新解析 1440 分生效（不放行、锁定值上调）
+        var bus = new ScriptedPointBus();
+        var logs = new List<string>();
+        var provider = new Boxed<CuringPolicy?>(new CuringPolicy { Name = "A", GlobalMinutes = 60 });
+        var machine = new SlotCuringMachine(bus, () => provider.Value,
+            clock: () => _now, log: logs.Add);
+        bus.PointChanged += (_, e) => machine.OnPointChanged(e); // 宿主转发
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);   // 按 60 分锁定开计时
+            _now += TimeSpan.FromMinutes(30);
+            machine.Pump(_now);
+
+            provider.Value = new CuringPolicy { Name = "B", GlobalMinutes = 1440 }; // 24 小时
+            machine.ApplyPolicyHotChange();
+            Assert.Contains(logs, m => m.Contains("策略热更"));
+
+            _now += TimeSpan.FromMinutes(30); // 旧锁定时长到点时刻——被延长顶掉，不放行
+            machine.Pump(_now);
+            var st = machine.GetStatus(1, 1)!;
+            Assert.Equal(SlotPhase.Curing, st.Phase);
+            Assert.Equal(1440, st.TotalMinutes);  // 锁定值已上调
+            Assert.Equal(1380, st.RemainMinutes); // 剩 1440-30=1380
+
+            _now += TimeSpan.FromMinutes(1380);   // 新时长到点才放行
+            machine.Pump(_now);
+            Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
+        }
+    }
+
+    [Fact]
+    public void PolicyHotChange_Shorten_Ignored()
+    {
+        // 工艺红线：在制调小一律不动（调小立即生效=把没固化满的货提前放行）
+        var bus = new ScriptedPointBus();
+        var provider = new Boxed<CuringPolicy?>(new CuringPolicy { Name = "A", GlobalMinutes = 60 });
+        var machine = new SlotCuringMachine(bus, () => provider.Value, clock: () => _now);
+        bus.PointChanged += (_, e) => machine.OnPointChanged(e);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            _now += TimeSpan.FromMinutes(30);
+            machine.Pump(_now);
+
+            provider.Value = new CuringPolicy { Name = "B", GlobalMinutes = 5 }; // 调小
+            machine.ApplyPolicyHotChange();   // 静默忽略（无延长日志，零动作）
+
+            _now += TimeSpan.FromMinutes(5);  // 调小后的"到点"时刻——必须不放行
+            machine.Pump(_now);
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+            Assert.Equal(60, machine.GetStatus(1, 1)!.TotalMinutes); // 仍锁定 60
+
+            _now += TimeSpan.FromMinutes(25); // 旧 60 分走完才放行
+            machine.Pump(_now);
+            Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
+        }
+    }
+
+    [Fact]
+    public void PolicyHotChange_PersistsExtendedMinutes()
+    {
+        // 延长同步重写持久化记录：断电恢复按延长后的时长续算（不回退旧值）
+        using var scope = new TestScope();
+        Directory.CreateDirectory(AppPaths.ConfigDir);
+        var bus = new ScriptedPointBus();
+        var provider = new Boxed<CuringPolicy?>(
+            new CuringPolicy { Name = "T", GlobalMinutes = 60, PersistMinutes = true });
+        var machine = new SlotCuringMachine(bus, () => provider.Value, clock: () => _now);
+        bus.PointChanged += (_, e) => machine.OnPointChanged(e);
+        using (machine)
+        {
+            bus.SetInput(Tray(2, 1), true);   // 落盘 60 分
+            provider.Value = new CuringPolicy { Name = "T2", GlobalMinutes = 1440, PersistMinutes = true };
+            machine.ApplyPolicyHotChange();
+
+            var rec = CuringStateStore.Load()!.Slots.Single(r => r.Rack == 2 && r.Level == 1);
+            Assert.Equal(1440, rec.Minutes);  // 记录已是延长后的值
+        }
+    }
+
+    [Fact]
+    public void PolicyHotChange_NonCuringSlots_Unaffected()
+    {
+        // 边界：Done（已放行）与 WaitingGate（没开计时）不做在制热更——
+        // Gate 开计时那一刻会重新按当前策略解析（热更后开计时自然是新时长）
+        var bus = new ScriptedPointBus();
+        var provider = new Boxed<CuringPolicy?>(new CuringPolicy { Name = "A", GlobalMinutes = 60 });
+        var machine = new SlotCuringMachine(bus, () => provider.Value, clock: () => _now);
+        bus.PointChanged += (_, e) => machine.OnPointChanged(e);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);          // 1-1：60 分到点放行（Done）
+            _now += TimeSpan.FromMinutes(60);
+            machine.Pump(_now);
+            Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
+
+            provider.Value = new CuringPolicy { Name = "B", GlobalMinutes = 60, GrillGate = true };
+            bus.SetInput(GrillL(3, 1), true);        // 3-1：先亮光栅（托盘边沿时才会进门控等待）
+            bus.SetInput(Tray(3, 1), true);
+            Assert.Equal(SlotPhase.WaitingGate, machine.GetStatus(3, 1)!.Phase);
+
+            provider.Value = new CuringPolicy { Name = "C", GlobalMinutes = 1440, GrillGate = true };
+            machine.ApplyPolicyHotChange();          // Done/Gate 都不动
+            Assert.Equal(60, machine.GetStatus(1, 1)!.TotalMinutes);  // Done 保持旧锁定
+
+            bus.SetInput(GrillL(3, 1), false);       // 光栅让空 → 开计时现取新策略 1440
+            machine.Pump(_now);
+            var opened = machine.GetStatus(3, 1)!;
+            Assert.Equal(SlotPhase.Curing, opened.Phase);
+            Assert.Equal(1440, opened.TotalMinutes);
+        }
+    }
+
     // ---------- 计时状态持久化（PersistMinutes 开关，断电续算） ----------
 
     /// <summary>持久化用例的公共装配：TestScope 隔离落盘目录 + 开关策略 + 宿主转发。</summary>

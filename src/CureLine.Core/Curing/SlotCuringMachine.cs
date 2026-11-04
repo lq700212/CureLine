@@ -19,8 +19,11 @@
 //   ② 断连恢复后宿主调 AlignFromSnapshot：托盘在架且空闲的仓位重新开
 //      计时。计时状态不持久化（断电前计了多久无从知道，属报价加价点
 //      登记项不脑补）——宁可重计也不放行没固化够的货。
-//   ③ 策略热切换：每次托盘到位现取激活策略；进行中的仓位按开计时那一刻
-//      锁定的时长走完（改参数不影响在制品，工艺上更安全）。
+//   ③ 策略热切换：每次托盘到位现取激活策略（新到位的仓位立即按新时长）；
+//      在制仓位两个口径：a) 默认沿走"开计时那一刻锁定的时长"（兜底安全）；
+//      b) 宿主收口调 ApplyPolicyHotChange（策略窗保存后）做单向上调热更——
+//      只延不缩：新解析值比锁定值大才延长并同步落盘，调小一律不动（调小
+//      立即生效=自动放行没固化够的货，工艺红线）。
 //   ④ 过账挂点（P3.2 后半）：TrayArrived/CuringStarted/TrayLeft 三事件供宿主
 //      接单线过账（CuringMesPoster）——只发"真实边沿"，重启对齐不发（防 MES
 //      重复过账）；处理器禁止同步回调状态机（锁内触发红线，见事件注释）。
@@ -92,7 +95,7 @@ public sealed class SlotCuringMachine : IDisposable
     {
         public SlotPhase Phase;
         public DateTimeOffset? StartedAt; // Curing 起点（时钟可注入，测试虚拟推进）
-        public int TotalMinutes;          // 开计时时锁定的时长（策略热切不干扰在制品）
+        public int TotalMinutes;          // 开计时时锁定的时长（在制热更单向上调，见 ApplyPolicyHotChange）
     }
 
     /// <summary>
@@ -194,6 +197,46 @@ public sealed class SlotCuringMachine : IDisposable
                         break;
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// 策略热更收口（宿主在策略窗保存/激活后调）：把当前激活策略解析出的
+    /// 时长应用到"在制"仓位——【只延不缩】。
+    ///
+    /// 为什么只延：在制调小立即生效=把还没固化满的货提前放行（工艺事故），
+    /// 所以调小一律不动——在制品保持开计时那一刻锁定的时长走完；调大则
+    /// 允许延长（客户临时"多固化一会儿再做"是常见诉求）并同步重写持久化
+    /// 记录（开关开时），断电恢复按延长后的时长续算。
+    ///
+    /// 谁不动：WaitingGate（没开计时，开计时那一刻会重新按策略解析）、
+    /// Done（已放行，改在制品时长无意义）、Idle（无在制品）。
+    /// 线程：任意线程可调（锁内遍历，只改内存+小文件落盘）；有延长才记
+    /// 日志/落盘——无变化零动作（铁律 4：只记边沿）。
+    /// </summary>
+    public void ApplyPolicyHotChange()
+    {
+        var policy = _policyProvider();
+        if (policy == null)
+            return;
+        lock (_sync)
+        {
+            bool changed = false;
+            foreach (var (slot, rt) in _slots)
+            {
+                if (rt.Phase != SlotPhase.Curing)
+                    continue;
+                int newMinutes = policy.ResolveMinutes(slot.Rack, slot.Level);
+                if (newMinutes > rt.TotalMinutes)
+                {
+                    _log($"架{slot.Rack}层{slot.Level} 策略热更：在制固化时长 " +
+                        $"{rt.TotalMinutes} 分钟延长为 {newMinutes} 分钟（只延不缩）");
+                    rt.TotalMinutes = newMinutes;
+                    changed = true;
+                }
+            }
+            if (changed)
+                PersistState(); // 延长同步落盘（开关开时），断电恢复按新时长续算
         }
     }
 

@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:CureStation.ViewModels"
+        xmlns:local="clr-namespace:CureStation"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:CuringPolicyViewModel, IsDesignTimeCreatable=False}"
@@ -18,6 +19,10 @@
     <Window.Resources>
         <!-- 点选浮层显隐（与 MesPostConfigWindow 同款窗内转换器） -->
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <!-- 策略库"生效中"徽标：本项策略名 == VM.ActiveName → true。
+             DataTrigger 的 Condition 只认静态值，两段动态绑定不能直接互比，
+             用 MultiBinding 一并喂给转换器返回 bool（详见转换器类头注释）。 -->
+        <local:StringEqualsConverter x:Key="StringEquals"/>
     </Window.Resources>
     <shell:WindowChrome.WindowChrome>
         <!-- 无边框自绘（V0.0.27 弹窗统一）：标题条命中拖动 + 边沿 6px 缩放 -->
@@ -35,9 +40,13 @@
          时长、左键拖框批量选（橡皮筋透明只描边，Ctrl 叠加）、Ctrl+单击加选/减选、
          中键平移、滚轮缩放、双击空白复位、右键适应图像、Esc 清选择；普通格=
          时长四档色（绿/黄/橙/红），特殊格（SlotMinutes 配了独立覆盖，VM 真识别）
+         特殊格（SlotMinutes 配了独立覆盖，VM 真识别）
          =主题蓝；选中=FgStrong 描边；浮层【清除】删覆盖恢复跟随层/全局。
-         底部按钮：预置选中→【套用为自定义策略】；自定义选中→【激活并生效】【仅保存】。
-         预置策略不能直接保存/激活/删除（激活只认自定义——出厂模板保证可回溯）。
+         底部按钮：预置选中→【套用目标▾ + 套用所选模板】（目标=自定义或用户
+         自建策略，列表项带"生效中"徽标=当前激活策略）；自定义选中→
+         【激活并生效】【仅保存】。
+         「自定义」恒存在（防删 + 载入缺时自愈补回——系统缺省策略）；预置
+         不能直接保存/激活/删除（出厂模板保证可回溯）。
          取色全走 Brush.Fresh.*（Tier* 四键双主题同名异值：Light=原稿浅色块、
          Dark=低透明霓虹浸染+亮字）；窗口骨架统一自绘标题条。-->
     <!-- 圆角弹窗骨架（全弹窗统一）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow 浮层投影，
@@ -113,8 +122,34 @@
                                  SelectedItem="{Binding SelectedPolicy}">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <!-- 预置策略带灰蓝标记（IsPreset 是配置后不变量，非 INPC 绑定初值够用） -->
                                     <StackPanel Orientation="Horizontal">
+                                        <!-- "生效中"徽标（V0.0.57）：本项 == 当前生效策略才亮。
+                                             缺省 Collapsed 写进 Style Setter（触发器死区口诀：
+                                             写在元素标签上=本地值，触发器永远盖不动）；
+                                             比对走 MultiBinding+StringEqualsConverter。 -->
+                                        <Border Background="{DynamicResource Brush.Fresh.Accent}" CornerRadius="3" Padding="4,1"
+                                                VerticalAlignment="Center" Margin="0,0,6,0">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger>
+                                                            <DataTrigger.Binding>
+                                                                <MultiBinding Converter="{StaticResource StringEquals}">
+                                                                    <Binding Path="Name"/>
+                                                                    <Binding Path="DataContext.ActiveName"
+                                                                             RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                </MultiBinding>
+                                                            </DataTrigger.Binding>
+                                                            <DataTrigger.Value>True</DataTrigger.Value>
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Text="生效中" FontSize="10" Foreground="{DynamicResource Brush.Fresh.OnAccent}"/>
+                                        </Border>
+                                        <!-- 预置策略带灰蓝标记（IsPreset 是配置后不变量，非 INPC 绑定初值够用） -->
                                         <Border Background="{DynamicResource Brush.Fresh.ButtonHoverBg}" CornerRadius="3" Padding="4,1"
                                                 VerticalAlignment="Center" Margin="0,0,6,0">
                                             <Border.Style>
@@ -167,14 +202,15 @@
                                       ToolTip="开=进行中仓位随状态变化写 config/curingstate.json，断电期间时间计入固化时长（重启按记录续算）；关（缺省）=断电重启后重新计时，宁可重计也不放行没固化够的货。"/>
                         </StackPanel>
                     </Border>
-                    <!-- 底部按钮：预置→套用为自定义；自定义→激活/仅保存（两组按选中项互斥显示） -->
+                    <!-- 底部按钮：预置→套用目标+套用所选模板；自定义→激活/仅保存（两组按选中项互斥显示） -->
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right"
                                 Margin="0,8,0,0">
-                        <!-- 预置策略专用出口：套用为自定义（缺省隐藏——设计器与缺省态显示激活/保存） -->
-                        <Button Tag="{StaticResource Geo.Check}" Content="套用为自定义策略（保存并激活）"
-                                Command="{Binding ApplyToCustomCommand}" Width="280" Height="36" Margin="0,0,8,0">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource FreshPrimaryButton}">
+                        <!-- 预置策略专用出口（缺省 Collapsed 整组收起——设计器与缺省态显示激活/保存）：
+                             套用目标下拉（名单=全部非预置策略：「自定义」+用户自建，缺省选「自定义」）
+                             + 套用按钮。套用=编辑内容整体替换目标策略并激活它（保存并生效一条链）。 -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,8,0">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding SelectedIsPreset, FallbackValue=False}" Value="True">
@@ -182,8 +218,16 @@
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </Button.Style>
-                        </Button>
+                            </StackPanel.Style>
+                            <TextBlock Text="套用目标：" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Brush.Fresh.FgMid}"/>
+                            <ComboBox Style="{StaticResource FreshCombo}" Width="120" VerticalAlignment="Center" Margin="0,0,8,0"
+                                      ItemsSource="{Binding ApplyTargets, FallbackValue={x:Null}}"
+                                      SelectedItem="{Binding ApplyTargetName, FallbackValue=自定义}"
+                                      ToolTip="预置模板落到哪个策略：默认「自定义」，也可选自己另建的策略（整体替换其时长并激活它）"/>
+                            <Button Tag="{StaticResource Geo.Check}" Content="套用所选模板（保存并激活）"
+                                    Command="{Binding ApplyTemplateCommand}" Width="230" Height="36"/>
+                        </StackPanel>
                         <Button Tag="{StaticResource Geo.Check}" Content="激活并生效（保存 + 启用选中策略）"
                                 Command="{Binding ActivateCommand}" Width="280" Height="36" Margin="0,0,8,0">
                             <Button.Style>

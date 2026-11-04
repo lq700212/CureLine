@@ -261,6 +261,11 @@ public static class Program
         {
             DataContext = new CurePolicyVm(fake, racks, levels),
         };
+        // 演示选中联动（V0.0.57 用户拍板：套用目标可选 + 生效中徽标）：切到
+        // 预置"标准固化"——底部显示套用目标下拉（缺省「自定义」）+套用按钮；
+        // 列表里「自定义」行同时亮"生效中"徽标——两个新能力一屏看全。
+        var polVm = (CurePolicyVm)pol.DataContext;
+        polVm.SelectedPolicy = polVm.Policies.First(p => p.IsPreset);
         Shot(pol, "cs-policy.png", 1000);
 
         // ---------- IO 通讯测试窗（独立演示总线：确定性推进 DI 快照） ----------
@@ -757,6 +762,7 @@ public static class Program
         public void ShowAccounts(OperatorRole actor) { }
         public bool ShowWorkOrder(OperatorRole? currentRole) => false;
         public bool ShowMesPostConfig() => false;
+        public bool ShowLicenseActivation() => false;   // V0.0.54 桩跟进（演示态不会开激活窗）
         public void ShowIoTest(IPointTableBus bus, PointTableConfig config) { }
         public void ShowLog(CureLogSnap snapshot) { }                 // 日志窗桩（截图段另开真实 LogWindow）
         public void Shutdown() { }                                    // harness 不退出
@@ -774,6 +780,7 @@ public static class Program
         public void ShowImage(string imagePath) { }
         public void ShowMesLog(int station) { }
         public void ShowMesDebug() { }
+        public bool ShowLicenseActivation() => false;   // V0.0.54 桩跟进（演示态不会开激活窗）
         public void RestartApp() { }
         public void CreateDesktopShortcut() { }
     }
