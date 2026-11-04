@@ -1866,4 +1866,181 @@ public class CureStationViewModelTests
         Assert.Equal(33, vm.SlotPreviewItems.Count);
         Assert.Equal(11, vm.SlotPreviewItems.Count(i => i.Level == 1));
     }
+
+    // ---------- 时间单位切换（V0.0.53：时/分/秒；存储恒为分钟） ----------
+
+    [Fact]
+    public void PolicyVm_TimeUnitSwitch_ConvertsEditorCanvasLegendAndFloating()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        vm.ReplaceSelection(new[] { Cell(vm, 1, 1) });
+
+        // 缺省分钟：与旧版文案一致
+        Assert.Equal(CureStation.ViewModels.PolicyTimeUnit.Minutes, vm.TimeUnit);
+        Assert.Equal("分", vm.TimeUnitSuffix);
+        Assert.Equal("120", vm.EditGlobalMinutes);
+        Assert.Equal("120", Cell(vm, 1, 1).MinutesText);
+        Assert.Contains("当前 120 分", vm.SelectionSummaryText);
+        Assert.Equal("跟随层/全局：< 60 分钟", vm.LegendGreenText);
+        Assert.Equal("每层覆盖（分钟，空=用全局）", vm.LevelHeaderText);
+        Assert.Contains("分钟", vm.GlobalMinutesToolTip);
+
+        // 切小时：120 分钟 = 2 小时——编辑区/画布/浮层/图例/标题全换
+        vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Hours;
+        Assert.Equal("2", vm.EditGlobalMinutes);
+        Assert.Equal("2", Cell(vm, 1, 1).MinutesText);
+        Assert.Contains("当前 2 时", vm.SelectionSummaryText);
+        Assert.Contains("固化 2 小时", Cell(vm, 1, 1).Tip);
+        Assert.Equal("跟随层/全局：< 1 小时", vm.LegendGreenText);
+        Assert.Equal("跟随层/全局：1 ~ 1.98 小时", vm.LegendYellowText);
+        Assert.Equal("每层覆盖（小时，空=用全局）", vm.LevelHeaderText);
+        Assert.Contains("小时", vm.SelectionInputToolTip);
+        Assert.Equal(0, vm.TimeUnitIndex);
+
+        // 切秒：2 小时 = 7200 秒
+        vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Seconds;
+        Assert.Equal("7200", vm.EditGlobalMinutes);
+        Assert.Equal("7200", Cell(vm, 1, 1).MinutesText);
+        Assert.Contains("当前 7200 秒", vm.SelectionSummaryText);
+        Assert.Equal("跟随层/全局：< 3600 秒", vm.LegendGreenText);
+        Assert.Equal(2, vm.TimeUnitIndex);
+
+        // 回分钟：无损
+        vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Minutes;
+        Assert.Equal("120", vm.EditGlobalMinutes);
+        Assert.Equal("120", Cell(vm, 1, 1).MinutesText);
+    }
+
+    [Fact]
+    public void PolicyVm_TimeUnitSwitch_ConvertsUnsavedEditsAndSlotRowsLosslessly()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+
+        vm.EditGlobalMinutes = "90";       // 未保存的编辑
+        vm.EditLevel2Min = "45";
+        vm.SlotRows.Add(new CureStation.ViewModels.SlotMinuteRow
+        {
+            Rack = "3", Level = "2", Minutes = "20",
+        });
+
+        vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Hours;
+        Assert.Equal("1.5", vm.EditGlobalMinutes);
+        Assert.Equal("0.75", vm.EditLevel2Min);
+        Assert.Equal("0.3333", vm.SlotRows[0].Minutes);   // 20 分 = 0.3333 时（0.####）
+        Assert.Equal(90, Cell(vm, 1, 1).Minutes);         // 内部分钟值不变
+        Assert.Equal(45, Cell(vm, 1, 2).Minutes);
+        Assert.Equal(20, Cell(vm, 3, 2).Minutes);
+
+        vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Seconds;
+        Assert.Equal("5400", vm.EditGlobalMinutes);
+        Assert.Equal("2700", vm.EditLevel2Min);
+        Assert.Equal("1200", vm.SlotRows[0].Minutes);
+
+        vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Minutes;
+        Assert.Equal("90", vm.EditGlobalMinutes);
+        Assert.Equal("45", vm.EditLevel2Min);
+        Assert.Equal("20", vm.SlotRows[0].Minutes);
+    }
+
+    [Fact]
+    public void PolicyVm_TimeUnitHours_DecimalInputSavesMinutes()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Hours;
+        vm.EditGlobalMinutes = "1.5";      // 1.5 小时 = 90 分钟
+
+        vm.ActivateCommand.Execute(null);
+
+        Assert.True(vm.CloseDialog);
+        var loaded = CuringPolicyStore.Load();
+        Assert.Equal(90, loaded!.Policies.First(p => p.Name == "自定义").GlobalMinutes);
+    }
+
+    [Fact]
+    public void PolicyVm_TimeUnitSeconds_RoundsToWholeMinutes()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Seconds;
+        vm.EditGlobalMinutes = "90";       // 1.5 分钟 → 2 分钟（计时精度分钟，四舍五入）
+
+        vm.SaveCommand.Execute(null);
+
+        var loaded = CuringPolicyStore.Load();
+        Assert.Equal(2, loaded!.Policies.First(p => p.Name == "自定义").GlobalMinutes);
+    }
+
+    [Fact]
+    public void PolicyVm_TimeUnit_RememberedInIni_InvalidFallsBackToMinutes()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        vm.TimeUnit = CureStation.ViewModels.PolicyTimeUnit.Seconds;
+        Assert.Equal("Seconds", IniFile.ReadStr(
+            AppPaths.ConfigIni, "setting", "PolicyTimeUnit", ""));
+
+        // 关窗再打开沿用记忆单位（120 分钟按秒回显 7200）
+        var reopened = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        Assert.Equal(CureStation.ViewModels.PolicyTimeUnit.Seconds, reopened.TimeUnit);
+        Assert.Equal("7200", reopened.EditGlobalMinutes);
+
+        // 非法值自愈回分钟
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Bogus");
+        var bad = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        Assert.Equal(CureStation.ViewModels.PolicyTimeUnit.Minutes, bad.TimeUnit);
+    }
+
+    [Fact]
+    public void PolicyVm_AddPolicy_ActivateSave_ReopenVisible_AndRaisesRequestClose()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        bool? closed = null;
+        vm.RequestClose += ok => closed = ok;
+
+        // 用户实测回归：添加策略 → 激活保存 → 关窗再打开，列表必须含新增项。
+        vm.AddPolicyCommand.Execute(null);
+        vm.EditName = "慢速固化";
+        vm.ActivateCommand.Execute(null);
+
+        Assert.True(vm.CloseDialog);
+        Assert.True(closed);   // View 据此 DialogResult=true（主窗刷新 + 提示"已保存"）
+
+        var reopened = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        Assert.Contains(reopened.Policies, p => p.Name == "慢速固化");
+        Assert.Equal("慢速固化", reopened.SelectedPolicy!.Name);   // 激活策略缺省选中
+        Assert.Equal("慢速固化", CuringPolicyStore.Load()!.ActiveName);
+    }
+
+    [Fact]
+    public void PolicyVm_SaveFailure_DoesNotRaiseRequestClose()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        bool raised = false;
+        vm.RequestClose += _ => raised = true;
+
+        vm.EditGlobalMinutes = "abc";
+        vm.SaveCommand.Execute(null);
+
+        Assert.False(raised);
+        Assert.False(vm.CloseDialog);
+    }
 }

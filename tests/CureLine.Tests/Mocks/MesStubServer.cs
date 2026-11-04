@@ -22,7 +22,7 @@ namespace CureLine.Tests.Mocks;
 
 public sealed class MesStubServer : IDisposable
 {
-    private readonly HttpListener _listener = new();
+    private readonly HttpListener _listener; // 构造函数里重试成功后赋值
     private readonly Queue<(int Status, string Body)> _queue = new();
     private readonly object _lock = new();
     private bool _disposed;
@@ -38,10 +38,30 @@ public sealed class MesStubServer : IDisposable
 
     public MesStubServer()
     {
-        int port = 18100 + Random.Shared.Next(0, 800);
-        Url = $"http://127.0.0.1:{port}/mes/";
-        _listener.Prefixes.Add(Url);
-        _listener.Start();
+        // 端口随机抽 + 失败重试：xUnit 按测试类并行跑，并发的多个桩实例可能
+        // 撞到同一端口（或撞上 http.sys 的前缀残留），Start 直接报"另一个程序
+        // 正在使用此文件"且每轮挂的用例不同（飘移）。重抽几次即可，连败才抛
+        // （端口段全耗尽的极端情况，让失败可见而不是被吞）。
+        // 坑：HttpListener.Start() 失败后内部把 listener 置为 Disposed 状态，
+        // 复用同一个实例再重试会抛 ObjectDisposedException——必须 Close 换新。
+        var listener = new HttpListener();
+        for (int attempt = 0; ; attempt++)
+        {
+            int port = 18100 + Random.Shared.Next(0, 800);
+            Url = $"http://127.0.0.1:{port}/mes/";
+            listener.Prefixes.Add(Url);
+            try
+            {
+                listener.Start();
+                break;
+            }
+            catch (HttpListenerException) when (attempt < 19)
+            {
+                try { listener.Close(); } catch { }
+                listener = new HttpListener(); // 失败的实例已被内部废弃，换新重抽
+            }
+        }
+        _listener = listener;
         Task.Run(Serve);
     }
 

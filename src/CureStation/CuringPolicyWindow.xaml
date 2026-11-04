@@ -29,7 +29,8 @@
          V0.0.44 布局重排（用户拍板：画布能直接改后，原"策略编辑面板+每仓位覆盖表"
          两个区域整体删除）——
          左：策略库（预置策略带【预置】标记，激活一个生效）+ 每层覆盖折叠（高级）；
-         右上：参数条（策略名/全局时长/光栅门控/断电续算，长说明收 ToolTip）；
+         右上：参数条（策略名/全局时长+时间单位 时·分·秒/光栅门控/断电续算，
+         长说明收 ToolTip；单位只换显示口径，存储恒为分钟，V0.0.53）；
          右主：仓位时长画布（全宽，主编辑区，傻瓜式）——左键单击选格直接浮层输
          时长、左键拖框批量选（橡皮筋透明只描边，Ctrl 叠加）、Ctrl+单击加选/减选、
          中键平移、滚轮缩放、双击空白复位、右键适应图像、Esc 清选择；普通格=
@@ -72,7 +73,7 @@
                         <!-- 每层覆盖（V0.0.44 收进左列折叠区）：整层同时长推荐画布拖选
                              整行批量设置（写仓位覆盖与层覆盖解析等效）；精确配层才展开 -->
                         <Expander DockPanel.Dock="Bottom" Margin="0,8,0,2"
-                                  Header="每层覆盖（分钟，空=用全局）">
+                                  Header="{Binding LevelHeaderText, FallbackValue='每层覆盖（分钟，空=用全局）'}">
                             <StackPanel Margin="0,6,0,0">
                                 <Grid Margin="0,0,0,6">
                                     <Grid.ColumnDefinitions>
@@ -147,10 +148,17 @@
                                      Text="{Binding EditName, FallbackValue=标准固化}"
                                      ToolTip="策略名（库内唯一；改名后激活/保存按新名生效）"/>
                             <TextBlock Text="　全局时长：" VerticalAlignment="Center" Margin="6,0,0,0"/>
-                            <TextBox Style="{StaticResource FreshInput}" Width="72"
+                            <TextBox Style="{StaticResource FreshInput}" Width="86"
                                      Text="{Binding EditGlobalMinutes, FallbackValue=120}"
-                                     ToolTip="全局固化时长（分钟）——所有仓位的打底值，被每层/每仓位覆盖"/>
-                            <TextBlock Text="分" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                                     ToolTip="{Binding GlobalMinutesToolTip, FallbackValue=全局固化时长（分钟）——所有仓位的打底值，被每层/每仓位覆盖}"/>
+                            <TextBlock Text="{Binding TimeUnitSuffix, FallbackValue=分}" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                            <!-- 时间单位切换（V0.0.53）：只换页面显示/输入口径，策略存储恒为分钟。
+                                 切换即把编辑区/画布/图例/浮层全部文本换算（VM 一处处理）。 -->
+                            <TextBlock Text="　单位：" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                            <ComboBox Style="{StaticResource FreshCombo}" Width="64" VerticalAlignment="Center"
+                                      ItemsSource="{Binding TimeUnitOptions, FallbackValue={x:Null}}"
+                                      SelectedIndex="{Binding TimeUnitIndex, FallbackValue=1}"
+                                      ToolTip="页面时间单位（时/分/秒）——仅显示与输入换算，底层计时精度为分钟，选择即记忆"/>
                             <CheckBox IsChecked="{Binding EditGrillGate, FallbackValue=False}"
                                       Content="光栅门控" Margin="18,0,0,0"
                                       ToolTip="开=左右光栅都灭且托盘在架才开计时（防人手在架内就计时）；关（缺省）=托盘到位即开计时，没绑光栅的仓位门控自动放行。"/>
@@ -204,7 +212,10 @@
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="210"/>
+                            <!-- 图例列宽 236：图例改为"色块+可换行文本"两列后，210 会把
+                                 "120 ~ 179 分钟"折成两行（V0.0.53 目检修）；236 保证
+                                 分钟/时/秒三档最长文案单行可读，画布 680 定宽仍放得下。 -->
+                            <ColumnDefinition Width="236"/>
                         </Grid.ColumnDefinitions>
                         <Border x:Name="CanvasHost" Grid.Column="0" Background="{DynamicResource Brush.Fresh.CanvasBg}"
                                 BorderBrush="{DynamicResource Brush.Fresh.PanelBorder}" BorderThickness="1" CornerRadius="4"
@@ -350,8 +361,8 @@
                                             <TextBox x:Name="QuickEditBox" Style="{StaticResource FreshInput}" Width="88"
                                                      Text="{Binding SelectionMinutesText, UpdateSourceTrigger=PropertyChanged}"
                                                      KeyDown="OnQuickEditKeyDown"
-                                                     ToolTip="分钟数（≥1），回车应用"/>
-                                            <TextBlock Text="分" VerticalAlignment="Center" Margin="6,0,8,0"/>
+                                                     ToolTip="{Binding SelectionInputToolTip, FallbackValue='时长（分钟，计时精度为分钟），回车应用'}"/>
+                                            <TextBlock Text="{Binding TimeUnitSuffix, FallbackValue=分}" VerticalAlignment="Center" Margin="6,0,8,0"/>
                                             <Button Style="{StaticResource FreshPrimaryButton}" Content="应用"
                                                     Width="56" Command="{Binding ApplySelectionCommand}"
                                                     Click="OnQuickEditApply"/>
@@ -375,26 +386,49 @@
                                                VerticalAlignment="Center" Margin="0,0,6,0"/>
                                     <TextBlock Text="特殊仓位（单独设过）" VerticalAlignment="Center"/>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,2">
+                                <!-- 图例四档：Grid 两列（色块 + 自动换行文本）——小时档文案
+                                     较长（"1 ~ 1.98 小时"），水平 StackPanel 不约束宽度会
+                                     截断，换行保证任何单位下全可见（V0.0.53 目检修）。 -->
+                                <Grid Margin="0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
                                     <Rectangle Width="18" Height="12" Fill="{DynamicResource Brush.Fresh.TierGreen}" RadiusX="2" RadiusY="2"
                                                VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <TextBlock Text="跟随层/全局：&lt; 60 分钟" VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,2">
+                                    <TextBlock Grid.Column="1" TextWrapping="Wrap"
+                                               Text="{Binding LegendGreenText, FallbackValue='跟随层/全局：&lt; 60 分钟'}" VerticalAlignment="Center"/>
+                                </Grid>
+                                <Grid Margin="0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
                                     <Rectangle Width="18" Height="12" Fill="{DynamicResource Brush.Fresh.TierYellow}" RadiusX="2" RadiusY="2"
                                                VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <TextBlock Text="跟随层/全局：60 ~ 119 分钟" VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,2">
+                                    <TextBlock Grid.Column="1" TextWrapping="Wrap"
+                                               Text="{Binding LegendYellowText, FallbackValue=跟随层/全局：60 ~ 119 分钟}" VerticalAlignment="Center"/>
+                                </Grid>
+                                <Grid Margin="0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
                                     <Rectangle Width="18" Height="12" Fill="{DynamicResource Brush.Fresh.TierOrange}" RadiusX="2" RadiusY="2"
                                                VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <TextBlock Text="跟随层/全局：120 ~ 179 分钟" VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,2">
+                                    <TextBlock Grid.Column="1" TextWrapping="Wrap"
+                                               Text="{Binding LegendOrangeText, FallbackValue=跟随层/全局：120 ~ 179 分钟}" VerticalAlignment="Center"/>
+                                </Grid>
+                                <Grid Margin="0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
                                     <Rectangle Width="18" Height="12" Fill="{DynamicResource Brush.Fresh.TierRed}" RadiusX="2" RadiusY="2"
                                                VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <TextBlock Text="跟随层/全局：≥ 180 分钟" VerticalAlignment="Center"/>
-                                </StackPanel>
+                                    <TextBlock Grid.Column="1" TextWrapping="Wrap"
+                                               Text="{Binding LegendRedText, FallbackValue=跟随层/全局：≥ 180 分钟}" VerticalAlignment="Center"/>
+                                </Grid>
                                 <Separator Margin="0,8"/>
                                 <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="左键单击：选格子，直接输时长"/>
                                 <TextBlock FontSize="10" Foreground="{DynamicResource Brush.Fresh.FgDim}" Text="左键拖框：批量选格（Ctrl 叠加）" TextWrapping="Wrap" Margin="0,2,0,0"/>

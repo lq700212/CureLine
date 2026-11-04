@@ -25,16 +25,38 @@
 //   SelectionMinutesText 回车应用=ApplySelectionCommand（逐格写覆盖行）；
 //   缩放/平移交互仍在 View 层（RenderTransform 属 View 关切，
 //   见 CuringPolicyWindow.xaml.cs）。
+// 时间单位（V0.0.53，用户要求：页面可切 时/分/秒，全部时间文本跟换）：
+//   **只换显示/输入口径，存储与状态机恒为分钟**（CuringPolicy.GlobalMinutes/
+//   LevelMinutes/SlotMinutes 的 int 分钟语义不动——状态机/持久化/过账零影响）。
+//   切换时把编辑区与仓位行文本按旧单位解析成分钟、再按新单位重写（多步无损：
+//   时=分钟/60，秒=分钟×60；小时显示 0.#### 精度足够整分钟往返）。
+//   解析统一走 TryParseDisplay（支持小数、AwayFromZero 四舍五入到整分钟）；
+//   秒模式输入 30 秒=0.5 分→1 分（计时精度是分钟，UI 提示口径同此）。
+//   选择记忆在 config.ini [setting] PolicyTimeUnit（程序①专用 UI 键，非法回
+//   Minutes，与 PointBitStyle 同款自愈）。
 // 怎么改：新增策略字段 = CuringPolicy 加属性 + 编辑区加控件 + BuildDraft
 //   /ApplyDraft 两处同步 + Validator 加规则；预览分档改 PreviewTiers。
 // =========================================================================
 
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Globalization;
 using CureLine.Core.Curing;
+using CureLine.Core.Infrastructure;
 using CureLine.ViewModels;
 
 namespace CureStation.ViewModels;
+
+/// <summary>
+/// 策略窗时间单位（仅界面显示/输入口径；存储与状态机恒为分钟）。
+/// 顺序即下拉顺序：时 → 分 → 秒（用户指定），TimeUnitIndex 直接取整数值。
+/// </summary>
+public enum PolicyTimeUnit
+{
+    Hours = 0,
+    Minutes = 1,
+    Seconds = 2,
+}
 
 /// <summary>每仓位覆盖行（DataGrid 可编辑三列；保存时解析回 SlotMinutes）。</summary>
 public sealed class SlotMinuteRow : ViewModelBase
@@ -44,6 +66,7 @@ public sealed class SlotMinuteRow : ViewModelBase
     private string _level = "";
     public string Level { get => _level; set => Set(ref _level, value); }
     private string _minutes = "";
+    /// <summary>时长文本（当前时间单位口径；保存时按单位换算回分钟）。</summary>
     public string Minutes { get => _minutes; set => Set(ref _minutes, value); }
 }
 
@@ -53,26 +76,31 @@ public sealed class SlotMinuteRow : ViewModelBase
 /// IsSelected（INPC）=画布点选/框选态——真源在 VM 的 _selectedKeys 键集合，
 /// 格子对象每次 RebuildPreview 全新重建，选中态由 VM 按键恢复，勿只依赖本属性。
 /// IsSpecial=该仓位在 SlotMinutes 配了独立覆盖（画布蓝色标识，与四档时长色区分）。
+/// Minutes 恒为分钟（分档/校验/保存口径）；MinutesText/Tip 是当前时间单位的
+/// 显示文本（VM 按单位格式化后传入，格子自身不认识单位）。
 /// </summary>
 public sealed class SlotPreviewItem : ViewModelBase
 {
     private bool _isSelected;
     public bool IsSelected { get => _isSelected; set => Set(ref _isSelected, value); }
 
-    public SlotPreviewItem(int rack, int level, int minutes, bool isSpecial = false)
+    public SlotPreviewItem(int rack, int level, int minutes, string minutesText, string tip,
+        bool isSpecial = false)
     {
         Rack = rack;
         Level = level;
         Minutes = minutes;
+        MinutesText = minutesText;
+        Tip = tip;
         IsSpecial = isSpecial;
         Tier = minutes >= 180 ? "Red" : minutes >= 120 ? "Orange" : minutes >= 60 ? "Yellow" : "Green";
-        Tip = $"架{rack} 层{level}：固化 {minutes} 分钟" + (isSpecial ? "（特殊仓位：单独设置过）" : "");
     }
 
     public int Rack { get; }
     public int Level { get; }
     public int Minutes { get; }
-    public string MinutesText => Minutes.ToString();
+    /// <summary>格子大数字显示文本（当前时间单位，含小数时按 0.#### 格式）。</summary>
+    public string MinutesText { get; }
     /// <summary>仓位短标（"架1-层1"，格子第二行显示；完整句进 ToolTip）。</summary>
     public string PositionText => $"架{Rack}-层{Level}";
     /// <summary>时长分档色键：Green(&lt;60)/Yellow(60~119)/Orange(120~179)/Red(≥180)。</summary>
@@ -91,8 +119,115 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     public const string CustomName = "自定义";
 
     private readonly IDialogService _dialogs;
-    private readonly List<string> _flushErrors = new();
     private string _activeName = "";
+
+    /// <summary>时间单位 ini 键（config.ini [setting]，程序①专用 UI 键）。</summary>
+    private const string TimeUnitIniKey = "PolicyTimeUnit";
+
+    private PolicyTimeUnit _timeUnit = PolicyTimeUnit.Minutes;
+
+    /// <summary>
+    /// 页面时间单位（时/分/秒）：只换显示/输入口径，策略存储与状态机恒为分钟。
+    /// 切换时把编辑区/仓位行文本按旧单位换算成分钟再按新单位重写（无损往返），
+    /// 并落盘记忆（下次打开沿用；非法值开机回 Minutes）。
+    /// </summary>
+    public PolicyTimeUnit TimeUnit
+    {
+        get => _timeUnit;
+        set
+        {
+            if (value == _timeUnit)
+                return;
+            var oldUnit = _timeUnit;
+            _timeUnit = value;
+            Raise(nameof(TimeUnit));
+            Raise(nameof(TimeUnitIndex));
+            Raise(nameof(TimeUnitSuffix));
+            Raise(nameof(TimeUnitName));
+            Raise(nameof(LevelHeaderText));
+            Raise(nameof(GlobalMinutesToolTip));
+            Raise(nameof(SelectionInputToolTip));
+            Raise(nameof(LegendGreenText));
+            Raise(nameof(LegendYellowText));
+            Raise(nameof(LegendOrangeText));
+            Raise(nameof(LegendRedText));
+            RescaleEditorTexts(oldUnit);   // 编辑区/仓位行文本换单位（分钟值不变）
+            RebuildPreview();              // 画布数字/ToolTip/浮层摘要随单位刷新
+            IniFile.Write(AppPaths.ConfigIni, "setting", TimeUnitIniKey, TimeUnit.ToString());
+        }
+    }
+
+    /// <summary>下拉选中索引（枚举值即顺序：0=时 1=分 2=秒）。</summary>
+    public int TimeUnitIndex
+    {
+        get => (int)TimeUnit;
+        set
+        {
+            if (value is >= (int)PolicyTimeUnit.Hours and <= (int)PolicyTimeUnit.Seconds)
+                TimeUnit = (PolicyTimeUnit)value;
+        }
+    }
+
+    /// <summary>下拉选项（顺序与枚举一致）。</summary>
+    public IReadOnlyList<string> TimeUnitOptions { get; } = ["时", "分", "秒"];
+
+    /// <summary>输入框后缀短词：时/分/秒。</summary>
+    public string TimeUnitSuffix => TimeUnit switch
+    {
+        PolicyTimeUnit.Hours => "时",
+        PolicyTimeUnit.Seconds => "秒",
+        _ => "分",
+    };
+
+    /// <summary>描述性文案单位名：小时/分钟/秒（图例/ToolTip/Expander 用）。</summary>
+    public string TimeUnitName => TimeUnit switch
+    {
+        PolicyTimeUnit.Hours => "小时",
+        PolicyTimeUnit.Seconds => "秒",
+        _ => "分钟",
+    };
+
+    /// <summary>每层覆盖折叠区标题（单位随切换）。</summary>
+    public string LevelHeaderText => $"每层覆盖（{TimeUnitName}，空=用全局）";
+
+    /// <summary>全局时长输入框 ToolTip（单位随切换）。</summary>
+    public string GlobalMinutesToolTip =>
+        $"全局固化时长（{TimeUnitName}）——所有仓位的打底值，被每层/每仓位覆盖";
+
+    /// <summary>浮层时长输入框 ToolTip（单位随切换）。</summary>
+    public string SelectionInputToolTip =>
+        $"时长（{TimeUnitName}，计时精度为分钟），回车应用";
+
+    // 图例四档阈值（分钟语义不变，文案随单位换算）：60/120/180 分钟三档边界。
+
+    // 图例是描述文案（非可编辑值），小时档用 0.## 显示更紧凑（1.98/2.98），
+    // 保持 0.#### 会在图例列里折成两行（V0.0.53 目检修）。
+
+    /// <summary>图例绿档：< 60 分钟。</summary>
+    public string LegendGreenText => $"跟随层/全局：< {FormatMinutesShort(60)} {TimeUnitName}";
+
+    /// <summary>图例黄档：60 ~ 119 分钟。</summary>
+    public string LegendYellowText =>
+        $"跟随层/全局：{FormatMinutesShort(60)} ~ {FormatMinutesShort(119)} {TimeUnitName}";
+
+    /// <summary>图例橙档：120 ~ 179 分钟。</summary>
+    public string LegendOrangeText =>
+        $"跟随层/全局：{FormatMinutesShort(120)} ~ {FormatMinutesShort(179)} {TimeUnitName}";
+
+    /// <summary>图例红档：≥ 180 分钟。</summary>
+    public string LegendRedText => $"跟随层/全局：≥ {FormatMinutesShort(180)} {TimeUnitName}";
+
+    /// <summary>分钟 → 当前单位的简短显示（图例用，0.##）。</summary>
+    private string FormatMinutesShort(int minutes)
+    {
+        double value = TimeUnit switch
+        {
+            PolicyTimeUnit.Hours => minutes / 60.0,
+            PolicyTimeUnit.Seconds => minutes * 60.0,
+            _ => minutes,
+        };
+        return value.ToString("0.##", CultureInfo.CurrentCulture);
+    }
 
     public ObservableCollection<CuringPolicy> Policies { get; } = new();
     public ObservableCollection<SlotMinuteRow> SlotRows { get; } = new();
@@ -197,7 +332,9 @@ public sealed class CuringPolicyViewModel : ViewModelBase
             {
                 var key = _selectedKeys.First();
                 var it = SlotPreviewItems.FirstOrDefault(x => $"{x.Rack}-{x.Level}" == key);
-                return it == null ? key : $"架{it.Rack}-层{it.Level} · 当前 {it.Minutes} 分";
+                return it == null
+                    ? key
+                    : $"架{it.Rack}-层{it.Level} · 当前 {FormatMinutes(it.Minutes)} {TimeUnitSuffix}";
             }
             var names = SlotPreviewItems
                 .Where(x => _selectedKeys.Contains($"{x.Rack}-{x.Level}"))
@@ -280,9 +417,10 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         var text = (SelectionMinutesText ?? "").Trim();
         if (text.Length == 0)
             return;
-        if (!int.TryParse(text, out var minutes) || minutes < 1)
+        // 按当前单位解析（支持小数）；底层仍是整分钟，秒值按四舍五入到分钟。
+        if (!TryParseDisplay(text, TimeUnit, out var minutes) || minutes < 1)
         {
-            _dialogs.ShowMessage("固化时长需为 ≥1 的整数分钟。", "设置时长");
+            _dialogs.ShowMessage($"固化时长需为 ≥1 分钟（当前单位：{TimeUnitName}）。", "设置时长");
             return;
         }
         foreach (var key in _selectedKeys)
@@ -293,13 +431,13 @@ public sealed class CuringPolicyViewModel : ViewModelBase
                 int.TryParse((r.Rack ?? "").Trim(), out var rr) && rr == rack &&
                 int.TryParse((r.Level ?? "").Trim(), out var ll) && ll == level);
             if (row != null)
-                row.Minutes = minutes.ToString();
+                row.Minutes = FormatMinutes(minutes);
             else
                 SlotRows.Add(new SlotMinuteRow
                 {
                     Rack = rack.ToString(),
                     Level = level.ToString(),
-                    Minutes = minutes.ToString(),
+                    Minutes = FormatMinutes(minutes),
                 });
         }
         SelectionMinutesText = "";
@@ -337,8 +475,16 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     public RelayCommand ApplySelectionCommand { get; }
     public RelayCommand ClearSelectionOverrideCommand { get; }
 
-    /// <summary>保存/激活/套用成功后置 true（DialogService 据此返回 true，主窗刷新策略）。</summary>
+    /// <summary>保存/激活/套用成功后置 true（测试断言用；View 经 RequestClose 关窗）。</summary>
     public bool CloseDialog { get; private set; }
+
+    /// <summary>
+    /// 关窗请求（View 订阅：设 DialogResult=true 并 Close）——保存/激活/套用成功后触发。
+    /// 这是 ShowDialog 返回值链的关键：不触发则主窗收到 false、不刷新激活策略、
+    /// 不弹"已保存"提示（用户会误以为没保存成功，V0.0.53 修）。
+    /// 与 LoginViewModel.RequestClose 同款模式（VM 不 new Window）。
+    /// </summary>
+    public event Action<bool>? RequestClose;
 
     public CuringPolicyViewModel(IDialogService dialogs, int rackCount = 10, int levelCount = 3)
     {
@@ -347,6 +493,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         // 点表配了更多架就铺更多，与主窗展示一致。
         RackCount = Math.Max(CureLine.Core.Curing.SlotLocationCode.RacksPerRow, rackCount);
         LevelCount = Math.Max(CureLine.Core.Curing.SlotLocationCode.Levels, levelCount);
+        _timeUnit = LoadTimeUnitFromIni();   // 记忆上次单位（非法/缺键=分钟）；加载策略前定好口径
         AddPolicyCommand = new RelayCommand(AddPolicy);
         RemovePolicyCommand = new RelayCommand(RemovePolicy, () => SelectedPolicy != null);
         SaveCommand = new RelayCommand(Save);
@@ -377,6 +524,76 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     private void OnSlotRowPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         => RebuildPreview();
 
+    /// <summary>读上次选择的时间单位（[setting] PolicyTimeUnit；缺键/非法/未定义枚举回分钟）。</summary>
+    private static PolicyTimeUnit LoadTimeUnitFromIni()
+    {
+        string text = IniFile.ReadStr(AppPaths.ConfigIni, "setting", TimeUnitIniKey,
+            nameof(PolicyTimeUnit.Minutes));
+        return Enum.TryParse<PolicyTimeUnit>(text, ignoreCase: true, out var unit) &&
+               Enum.IsDefined(unit)
+            ? unit
+            : PolicyTimeUnit.Minutes;
+    }
+
+    // ---------- 时间单位换算（显示文本 ↔ 分钟） ----------
+
+    /// <summary>分钟 → 当前单位显示文本（时=÷60，秒=×60；0.#### 精度保证整分钟无损往返）。</summary>
+    private string FormatMinutes(int minutes)
+    {
+        double value = TimeUnit switch
+        {
+            PolicyTimeUnit.Hours => minutes / 60.0,
+            PolicyTimeUnit.Seconds => minutes * 60.0,
+            _ => minutes,
+        };
+        return value.ToString("0.####", CultureInfo.CurrentCulture);
+    }
+
+    /// <summary>
+    /// 当前单位文本 → 分钟（支持小数；四舍五入到整分钟——状态机计时精度是分钟，
+    /// 秒模式输入 30 秒=0.5 分按 1 分计）。NaN/无穷/超 int 范围一律算格式错。
+    /// </summary>
+    private static bool TryParseDisplay(string? text, PolicyTimeUnit unit, out int minutes)
+    {
+        minutes = 0;
+        if (!double.TryParse((text ?? "").Trim(), NumberStyles.Float,
+                CultureInfo.CurrentCulture, out var value))
+            return false;
+        double m = unit switch
+        {
+            PolicyTimeUnit.Hours => value * 60.0,
+            PolicyTimeUnit.Seconds => value / 60.0,
+            _ => value,
+        };
+        if (double.IsNaN(m) || double.IsInfinity(m) || m is < int.MinValue or > int.MaxValue)
+            return false;
+        minutes = (int)Math.Round(m, MidpointRounding.AwayFromZero);
+        return true;
+    }
+
+    /// <summary>
+    /// 单位切换时重写编辑区/仓位行的时长文本：按旧单位解析成分钟、按新单位格式化。
+    /// 解析失败的文本原样保留（切换不吞用户输入错误，保存时照常拦并提示）。
+    /// 空文本保持空（层覆盖/仓位行的"空=跟随"语义不变）。
+    /// </summary>
+    private void RescaleEditorTexts(PolicyTimeUnit oldUnit)
+    {
+        string Convert(string text) =>
+            string.IsNullOrWhiteSpace(text)
+                ? text
+                : TryParseDisplay(text, oldUnit, out var minutes)
+                    ? FormatMinutes(minutes)
+                    : text;
+
+        EditGlobalMinutes = Convert(EditGlobalMinutes);
+        EditLevel1Min = Convert(EditLevel1Min);
+        EditLevel2Min = Convert(EditLevel2Min);
+        EditLevel3Min = Convert(EditLevel3Min);
+        EditLevel4Min = Convert(EditLevel4Min);
+        foreach (var row in SlotRows)
+            row.Minutes = Convert(row.Minutes);
+    }
+
     private void LoadFromDisk()
     {
         var book = CuringPolicyStore.Load() ?? CuringPolicyStore.BuildDefaultBook();
@@ -398,7 +615,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         }
         var p = SelectedPolicy;
         EditName = p.Name;
-        EditGlobalMinutes = p.GlobalMinutes.ToString();
+        EditGlobalMinutes = FormatMinutes(p.GlobalMinutes);
         EditGrillGate = p.GrillGate;
         EditPersistMinutes = p.PersistMinutes;
         EditLevel1Min = LevelText(p, 1);
@@ -413,14 +630,14 @@ public sealed class CuringPolicyViewModel : ViewModelBase
             {
                 Rack = parts.ElementAtOrDefault(0) ?? "",
                 Level = parts.ElementAtOrDefault(1) ?? "",
-                Minutes = minutes.ToString(),
+                Minutes = FormatMinutes(minutes),
             });
         }
         RebuildPreview();
     }
 
-    private static string LevelText(CuringPolicy p, int level) =>
-        p.LevelMinutes.TryGetValue(level, out var m) && m > 0 ? m.ToString() : "";
+    private string LevelText(CuringPolicy p, int level) =>
+        p.LevelMinutes.TryGetValue(level, out var m) && m > 0 ? FormatMinutes(m) : "";
 
     private void ClearEditor()
     {
@@ -460,8 +677,10 @@ public sealed class CuringPolicyViewModel : ViewModelBase
                 string.IsNullOrWhiteSpace(row.Minutes);
             if (blank)
                 continue; // 全空行忽略
-            int rack = ParseOrError(row.Rack, 0, $"仓位行 架号 \"{row.Rack}\"", draft.Name, errors);
-            int level = ParseOrError(row.Level, 0, $"仓位行 层号 \"{row.Level}\"", draft.Name, errors);
+            // 架号/层号是物理位置整数，恒按十进制解析——不能走时间单位换算
+            // （否则小时模式下架"3"会被当成 180 分钟，绑定错仓位）。
+            int rack = ParseIndexOrError(row.Rack, 0, $"仓位行 架号 \"{row.Rack}\"", draft.Name, errors);
+            int level = ParseIndexOrError(row.Level, 0, $"仓位行 层号 \"{row.Level}\"", draft.Name, errors);
             int minutes = ParseOrError(row.Minutes, 0, $"仓位行 时长 \"{row.Minutes}\"", draft.Name, errors);
             if (rack > 0 && level > 0 && minutes > 0)
                 draft.SlotMinutes[CuringPolicy.SlotKey(rack, level)] = minutes;
@@ -480,12 +699,23 @@ public sealed class CuringPolicyViewModel : ViewModelBase
             draft.LevelMinutes[level] = minutes;
     }
 
-    private static int ParseOrError(string text, int fallback, string what, string policyName,
+    /// <summary>按当前时间单位解析数字；失败记一条（带单位提示），回退 fallback。</summary>
+    private int ParseOrError(string text, int fallback, string what, string policyName,
         List<string> errors)
     {
-        if (int.TryParse(text?.Trim(), out var v))
-            return v;
-        errors.Add($"策略[{policyName}] {what} 不是数字。");
+        if (TryParseDisplay(text, TimeUnit, out var minutes))
+            return minutes;
+        errors.Add($"策略[{policyName}] {what} 不是数字（当前单位：{TimeUnitName}）。");
+        return fallback;
+    }
+
+    /// <summary>解析物理编号（架号/层号）：恒十进制整数，不随页面时间单位换算。</summary>
+    private static int ParseIndexOrError(string text, int fallback, string what, string policyName,
+        List<string> errors)
+    {
+        if (int.TryParse((text ?? "").Trim(), out var value))
+            return value;
+        errors.Add($"策略[{policyName}] {what} 不是整数。");
         return fallback;
     }
 
@@ -518,8 +748,12 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         for (int rack = 1; rack <= RackCount; rack++)
         {
             var key = CuringPolicy.SlotKey(rack, level);
-            items.Add(new SlotPreviewItem(rack, level, draft.ResolveMinutes(rack, level),
-                draft.SlotMinutes.ContainsKey(key)));
+            int minutes = draft.ResolveMinutes(rack, level);
+            bool special = draft.SlotMinutes.ContainsKey(key);
+            string display = FormatMinutes(minutes);
+            string tip = $"架{rack} 层{level}：固化 {display} {TimeUnitName}" +
+                         (special ? "（特殊仓位：单独设置过）" : "");
+            items.Add(new SlotPreviewItem(rack, level, minutes, display, tip, special));
         }
         SlotPreviewItems = items;
         Raise(nameof(SlotPreviewItems));
@@ -598,7 +832,8 @@ public sealed class CuringPolicyViewModel : ViewModelBase
             _dialogs.ShowMessage(validation.ToString(), "套用失败（校验不过）");
             return;
         }
-        CuringPolicyStore.Save(book);
+        if (!TrySave(book))
+            return;
         _activeName = book.ActiveName;
         // 刷新列表与选中（自定义是库内对象的新状态——重建集合保 UI 同步）
         Policies.Clear();
@@ -608,6 +843,27 @@ public sealed class CuringPolicyViewModel : ViewModelBase
             string.Equals((p.Name ?? "").Trim(), CustomName, StringComparison.OrdinalIgnoreCase)
             && !p.IsPreset);
         CloseDialog = true;   // 主窗统一提示（与保存/激活同一条链）
+        RequestClose?.Invoke(true);
+    }
+
+    /// <summary>
+    /// 落盘策略库（带可见失败提示）：写盘异常不许静默——现场只读目录/占用时
+    /// 用户必须知道"没保存成功"，而不是关窗重开发现白改（V0.0.53）。
+    /// </summary>
+    private bool TrySave(CuringPolicyBook book)
+    {
+        try
+        {
+            CuringPolicyStore.Save(book);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _dialogs.ShowMessage(
+                $"工艺策略落盘失败：{ex.Message}\n请检查程序目录 config 文件夹是否可写（磁盘/权限/占用）。",
+                "保存失败");
+            return false;
+        }
     }
 
     /// <summary>
@@ -645,10 +901,15 @@ public sealed class CuringPolicyViewModel : ViewModelBase
             _dialogs.ShowMessage(validation.ToString(), "保存失败（校验不过）");
             return;
         }
+        // 先落盘成功才同步选中对象（写盘失败不污染内存里的选中策略）。
+        if (!TrySave(book))
+            return;
         ApplyDraftToSelected(draft);
-        CuringPolicyStore.Save(book);
         _activeName = book.ActiveName;
         CloseDialog = true;
-        // 成功提示由主窗统一弹（OpenCuringPolicy 收到 true 后提示），与点表窗同款
+        // 关窗经 RequestClose → DialogResult=true → 主窗 LoadPolicyBook + 统一提示。
+        // （V0.0.53 前 CloseDialog 无人消费：窗口不关、ShowDialog 恒 false，
+        //   主窗不刷新激活策略也不提示，用户误以为"没保存/没新增"。）
+        RequestClose?.Invoke(true);
     }
 }

@@ -15,17 +15,36 @@ namespace CureLine.Tests;
 public class MultiGatewayTests : IDisposable
 {
     private readonly SimulatedStationClient _plc = new();
-    private readonly HttpListener _mes = new();
+    private readonly HttpListener _mes; // 构造函数里重试成功后赋值
     private readonly string _url;
     private string _nextResp = "{\"STATUS\":\"1\",\"MSG\":\"ok\",\"DATA\":null}";
     private readonly int _port;
 
     public MultiGatewayTests()
     {
-        _port = 18080 + Random.Shared.Next(0, 500);
-        _url = $"http://127.0.0.1:{_port}/mes/";
-        _mes.Prefixes.Add(_url);
-        _mes.Start();
+        // 端口随机抽 + 失败重试：与 MesStubServer 同款加固——xUnit 并行下
+        // 并发桩（本类 / MesStubServer，两段端口区间有重叠）可能撞同端口，
+        // Start 报"另一个程序正在使用此文件"即重抽，连败 20 次才向上抛。
+        // 坑：HttpListener.Start() 失败后内部把 listener 置为 Disposed 状态，
+        // 复用同一个实例再重试会抛 ObjectDisposedException——必须 Close 换新。
+        var mes = new HttpListener();
+        for (int attempt = 0; ; attempt++)
+        {
+            _port = 18080 + Random.Shared.Next(0, 500);
+            _url = $"http://127.0.0.1:{_port}/mes/";
+            mes.Prefixes.Add(_url);
+            try
+            {
+                mes.Start();
+                break;
+            }
+            catch (HttpListenerException) when (attempt < 19)
+            {
+                try { mes.Close(); } catch { }
+                mes = new HttpListener(); // 失败的实例已被内部废弃，换新重抽
+            }
+        }
+        _mes = mes;
         Task.Run(ServeMes);
         _plc.Connect("127.0.0.1", 6060);
 

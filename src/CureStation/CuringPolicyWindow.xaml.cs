@@ -47,6 +47,18 @@ public partial class CuringPolicyWindow : Window
     public CuringPolicyWindow()
     {
         InitializeComponent();
+        // 保存/激活/套用成功 → VM 发 RequestClose → 设 DialogResult 关窗
+        // （ShowDialog 返回 true，主窗才刷新激活策略并提示"已保存"）。
+        // DataContextChanged 订阅：DialogService 是先建窗后设 DataContext。
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is CuringPolicyViewModel vm)
+                vm.RequestClose += ok =>
+                {
+                    DialogResult = ok;
+                    Close();
+                };
+        };
     }
 
     /// <summary>标题条 ✕（无边框自绘标配；保存/激活走命令链——✕ 只关窗不保存）。</summary>

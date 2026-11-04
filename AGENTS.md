@@ -421,6 +421,24 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   部分台在线保"N/M 台已连"，全断/一目连接错误的全文="未连接"）；
   `ConnectionDetailText`=详情全文（总线摘要/设备错误串）只走悬停
   ToolTip——错误长文永远不写回顶栏文本，勿再回滚全文字口径。
+- **策略窗时间单位语义（V0.0.53 起，全在 `CuringPolicyViewModel`）**：① 页面
+  可切 时/分/秒（`PolicyTimeUnit`，参数条右上"单位"下拉），**仅显示/输入口径**——
+  `CuringPolicy` 的 int 分钟存储、状态机计时、断电续算、过账时间单位一律不动；
+  ② 切换时编辑区/仓位行文本按"旧单位解析→分钟→新单位格式化"重写
+  （`0.####` 精度整分钟无损往返，`TryParseDisplay` 支持小数、AwayFromZero
+  四舍五入到整分钟，秒输入 30 秒=1 分）；画布数字/ToolTip、浮层摘要、图例
+  四档、Expander 标题全走 VM 派生属性，勿在 XAML 写死时间文案；
+  ③ **架号/层号恒十进制解析**（`ParseIndexOrError`，不走单位换算——否则小时
+  模式下架号 3 被当 180 分钟绑错仓位，V0.0.53 实测坑）；
+  ④ 选择记忆 `[setting] PolicyTimeUnit`（程序①专用 UI 键，非法回 Minutes，
+  与 PointBitStyle 同款自愈）。
+- **策略窗关窗链（V0.0.53 修，勿回退）**：保存/激活/套用成功 → VM
+  `CloseDialog=true` + `RequestClose(true)` → View（`CuringPolicyWindow`
+  订阅 DataContextChanged）设 `DialogResult=true` 关窗 → 主窗刷新激活策略并
+  提示"已保存"。**缺这条链时窗口不关、ShowDialog 恒 false、主窗不刷新不提示，
+  用户会误判"添加策略没保存"**（V0.0.53 用户实测反馈的根因）；失败路径不发
+  RequestClose。落盘走 `TrySave`（异常弹可见原因），且先落盘成功才
+  `ApplyDraftToSelected`（写盘失败不污染内存策略）。
 - **策略预置/套用语义（V0.0.20 三轮起，全在 `CuringPolicy.IsPreset` +
   `CuringPolicyViewModel`）**：① 预置策略（IsPreset=true，出厂模板）可选中
   查看/编辑，但保存/激活/删除一律 VM 层拦下——唯一出口【套用为自定义策略】
