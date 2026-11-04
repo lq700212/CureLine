@@ -158,9 +158,11 @@ public class SqliteHelper
     }
 
     /// <summary>
-    /// 建库：确保目录 + cure_record 表存在。老项目靠现场预置 db3 文件，
-    /// 新项目启动时自建（与 INI 自愈同一思想），现场删库也不怕。
+    /// 建库：确保目录 + cure_record / app_meta 两张表存在。老项目靠现场预置
+    /// db3 文件，新项目启动时自建（与 INI 自愈同一思想），现场删库也不怕。
     /// 表结构 1:1：Time / 库位ID / 产品ID / Mark。
+    /// app_meta 是键值表（授权水位等进程级元数据）——与业务表分开，清业务数据
+    /// 不误删授权水位（水位只是防回拨三存储之一，删了还有 ini/注册表兜底）。
     /// </summary>
     public void EnsureDatabase()
     {
@@ -170,5 +172,36 @@ public class SqliteHelper
         ExecuteNonQuery(
             "CREATE TABLE IF NOT EXISTS cure_record (" +
             "Time TEXT, 库位ID TEXT, 产品ID TEXT, Mark TEXT)", null);
+        ExecuteNonQuery(
+            "CREATE TABLE IF NOT EXISTS app_meta (" +
+            "Key TEXT PRIMARY KEY, Value TEXT)", null);
+    }
+
+    /// <summary>
+    /// 读 app_meta 键值（键不存在返回 null）。授权水位用；调用方自行兜底异常。
+    /// 表未建时这里会抛异常——生产链路 App.OnStartup 已先 EnsureDatabase。
+    /// </summary>
+    public string? GetMeta(string key)
+    {
+        object? v = ExecuteScalar(
+            "SELECT Value FROM app_meta WHERE Key=@key",
+            new Dictionary<string, object?> { ["@key"] = key });
+        return v == null || v == DBNull.Value ? null : Convert.ToString(v);
+    }
+
+    /// <summary>
+    /// 写 app_meta 键值（存在则覆盖）。SQLite 3.24+ UPSERT 语法；
+    /// System.Data.SQLite 1.0.119 内置版本满足。参数化，禁止拼接。
+    /// </summary>
+    public void SetMeta(string key, string value)
+    {
+        ExecuteNonQuery(
+            "INSERT INTO app_meta (Key, Value) VALUES (@key, @value) " +
+            "ON CONFLICT(Key) DO UPDATE SET Value=excluded.Value",
+            new Dictionary<string, object?>
+            {
+                ["@key"] = key,
+                ["@value"] = value,
+            });
     }
 }

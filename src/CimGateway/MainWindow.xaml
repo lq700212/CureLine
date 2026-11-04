@@ -193,6 +193,13 @@
                                Margin="14,0,0,0" VerticalAlignment="Center" FontSize="12"
                                Foreground="{DynamicResource Brush.HeaderSubFg}"/>
                 </StackPanel>
+                <!-- 中间 * 列：软件授权状态靠右（不抢左段标题/时钟与右段按钮组）。
+                     点击入口在"设置 ▾ → 软件激活"；这里只做状态提示。 -->
+                <TextBlock Grid.Column="1" Text="{Binding LicenseText, FallbackValue=授权：未激活}"
+                           HorizontalAlignment="Right" Margin="18,0,12,0"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource Brush.HeaderSubFg}"
+                           ToolTip="软件授权状态；输入/更换激活码：设置 ▾ → 软件激活"/>
                 <!-- 功能按钮组（V0.0.39 精简）：连接设备/日志/登录高频留顶栏，其余收拢
                      "设置"下拉——菜单项的命令/显隐/灰显绑定与原独立按钮一致（VM 零改）；
                      系统三钮收尾（最小化/最大化还原/关闭，无边框窗顶替 OS 按钮职责） -->
@@ -260,6 +267,10 @@
                                         IsEnabled="{Binding SettingsItemEnabled}" Click="OnMenuClick"
                                         ToolTip="创建桌面快捷方式"/>
                                 <Border Style="{StaticResource SettingsMenuSep}"/>
+                                <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.Check}"
+                                        Content="软件激活" Command="{Binding OpenLicenseCommand}"
+                                        IsEnabled="{Binding SettingsItemEnabled}" Click="OnMenuClick"
+                                        ToolTip="输入厂商提供的激活码（登录后可用）"/>
                                 <Button Style="{StaticResource SettingsMenuBtn}"
                                         Content="{Binding BtnLangText, FallbackValue='English'}"
                                         Command="{Binding SwitchLanguageCommand}" Click="OnMenuClick"/>

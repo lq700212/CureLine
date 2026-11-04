@@ -602,7 +602,13 @@
                 <!-- 激活策略（短词；连排后与右段统一 18px 左间距防粘连） -->
                 <TextBlock Grid.Column="1" Text="{Binding PolicyText, FallbackValue=策略：—}" Margin="18,0,0,0"
                            VerticalAlignment="Center" Foreground="{DynamicResource Brush.HeaderSubFg}"/>
-                <!-- 中间 * 空列留空不摆元素：弹性撑开，把右侧状态与按钮组推到窗尾 -->
+                <!-- 中间 * 列：软件授权状态靠右（不抢左段连接/策略与右段按钮组）。
+                     点击入口在"设置 ▾ → 软件激活"；这里只做状态提示。 -->
+                <TextBlock Grid.Column="2" Text="{Binding LicenseText, FallbackValue=授权：未激活}"
+                           HorizontalAlignment="Right" Margin="18,0,12,0"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource Brush.HeaderSubFg}"
+                           ToolTip="软件授权状态；输入/更换激活码：设置 ▾ → 软件激活"/>
                 <!-- 过账/操作员状态（功能状态文本，弱化色阶放按钮组前；连排补左间距） -->
                 <TextBlock Grid.Column="3" Text="{Binding PostingText, FallbackValue=过账：—}"
                            Margin="18,0,12,0" VerticalAlignment="Center"
@@ -673,6 +679,9 @@
                                     </Button.Style>
                                 </Button>
                                 <Border Style="{StaticResource SettingsMenuSep}"/>
+                                <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.Check}"
+                                        Content="软件激活" Command="{Binding OpenLicenseCommand}" Click="OnMenuClick"
+                                        ToolTip="输入厂商提供的激活码（管理员+）"/>
                                 <Button Style="{StaticResource SettingsMenuBtn}"
                                         Content="{Binding ToggleThemeText, FallbackValue=深色}"
                                         Command="{Binding ToggleThemeCommand}" Click="OnMenuClick"

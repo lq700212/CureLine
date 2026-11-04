@@ -74,6 +74,15 @@ public class FakeCureDialogService : CureStation.ViewModels.IDialogService
         return MesPostConfigResult;
     }
 
+    /// <summary>ShowLicenseActivation 的桩返回值（true=激活成功）。</summary>
+    public bool LicenseActivationResult { get; set; }
+
+    public bool ShowLicenseActivation()
+    {
+        Calls.Add("ShowLicenseActivation");
+        return LicenseActivationResult;
+    }
+
     public void ShowIoTest(CureLine.Core.Comms.IPointTableBus bus, CureLine.Core.Comms.PointTableConfig config)
         => Calls.Add("ShowIoTest");
 

@@ -20,6 +20,8 @@ config/*.json
 hsl.dat
 *.kcfg
 HslLicense.dat
+# 软件激活签名私钥（厂商信任根：丢失=已发激活码全部作废，外泄=可伪造激活码）
+LicenseSignKey.dat
 
 # ===== 本地状态 =====
 .vs/

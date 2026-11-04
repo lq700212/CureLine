@@ -27,6 +27,9 @@
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
+    <!-- 软件授权设备指纹：WMI 读主板/磁盘/CPU 序列号（MachineFingerprint）。
+         System.Management 仅 Windows 可用，本工程 net8.0-windows 无跨平台问题。 -->
+    <PackageReference Include="System.Management" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>

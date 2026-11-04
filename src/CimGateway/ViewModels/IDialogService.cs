@@ -54,6 +54,12 @@ public interface IDialogService
     /// <summary>调试窗（非模态，直接 Show）。</summary>
     void ShowMesDebug();
 
+    /// <summary>
+    /// 打开软件激活窗（模态）。返回 true 表示激活成功（主窗刷新授权状态文案）。
+    /// 两个程序各自实现（窗是程序私有资产），编排在 Core 的 LicenseActivationViewModel。
+    /// </summary>
+    bool ShowLicenseActivation();
+
     /// <summary>创建桌面快捷方式（逻辑在 Core，服务只弹结果提示）。</summary>
     void CreateDesktopShortcut();
 }

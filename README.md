@@ -8,7 +8,7 @@
 ![WPF](https://img.shields.io/badge/UI-WPF-5C2D91)
 ![数据库](https://img.shields.io/badge/SQLite-3.x-044A64?logo=sqlite&logoColor=white)
 ![通讯](https://img.shields.io/badge/Modbus-TCP-00599C)
-![测试](https://img.shields.io/badge/xUnit-395%20passing-brightgreen)
+![测试](https://img.shields.io/badge/xUnit-434%20passing-brightgreen)
 ![平台](https://img.shields.io/badge/OS-Windows-lightgrey?logo=windows11&logoColor=white)
 
 一套 .NET 8 解决方案：两个可独立部署的 WPF 上位机程序（固化程控 + CIM 整线过账），共享一个业务内核。
@@ -116,6 +116,31 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
 
 ---
 
+## 软件授权（ECDsa 激活码）
+
+- **方案与 HJVision 同源**：ECDsa P-256 非对称签名，私钥只在厂商签发工具，
+  程序内置公钥验签——反编译只能拿到公钥，无法离线伪造激活码。
+- **设备码**：`CURE-<指纹8HEX>-<挑战8HEX>-<校验4HEX>`；指纹=本机四因子
+  （MachineGuid + 主板/磁盘/CPU）SHA256 前 4 字节，挑战值每次打开激活窗
+  随机重生成（防重放，关窗重开旧码作废）。
+- **两产品隔离**：与 HJVision 共用同一把密钥对，靠激活码 payload 产品 ID
+  区分（CureLine=`0x434C` / HJVision=`0xFFFF`）——HJVision 的激活码不能
+  激活 CureLine，反之亦然；设备码前缀 `CURE`（HJVision 保持历史 `HUAJI`）。
+- **试用 / 永久**：厂商按设备码签发，试用 1~255 天（从签发日起算）或永久；
+  授权记录存 `config/config.ini` 的 `[License]` 段，每次启动重新验签。
+- **防回拨**：时间水位同时写 ini / `HKCU\Software\CureLine\License` /
+  SQLite `app_meta` 三处，并与构建日期、exe 文件时间取大做下限；试用机
+  改系统时间绕不过期判定。
+- **门禁**：两程序启动即校验，未授权弹激活窗，关闭仍未授权则退出；运行期
+  每小时巡检；主窗顶栏常显授权状态（永久/试用剩 N 天/未激活/已过期/
+  指纹不符/演示），设置下拉「软件激活」可随时打开激活窗。
+- **演示模式**：`[setting] Simulate=1` 免激活放行（仅联调演示，不得用于生产）。
+- **签发工具**：`tools/LicenseIssuer`（厂商内部，不随客户版分发）。私钥
+  `LicenseSignKey.dat` 已加入 `.gitignore`——丢失=已发激活码全部作废，
+  外泄=可伪造任意激活码，禁止入库/外发。
+
+---
+
 ## 架构（MVVM）
 
 ```mermaid
@@ -154,10 +179,11 @@ CureLine/
 │   ├── CureLine.Core/    共享业务：IO 点表 / 固化工艺 / 过账 / 通讯底座 / VM 基建
 │   ├── CureStation/      程序①固化程控（30 仓位主窗 + 6 功能窗 + 双主题）
 │   └── CimGateway/       程序②CIM 整线过账（网关视图 + 配置/调试/日志窗）
-├── tests/CureLine.Tests/ 395 例 xUnit（本地桩 MES / 状态机桩 / Fake 对话框）
+├── tests/CureLine.Tests/ 434 例 xUnit（本地桩 MES / 状态机桩 / Fake 对话框）
 ├── extern/kaleidoscope/  通讯子模块（独立仓库；Modbus/HslCommunication）
 ├── docs/                 拆分设计 + 培训手册（md/pdf）+ 配图 docs/images/
 ├── tools/DocShot/        文档截图 harness
+├── tools/LicenseIssuer/  软件授权签发工具（厂商内部，私钥不入库）
 └── config.sample.ini     现场配置样例（含逐键注释）
 ```
 

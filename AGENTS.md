@@ -108,12 +108,15 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 409/409（V0.0.52 全量；P3 期分版增量与 V0.0.19~V0.0.20
-   各轮增量明细见各版本 CHANGELOG，V0.0.33~37 增量未逐版回填此括号——
-   基线此后只增不减，V0.0.49 因删改密面板与旧权限窗用例净减 4、
-   自愈播种防回归 +2）；禁止交付编译不过/测试不过的代码。
+   `dotnet test` 434/434（V0.0.54 全量；V0.0.53 及以前各轮增量明细见各版本
+   CHANGELOG，V0.0.33~37 增量未逐版回填此括号——基线此后只增不减，
+   V0.0.49 因删改密面板与旧权限窗用例净减 4、自愈播种防回归 +2，
+   V0.0.54 软件授权 +18）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
+   **`LicenseSignKey.dat`（软件激活签名私钥）** 只留厂商签发工具目录，已
+   ignore——丢失=已发激活码全部作废，外泄=可伪造任意激活码；禁止入库、
+   外发、打进部署包。客户激活码可存 ini，但同样不得写进项目文档/仓库。
 8. **配置样例同步**：新增配置键必须同步改 `config.sample.ini` + `AppConfig`
    缺省值（ini 自愈依赖缺省值，漏了现场起不来）。
 9. **改干净改彻底（2026-10-29 用户拍板，2026-10-31 重申强化：项目未上线，
@@ -209,6 +212,13 @@
 | **程序①（策略预置 + IO 测试，V0.0.20 三轮新增）** | |
 | `src/CureStation/ViewModels/CuringPolicyViewModel.cs` | 策略窗编排：预置库（IsPreset）/套用为自定义/三拦截/先改副本/可视化预览数据（`SlotPreviewItem` 四档色键） |
 | `src/CureStation/ViewModels/IoTestViewModel.cs` + `IoTestWindow.*` | IO 通讯测试窗：点表驱动仓位卡网格（DI 只读灯/DO 点击钮）+ 一键遍历跑马灯 + 共享总线（关窗 Detach） |
+| **Core 共享（软件授权家族，V0.0.54 新增）** | |
+| `src/CureLine.Core/Security/LicenseCodec.cs` | **授权编解码单一事实源**（主程序 + 签发工具链接同一份）：双产品设备码（CureLine `CURE` / HJVision `HUAJI`）、挑战值、payload 布局、Crockford Base32、内置公钥验签。payload `[14..15]` 产品 ID（`0x434C`/`0xFFFF`）是两产品隔离的唯一依据，验签后必须由 `LicenseGate` 比对 |
+| `src/CureLine.Core/Security/MachineFingerprint.cs` | 本机四因子指纹（MachineGuid + 主板/磁盘/CPU 序列号 → SHA256 前 4 字节）；MachineGuid 缺失直接判采集失败（拒绝出设备码/拒绝激活） |
+| `src/CureLine.Core/Security/LicenseGate.cs` | **授权门禁五态**（未激活/试用/永久/已过期/指纹不符）+ 激活落盘 + 产品隔离 + 挑战值防重放 + 三存储防回拨（ini/注册表/SQLite `app_meta`）；全工程放行只许调 `IsProductionAllowed()`；可测实例类 + `Default` 生产单例 |
+| `src/CureLine.Core/ViewModels/LicenseActivationViewModel.cs` + 两程序 `LicenseActivationWindow.*` | 激活窗 VM（设备码/状态/原因/激活码输入/命令）+ 两程序各自 XAML（文案产品名不同）；演示模式隐藏入口并禁用命令 |
+| `src/CureStation/App.xaml.cs` / `src/CimGateway/App.xaml.cs` | 启动门禁（未授权弹窗，关闭即退出；`ShutdownMode=OnExplicitShutdown` 到主窗建好恢复）+ 每小时巡检 |
+| `tools/LicenseIssuer/` | **厂商签发工具**（.NET 8 WPF，不随客户版分发）：GUI 粘贴设备码签发 + `--generate`/`--issue` 命令行；按设备码前缀自动识别产品。私钥 `LicenseSignKey.dat` 已 ignore，禁止入库/外发 |
 | **Core 共享（业务既有）** | |
 | `src/CureLine.Core/Services/LocalLogService.cs` | 本机操作日志落盘（截 50 字写文件，全量上界面） |
 | `src/CureLine.Core/Modes/MultiMachineGateway.cs` | 多机网关：触发→JSON→POST→回写 + Manager（Modbus 底座已接，业务零改动） |
@@ -217,7 +227,7 @@
 | `src/CureLine.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段）+ `MockMesServer`（内置模拟 MES 桩，仅 Simulate=1 且 URL 空/占位时接管，自配 URL 透传） |
 | `src/CureLine.Core/Data/CureRecordStore.cs` | `cure_record` 表 CRUD（V0.0.32 由 PLCtable 改名，项目未上线无兼容包袱）+ `ComputeStats` 纯统计 |
 | `src/CureLine.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/机台连接配置（`StationConfig.cs`：StationConfigStore/Validator） |
-| `tests/CureLine.Tests/` | 395 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用） |
+| `tests/CureLine.Tests/` | 434 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用；`LicenseTests` 18 例锁双产品授权） |
 | `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
 | `tools/DocShot/` | **文档截图 harness（V0.0.50 重作）**：`run_docshot.ps1` 一键 build 两程序→build harness→组装 runner→起 exe 全自动；**完全后台静默纪律（用户拍板）**——所有窗（含两主窗）`ShowActivated=false`+`ShowInTaskbar=false`+Left/Top=-20000 离屏，绝不抢焦点/不进任务栏/不落用户屏幕；**成品口径=RTB 优先**（`ShotRtb` 按 DPI 缩放渲染视觉树——无 DWM 阴影黑边、与窗口位置无关），PrintWindow 降为兜底（离屏下拍出黑边已被用户目检否决）；镜头名与文档引用全对齐（`cs-workorder-operator/admin.png` 三级视角、`cs-main-idle/flow/dark.png` 三帧），万象清单校验走 `check_config.py`（IMG_WHITE/REQUIRED_IMGS 两张表）+`check_docs.py`；**深色帧换装坑**：斜杠 URI `"/Themes/Dark.xaml"` 相对 Application 根（harness=DocShot 组件 404 FATAL）——必须手 Build `pack://…/CureStation;component/Themes/Dark.xaml` 并**按 Source 认出主题槽替换**（盲替 merged[0] 会把主样式字典换没，半坏视觉），`ThemeManager.Current` 私有 setter 反射同步防顶栏按钮文案不符；工单镜头演示数据用种子 `WorkOrderBook` 不落盘（R1 纪律） |
 
@@ -226,9 +236,11 @@
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build CureLine.slnx --nologo
-# 全量测试（409/409 全绿，串行，约 20s；含本地 HttpListener 桩 MES 端到端
+# 全量测试（434/434 全绿，串行，约 20s；含本地 HttpListener 桩 MES 端到端
 #   + 模拟链路 VM 全链路用例：按钮→注入→扫触发→POST 内置桩→回写→观测）
 dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
+# 厂商签发工具（授权相关改动后同步构建；私钥 LicenseSignKey.dat 不进仓库）
+dotnet build tools/LicenseIssuer/LicenseIssuer.csproj --nologo
 # 子模块改动后（VS MSBuild，net472，原样沿用上游命令）
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
   "extern/kaleidoscope/Kaleidoscope/Kaleidoscope.csproj" `
@@ -512,6 +524,30 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   R/L 选择易误会要配双工位）——隐藏但 `EditSide` 照常 Sync/Flush，ini
   `[CuringMes] Side` 缺省 R 原样往返、`SideOfRack` 语义不变，勿把该属性
   当死代码删。
+- **软件授权语义（V0.0.54 起，全在 Core/Security 三件套 + 两程序 App）**：
+  ① **放行唯一口**=`LicenseGate.IsProductionAllowed()`（试用/永久/演示=true，
+  未激活/过期/指纹不符=false）——业务层别自己读 ini 判断；② **双产品隔离**：
+  CureLine 与 HJVision 共用同一把 ECDsa 私钥，靠激活码 payload `[14..15]`
+  产品 ID 区分（CureLine=0x434C / HJVision=0xFFFF）——验签通过只证明"码是
+  厂商签的"，`LicenseGate` 必须再比对产品 ID，否则会串用；设备码前缀
+  CureLine=`CURE`、HJVision=`HUAJI`（校验位哈希含前缀，HUAJI 旧码逐字节
+  兼容）；③ **挑战值防重放**：激活窗每次打开 `NewChallenge()` 换随机值，
+  `TryActivate` 比对 payload 挑战值；已生效授权 `Refresh` 只验签+指纹，
+  不比对挑战值（重开窗不影响已激活机器）；④ **防回拨三存储**：ini
+  `[License]/WaterMark` + `HKCU\Software\CureLine\License` + SQLite
+  `app_meta` 取最大，再与 `LicenseGate.BuiltOn`/exe 文件时间取大做下限，
+  容差 1 小时；单点删改挡不住，三处全删还有 exe 时间兜底；⑤ **启动门禁**：
+  两程序 `App.OnStartup` 先 `Refresh`，未授权 `ShowLicenseActivation`，关闭
+  仍未授权即 `Shutdown`；启动期 `ShutdownMode=OnExplicitShutdown`、主窗
+  建好后恢复 `OnLastWindowClose`（CimGateway 已删 `StartupUri` 手工建主窗）；
+  运行期每小时巡检；⑥ **演示模式** `[setting] Simulate=1` 免激活（`Refresh`
+  直接判 Permanent 并置 `IsSimulated`，UI 隐藏激活入口/命令双保险）——
+  仅联调，不得用于生产；⑦ **私钥红线** `LicenseSignKey.dat` 只留厂商签发
+  工具目录，已 ignore；丢失=已发码全部作废，外泄=可伪造任意激活码；换钥
+  必须同步替换两产品 `LicenseCodec.PubKeyB64` 并重编；⑧ **测试纪律**：
+  `LicenseGate.Default` 会采集真机指纹，单测一律构造实例注入假指纹/内存
+  水位/临时密钥对，不要调 `Default.Refresh`；`LicenseTests` 18 例覆盖双产品
+  设备码/隔离/挑战重放/回拨/到期/演示模式。
 
 ## 文档同步（每次任务收尾自查）
 

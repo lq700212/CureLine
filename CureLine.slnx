@@ -7,4 +7,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/CureLine.Tests/CureLine.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/LicenseIssuer/LicenseIssuer.csproj" />
+  </Folder>
 </Solution>

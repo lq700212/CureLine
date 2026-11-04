@@ -2,6 +2,46 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.54（2026-11-04，软件授权体系：ECDsa 激活码 + 产品隔离）
+
+补齐"软件本身能不能跑"的授权层（与 HSL 通讯组件授权无关）。采用 ECDsa P-256
+非对称签名：厂商持私钥签发、程序内置公钥验签，反编译只能拿到公钥，无法离线
+伪造激活码。激活码 payload 保留位 `[14..15]` 写产品 ID，本产品为 CureLine
+（`0x434C`）——其它产品的激活码（产品 ID 不同）在本程序被明确拒绝；设备码
+前缀 `CURE`。
+
+- **Core 授权三件套**（新增 `src/CureLine.Core/Security/`）：
+  `LicenseCodec`（设备码/激活码编解码 + Crockford Base32 + 验签单一
+  事实源）、`MachineFingerprint`（MachineGuid + 主板/磁盘/CPU 四因子 SHA256
+  前 4 字节）、`LicenseGate`（五态判定/激活落盘/产品隔离/挑战值防重放/
+  三存储防回拨；可测实例类 + `Default` 生产单例）。
+- **五态与门禁**：未激活 / 试用 / 永久 / 已过期 / 指纹不符；全工程放行判据
+  只走 `LicenseGate.IsProductionAllowed()`。演示模式 `[setting] Simulate=1`
+  免激活放行（仅联调，不得用于生产）。
+- **防回拨**：水位三存储（ini `[License]/WaterMark` + `HKCU\Software\CureLine\
+  License` + SQLite `app_meta` 表）取最大值，再与构建日期/exe 文件时间取大做
+  下限；本地时间早于水位超过 1 小时容差判定回拨（试用按过期处理，永久留痕）。
+  单点删改挡不住回拨，三处全删还有 exe 时间戳兜底。
+- **启动门禁 + 运行期巡检**：两程序 `App.OnStartup` 先 `Refresh`，未授权弹
+  激活窗，关闭仍未授权则退出；启动期 `ShutdownMode=OnExplicitShutdown`，主窗
+  建好后恢复 `OnLastWindowClose`；运行期每小时巡检一次。
+- **激活 UI**：两程序各一份 `LicenseActivationWindow`（共用 Core 的
+  `LicenseActivationViewModel`），显示设备码/状态/原因/激活码输入；主窗顶栏
+  常显授权短文案（永久/试用剩 N 天/未激活/已过期/指纹不符/演示），设置下拉
+  新增「软件激活」入口（演示模式隐藏入口并禁用命令）。
+- **签发工具** `tools/LicenseIssuer`（.NET 8 WPF，源码链接同一份
+  `LicenseCodec.cs`，格式永不漂移）：GUI 粘贴设备码签发 + 命令行
+  `--generate` / `--issue 设备码 P|T 天数`；按设备码前缀自动识别产品，
+  输出 `PRODUCT=` 行。私钥 `LicenseSignKey.dat` 已加入 `.gitignore`
+  （丢失=已发激活码全部作废，外泄=可伪造任意激活码，禁止入库/外发）。
+- **SQLite 元数据**：`SqliteHelper` 增 `app_meta` 表与 `GetMeta/SetMeta`，
+  供防回拨水位与后续运行元数据复用（参数化 SQL）。
+- **测试 416→434**：+18（设备码/校验位向量兼容/宽容解析/Base32
+  末位补零/ payload 布局/验签与篡改/激活持久化/产品隔离/挑战重放/指纹
+  不符/试用到期/时钟回拨/演示模式/清空/指纹失败/激活窗 VM）。
+- **文档**：README 授权章节 + `config.sample.ini` 新增 `[License]` 说明；
+  AGENTS.md 补授权体系、签发流程与私钥红线。
+
 ## V0.0.53（2026-11-04，策略窗时间单位切换 + 保存关窗链修复）
 
 用户反馈两件：① 策略窗要能切 时/分/秒（切后页面全部时间文本跟换）；

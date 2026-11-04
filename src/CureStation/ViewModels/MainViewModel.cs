@@ -385,6 +385,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         private set => Set(ref _postingText, value);
     }
 
+    /// <summary>
+    /// 顶栏软件授权短文案（"授权：永久 / 试用剩 N 天 / 未激活 / 已过期 / 指纹不符"）。
+    /// 启动门禁已 Refresh；运行期从"设置→软件激活"成功后刷新。
+    /// </summary>
+    private string _licenseText = "授权：—";
+    public string LicenseText
+    {
+        get => _licenseText;
+        private set => Set(ref _licenseText, value);
+    }
+
     /// <summary>过账是否启用（工单卡角标 DataTrigger 出"过账启用/过账未启用"文案）。</summary>
     private bool _postingEnabled;
     public bool PostingEnabled
@@ -529,6 +540,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public RelayCommand ShowLogCommand { get; }
     public RelayCommand ToggleThemeCommand { get; }
     public RelayCommand ToggleSimulateCommand { get; }
+    public RelayCommand OpenLicenseCommand { get; }
 
     public MainViewModel(IDialogService dialogs)
     {
@@ -545,6 +557,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         ShowLogCommand = new RelayCommand(ShowLog);
         ToggleThemeCommand = new RelayCommand(ToggleTheme);
         ToggleSimulateCommand = new RelayCommand(ToggleSimulate);
+        OpenLicenseCommand = new RelayCommand(OpenLicense);
+        // 顶栏授权文案：启动门禁已 Refresh 过（App.OnStartup），这里只读快照，
+        // 不触发指纹采集/文件 IO。
+        LicenseText = LicenseGate.Default.ShortStatusText();
         // 主题按钮文案对齐 App.OnStartup 已应用的当前主题（测试态无 App：ThemeManager
         // 缺省 Light，同样落"深色"文案，现场首点即切 G1，行为一致）。
         ToggleThemeText = ThemeManager.Current == "Dark" ? "浅色" : "深色";
@@ -896,6 +912,25 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             _poster?.UpdateOptions(options);
             ApplyPostOptions(options);
             _dialogs.ShowMessage("过账配置已保存并生效。", "保存成功");
+        }
+    }
+
+    /// <summary>
+    /// 软件激活窗：管理员+（激活码是设备级凭据，操作员不应接触）。
+    /// 激活成功/失败都刷新顶栏文案（关窗后状态可能变化）。
+    /// </summary>
+    private void OpenLicense()
+    {
+        if (!Gate(OperatorRole.Admin, "软件激活"))
+            return;
+        try
+        {
+            if (_dialogs.ShowLicenseActivation())
+                _dialogs.ShowMessage("软件激活成功。", "软件激活");
+        }
+        finally
+        {
+            LicenseText = LicenseGate.Default.ShortStatusText();
         }
     }
 

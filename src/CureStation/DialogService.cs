@@ -60,6 +60,12 @@ public interface IDialogService
     bool ShowMesPostConfig();
 
     /// <summary>
+    /// 打开软件激活窗（模态）。返回 true 表示激活成功（主窗刷新授权状态文案）。
+    /// 两个程序各自实现（窗是程序私有资产），编排在 Core 的 LicenseActivationViewModel。
+    /// </summary>
+    bool ShowLicenseActivation();
+
+    /// <summary>
     /// 打开 IO 通讯测试窗（模态）。bus=主窗已启动的共享总线（测试窗不建 TCP），
     /// config=点表配置（通道清单来源——通用化核心：点表怎么配测试窗就怎么显示）。
     /// </summary>
@@ -170,6 +176,21 @@ public sealed class DialogService : IDialogService
         {
             Owner = Application.Current?.MainWindow,
             DataContext = new MesPostConfigViewModel(new DialogService()),
+        };
+        return win.ShowDialog() == true;
+    }
+
+    /// <summary>
+    /// 软件激活窗（运行时从"设置→软件激活"打开；启动门禁那次由 App 直接 new，
+    /// 因为那时还没有主窗可做 Owner）。授权逻辑/挑战值在 Core LicenseGate。
+    /// </summary>
+    public bool ShowLicenseActivation()
+    {
+        var win = new LicenseActivationWindow
+        {
+            Owner = Application.Current?.MainWindow,
+            DataContext = new CureLine.ViewModels.LicenseActivationViewModel(
+                CureLine.Core.Security.LicenseGate.Default, "固化程控"),
         };
         return win.ShowDialog() == true;
     }

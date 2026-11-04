@@ -11,6 +11,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using CureLine.Core.Infrastructure;
+using CureLine.Core.Security;
+using CureLine.ViewModels;
 
 namespace CimGateway.ViewModels;
 
@@ -85,6 +87,13 @@ public sealed class DialogService : IDialogService
 
     public void ShowMesDebug() =>
         Prep(new MesDebugWindow()).Show();
+
+    public bool ShowLicenseActivation()
+    {
+        var vm = new LicenseActivationViewModel(LicenseGate.Default, "CIM通信网关");
+        var w = Prep(new LicenseActivationWindow { DataContext = vm });
+        return w.ShowDialog() == true;
+    }
 
     public void CreateDesktopShortcut()
     {

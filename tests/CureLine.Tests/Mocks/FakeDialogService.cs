@@ -63,4 +63,13 @@ public class FakeDialogService : IDialogService
         Calls.Add($"MesLog:{station}");
 
     public void ShowMesDebug() => Calls.Add("MesDebug");
+
+    /// <summary>ShowLicenseActivation 的桩返回值（true=激活成功）。</summary>
+    public bool LicenseActivationResult { get; set; }
+
+    public bool ShowLicenseActivation()
+    {
+        Calls.Add("ShowLicenseActivation");
+        return LicenseActivationResult;
+    }
 }
