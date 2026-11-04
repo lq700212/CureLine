@@ -461,7 +461,10 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   ⑥ 选择记忆 `[setting] PolicyTimeUnit`（程序①专用 UI 键，非法回 Minutes，
   与 PointBitStyle 同款自愈）；**文本拼装全收 UI 层**：Core `SlotStatus`
   已无 `StateText`、`SlotStatistics.NextClose` 返回最小项不给全文——加显示
-  场景勿回 Core 拼带单位的串。
+  场景勿回 Core 拼带单位的串；
+  ⑦ **窄卡缩放（V0.0.56 三轮，用户拍板"等比缩放"）**：卡片大数字行与副文
+  行各外包 `Viewbox`（`Stretch=Uniform`+`StretchDirection=DownOnly`）——
+  宽度够原样 26/11 号、不够整行等比缩；勿改成缩字号/换行方案（已否决）。
 - **策略窗关窗链（V0.0.53 修，勿回退）**：保存/激活/套用成功 → VM
   `CloseDialog=true` + `RequestClose(true)` → View（`CuringPolicyWindow`
   订阅 DataContextChanged）设 `DialogResult=true` 关窗 → 主窗刷新激活策略并

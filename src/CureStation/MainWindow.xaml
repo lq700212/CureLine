@@ -375,38 +375,44 @@
                                         </Style.Triggers>
                                     </Style>
                                 </StackPanel.Style>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding RemainNum1, FallbackValue=47}" FontSize="26" FontWeight="ExtraBold"
-                                               Foreground="{DynamicResource Brush.NumCuring}" VerticalAlignment="Bottom"/>
-                                    <TextBlock Text="{Binding RemainUnit1, FallbackValue=分}" FontSize="11" FontWeight="Medium"
-                                               Foreground="{DynamicResource Brush.NumCuring}"
-                                               VerticalAlignment="Bottom" Margin="4,0,0,3"/>
-                                    <!-- 第二组"28分"：仅小时口径且 >1 小时（SplitBig Num2 非空）时显示；
-                                         缺省 Collapsed 写死在 Setter（触发死区口诀：改不动=找标签本地值） -->
+                                <Viewbox MaxHeight="36" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left">
+                                    <!-- V0.0.56 三轮（用户拍板"等比缩放"）：卡窄时整行只缩不放——
+                                         正常宽度原样 26/11 号，不够宽时数字+单位字等比缩到正好放下 -->
                                     <StackPanel Orientation="Horizontal">
-                                        <StackPanel.Style>
-                                            <Style TargetType="StackPanel">
-                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding RemainHasTail, FallbackValue=False}" Value="True">
-                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </StackPanel.Style>
-                                        <TextBlock Text="{Binding RemainNum2, FallbackValue=28}" FontSize="26" FontWeight="ExtraBold"
+                                        <TextBlock Text="{Binding RemainNum1, FallbackValue=47}" FontSize="26" FontWeight="ExtraBold"
                                                    Foreground="{DynamicResource Brush.NumCuring}" VerticalAlignment="Bottom"/>
-                                        <TextBlock Text="{Binding RemainUnit2, FallbackValue=分}" FontSize="11" FontWeight="Medium"
+                                        <TextBlock Text="{Binding RemainUnit1, FallbackValue=分}" FontSize="11" FontWeight="Medium"
                                                    Foreground="{DynamicResource Brush.NumCuring}"
                                                    VerticalAlignment="Bottom" Margin="4,0,0,3"/>
+                                        <!-- 第二组"28分"：仅小时口径且 >1 小时（SplitBig Num2 非空）时显示；
+                                             缺省 Collapsed 写死在 Setter（触发死区口诀：改不动=找标签本地值） -->
+                                        <StackPanel Orientation="Horizontal">
+                                            <StackPanel.Style>
+                                                <Style TargetType="StackPanel">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding RemainHasTail, FallbackValue=False}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </StackPanel.Style>
+                                            <TextBlock Text="{Binding RemainNum2, FallbackValue=28}" FontSize="26" FontWeight="ExtraBold"
+                                                       Foreground="{DynamicResource Brush.NumCuring}" VerticalAlignment="Bottom"/>
+                                            <TextBlock Text="{Binding RemainUnit2, FallbackValue=分}" FontSize="11" FontWeight="Medium"
+                                                       Foreground="{DynamicResource Brush.NumCuring}"
+                                                       VerticalAlignment="Bottom" Margin="4,0,0,3"/>
+                                        </StackPanel>
                                     </StackPanel>
-                                </StackPanel>
-                                <TextBlock FontSize="10.5" Margin="0,3,0,0"
-                                           Foreground="{DynamicResource Brush.NumSmall}">
-                                    <Run Text="共 "/><Run Text="{Binding TotalDisplay, Mode=OneWay, FallbackValue=120 分}"/>
-                                    <Run Text=" · 已固化 "/><Run Text="{Binding ProgressPct, Mode=OneWay, FallbackValue=0}"/>
-                                    <Run Text="%"/>
-                                </TextBlock>
+                                </Viewbox>
+                                <Viewbox MaxHeight="16" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left" Margin="0,3,0,0">
+                                    <TextBlock FontSize="10.5"
+                                               Foreground="{DynamicResource Brush.NumSmall}">
+                                        <Run Text="共 "/><Run Text="{Binding TotalDisplay, Mode=OneWay, FallbackValue=120 分}"/>
+                                        <Run Text=" · 已固化 "/><Run Text="{Binding ProgressPct, Mode=OneWay, FallbackValue=0}"/>
+                                        <Run Text="%"/>
+                                    </TextBlock>
+                                </Viewbox>
                                 <!-- 进度条：6px 圆角槽 + 状态黄填充（Rectangle 整宽 ScaleTransform 压缩，
                                      比 ActualWidth 换算轻；VM ProgressRatio 0~1 直绑） -->
                                 <Grid Height="6" Margin="0,9,0,0">
