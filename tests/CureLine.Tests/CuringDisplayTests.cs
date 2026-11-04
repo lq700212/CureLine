@@ -73,18 +73,18 @@ public class CuringDisplayTests
     private static void EnsureConfigDir() =>
         Directory.CreateDirectory(AppPaths.ConfigDir);
 
-    [Fact(DisplayName = "DurationUnit：分钟口径=旧显示（N分/纯数字/尾'分'）")]
+    [Fact(DisplayName = "DurationUnit：分钟口径=旧显示（N分整串；大数字纯数字+尾'分'）")]
     public void DurationUnit_Minutes_KeepsLegacyFormat()
     {
         using var scope = new TestScope();
         DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);
         Assert.Equal("45分", DurationUnit.Text(45));
         Assert.Equal("120分", DurationUnit.Text(120));
-        Assert.Equal("45", DurationUnit.BigText(45));   // 大数字=纯数字，"分"由后缀出
-        Assert.Equal("分", DurationUnit.Suffix);
+        Assert.Equal(("45", "分", "", ""), DurationUnit.SplitBig(45));   // 数字26号+尾'分'11号
+        Assert.Equal(("120", "分", "", ""), DurationUnit.SplitBig(120));
     }
 
-    [Fact(DisplayName = "DurationUnit：小时口径=智能省略零段（X小时第Y分/整X小时/不足1小时Y分）")]
+    [Fact(DisplayName = "DurationUnit：小时口径=智能省略零段 + 大数字四段交替（数字26/单位字11）")]
     public void DurationUnit_Hours_SmartOmitZeroSegment()
     {
         using var scope = new TestScope();
@@ -93,8 +93,10 @@ public class CuringDisplayTests
         Assert.Equal("1小时28分", DurationUnit.Text(88));   // 88 分 = 1 时 28 分
         Assert.Equal("47分", DurationUnit.Text(47));        // 不足 1 小时省"0小时"
         Assert.Equal("0分", DurationUnit.Text(0));          // 不变量兜底
-        Assert.Equal("2小时", DurationUnit.BigText(120));
-        Assert.Equal("" , DurationUnit.Suffix);             // 整串已带单位，后缀退场
+        // 大数字四段（数字/单位字交替；空段=空串，显隐由第二组非空推导）
+        Assert.Equal(("1", "小时", "28", "分"), DurationUnit.SplitBig(88)); // 1|小时|28|分
+        Assert.Equal(("2", "小时", "", ""), DurationUnit.SplitBig(120));   // 整小时无第二段
+        Assert.Equal(("47", "分", "", ""), DurationUnit.SplitBig(47));     // 不足 1 小时=两段
     }
 
     [Fact(DisplayName = "DurationUnit：Change 落盘 ini 记忆 + 触发广播")]
@@ -125,7 +127,7 @@ public class CuringDisplayTests
 
     // ---------- 卡片时长文本（随显示单位） ----------
 
-    [Fact(DisplayName = "卡片文本：分钟口径保持旧显示（'47'+尾'分'、副文'120 分'）")]
+    [Fact(DisplayName = "卡片文本：分钟口径保持旧显示（'47'+尾'分'两段、副文'120 分'）")]
     public void CardText_Minutes_Legacy()
     {
         using var scope = new TestScope();
@@ -133,13 +135,15 @@ public class CuringDisplayTests
         var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
         slot.Refresh(PointTableSnapshot.Empty, true, new SlotStatus(SlotPhase.Curing, 120, 47));
 
-        Assert.Equal("47", slot.RemainDisplay);
-        Assert.Equal("分", slot.RemainSuffix);
+        Assert.Equal("47", slot.RemainNum1);
+        Assert.Equal("分", slot.RemainUnit1);
+        Assert.Equal("", slot.RemainNum2);      // 无第二段（26/11 两段即旧版视觉）
+        Assert.False(slot.RemainHasTail);
         Assert.Equal("120 分", slot.TotalDisplay);
         Assert.Equal("计时中 剩47分", slot.SlotStateText);
     }
 
-    [Fact(DisplayName = "卡片文本：小时口径整串+状态词'剩1小时15分'（RefreshUnitText 只换字面）")]
+    [Fact(DisplayName = "卡片文本：小时口径四段交替+第二段显隐+状态词'剩1小时15分'（只换字面）")]
     public void CardText_Hours_SyncsOnUnitNameOnly()
     {
         using var scope = new TestScope();
@@ -152,18 +156,27 @@ public class CuringDisplayTests
         DurationUnit.RecallForTest(PolicyTimeUnit.Hours);
         slot.RefreshUnitText();
 
-        Assert.Equal("1小时15分", slot.RemainDisplay);  // 75 分 = 1 时 15 分
-        Assert.Equal("", slot.RemainSuffix);
+        Assert.Equal("1", slot.RemainNum1);        // 75 分 = 1 时 15 分
+        Assert.Equal("小时", slot.RemainUnit1);    // 单位字 11 号（与"分"后缀同字号）
+        Assert.Equal("15", slot.RemainNum2);
+        Assert.Equal("分", slot.RemainUnit2);
+        Assert.True(slot.RemainHasTail);           // 第二段组（"15分"）显示
         Assert.Equal("2小时", slot.TotalDisplay);
         Assert.Equal("计时中 剩1小时15分", slot.SlotStateText);   // 缓存快照重拼
         Assert.Equal(120, slot.TotalMin);   // 数值未动
         Assert.Equal(38, slot.ProgressPct); // 进度未动 ((120-75)/120=37.5% → 38 AwayFromZero)
 
-        // 回分钟无损
+        // 整小时形态：第二段组收起（"2小时"两段完事）
+        slot.RefreshUnitText();   // 数据不变；借 SplitBig 直接验证整小时态
+        Assert.Equal(("2", "小时", "", ""), DurationUnit.SplitBig(120));
+
+        // 回分钟无损：退回数字+尾"分"两段
         DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);
         slot.RefreshUnitText();
-        Assert.Equal("75", slot.RemainDisplay);
-        Assert.Equal("分", slot.RemainSuffix);
+        Assert.Equal("75", slot.RemainNum1);
+        Assert.Equal("分", slot.RemainUnit1);
+        Assert.Equal("", slot.RemainNum2);
+        Assert.False(slot.RemainHasTail);
         Assert.Equal("120 分", slot.TotalDisplay);
     }
 
@@ -179,13 +192,16 @@ public class CuringDisplayTests
         // 手动点亮一张卡（生产链路是 500ms 拍走同方法 Refresh，此处直调同口径）
         var slot = vm.Slots.First(s => s.Rack == 1 && s.Level == 1);
         slot.Refresh(PointTableSnapshot.Empty, true, new SlotStatus(SlotPhase.Curing, 120, 75));
-        Assert.Equal("75", slot.RemainDisplay);   // 前置锚点：分钟口径
+        Assert.Equal("75", slot.RemainNum1);   // 前置锚点：分钟口径（纯数字 26 号）
 
         // 策略窗唯一入口 Change=写 ini 记忆 + 广播 → 主窗订阅立即重刷（不等 500ms）
         DurationUnit.Change(PolicyTimeUnit.Hours);
 
-        Assert.Equal("1小时15分", slot.RemainDisplay);   // 75 分 = 1 时 15 分
-        Assert.Equal("", slot.RemainSuffix);
+        Assert.Equal("1", slot.RemainNum1);       // 75 分 = 1 时 15 分（四段交替）
+        Assert.Equal("小时", slot.RemainUnit1);
+        Assert.Equal("15", slot.RemainNum2);
+        Assert.Equal("分", slot.RemainUnit2);
+        Assert.True(slot.RemainHasTail);
         Assert.Contains("剩1小时15分", vm.NextCloseText);  // 统计条同口（⚡码·剩X）
         Assert.Equal("Hours", IniFile.ReadStr(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", ""));
 

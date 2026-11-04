@@ -5,7 +5,7 @@
 //   ① 策略窗 Change() 切单位 → 落盘 config.ini [setting] PolicyTimeUnit 记忆
 //      + 广播 Changed → 主窗立即按新单位重写卡片/统计条的时长文本（不等 500ms 拍）；
 //   ② 重启/开窗时 LoadFromIni（或取静态 Current）回上次选择；
-//   ③ Text/BigText/Suffix 三个纯格式化函数供两窗拼文本——存储、状态机计时、
+//   ③ Text/SplitBig 两个纯格式化函数供主窗拼文本——存储、状态机计时、
 //      过账报文恒为分钟，本类只决定"多少分钟用文字怎么说"。
 // 为什么做静态中枢：单位是程序①全局 UI 口径，策略窗与主窗两个独立 VM 要同拍
 //   （用户拍板"策略里切了，主界面也要同步"）；静态单例 + 事件是两 VM 之间最轻
@@ -15,7 +15,7 @@
 //   ini 存量 "Seconds" 值不在新枚举内，LoadFromIni 非法值自愈回 Minutes。
 //
 // 线程纪律：Change/LoadFromIni/恢复 一律 UI 线程调（Changed 订阅方是 VM 集合
-//   刷新，与主窗 500ms 拍同线程口径）；Text/BigText/Suffix 纯函数任意线程可调。
+//   刷新，与主窗 500ms 拍同线程口径）；Text/SplitBig 纯函数任意线程可调。
 // =========================================================================
 
 using System.Globalization;
@@ -95,15 +95,26 @@ public static class DurationUnit
         : $"{minutes}分";
 
     /// <summary>
-    /// 卡片大数字段（26 号字体）：分钟口径=纯数字（"分"由小字体后缀块出）；
-    /// 小时口径=带单位整串（后缀块空串退场，"X小时Y分"整体上大字号）。
+    /// 卡片大数字拆"数字段/单位字"交替四段（V0.0.56 二轮：数字 26 号、单位字
+    /// 11 号——与分钟模式"分"后缀同字号，用户拍板）：
+    ///   分/47 → ("47","分","","")；小时 120 → ("2","小时","","")；
+    ///   小时 88 → ("1","小时","28","分")；不足 1 小时 47 → ("47","分","","")。
+    /// 空段一律空串（界面显隐由第二组非空推导）。
     /// </summary>
-    public static string BigText(int minutes) => Current == PolicyTimeUnit.Hours
-        ? HourText(minutes)
-        : minutes.ToString(CultureInfo.InvariantCulture);
-
-    /// <summary>大数字单位后缀（11 号字体块）：分钟="分"；小时=""（整串已带单位）。</summary>
-    public static string Suffix => Current == PolicyTimeUnit.Hours ? "" : "分";
+    public static (string Num1, string Unit1, string Num2, string Unit2) SplitBig(int minutes)
+    {
+        if (Current != PolicyTimeUnit.Hours)
+            return (minutes.ToString(CultureInfo.InvariantCulture), "分", "", "");
+        if (minutes <= 0)
+            return ("0", "分", "", "");
+        int hours = minutes / 60, rest = minutes % 60;
+        if (hours == 0)
+            return (rest.ToString(CultureInfo.InvariantCulture), "分", "", "");
+        return rest > 0
+            ? (hours.ToString(CultureInfo.InvariantCulture), "小时",
+               rest.ToString(CultureInfo.InvariantCulture), "分")
+            : (hours.ToString(CultureInfo.InvariantCulture), "小时", "", "");
+    }
 
     /// <summary>小时口径整串："X小时Y分" / 整小时"X小时" / 不足 1 小时"Y分"。</summary>
     private static string HourText(int minutes)

@@ -356,7 +356,9 @@
                                     </TextBlock.Style>
                                 </TextBlock>
                             </StackPanel>
-                            <!-- 大数字视图：小时"1小时28分"/分钟"47"+尾"分" + "共 2小时/共 120 分"·已固化 61% + 进度条（设计图三行左对齐；
+                            <!-- 大数字视图：数字 26 号 + 单位字 11 号（与"分"后缀同字号）交替；
+                                 分钟"47|分"、小时"1|小时|28|分"（第二组显隐由 RemainHasTail）+
+                                 "共 2小时/共 120 分"·已固化 61% + 进度条（设计图三行左对齐；
                                  时长字面随 DurationUnit 显示单位联动，V0.0.56） -->
                             <StackPanel>
                                 <StackPanel.Style>
@@ -374,11 +376,30 @@
                                     </Style>
                                 </StackPanel.Style>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding RemainDisplay, FallbackValue=47}" FontSize="26" FontWeight="ExtraBold"
+                                    <TextBlock Text="{Binding RemainNum1, FallbackValue=47}" FontSize="26" FontWeight="ExtraBold"
                                                Foreground="{DynamicResource Brush.NumCuring}" VerticalAlignment="Bottom"/>
-                                    <TextBlock Text="{Binding RemainSuffix, FallbackValue=分}" FontSize="11" FontWeight="Medium"
+                                    <TextBlock Text="{Binding RemainUnit1, FallbackValue=分}" FontSize="11" FontWeight="Medium"
                                                Foreground="{DynamicResource Brush.NumCuring}"
                                                VerticalAlignment="Bottom" Margin="4,0,0,3"/>
+                                    <!-- 第二组"28分"：仅小时口径且 >1 小时（SplitBig Num2 非空）时显示；
+                                         缺省 Collapsed 写死在 Setter（触发死区口诀：改不动=找标签本地值） -->
+                                    <StackPanel Orientation="Horizontal">
+                                        <StackPanel.Style>
+                                            <Style TargetType="StackPanel">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding RemainHasTail, FallbackValue=False}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </StackPanel.Style>
+                                        <TextBlock Text="{Binding RemainNum2, FallbackValue=28}" FontSize="26" FontWeight="ExtraBold"
+                                                   Foreground="{DynamicResource Brush.NumCuring}" VerticalAlignment="Bottom"/>
+                                        <TextBlock Text="{Binding RemainUnit2, FallbackValue=分}" FontSize="11" FontWeight="Medium"
+                                                   Foreground="{DynamicResource Brush.NumCuring}"
+                                                   VerticalAlignment="Bottom" Margin="4,0,0,3"/>
+                                    </StackPanel>
                                 </StackPanel>
                                 <TextBlock FontSize="10.5" Margin="0,3,0,0"
                                            Foreground="{DynamicResource Brush.NumSmall}">

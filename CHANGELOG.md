@@ -18,7 +18,8 @@
 - **主窗同步（不等 500ms 拍）**：MainViewModel 订阅 `Changed` → 全部卡片
   `RefreshUnitText()`（数值/进度不动、只换字面；状态词"剩X"用最近一拍
   Curing 快照缓存重拼）+ 统计条"⚡码·剩X"重拼。卡片大数字/副文改绑
-  `RemainDisplay`/`RemainSuffix`/`TotalDisplay` 三个派生文本。
+  `RemainNum1/RemainUnit1/RemainNum2/RemainUnit2/RemainHasTail`/
+  `TotalDisplay` 六个派生文本。
 - **小时口径**（用户拍板"智能省略零段"）：2 小时→"2小时"、1.5 小时→
   "1小时28分"、不足 1 小时→"47分"（0 段省略）；0 兜底"0分"。
 - **文本拼装上移收口**（随单位走 UI，Core 恒为分钟数据）：删 Core
@@ -28,6 +29,12 @@
 - **测试净 +5**（442/442）：删秒取整用例；单位切换/记忆用例改双档（含旧版
   `Seconds` 自愈回归）；新增 DurationUnit 格式表、Change 落盘广播、卡片两
   口径文本、主窗开窗联动共 6 例；TestScope 增单位快照/重读/恢复隔离。
+- **二轮（同日用户反馈）：小时口径大数字单位字缩小**——"X小时Y分"不再
+  整串 26 号：数字段 26 号（`ExtraBold` 不变），单位字"小时/分"一律 11 号
+  `Medium`（与分钟模式"分"后缀完全同规格）。实现：`DurationUnit.BigText/
+  Suffix` 换成 `SplitBig`（数字/单位字交替四段，第二段组仅 >1 小时有值，
+  空段空串）；卡内第二段组由 `RemainHasTail` 显隐（缺省 Collapsed 写死
+  Setter，触发死区口诀）。分钟口径视觉与旧版完全一致（"47"+"分"）。
 
 ## V0.0.55（2026-11-04，策略窗：画布全选应用升格为改全局）
 

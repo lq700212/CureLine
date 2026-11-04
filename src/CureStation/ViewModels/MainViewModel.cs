@@ -98,24 +98,49 @@ public sealed class RackSlotViewModel : ViewModelBase
 
     // ---------- 时长显示文本（随显示单位：V0.0.56 策略窗切时/分主窗同步） ----------
     //
-    // 分钟口径保持旧显示："47" + 后缀"分"、副文"共 120 分"；小时口径整串
-    // "X小时Y分"（智能省略零段：2小时 / 0小时47分→47分），后缀退场空串。
+    // 分钟口径保持旧显示："47"(26号) + "分"(11号)、副文"共 120 分"；小时口径
+    // 数字 26 号、单位字 11 号（与"分"后缀同字号，V0.0.56 二轮用户拍板）：
+    // ("1"(26) "小时"(11) "28"(26) "分"(11))——四段交替、第二组仅 >1 小时有值。
     // 数值源仍是分钟（RemainMin/TotalMin），文本在 ApplyKind 一拍内同步落。
 
-    private string _remainDisplay = "0";
-    /// <summary>卡片大数字文本（分钟口径=纯数字；小时口径="X小时Y分"整串）。</summary>
-    public string RemainDisplay
+    private string _remainNum1 = "0";
+    /// <summary>大数字第一段数字（26 号；分钟/不足 1 小时=全部数字）。</summary>
+    public string RemainNum1
     {
-        get => _remainDisplay;
-        private set => Set(ref _remainDisplay, value);
+        get => _remainNum1;
+        private set => Set(ref _remainNum1, value);
     }
 
-    private string _remainSuffix = "分";
-    /// <summary>大数字单位后缀（分钟="分"；小时=""——整串已带单位）。</summary>
-    public string RemainSuffix
+    private string _remainUnit1 = "分";
+    /// <summary>第一段单位字（11 号；"分"/"小时"）。</summary>
+    public string RemainUnit1
     {
-        get => _remainSuffix;
-        private set => Set(ref _remainSuffix, value);
+        get => _remainUnit1;
+        private set => Set(ref _remainUnit1, value);
+    }
+
+    private string _remainNum2 = "";
+    /// <summary>大数字第二段数字（"分"部分；仅 >1 小时有值，否则空串）。</summary>
+    public string RemainNum2
+    {
+        get => _remainNum2;
+        private set => Set(ref _remainNum2, value);
+    }
+
+    private string _remainUnit2 = "";
+    /// <summary>第二段单位字（"分"；仅 >1 小时有值，否则空串）。</summary>
+    public string RemainUnit2
+    {
+        get => _remainUnit2;
+        private set => Set(ref _remainUnit2, value);
+    }
+
+    private bool _remainHasTail;
+    /// <summary>有大数字第二段（=Num2 非空，"1小时28分"形态）——卡内第二组显隐开关。</summary>
+    public bool RemainHasTail
+    {
+        get => _remainHasTail;
+        private set => Set(ref _remainHasTail, value);
     }
 
     private string _totalDisplay = "0 分";
@@ -262,12 +287,16 @@ public sealed class RackSlotViewModel : ViewModelBase
         SyncDisplayTexts();
     }
 
-    /// <summary>按当前显示单位落三个文本属性（数值源恒分钟；ApplyKind 与单位切换共用）。</summary>
+    /// <summary>按当前显示单位落大数字四段/显隐开关与副文（数值源恒分钟；ApplyKind 与单位切换共用）。</summary>
     private void SyncDisplayTexts()
     {
         bool isHours = DurationUnit.Current == PolicyTimeUnit.Hours;
-        RemainDisplay = DurationUnit.BigText(RemainMin);
-        RemainSuffix = isHours ? "" : "分";
+        var (num1, unit1, num2, unit2) = DurationUnit.SplitBig(RemainMin);
+        RemainNum1 = num1;
+        RemainUnit1 = unit1;
+        RemainNum2 = num2;
+        RemainUnit2 = unit2;
+        RemainHasTail = !string.IsNullOrEmpty(num2);
         TotalDisplay = isHours ? DurationUnit.Text(TotalMin) : $"{TotalMin} 分";
     }
 }

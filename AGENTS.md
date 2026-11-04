@@ -444,11 +444,14 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   → 全部卡片 `RefreshUnitText()`（数值/进度不动只换字面，状态词"剩X"用
   `_lastCuring` 缓存重拼）+ 统计条"⚡码·剩X"重拼——**不等 500ms 拍**；重开
   策略窗/主窗走 `LoadFromIni()` 重读（盘上为准）。勿回滚成"两窗各读各的"；
-  ③ **小时口径（"智能省略零段"）**：产物在 `DurationUnit.Text/BigText/
-  Suffix`——"2小时0分"→"2小时"、"1小时28分"、"0小时47分"→"47分"（0 段
-  省略）、0 兜底"0分"；分钟口径保持旧显示（大数字纯数字+"分"后缀、副文
-  "N 分"）；卡片三文本 `RemainDisplay/RemainSuffix/TotalDisplay` 只换字面，
-  `RemainMin/TotalMin/ProgressPct` 恒分钟数值（勿把小时数写进数值属性）；
+  ③ **小时口径（"智能省略零段"）**：产物在 `DurationUnit.Text`（整串：
+  "2小时0分"→"2小时"、"1小时28分"、"0小时47分"→"47分"（0 段
+  省略）、0 兜底"0分"）与 `DurationUnit.SplitBig`（卡片大数字四段交替：
+  数字段 26 号、单位字"小时/分"11 号=与"分"后缀同规格——V0.0.56 二轮用户
+  拍板；第二段组仅 >1 小时有值，卡内显隐走 `RemainHasTail`）；分钟口径保持
+  旧显示（大数字纯数字+"分"后缀、副文"N 分"）；卡片文本
+  `RemainNum1/RemainUnit1/RemainNum2/RemainUnit2/RemainHasTail/TotalDisplay`
+  只换字面，`RemainMin/TotalMin/ProgressPct` 恒分钟数值（勿把小时数写进数值属性）；
   ④ 切换时策略窗编辑区/仓位行文本按"旧单位解析→分钟→新单位格式化"重写
   （`0.####` 精度整分钟无损往返，`TryParseDisplay` 支持小数、AwayFromZero
   四舍五入到整分钟）；画布数字/ToolTip、浮层摘要、图例四档、Expander 标题
