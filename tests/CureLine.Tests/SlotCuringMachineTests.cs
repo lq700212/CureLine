@@ -19,6 +19,8 @@ public class SlotCuringMachineTests
         new(true, IoPointRole.TrayDetect, rack, level);
     private static IoPointKey GrillL(int rack, int level) =>
         new(true, IoPointRole.RackLightL, rack, level);
+    private static IoPointKey GrillR(int rack, int level) =>
+        new(true, IoPointRole.RackLightR, rack, level);
     private static IoPointKey Lamp(IoPointRole role, int rack, int level) =>
         new(false, role, rack, level);
 
@@ -221,6 +223,180 @@ public class SlotCuringMachineTests
         {
             bus.SetInput(Tray(1, 1), true);
             Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+        }
+    }
+
+    // ---------- 计时中光栅报警（V0.0.63 客户口径：计时不变，报警复位） ----------
+
+    [Fact]
+    public void GrillDuringCuring_RaisesAlarm_TimerUntouched()
+    {
+        var (bus, machine, logs) = Make(new CuringPolicy { Name = "T", GlobalMinutes = 60 });
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            _now += TimeSpan.FromMinutes(30);
+            machine.Pump(_now);               // 半程
+            bus.Writes.Clear();
+
+            bus.SetInput(GrillL(1, 1), true); // 计时中人手伸入
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase); // 相位不动（不停表）
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), true));      // 报警红灯
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), false));  // 黄灯让位
+            Assert.Contains(logs, m => m.Contains("报警"));
+
+            bus.Writes.Clear();
+            bus.SetInput(GrillL(1, 1), true); // 冗余重复边沿：AlarmGrill 状态去重不出声
+            Assert.Empty(bus.Writes);
+        }
+    }
+
+    [Fact]
+    public void GrillClearAfterAlarm_ResetsLampsAndKeepsPlannedEnd()
+    {
+        var (bus, machine, logs) = Make(new CuringPolicy { Name = "T", GlobalMinutes = 60 });
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);    // t0 开计时
+            _now += TimeSpan.FromMinutes(10);
+            machine.Pump(_now);                // t0+10
+            bus.SetInput(GrillL(1, 1), true);  // 报警（人手伸入）
+            bus.SetInput(GrillL(1, 1), false); // 复位（人手离开）
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), false));     // 红灯灭
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true));   // 黄灯复亮
+            Assert.Contains(logs, m => m.Contains("报警复位"));
+
+            _now += TimeSpan.FromMinutes(50);  // 仍按原计划 t0+60 到点
+            machine.Pump(_now);
+            Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase); // 报亮/复位均未动表
+        }
+    }
+
+    [Fact]
+    public void GrillAlarmWhenExpires_DoneTurnsGreenAndClearsRed()
+    {
+        var (bus, machine, logs) = Make(new CuringPolicy { Name = "T", GlobalMinutes = 60 });
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            bus.SetInput(GrillL(1, 1), true);  // 人手一直在架内（计时照走）
+            bus.Writes.Clear();
+
+            _now += TimeSpan.FromMinutes(60);
+            machine.Pump(_now);                // 报警中到点：绿灯放行，红灯让位
+
+            Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), false));
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampGreen, 1, 1), true));
+            Assert.Contains(logs, m => m.Contains("报警随放行解除"));
+        }
+    }
+
+    [Fact]
+    public void GrillAlarmWhenTrayLeaves_IdleClearsRed()
+    {
+        var (bus, machine, logs) = Make(new CuringPolicy { Name = "T", GlobalMinutes = 60 });
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            bus.SetInput(GrillL(1, 1), true);  // 报警
+            bus.Writes.Clear();
+
+            bus.SetInput(Tray(1, 1), false);   // 人没走直接端走托盘：计时作废，红灯随取件灭
+            Assert.Null(machine.GetStatus(1, 1)); // 回空闲
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), false));
+            Assert.Contains(logs, m => m.Contains("计时中取件，计时作废"));
+        }
+    }
+
+    [Fact]
+    public void GrillOnInWaitingOrDone_NoAlarm()
+    {
+        var (bus, machine, _) = Make(new CuringPolicy { Name = "T", GlobalMinutes = 10, GrillGate = true });
+        using (machine)
+        {
+            bus.SetInput(GrillL(1, 1), true);  // 人手先在架内
+            bus.SetInput(Tray(1, 1), true);    // 到位 → 门控等待（本来就在等，不算中途报警）
+            Assert.Equal(SlotPhase.WaitingGate, machine.GetStatus(1, 1)!.Phase);
+            Assert.DoesNotContain(bus.Writes, w => w.Key == Lamp(IoPointRole.LampRed, 1, 1) && w.State);
+
+            bus.SetInput(GrillL(1, 1), false); // 让空 → 开计时
+            _now += TimeSpan.FromMinutes(10);
+            machine.Pump(_now);                // 放行 → Done
+            bus.Writes.Clear();
+            bus.SetInput(GrillL(1, 1), true);  // 取件伸入（Done 是正常取件动作，不报警）
+            Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
+            Assert.DoesNotContain(bus.Writes, w => w.Key == Lamp(IoPointRole.LampRed, 1, 1) && w.State);
+        }
+    }
+
+    [Fact]
+    public void AlignGrillBlocked_RestartsCuringWithAlarm()
+    {
+        // 重启对齐路径（StartCuring 复核）：托盘在架 + 人手还在（光栅挡）→ 开计时即报警
+        var (bus, machine, logs) = Make(new CuringPolicy { Name = "T", GlobalMinutes = 60 });
+        using (machine)
+        {
+            bus.SetSnapshotSilently(Tray(1, 1), true);
+            bus.SetSnapshotSilently(GrillL(1, 1), true);
+            machine.AlignFromSnapshot();
+
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), true));
+            Assert.Contains(logs, m => m.Contains("报警"));
+        }
+    }
+
+    [Fact]
+    public void RestoreRecord_GrillStillBlocked_ReraisesAlarm()
+    {
+        // 断电续算路径（RestoreFromRecord 复核）：重启恢复计时 + 人手仍在架内 → 重新报警
+        using var scope = new TestScope();
+        Directory.CreateDirectory(AppPaths.ConfigDir);
+        var (bus, machine1, _) = MakePersisted(persist: true,
+            new CuringPolicy { Name = "T", GlobalMinutes = 60, PersistMinutes = true });
+        using (machine1)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            _now += TimeSpan.FromMinutes(10);  // 计了 10 分断电（落盘 Curing 记录）
+        }
+
+        var policy = new CuringPolicy { Name = "T", GlobalMinutes = 60, PersistMinutes = true };
+        var logs2 = new List<string>();
+        var machine2 = new SlotCuringMachine(bus, () => policy, clock: () => _now, log: logs2.Add);
+        using (machine2)
+        {
+            bus.SetSnapshotSilently(GrillL(1, 1), true); // 重启时人手还在架内
+            machine2.AlignFromSnapshot();
+
+            Assert.Equal(SlotPhase.Curing, machine2.GetStatus(1, 1)!.Phase);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), true));
+            Assert.Contains(logs2, m => m.Contains("报警"));
+        }
+    }
+
+    [Fact]
+    public void GrillClearAfterAlarm_ResetsOnlyWhenBothSidesClear()
+    {
+        // 双光栅组合口径：一侧让空另一侧仍挡=人手还在架区，不复位；
+        // 全让空才复位（与门控放行同源 GrillClear 检查）。
+        var (bus, machine, _) = Make(new CuringPolicy { Name = "T", GlobalMinutes = 60 });
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            bus.SetInput(GrillL(1, 1), true);  // 左挡 → 报警
+            bus.SetInput(GrillR(1, 1), true);  // 右也挡（已报警态短路，无新写）
+            bus.Writes.Clear();
+
+            bus.SetInput(GrillL(1, 1), false); // 左让空、右仍挡 → 不复位
+            Assert.DoesNotContain(bus.Writes,
+                w => w.Key == Lamp(IoPointRole.LampRed, 1, 1) && w.State == false);
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+
+            bus.SetInput(GrillR(1, 1), false); // 双侧让空 → 复位
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), false));
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true));
         }
     }
 

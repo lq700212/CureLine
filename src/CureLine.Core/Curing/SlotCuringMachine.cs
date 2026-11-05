@@ -6,6 +6,15 @@
 //   到点放行（绿灯）→（托盘离开）→ 灭灯回空闲。任何时刻托盘离开都回
 //   空闲（计时中取件=计时作废并记日志）。
 //
+// 光栅两用（V0.0.63 客户口径收口："计时不变，报警复位"）：
+//   ① 门控闸：只在托盘到位那一瞬间当闸门（防人手还在架内就开计时）；
+//   ② 报警：计时一经开始，光栅任何 ON/OFF 都不停表、不重置、不作废——
+//      唯一能打断计时的仍是托盘离开（取件）。中途光栅 ON（人手伸入）只
+//      做安全报警：红灯点亮（黄绿灭），光栅让空即自动复位（红灯灭、黄灯
+//      复亮）。WaitingGate（本来就在等门控）与 Done（取件伸入是正常动作）
+//      不触发报警；报警态不落盘（curingstate.json 不加字段）——重启对齐/
+//      续算恢复按当前光栅快照重判（人手仍在架内则重新进报警态）。
+//
 // 线程模型（铁律 2）：灯写 WritePoint 是网络 IO，绝不能进 UI 线程——
 //   本类全部动作发生在后台：OnPointChanged 由宿主从总线后台事件转发进来，
 //   Pump 由内部 1s 心跳 Timer（后台线程）调；测试注入虚拟时钟手动 Pump
@@ -100,6 +109,7 @@ public sealed class SlotCuringMachine : IDisposable
         public SlotPhase Phase;
         public DateTimeOffset? StartedAt; // Curing 起点（时钟可注入，测试虚拟推进）
         public int TotalMinutes;          // 开计时时锁定的时长（在制热更单向上调，见 ApplyPolicyHotChange）
+        public bool AlarmGrill;           // Curing 中光栅被挡的报警态（红灯亮着）——瞬时安全态不落盘
     }
 
     /// <summary>
@@ -153,18 +163,33 @@ public sealed class SlotCuringMachine : IDisposable
                     OnTrayLeft(rt, key.Rack, key.Level);
             }
         }
-        else if (key.Role is IoPointRole.RackLightL or IoPointRole.RackLightR && !e.State)
+        else if (key.Role is IoPointRole.RackLightL or IoPointRole.RackLightR)
         {
-            // 光栅让空边沿：门控等待中的仓位立即开计时（Pump 有快照兜底，双保险）
+            // 光栅边沿按计时相位分派（口径见类头"光栅两用"）：
+            // ① 让空（OFF 边沿）+ 门控等待中 → 立即开计时（Pump 有快照兜底，双保险）；
+            // ② 让空（OFF 边沿）+ 计时中报警态 + 双光栅全让空 → 报警复位
+            //    （红灯灭、黄灯复亮）——一侧让空另一侧仍挡不算（人手还在架区）；
+            // ③ 亮起（ON 边沿）+ 计时中未报警 → 报警亮红灯（计时不动——客户口径
+            //    "固化计时不需要变化，报警复位就可以"）。WaitingGate（本来就在等
+            //    门控）与 Done（取件伸入是正常动作）不触发报警。如现场要求计时中
+            //    暂停表，属新分支：加 SlotPhase.Paused 处理。
             lock (_sync)
             {
                 var rt = GetOrAdd(key.Rack, key.Level);
-                if (rt.Phase == SlotPhase.WaitingGate && GrillClear(key.Rack, key.Level))
-                    StartCuring(rt, key.Rack, key.Level);
+                if (!e.State)
+                {
+                    if (rt.Phase == SlotPhase.WaitingGate && GrillClear(key.Rack, key.Level))
+                        StartCuring(rt, key.Rack, key.Level);
+                    else if (rt.Phase == SlotPhase.Curing && rt.AlarmGrill
+                        && GrillClear(key.Rack, key.Level))
+                        SetGrillAlarm(rt, key.Rack, key.Level, on: false);
+                }
+                else if (rt.Phase == SlotPhase.Curing && !rt.AlarmGrill)
+                {
+                    SetGrillAlarm(rt, key.Rack, key.Level, on: true);
+                }
             }
         }
-        // 光栅亮起（人手伸入）不打断进行中的计时——第一版不暂停（客户口径
-        // "计时为主"），如现场要求暂停属新分支，加 SlotPhase.Paused 处理。
     }
 
     /// <summary>心跳泵：扫描到期仓位放行 + 灯写补写自愈 + 门控兜底推进。可测试直调（虚拟时间）。</summary>
@@ -181,10 +206,24 @@ public sealed class SlotCuringMachine : IDisposable
                         if (elapsed >= rt.TotalMinutes)
                         {
                             rt.Phase = SlotPhase.Done;
+                            // 报警中到点：放行接替报警（绿灯让位红灯——取件作业中不再"禁止靠近"）
+                            bool alarmWasOn = rt.AlarmGrill;
+                            rt.AlarmGrill = false;
+                            EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampRed, false);
                             EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampYellow, false);
                             EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampGreen, true);
-                            _log($"架{slot.Rack}层{slot.Level} 固化到点放行（绿灯，共 {MinutesText(rt.TotalMinutes)}）");
+                            _log(alarmWasOn
+                                ? $"架{slot.Rack}层{slot.Level} 固化到点放行（绿灯，共 {MinutesText(rt.TotalMinutes)}，报警随放行解除）"
+                                : $"架{slot.Rack}层{slot.Level} 固化到点放行（绿灯，共 {MinutesText(rt.TotalMinutes)}）");
                             PersistState(); // 状态变化落盘（开关开时）
+                        }
+                        else if (rt.AlarmGrill)
+                        {
+                            // 计时中报警态：红灯亮/黄绿灭补写自愈（去重后稳态零网络写；
+                            // 报警灯早于黄灯写入失败时靠这里重试，与黄灯补写同性质）
+                            EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampRed, true);
+                            EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampYellow, false);
+                            EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampGreen, false);
                         }
                         else
                         {
@@ -303,6 +342,7 @@ public sealed class SlotCuringMachine : IDisposable
             rt.Phase = SlotPhase.Done;
             rt.StartedAt = rec.StartedAt;
             rt.TotalMinutes = rec.Minutes;
+            EnsureLamp(rack, level, IoPointRole.LampRed, false); // 防断电前红灯寄存器残留
             EnsureLamp(rack, level, IoPointRole.LampYellow, false);
             EnsureLamp(rack, level, IoPointRole.LampGreen, true);
             _log($"架{rack}层{level} 重启恢复：断电前已固化到点，保持放行（绿灯，共 {MinutesText(rec.Minutes)}）");
@@ -314,6 +354,9 @@ public sealed class SlotCuringMachine : IDisposable
         rt.TotalMinutes = rec.Minutes;
         EnsureLamp(rack, level, IoPointRole.LampYellow, true);
         EnsureLamp(rack, level, IoPointRole.LampGreen, false);
+        EnsureLamp(rack, level, IoPointRole.LampRed, false); // 防残留红灯（报警态不落盘，见下）
+        if (!GrillClear(rack, level))
+            SetGrillAlarm(rt, rack, level, on: true); // 续算恢复即复核：人手仍在架内 → 重新进报警态
         int remain = Math.Max(0, rec.Minutes - (int)Math.Ceiling((_clock() - rec.StartedAt).TotalMinutes));
         _log($"架{rack}层{level} 重启恢复：续算断电前计时，剩 {MinutesText(remain)}（共 {MinutesText(rec.Minutes)}）");
     }
@@ -370,6 +413,11 @@ public sealed class SlotCuringMachine : IDisposable
         _log($"架{rack}层{level} 开始固化计时 {MinutesText(rt.TotalMinutes)}（黄灯）");
         if (realEdge)
             CuringStarted?.Invoke(rack, level); // 过账进站挂点（Start 口径，Poster 内按配置取舍）
+        // 开计时即复核光栅：门控关（GrillGate=false）的现场人手也可能恰好在架内，
+        // 计时一开始就"被挡"——按报警语义立即亮红（SetGrillAlarm 内有状态去重，
+        // 正常门控放行路径此刻光栅已让空，走到这里必然零操作）。
+        if (!GrillClear(rack, level))
+            SetGrillAlarm(rt, rack, level, on: true);
         PersistState(); // 状态变化落盘（开关开时）
     }
 
@@ -396,6 +444,10 @@ public sealed class SlotCuringMachine : IDisposable
         rt.Phase = SlotPhase.Idle;
         rt.StartedAt = null;
         rt.TotalMinutes = 0;
+        // 报警态随取件一并消除（人手在架内直接端走托盘的场景）：红灯也让位，
+        // 与黄绿同批灭灯——不额外记"复位"日志，取件日志（下方 note）已是本边沿。
+        rt.AlarmGrill = false;
+        EnsureLamp(rack, level, IoPointRole.LampRed, false);
         EnsureLamp(rack, level, IoPointRole.LampYellow, false);
         EnsureLamp(rack, level, IoPointRole.LampGreen, false);
         _log($"架{rack}层{level} {note}，回空闲");
@@ -451,7 +503,8 @@ public sealed class SlotCuringMachine : IDisposable
 
     /// <summary>
     /// 写灯（去重）：与上次成功写的值相同则跳过（稳态零网络写）；
-    /// 失败不记账 → 下轮 Pump 自动补写。红灯本状态机不碰（留给将来异常语义）。
+    /// 失败不记账 → 下轮 Pump 自动补写。红灯走光栅报警语义（SetGrillAlarm，
+    /// V0.0.63 起：计时中人手伸入亮红、让空复位——不再是"永不写"的预留位）。
     /// </summary>
     private void EnsureLamp(int rack, int level, IoPointRole role, bool state)
     {
@@ -478,6 +531,34 @@ public sealed class SlotCuringMachine : IDisposable
         var left = snap.Get(new IoPointKey(true, IoPointRole.RackLightL, rack, level));
         var right = snap.Get(new IoPointKey(true, IoPointRole.RackLightR, rack, level));
         return left != true && right != true;
+    }
+
+    /// <summary>
+    /// 光栅报警收口（V0.0.63 客户口径"固化计时不需要变化，报警复位就可以"）：
+    /// 仅 Curing 相位有意义。亮起：红灯独亮（黄绿灭——三色灯"红=禁止靠近"现场
+    /// 语义）+ 一条边沿日志；复位：红灯灭、黄灯复亮 + 一条边沿日志。报警态
+    /// （rt.AlarmGrill）就是状态比对闸——重复 ON 边沿/重复 OFF 边沿在这里短路，
+    /// 日志只记边沿不刷屏（铁律 4）。写灯失败不记账 → 下轮 Pump 报警分支
+    /// 补写自愈（与黄灯补写同性质）。复位不动计时（StartedAt 原样）。
+    /// </summary>
+    private void SetGrillAlarm(SlotRuntime rt, int rack, int level, bool on)
+    {
+        if (rt.AlarmGrill == on)
+            return; // 状态去重：冗余边沿不重复写灯、不重复记日志
+        rt.AlarmGrill = on;
+        if (on)
+        {
+            EnsureLamp(rack, level, IoPointRole.LampRed, true);
+            EnsureLamp(rack, level, IoPointRole.LampYellow, false);
+            EnsureLamp(rack, level, IoPointRole.LampGreen, false);
+            _log($"架{rack}层{level} 光栅被挡（人手伸入），报警（红灯），计时继续");
+        }
+        else
+        {
+            EnsureLamp(rack, level, IoPointRole.LampRed, false);
+            EnsureLamp(rack, level, IoPointRole.LampYellow, true);
+            _log($"架{rack}层{level} 光栅让空，报警复位（红灯灭），计时继续");
+        }
     }
 
     private SlotRuntime GetOrAdd(int rack, int level)
