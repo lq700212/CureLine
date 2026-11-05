@@ -99,6 +99,23 @@ public class CuringDisplayTests
         Assert.Equal(("47", "分", "", ""), DurationUnit.SplitBig(47));     // 不足 1 小时=两段
     }
 
+    [Fact(DisplayName = "DurationUnit.LogText：日志口径（分钟=“X 分钟”老字样；小时=同 Text 智能省略）")]
+    public void DurationUnit_LogText_MinutesLegacy_HoursSmart()
+    {
+        using var scope = new TestScope();
+        DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);
+        Assert.Equal("120 分钟", DurationUnit.LogText(120));  // 历史日志观感零变化（非"120分"）
+        Assert.Equal("47 分钟", DurationUnit.LogText(47));
+
+        DurationUnit.RecallForTest(PolicyTimeUnit.Hours);
+        Assert.Equal("2小时", DurationUnit.LogText(120));     // 整小时省"0分"
+        Assert.Equal("24小时", DurationUnit.LogText(1440));   // 现场日记"1440 分钟"→"24小时"
+        Assert.Equal("1小时28分", DurationUnit.LogText(88));
+        Assert.Equal("47分", DurationUnit.LogText(47));       // 不足 1 小时省"0小时"
+
+        DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);   // 收尾还原（TestScope Dispose 双保险）
+    }
+
     [Fact(DisplayName = "DurationUnit：Change 落盘 ini 记忆 + 触发广播")]
     public void DurationUnit_Change_PersistsAndRaises()
     {

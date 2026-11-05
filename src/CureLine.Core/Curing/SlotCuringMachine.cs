@@ -29,6 +29,8 @@
 //      重复过账）；处理器禁止同步回调状态机（锁内触发红线，见事件注释）。
 //
 // 日志（铁律 4）：只记边沿——开计时/放行/取件/重启对齐，不刷屏。
+//   时长文本可由宿主注入（durationText，如程序①按显示单位把 1440 分钟读成
+//   "24小时"）；不注入时统一"X 分钟"老口径——Core 不背显示单位静态。
 //
 // 怎么改：新增工艺分支（如暂停计时）在 SlotPhase 加状态 + OnPointChanged/
 //   Pump 两处推进逻辑；灯色语义（黄=计时绿=放行）改动要同步
@@ -65,6 +67,8 @@ public sealed class SlotCuringMachine : IDisposable
     private readonly Func<CuringPolicy?> _policyProvider;
     private readonly Func<DateTimeOffset> _clock;
     private readonly Action<string> _log;
+    /// <summary>日志时长文本格式化（宿主注入跟随显示单位；null=缺省"X 分钟"口径）。</summary>
+    private readonly Func<int, string>? _durationText;
     private readonly Dictionary<(int Rack, int Level), SlotRuntime> _slots = new();
     /// <summary>成功写过的灯态（IoPointKey→值）：去重 + 失败补写的比对基准。</summary>
     private readonly Dictionary<IoPointKey, bool> _writtenLamps = new();
@@ -100,15 +104,19 @@ public sealed class SlotCuringMachine : IDisposable
 
     /// <summary>
     /// 构造即起 1s 心跳（后台线程）。bus 可后续经 Attach 换（重连不丢状态）；
-    /// policyProvider 每次托盘到位现取（支持策略窗热切换）；clock/log 可注入（测试）。
+    /// policyProvider 每次托盘到位现取（支持策略窗热切换）；clock/log/durationText
+    /// 可注入（测试：clock/log；显示单位：durationText——缺省 null 走"X 分钟"）。
+    /// durationText 在后台线程逐条调用，须线程安全（纯函数即可）。
     /// </summary>
     public SlotCuringMachine(IPointTableBus bus, Func<CuringPolicy?> policyProvider,
-        Func<DateTimeOffset>? clock = null, Action<string>? log = null)
+        Func<DateTimeOffset>? clock = null, Action<string>? log = null,
+        Func<int, string>? durationText = null)
     {
         _bus = bus;
         _policyProvider = policyProvider;
         _clock = clock ?? (() => DateTimeOffset.Now);
         _log = log ?? (_ => { });
+        _durationText = durationText;
         _pumpTimer = new Timer(_ => SafePump(), null,
             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
@@ -175,7 +183,7 @@ public sealed class SlotCuringMachine : IDisposable
                             rt.Phase = SlotPhase.Done;
                             EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampYellow, false);
                             EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampGreen, true);
-                            _log($"架{slot.Rack}层{slot.Level} 固化到点放行（绿灯，共 {rt.TotalMinutes} 分钟）");
+                            _log($"架{slot.Rack}层{slot.Level} 固化到点放行（绿灯，共 {MinutesText(rt.TotalMinutes)}）");
                             PersistState(); // 状态变化落盘（开关开时）
                         }
                         else
@@ -230,7 +238,7 @@ public sealed class SlotCuringMachine : IDisposable
                 if (newMinutes > rt.TotalMinutes)
                 {
                     _log($"架{slot.Rack}层{slot.Level} 策略热更：在制固化时长 " +
-                        $"{rt.TotalMinutes} 分钟延长为 {newMinutes} 分钟（只延不缩）");
+                        $"{MinutesText(rt.TotalMinutes)} 延长为 {MinutesText(newMinutes)}（只延不缩）");
                     rt.TotalMinutes = newMinutes;
                     changed = true;
                 }
@@ -297,7 +305,7 @@ public sealed class SlotCuringMachine : IDisposable
             rt.TotalMinutes = rec.Minutes;
             EnsureLamp(rack, level, IoPointRole.LampYellow, false);
             EnsureLamp(rack, level, IoPointRole.LampGreen, true);
-            _log($"架{rack}层{level} 重启恢复：断电前已固化到点，保持放行（绿灯，共 {rec.Minutes} 分钟）");
+            _log($"架{rack}层{level} 重启恢复：断电前已固化到点，保持放行（绿灯，共 {MinutesText(rec.Minutes)}）");
             return;
         }
         // Curing：按记录起点续算——断电期间流逝的时间自然计入固化时长
@@ -307,7 +315,7 @@ public sealed class SlotCuringMachine : IDisposable
         EnsureLamp(rack, level, IoPointRole.LampYellow, true);
         EnsureLamp(rack, level, IoPointRole.LampGreen, false);
         int remain = Math.Max(0, rec.Minutes - (int)Math.Ceiling((_clock() - rec.StartedAt).TotalMinutes));
-        _log($"架{rack}层{level} 重启恢复：续算断电前计时，剩 {remain} 分钟（共 {rec.Minutes} 分钟）");
+        _log($"架{rack}层{level} 重启恢复：续算断电前计时，剩 {MinutesText(remain)}（共 {MinutesText(rec.Minutes)}）");
     }
 
     /// <summary>查仓位状态（UI 500ms 刷用）。空闲/没动过回 null（UI 走灯色反推口径）。</summary>
@@ -345,7 +353,7 @@ public sealed class SlotCuringMachine : IDisposable
             rt.Phase = SlotPhase.WaitingGate;
             rt.TotalMinutes = minutes;
             rt.StartedAt = null;
-            _log($"架{rack}层{level} 托盘到位，等光栅让空后开始计时（{minutes} 分钟）");
+            _log($"架{rack}层{level} 托盘到位，等光栅让空后开始计时（{MinutesText(minutes)}）");
             return;
         }
         StartCuring(rt, rack, level, minutes, realEdge);
@@ -359,7 +367,7 @@ public sealed class SlotCuringMachine : IDisposable
         rt.StartedAt = _clock();
         EnsureLamp(rack, level, IoPointRole.LampYellow, true);
         EnsureLamp(rack, level, IoPointRole.LampGreen, false); // 防残留绿灯
-        _log($"架{rack}层{level} 开始固化计时 {rt.TotalMinutes} 分钟（黄灯）");
+        _log($"架{rack}层{level} 开始固化计时 {MinutesText(rt.TotalMinutes)}（黄灯）");
         if (realEdge)
             CuringStarted?.Invoke(rack, level); // 过账进站挂点（Start 口径，Poster 内按配置取舍）
         PersistState(); // 状态变化落盘（开关开时）
@@ -433,6 +441,13 @@ public sealed class SlotCuringMachine : IDisposable
     }
 
     // ---------- 灯写与辅助 ----------
+
+    /// <summary>
+    /// 日志用时长文本：宿主注入了 durationText 就按它说（跟随显示单位），
+    /// 没注入统一"X 分钟"老口径（缺省值与测试断言、历史日志观感都不变）。
+    /// </summary>
+    private string MinutesText(int minutes) =>
+        _durationText != null ? _durationText(minutes) : $"{minutes} 分钟";
 
     /// <summary>
     /// 写灯（去重）：与上次成功写的值相同则跳过（稳态零网络写）；

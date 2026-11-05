@@ -881,7 +881,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             if (_machine == null)
             {
                 _machine = new SlotCuringMachine(bus, GetActivePolicy,
-                    log: m => LocalLogService.Write(m));
+                    log: m => LocalLogService.Write(m),
+                    // 日志时长文本随显示单位（策略窗切小时 → 日志"开始固化计时 2小时"；
+                    // 分钟口径保持"X 分钟"老字样）——LogText 是纯函数，后台线程安全。
+                    durationText: DurationUnit.LogText);
                 // 过账挂点（P3.2 后半）：状态机三事件 → 过账服务（只在创建时订阅
                 // 一次——重连 Attach 换通道不重复订阅）。事件在状态机锁内触发，
                 // Poster 方法内部 Task.Run 立即返回，不重入不阻塞。

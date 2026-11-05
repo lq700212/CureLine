@@ -23,12 +23,12 @@ public class SlotCuringMachineTests
         new(false, role, rack, level);
 
     private (ScriptedPointBus Bus, SlotCuringMachine Machine, List<string> Logs) Make(
-        CuringPolicy? policy = null)
+        CuringPolicy? policy = null, Func<int, string>? durationText = null)
     {
         var bus = new ScriptedPointBus();
         var logs = new List<string>();
         var machine = new SlotCuringMachine(bus, () => policy,
-            clock: () => _now, log: logs.Add);
+            clock: () => _now, log: logs.Add, durationText: durationText);
         // 宿主转发边沿（生产由 MainViewModel 做——machine 不直接订阅总线）
         bus.PointChanged += (_, e) => machine.OnPointChanged(e);
         return (bus, machine, logs);
@@ -51,6 +51,35 @@ public class SlotCuringMachineTests
             Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
             Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true));
             Assert.Contains(logs, m => m.Contains("架1层1 开始固化计时"));
+        }
+    }
+
+    // ---------- 日志时长文本（durationText 注入跟随显示单位，V0.0.61） ----------
+
+    [Fact]
+    public void Logs_Default_KeepsMinutesFormat()
+    {
+        var (bus, machine, logs) = Make();   // policy=null → 兜底 FallbackMinutes=120
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            // 缺省“X 分钟”老口径逐字锁定（没注入 durationText 时历史观感不变）
+            Assert.Contains(logs, m => m.Contains("开始固化计时 120 分钟（黄灯）"));
+        }
+    }
+
+    [Fact]
+    public void Logs_DurationTextInjected_AllDurationTextsFollow()
+    {
+        // 宿主注入的时长文本（生产=DurationUnit.LogText 跟随显示单位；此处纯函数代言）
+        var (bus, machine, logs) = Make(durationText: m => $"{m / 60}小时");
+        using (machine)
+        {
+            bus.SetInput(Tray(2, 3), true);
+            Assert.Contains(logs, m => m.Contains("开始固化计时 2小时（黄灯）"));
+
+            machine.Pump(_now.AddMinutes(120));
+            Assert.Contains(logs, m => m.Contains("固化到点放行（绿灯，共 2小时）"));
         }
     }
 

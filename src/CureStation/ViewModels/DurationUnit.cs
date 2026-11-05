@@ -95,6 +95,16 @@ public static class DurationUnit
         : $"{minutes}分";
 
     /// <summary>
+    /// 日志版时长文本（状态机日志经宿主 MainViewModel 注入本函数，跟随单位）：
+    /// 小时口径同 Text（"24小时"/"1小时28分"/"47分"智能省略零段）；
+    /// 分钟口径保持"X 分钟"老字样——与历史日志观感一致（"1440 分钟"，非"1440分"）。
+    /// 纯函数任意线程可调（状态机后台线程逐条调，只做 quotients 与字符串拼装）。
+    /// </summary>
+    public static string LogText(int minutes) => Current == PolicyTimeUnit.Hours
+        ? HourText(minutes)
+        : $"{minutes} 分钟";
+
+    /// <summary>
     /// 卡片大数字拆"数字段/单位字"交替四段（V0.0.56 二轮：数字 26 号、单位字
     /// 11 号——与分钟模式"分"后缀同字号，用户拍板）：
     ///   分/47 → ("47","分","","")；小时 120 → ("2","小时","","")；
