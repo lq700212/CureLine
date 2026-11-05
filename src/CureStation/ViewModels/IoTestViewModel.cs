@@ -218,6 +218,16 @@ public sealed class IoTestViewModel : ViewModelBase
     public RelayCommand SweepCommand { get; }
     public RelayCommand<IoTestPointVm> TogglePointCommand { get; }
 
+    /// <summary>
+    /// 机台总监塔灯/蜂鸣通道（V0.0.65）：机台级点（Beacon*/Buzzer，Rack/Level 恒 0）
+    /// 不属于任何仓位卡——点位聚合到窗口顶部一排不参与网格铺格（30 卡契约不动）；
+    /// 通道钮仍注册进 _points：刷灯/全部关闭/一键遍历走全网通用逻辑零特判。
+    /// </summary>
+    private readonly List<IoTestPointVm> _beacon = new();
+    public IReadOnlyList<IoTestPointVm> BeaconChannels => _beacon;
+    /// <summary>专条只看点表真接了塔灯才显示（旧点表/未接灯的表零视觉变化）。</summary>
+    public bool BeaconRowVisible => _beacon.Count > 0;
+
     public IoTestViewModel(IPointTableBus bus, PointTableConfig config)
     {
         _bus = bus ?? throw new ArgumentNullException(nameof(bus));
@@ -239,6 +249,19 @@ public sealed class IoTestViewModel : ViewModelBase
             .Where(x => x.B.Role != IoPointRole.Reserved && x.B.Rack > 0 && x.B.Level > 0)
             .GroupBy(x => (x.B.Rack, x.B.Level))
             .ToDictionary(g => g.Key, g => g.ToList());
+
+        // 机台总监塔灯/蜂鸣通道（V0.0.65）：机台级点进顶部专条（按枚举序排=红黄绿
+        // 蓝蜂，与宿主块位 11~15 顺延一致）；不接塔灯的表此项为空、专条隐藏。
+        foreach (var (dev, b) in config.Devices
+            .SelectMany(d => d.Bindings.Select(b => (Device: d, B: b)))
+            .Where(x => IoPointRoleInfo.IsMachineLevel(x.B.Role))
+            .OrderBy(x => (int)x.B.Role))
+        {
+            var vm = new IoTestPointVm(b.Key, IoPointRoleInfo.ToText(b.Role),
+                b.FunctionName, $"{dev.Name}（{dev.Ip}）");
+            _beacon.Add(vm);
+            _points[b.Key] = vm;
+        }
         for (int level = 1; level <= LevelCount; level++)
         for (int rack = 1; rack <= RackCount; rack++)
         {

@@ -261,6 +261,10 @@ public sealed class SlotCuringMachine : IDisposable
                         break;
                 }
             }
+            // 机台塔灯每拍聚合（V0.0.65）：兜住边沿挂点之外的聚合变化——到点放行
+            // （Curing→Done）与快照兜底复位都发生在这层循环内；同时兼每秒自愈补写
+            // （与仓位灯补写同性质，EnsureLamp 去重后稳态零网络写）。
+            RefreshMachineBeacon();
         }
     }
 
@@ -414,6 +418,7 @@ public sealed class SlotCuringMachine : IDisposable
             rt.TotalMinutes = minutes;
             rt.StartedAt = null;
             _log($"架{rack}层{level} 托盘到位，等光栅让空后开始计时（{MinutesText(minutes)}）");
+            RefreshMachineBeacon(); // 等门控也算"忙碌"——塔灯黄灯即时（后续开计行走 StartCuring 尾）
             return;
         }
         StartCuring(rt, rack, level, minutes, realEdge);
@@ -436,6 +441,7 @@ public sealed class SlotCuringMachine : IDisposable
         if (!GrillClear(rack, level))
             SetGrillAlarm(rt, rack, level, on: true);
         PersistState(); // 状态变化落盘（开关开时）
+        RefreshMachineBeacon(); // 机台塔灯同步：新仓位开计时，全机聚合即时跟随（黄/红）
     }
 
     private void OnTrayLeft(SlotRuntime rt, int rack, int level)
@@ -468,6 +474,7 @@ public sealed class SlotCuringMachine : IDisposable
         EnsureLamp(rack, level, IoPointRole.LampYellow, false);
         EnsureLamp(rack, level, IoPointRole.LampGreen, false);
         _log($"架{rack}层{level} {note}，回空闲");
+        RefreshMachineBeacon(); // 机台塔灯同步：取件/取走后全机聚合即时跟随（蜂鸣停，回绿或黄）
         PersistState(); // 状态变化落盘（开关开时）：取件仓位从记录中移除
         // 过账出站挂点（唯一调用方 OnPointChanged 恒为真实边沿，无对齐路径）
         TrayLeft?.Invoke(rack, level, leavePhase, curedSeconds);
@@ -541,6 +548,57 @@ public sealed class SlotCuringMachine : IDisposable
         }
     }
 
+    /// <summary>
+    /// 机台总监塔灯聚合刷新（V0.0.65，仅 <see cref="_sync"/> 锁内调用）：
+    /// 全机一套四色塔灯+蜂鸣，优先级 红 &gt; 黄 &gt; 绿——
+    ///   任一仓位 AlarmGrill → 红+蜂鸣长鸣；否则任一仓位 Curing/WaitingGate
+    ///   （计时中/等门控）→ 黄；否则 → 绿常亮（设备就绪/已全部放行）。蓝不写
+    ///   （预留现场自接）。每态一次性写四路（红黄绿+蜂），EnsureLamp 逐路去重，
+    ///   稳态零网络写；未绑定塔灯时 WritePoint 静默 false 零网络成本。
+    /// 挂点=每个可能改变聚合态的转移收尾（StartCuring/OnTrayArrived 等门控/
+    /// OnTrayLeft/SetGrillAlarm/Pump 尾），到点放行走 Pump 尾兜住——覆盖清单见
+    /// DocShot 之外本方法头注释与 SlotCuringMachineTests 用例。
+    /// </summary>
+    private void RefreshMachineBeacon()
+    {
+        bool anyAlarm = false, anyBusy = false;
+        foreach (var rt in _slots.Values)
+        {
+            if (rt.AlarmGrill)
+            {
+                anyAlarm = true;
+                break; // 红优先：一个报警即定全机塔灯
+            }
+            if (rt.Phase is SlotPhase.Curing or SlotPhase.WaitingGate)
+                anyBusy = true;
+        }
+
+        if (anyAlarm)
+        {
+            // 报警总指示：红常亮 + 蜂鸣长鸣（复位/放行/取件才停）
+            EnsureLamp(0, 0, IoPointRole.BeaconRed, true);
+            EnsureLamp(0, 0, IoPointRole.BeaconYellow, false);
+            EnsureLamp(0, 0, IoPointRole.BeaconGreen, false);
+            EnsureLamp(0, 0, IoPointRole.Buzzer, true);
+        }
+        else if (anyBusy)
+        {
+            // 计时中/等门控：黄灯（红灯灭防复位写失败残留，蜂鸣停）
+            EnsureLamp(0, 0, IoPointRole.BeaconRed, false);
+            EnsureLamp(0, 0, IoPointRole.BeaconYellow, true);
+            EnsureLamp(0, 0, IoPointRole.BeaconGreen, false);
+            EnsureLamp(0, 0, IoPointRole.Buzzer, false);
+        }
+        else
+        {
+            // 全机空闲（含刚启动无事件）：绿常亮=设备就绪
+            EnsureLamp(0, 0, IoPointRole.BeaconRed, false);
+            EnsureLamp(0, 0, IoPointRole.BeaconYellow, false);
+            EnsureLamp(0, 0, IoPointRole.BeaconGreen, true);
+            EnsureLamp(0, 0, IoPointRole.Buzzer, false);
+        }
+    }
+
     /// <summary>光栅是否让空：左右都没亮才算让（没绑定 null 视为让空，不卡没配光栅的仓位）。</summary>
     private bool GrillClear(int rack, int level)
     {
@@ -576,6 +634,7 @@ public sealed class SlotCuringMachine : IDisposable
             EnsureLamp(rack, level, IoPointRole.LampYellow, true);
             _log($"架{rack}层{level} 光栅让空，报警复位（红灯灭），计时继续");
         }
+        RefreshMachineBeacon(); // 机台塔灯同步：报警→红+蜂鸣，复位→黄（计时继续，蜂鸣即停）
     }
 
     private SlotRuntime GetOrAdd(int rack, int level)

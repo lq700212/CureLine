@@ -71,6 +71,32 @@ public class IoTestViewModelTests
     }
 
     [Fact]
+    public void IoTestVm_BeaconChannels_MachineLevelPointsGoTopBar()
+    {
+        // 塔灯口径（V0.0.65）：BuildMachineTemplate 缺省第 2 台挂机台总监 5 路——
+        // 机台级点不进 30 卡网格、不进机台下拉，单独一排顶部灯钮（可点击验接线）
+        var bus = new ScriptedPointBus();
+        var vm = new CureStation.ViewModels.IoTestViewModel(
+            bus, IoPointTableStore.BuildMachineTemplate());
+
+        Assert.Equal(30, vm.Slots.Count);            // 网格仍 30 卡（塔灯点不进去）
+        Assert.True(vm.BeaconRowVisible);
+        Assert.Equal(5, vm.BeaconChannels.Count);
+        // 排序=红黄绿蓝蜂（按枚举序，与宿主块位 11~15 顺延一致）
+        Assert.Equal(new[]
+        {
+            IoPointRole.BeaconRed, IoPointRole.BeaconYellow, IoPointRole.BeaconGreen,
+            IoPointRole.BeaconBlue, IoPointRole.Buzzer,
+        }, vm.BeaconChannels.Select(c => c.Key.Role).ToArray());
+        Assert.All(vm.BeaconChannels, c => { Assert.True(c.Exists); Assert.True(c.IsOutput); });
+
+        // 无塔灯旧表：零通道、专条隐藏（网格/机台下拉零影响）
+        var vm2 = new CureStation.ViewModels.IoTestViewModel(bus, DefaultConfig());
+        Assert.False(vm2.BeaconRowVisible);
+        Assert.Empty(vm2.BeaconChannels);
+    }
+
+    [Fact]
     public void IoTestVm_MachinePicker_SwitchesSlots()
     {
         // 双架点表：架 1~10（第一台耦合器）+ 架 11~20（第二台，rackStart=11）

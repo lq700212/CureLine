@@ -34,6 +34,9 @@ public class GrillAlarmSimulationTests
         new(true, IoPointRole.RackLightR, rack, level);
     private static IoPointKey Lamp(IoPointRole role) =>
         new(false, role, 1, 1);
+    /// <summary>机台总监塔灯键（V0.0.65）：机台级恒 (DO, role, 0, 0)。</summary>
+    private static IoPointKey Beacon(IoPointRole role) =>
+        new(false, role, 0, 0);
 
     private (ScriptedPointBus Bus, SlotCuringMachine Machine, List<string> Logs) Make(
         CuringPolicy? policy = null)
@@ -74,6 +77,9 @@ public class GrillAlarmSimulationTests
             bus.SetInput(GrillL(1, 1), true);
             Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed), true));
             Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow), false));
+            // 机台塔灯同步（V0.0.65）：报警即全机红 + 蜂鸣长鸣
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconRed), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.Buzzer), true));
             Assert.Contains(logs, m => m.Contains("光栅被挡"));
             bus.Writes.Clear();
 
@@ -93,6 +99,10 @@ public class GrillAlarmSimulationTests
             bus.SetInput(GrillR(1, 1), false);
             Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed), false));
             Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow), true));
+            // 机台塔灯同步（V0.0.65）：复位即红灭+蜂停；唯一仓位回计时中 → 塔灯黄
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconRed), false));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.Buzzer), false));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconYellow), true));
             Assert.Contains(logs, m => m.Contains("报警复位"));
             Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
             bus.Writes.Clear();
@@ -102,6 +112,7 @@ public class GrillAlarmSimulationTests
             machine.Pump(_now);
             Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
             Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampGreen), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconGreen), true)); // 塔灯放行绿
             // 复位已先行，到点放行不该再打"报警随放行解除"日志
             Assert.DoesNotContain(logs, m => m.Contains("报警随放行解除"));
             bus.Writes.Clear();
@@ -135,6 +146,9 @@ public class GrillAlarmSimulationTests
             Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
             Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampGreen), true));  // 绿灯放行
             Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed), false));   // 红灯让位
+            // 机台塔灯同步（V0.0.65）：放行即全机绿 + 蜂鸣停（报警随放行解除）
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconGreen), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.Buzzer), false));
             Assert.Contains(logs, m => m.Contains("报警随放行解除"));
         }
     }

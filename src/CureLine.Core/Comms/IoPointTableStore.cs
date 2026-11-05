@@ -80,9 +80,13 @@ public static class IoPointTableStore
     /// 层数 >4 时本方法抛异常（调用方应把多余层分到另一台设备）。
     /// rackStart=起始全局架号（缺省 1）：双架部署第二台耦合器传 11，
     /// 生成架 11~rackStart+rackCount-1（块号仍从 1 起算设备内地址，地址换算不受影响）。
+    /// withBeacon=true（V0.0.65 塔灯）：额外生成五条机台级绑定（四色塔灯红/黄/绿/蓝
+    /// + 蜂鸣），落本设备第 1 块 DO 段位 11~15（图纸口径：三层仓位灯占位 0~10，
+    /// 层3 预留位 11 起顺延塔灯五件套——一套灯管全机，Rack/Level 恒 0，校验器强制）。
     /// </summary>
     public static PointTableConfig BuildDefaultTemplate(
-        string deviceName, string ip, int rackCount, int levelsPerRack, int rackStart = 1)
+        string deviceName, string ip, int rackCount, int levelsPerRack,
+        int rackStart = 1, bool withBeacon = false)
     {
         const int bitsPerLevel = 4, pointsPerLevel = 3;
         int maxLevels = 16 / bitsPerLevel;
@@ -101,7 +105,8 @@ public static class IoPointTableStore
             BlockCount = rackCount,
         };
 
-        var bindings = new List<IoPointBinding>(rackCount * levelsPerRack * pointsPerLevel * 2);
+        var bindings = new List<IoPointBinding>(rackCount * levelsPerRack * pointsPerLevel * 2
+            + (withBeacon ? 5 : 0));
         for (int block = 1; block <= rackCount; block++)
         {
             int rack = rackStart + block - 1;   // 块 K ↔ 全局架号（第二台 rackStart=11 → 块1=架11）
@@ -118,6 +123,29 @@ public static class IoPointTableStore
                 bindings.Add(Make(block, bitBase + 1, false, IoPointRole.LampYellow, rack, level, levelName));
                 bindings.Add(Make(block, bitBase + 2, false, IoPointRole.LampGreen, rack, level, levelName));
             }
+        }
+
+        // 机台总监塔灯五件套（V0.0.65，withBeacon 才生成）：全机唯一一套，落第 1 块
+        // DO 位 11~15 = 红黄绿蓝+蜂鸣（与仓位灯同块同帧——扫描计划零分帧变化）。
+        // FunctionName 直接用角色文案（机台级不挂架/层，无仓位前缀可拼）。
+        if (withBeacon)
+        {
+            const int beaconBitBase = 11;   // 三层占位 0~10，位 11 起顺延（图纸 Y103B~F）
+            IoPointRole[] beaconRoles =
+            [
+                IoPointRole.BeaconRed, IoPointRole.BeaconYellow, IoPointRole.BeaconGreen,
+                IoPointRole.BeaconBlue, IoPointRole.Buzzer,
+            ];
+            foreach (var role in beaconRoles)
+                bindings.Add(new IoPointBinding
+                {
+                    Block = 1,                  // 宿主块=本设备第 1 块（多块设备的塔灯手工挪块）
+                    Bit = beaconBitBase + Array.IndexOf(beaconRoles, role),
+                    IsInput = false,            // 全是 DO 输出
+                    Role = role,
+                    Rack = 0, Level = 0,        // 机台级恒 0（校验器强制清零）
+                    FunctionName = IoPointRoleInfo.ToText(role),
+                });
         }
 
         var config = new PointTableConfig { Devices = { device } };
@@ -152,6 +180,13 @@ public static class IoPointTableStore
     /// <param name="port">Modbus TCP 端口（缺省 502）。</param>
     /// <param name="diStartAddress">DI 输入寄存器起始地址占位（FC04，缺省 0x1000）。</param>
     /// <param name="doStartAddress">DO 输出寄存器起始地址占位（FC03 读/FC06 写，缺省 0x2000）。</param>
+    /// <param name="beaconDeviceIndex">
+    /// 机台总监塔灯宿主设备序号（V0.0.65，0-based）：<b>-2=自动档（缺省）</b>——
+    /// ≥2 台按图纸硬契约挂第 2 台（DO 段位 11~15，现场实拍 Y103B~F）；单台部署
+    /// 自动挂唯一台。-1=不生成塔灯（未接塔灯的现场/旧口径）；0~台数-1=显式指定
+    /// 宿主台（塔灯实际接线挪到别的耦合器时用）。全机只生成这一套（机台级，
+    /// Rack/Level 恒 0），其余台不生成——跨设备语义键唯一。
+    /// </param>
     public static PointTableConfig BuildMachineTemplate(
         int deviceCount = 10,
         int rackStart = 1,
@@ -160,7 +195,8 @@ public static class IoPointTableStore
         int ipStep = 1,
         int port = 502,
         ushort diStartAddress = 0x1000,
-        ushort doStartAddress = 0x2000)
+        ushort doStartAddress = 0x2000,
+        int beaconDeviceIndex = -2)
     {
         if (deviceCount < 1)
             throw new ArgumentOutOfRangeException(nameof(deviceCount), "台数 ≥1");
@@ -172,12 +208,24 @@ public static class IoPointTableStore
         if (!System.Net.IPAddress.TryParse(ipFirst, out var first))
             throw new ArgumentException($"IP 首址非法：'{ipFirst}'", nameof(ipFirst));
 
+        // 塔灯宿主档位解析：-2=自动（≥2 台→图纸第 2 台；单台→唯一台）；
+        // -1=关闭；其它值必须落在 [0, 台数-1]，越界当场抛（防调用方手滑静默错挂）。
+        int beaconHost = beaconDeviceIndex switch
+        {
+            -2 => deviceCount >= 2 ? 1 : 0,
+            -1 => -1,
+            _ when beaconDeviceIndex >= 0 && beaconDeviceIndex < deviceCount => beaconDeviceIndex,
+            _ => throw new ArgumentOutOfRangeException(nameof(beaconDeviceIndex),
+                $"beaconDeviceIndex 需为 -2（自动）/-1（不生成）或 [0, {deviceCount - 1}]。"),
+        };
+
         var config = new PointTableConfig();
         for (int i = 0; i < deviceCount; i++)
         {
             // 每台 1 块承载 1 架（GFNB-1A3A = 16DI+16DO 正好一块），架号=列号连续排。
             var single = BuildDefaultTemplate(
-                $"IO耦合器{i + 1}", NextIp(first, i * ipStep), 1, levelsPerRack, rackStart + i);
+                $"IO耦合器{i + 1}", NextIp(first, i * ipStep), 1, levelsPerRack, rackStart + i,
+                withBeacon: i == beaconHost);
             var device = single.Devices[0];
             device.Port = port;
             device.BlockCount = 1;                  // 一台 = 1 块（16DI+16DO）

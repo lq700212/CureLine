@@ -246,12 +246,88 @@ public class PointTableTests
         Assert.Contains(v.Errors, e => e.Contains("仓位必须清零"));
     }
 
+    [Fact]
+    public void Validation_BeaconUsePassesAndWrongSlotFails()
+    {
+        // 正例：塔灯机台级绑定（Rack/Level 恒 0）过校验
+        var ok = PointTableValidator.Validate(new PointTableConfig
+        {
+            Devices =
+            {
+                new IoCouplerDevice { Name = "A", Ip = "127.0.0.1", TimeoutMs = 200, BlockCount = 1, Bindings =
+                {
+                    new IoPointBinding { Block = 1, Bit = 11, IsInput = false,
+                        Role = IoPointRole.BeaconRed, Rack = 0, Level = 0 },
+                    new IoPointBinding { Block = 1, Bit = 0, IsInput = true,
+                        Role = IoPointRole.TrayDetect, Rack = 1, Level = 1 },
+                } },
+            },
+        });
+        Assert.True(ok.Ok, string.Join("\r\n", ok.Errors));
+
+        // 反例：机台级点挂了仓位 → 校验器拦（塔灯是全机总监灯，不属某一架/层）
+        var bad = new PointTableConfig
+        {
+            Devices =
+            {
+                new IoCouplerDevice { Name = "B", Ip = "127.0.0.1", TimeoutMs = 200, BlockCount = 1, Bindings =
+                {
+                    new IoPointBinding { Block = 1, Bit = 11, IsInput = false,
+                        Role = IoPointRole.BeaconRed, Rack = 1, Level = 1 },
+                } },
+            },
+        };
+        var v = PointTableValidator.Validate(bad);
+        Assert.False(v.Ok);
+        Assert.Contains(v.Errors, e => e.Contains("机台级点"));
+    }
+
+    [Fact]
+    public void Validation_BeaconDuplicateAcrossDevices_Rejected()
+    {
+        // 全机一套闸：两台耦合器各生成了一套机台塔灯 → 跨设备同语义键，保存前拦
+        var d1 = IoPointTableStore.BuildDefaultTemplate("1号架", "127.0.0.1", 10, 3, 1, withBeacon: true);
+        var d2 = IoPointTableStore.BuildDefaultTemplate("2号架", "127.0.0.2", 10, 3, 11, withBeacon: true);
+        var v = PointTableValidator.Validate(new PointTableConfig
+        {
+            Devices = { d1.Devices[0], d2.Devices[0] },
+        });
+        Assert.False(v.Ok);
+        Assert.Contains(v.Errors, e => e.Contains("四色灯-红"));
+    }
+
+    [Fact]
+    public void DefaultTemplate_Beacon_FiveMachineLevelBindingsAtBits11To15()
+    {
+        // withBeacon：塔灯五件套（红黄绿蓝+蜂）落块 1 DO 位 11~15、机台级 Rack/Level 0；
+        // 不开塔灯（缺省）的老口径零变化（各调点/自愈点全量不加绑定）。
+        var with = IoPointTableStore.BuildDefaultTemplate("T", "192.168.1.2", 10, 3, withBeacon: true);
+        var dev = with.Devices[0];
+        Assert.Equal(185, dev.Bindings.Count);   // 180 仓位点 + 5 塔灯
+        IoPointRole[] roles =
+        [
+            IoPointRole.BeaconRed, IoPointRole.BeaconYellow, IoPointRole.BeaconGreen,
+            IoPointRole.BeaconBlue, IoPointRole.Buzzer,
+        ];
+        for (int off = 0; off < roles.Length; off++)
+        {
+            var b = Find(dev, false, roles[off], 0, 0);
+            Assert.Equal(1, b.Block);
+            Assert.Equal(11 + off, b.Bit);
+        }
+        Assert.True(PointTableValidator.Validate(with).Ok);
+
+        var without = IoPointTableStore.BuildDefaultTemplate("T", "192.168.1.2", 10, 3);
+        Assert.Equal(180, without.Devices[0].Bindings.Count);
+    }
+
     // ---------- 机台批量模板（V0.0.41：10 台 GFNB-1A3A 现场口径） ----------
 
     [Fact]
     public void MachineTemplate_Defaults_MatchSiteLayout()
     {
-        // 缺省参数=现场现值：10 台、IP 192.168.1.20~.29、每台 1 架 3 层
+        // 缺省参数=现场现值：10 台、IP 192.168.1.20~.29、每台 1 架 3 层；
+        // V0.0.65 第 2 台（自动档）加挂机台总监塔灯 5 路（图纸僵契约 Y103B~F）
         var config = IoPointTableStore.BuildMachineTemplate();
         Assert.Equal(10, config.Devices.Count);
         for (int i = 0; i < 10; i++)
@@ -263,10 +339,54 @@ public class PointTableTests
             Assert.Equal(1, d.BlockCount);            // GFNB-1A3A = 16DI+16DO 一块
             Assert.Equal(0x1000, d.DiStartAddress);   // iO-GRID 家族占位，现场实测后配置窗改
             Assert.Equal(0x2000, d.DoStartAddress);
-            Assert.Equal(18, d.Bindings.Count);       // 1 架 3 层 × (3 入 + 3 出)
+            // 1 架 3 层 × (3 入 + 3 出) = 18 仓位点；塔灯宿主台（第 2 台）+5 路
+            Assert.Equal(i == 1 ? 23 : 18, d.Bindings.Count);
             Assert.Equal(i + 1, d.Bindings[0].Rack);  // 架号=列号连续排（跨设备不撞）
         }
+
+        // ---- 塔灯宿主（第 2 台）：五件套落块 1 DO 位 11~15，机台级不挂仓位 ----
+        var host = config.Devices[1];
+        IoPointRole[] beaconRoles =
+        [
+            IoPointRole.BeaconRed, IoPointRole.BeaconYellow, IoPointRole.BeaconGreen,
+            IoPointRole.BeaconBlue, IoPointRole.Buzzer,
+        ];
+        for (int off = 0; off < beaconRoles.Length; off++)
+        {
+            var b = Find(host, false, beaconRoles[off], 0, 0); // 语义键=方向 false + Rack/Level 0
+            Assert.Equal(1, b.Block);
+            Assert.Equal(11 + off, b.Bit);
+        }
+        // 其余台零塔灯绑定（全机只此一套——跨设备语义键唯一，两套即校验冲突）
+        Assert.DoesNotContain(
+            config.Devices.Take(1).Concat(config.Devices.Skip(2)).SelectMany(d => d.Bindings),
+            b => IoPointRoleInfo.IsMachineLevel(b.Role));
         Assert.True(PointTableValidator.Validate(config).Ok);
+    }
+
+    [Fact]
+    public void MachineTemplate_SingleDevice_BeaconAutoToOneHost()
+    {
+        // 单台部署：缺省自动档把塔灯挂到唯一台（接线只有它可选）
+        var config = IoPointTableStore.BuildMachineTemplate(deviceCount: 1);
+        Assert.Equal(23, config.Devices[0].Bindings.Count);
+        Assert.True(PointTableValidator.Validate(config).Ok);
+    }
+
+    [Fact]
+    public void MachineTemplate_BeaconDisabledOrExplicitIndex()
+    {
+        // beaconDeviceIndex=-1：不生成塔灯（未接灯的现场逐台老口径 18 点）；
+        // =0：显式指定第 1 台做宿主（接线挪台用）
+        var off = IoPointTableStore.BuildMachineTemplate(beaconDeviceIndex: -1);
+        Assert.All(off.Devices, d => Assert.Equal(18, d.Bindings.Count));
+
+        var first = IoPointTableStore.BuildMachineTemplate(deviceCount: 5, beaconDeviceIndex: 0);
+        Assert.Equal(23, first.Devices[0].Bindings.Count);
+        Assert.All(first.Devices.Skip(1), d => Assert.Equal(18, d.Bindings.Count));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            IoPointTableStore.BuildMachineTemplate(deviceCount: 3, beaconDeviceIndex: 3)); // 越界
+        Assert.True(PointTableValidator.Validate(first).Ok);
     }
 
     [Fact]

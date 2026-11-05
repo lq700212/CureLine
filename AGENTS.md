@@ -198,7 +198,7 @@
 | `src/CureLine.Core/Curing/CuringStateStore.cs` | `config/curingstate.json` 计时状态持久化（`PersistMinutes` 开关的落盘件；运行时数据非配置，删了即回退重计） |
 | `src/CureLine.Core/Curing/WorkOrderStore.cs` | 工单信息 `config/workorder.json`（R/L 双工位+EMP/BC/PT×2，字段名对齐 MES 16 字段）+ 自愈空工单 |
 | `src/CureLine.Core/Security/OperatorStore.cs` | 程序①三级操作员账号（V0.0.49 重做：`OperatorRole` Operator/Admin/Dev + 预置三账号 `SeedUser` 播种 + PBKDF2 复用；增删/改密全带 **actor 兜底**，VM 置灰之外的第二道防线）；**防锁死红线**：dev 账号永不可删、密码仅本人可改、Dev 角色不开放创建（预置唯一） |
-| `src/CureLine.Core/Curing/SlotCuringMachine.cs` | **仓位状态机**：托盘到位→（门控）→黄灯计时→绿灯放行→离开灭灯；边沿后台直转+1s 心跳 Pump；灯写去重补写/断连恢复对齐/策略热切换三自愈；过账挂点三事件（TrayArrived/CuringStarted/TrayLeft，只发真实边沿） |
+| `src/CureLine.Core/Curing/SlotCuringMachine.cs` | **仓位状态机**：托盘到位→（门控）→黄灯计时→绿灯放行→离开灭灯；边沿后台直转+1s 心跳 Pump；灯写去重补写/断连恢复对齐/策略热切换三自愈；过账挂点三事件（TrayArrived/CuringStarted/TrayLeft，只发真实边沿）；机台总监塔灯聚合 `RefreshMachineBeacon`（V0.0.65，五挂点+每拍自愈） |
 | `src/CureLine.Core/Curing/SlotLocationCode.cs` | 客户库位编码换算（Date Matrix，10 站×3 层）：架×层↔编码互转（`Encode`/`TryDecode` 客户约定锚点）+ 双架口径（`RackGroupOf`/`StationInRack`/`EncodeInRack` 按架内站号换算，每台架独立一套 A01~J12），主窗卡片标题与后续扫码绑定的同源入口 |
 | **Core 共享（单线过账家族，P3.2 后半新增）** | |
 | `src/CureLine.Core/Curing/CuringMesOptions.cs` | 过账配置模型（ini `[CuringMes]` 节）：开关/工位/时间单位/进站时机/中途取件/静态参数五件；`NormSide` 规范化（非 L 按 R 兜底） |
@@ -322,6 +322,29 @@ dotnet build tools/LicenseIssuer/LicenseIssuer.csproj --nologo
    =绑错端子静默失灵——三道闸已有（UI 数字弹回/保存校验/StartBus 兜底），
    语义误改属直编固有风险，用户拍板不加保存前确认弹框，靠"测试连接+
    IO 测试窗"现场验证。
+- **机台总监塔灯+蜂鸣（V0.0.65 起，全在 `IoPointTableStore`/`SlotCuringMachine`
+  /`PointTableViewModel` 一处）**：① 现场口径=全机**一台**四色塔灯（红/黄/绿/
+  蓝）+蜂鸣，图纸宿主=第 2 台耦合器 DO 段位 11~15（Y103B~F）；业务键恒
+  `(false, BeaconXxx/Buzzer, 0, 0)`（机台级不挂仓位），五角色 `IsMachineLevel`
+  判定+校验器强制 Rack/Level 清零，全机只许一套（双套=跨设备语义键重复被
+  全场查重拦）；② **模板生成**：`BuildDefaultTemplate(withBeacon)` 五件套落
+  **本设备第 1 块** DO 位 11~15（FunctionName=角色文案）；`BuildMachineTemplate
+  (beaconDeviceIndex)`：**-2=自动档（缺省，≥2 台挂第 2 台/单台挂唯一台）**、
+  -1=不生成、显式序号越界当场抛——批量生成/演示自愈走自动档，`BuildDefault`
+  `Template` 既有调用缺省不生成（零变化）；**与仓位灯同块同帧，ScanPlanner
+  零分帧变化**（改塔灯位号需同步 IoBusTests 的"20 帧/周期"断言）；③
+  **状态机聚合 `RefreshMachineBeacon`（仅 _sync 锁内）**：优先级红 > 黄 > 绿
+  ——任一仓位 AlarmGrill→红+蜂鸣长鸣；否则任一 Curing/**WaitingGate（等门控
+  也算忙碌）**→黄；否则绿常亮（设备就绪/Done/取完）。**蓝不写**（现场自接）；
+  挂点五处=StartCuring 尾/等门控分支/OnTrayLeft 尾/SetGrillAlarm 尾/Pump 尾
+  （每拍兜住到点放行+自愈补写）——新增可改变聚合态的转移必须挂点，否则
+  塔灯滞后到下一拍；EnsureLamp 逐路去重=稳态零网络写，未绑定塔灯时
+  WritePoint 静默 false **零网络成本**（桩 ScriptedPointBus 直录——老用例的
+  `Assert.Empty(bus.Writes)` 依赖"聚合态不变=零写"成立，改挂点前先想稳态）；
+  ④ **旧点表不自愈迁移（用户拍板）**：已部署现场升级走点表窗"批量生成"重刷
+  或手工补行；⑤ IO 测试窗机台级点不进 30 卡网格（Rack>0 过滤原样），顶部
+  "机台总监"专条一排灯钮（与仓位卡共用 `DoPointBtnTemplate` 资源），通道
+  注册进 _points 零特判；点表窗仓位列机台级显示"机台"。
 - 点表布局三键可改现场分叉：`DiStartAddress`/`DoStartAddress`/
   `BlockStrideRegisters`（缺省 0x1000/0x1010/0x20，块 K 线性外推）；
   改动必同步 `PointTableTests` 的地址断言。

@@ -106,8 +106,13 @@ public sealed class PointBindingRow : ViewModelBase
     public void RefreshBitDisplay() => Raise(nameof(BitDisplay));
 
     // ---- 派生列 ----
-    public string SlotText => Raw.Role == IoPointRole.Reserved
-        ? "—" : $"架{Raw.Rack}层{Raw.Level}";
+    public string SlotText => Raw.Role switch
+    {
+        // 机台级（V0.0.65 塔灯/蜂鸣）：全机一套总监灯，不挂仓位——列显示"机台"
+        IoPointRole r when IoPointRoleInfo.IsMachineLevel(r) => "机台",
+        IoPointRole.Reserved => "—",
+        _ => $"架{Raw.Rack}层{Raw.Level}",
+    };
 }
 
 public sealed class PointTableViewModel : ViewModelBase

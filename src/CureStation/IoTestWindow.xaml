@@ -21,6 +21,46 @@
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <!-- DO 输出灯钮（仓位卡与"机台总监"专条共用单款模板：24px 圆钮，点击写
+             ON/OFF 验接线）——提为资源避免同一钮形两处维护；模板内绑定经可视树
+             解析（使用点都在 Window 内），色走 Fresh 键板双主题同款。 -->
+        <DataTemplate x:Key="DoPointBtnTemplate">
+            <Button Width="24" Height="24" Margin="2,0"
+                    Command="{Binding DataContext.TogglePointCommand,
+                        RelativeSource={RelativeSource AncestorType=Window}}"
+                    CommandParameter="{Binding}"
+                    ToolTip="{Binding Tip, FallbackValue=状态灯_红}">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" CornerRadius="12"
+                                BorderThickness="1" BorderBrush="{DynamicResource Brush.Fresh.DotBorder}">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="{DynamicResource Brush.Fresh.DotOff}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsOn}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Fresh.Success}"/>
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.SuccessBorder}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsOn}" Value="{x:Null}">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Fresh.DotNoRead}"/>
+                                        </DataTrigger>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Opacity" Value="0.85"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.3"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+        </DataTemplate>
     </Window.Resources>
     <!--★★ IO 通讯测试窗（移植 AgingTestSystem 通讯测试思路 + 本项目点表通用化）：
          通道清单完全来自 config/pointtable.json（界面可配）——换项目/换耦合器
@@ -124,6 +164,26 @@
                         BorderBrush="{DynamicResource Brush.Fresh.PanelBorder}" BorderThickness="1"
                         CornerRadius="4" Padding="6">
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                        <!-- 机台总监塔灯/蜂鸣专条（V0.0.65）：机台级点不属于任何仓位卡，
+                             单独一排 DO 灯钮（点位注册进 _points，刷灯/关灯/遍历全通用）；
+                             点表真绑了塔灯才显示（BeaconRowVisible），旧表零视觉变化 -->
+                        <StackPanel Orientation="Horizontal" Margin="0,2,0,8"
+                                    Visibility="{Binding BeaconRowVisible, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}">
+                            <TextBlock Text="机台总监" FontSize="11" FontWeight="Bold"
+                                       Foreground="{DynamicResource Brush.Fresh.FgStrong}"
+                                       VerticalAlignment="Center" Margin="6,0,4,0"/>
+                            <ItemsControl ItemsSource="{Binding BeaconChannels, FallbackValue={x:Null}}"
+                                          ItemTemplate="{StaticResource DoPointBtnTemplate}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                            <TextBlock Foreground="{DynamicResource Brush.Fresh.FgDim}" VerticalAlignment="Center" Margin="12,0,0,0"
+                                       Text="四色塔灯+蜂鸣（全机一套，宿主耦合器 DO 位 11~15）——报警红+蜂鸣长鸣 / 有仓位计时黄 / 全机空闲绿；蓝灯现场自接不自动写"/>
+                        </StackPanel>
                         <ItemsControl ItemsSource="{Binding Slots, FallbackValue={x:Null}}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
@@ -172,57 +232,20 @@
                                             </ItemsControl>
                                             <!-- 输出通道（DO 可点击灯钮） -->
                                             <ItemsControl ItemsSource="{Binding Outputs}" Margin="0,4,0,0"
-                                                          HorizontalAlignment="Center">
+                                                          HorizontalAlignment="Center"
+                                                          ItemTemplate="{StaticResource DoPointBtnTemplate}">
                                                 <ItemsControl.ItemsPanel>
                                                     <ItemsPanelTemplate>
                                                         <StackPanel Orientation="Horizontal"/>
                                                     </ItemsPanelTemplate>
                                                 </ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Button Width="24" Height="24" Margin="2,0"
-                                                                Command="{Binding DataContext.TogglePointCommand,
-                                                                    RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                CommandParameter="{Binding}"
-                                                                ToolTip="{Binding Tip, FallbackValue=状态灯_红}">
-                                                            <Button.Template>
-                                                                <ControlTemplate TargetType="Button">
-                                                                    <Border x:Name="Bd" CornerRadius="12"
-                                                                            BorderThickness="1" BorderBrush="{DynamicResource Brush.Fresh.DotBorder}">
-                                                                        <Border.Style>
-                                                                            <Style TargetType="Border">
-                                                                                <Setter Property="Background" Value="{DynamicResource Brush.Fresh.DotOff}"/>
-                                                                                <Style.Triggers>
-                                                                                    <DataTrigger Binding="{Binding IsOn}" Value="True">
-                                                                                        <Setter Property="Background" Value="{DynamicResource Brush.Fresh.Success}"/>
-                                                                                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.SuccessBorder}"/>
-                                                                                    </DataTrigger>
-                                                                                    <DataTrigger Binding="{Binding IsOn}" Value="{x:Null}">
-                                                                                        <Setter Property="Background" Value="{DynamicResource Brush.Fresh.DotNoRead}"/>
-                                                                                    </DataTrigger>
-                                                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                                                        <Setter Property="Opacity" Value="0.85"/>
-                                                                                    </Trigger>
-                                                                                </Style.Triggers>
-                                                                            </Style>
-                                                                        </Border.Style>
-                                                                    </Border>
-                                                                    <ControlTemplate.Triggers>
-                                                                        <Trigger Property="IsEnabled" Value="False">
-                                                                            <Setter TargetName="Bd" Property="Opacity" Value="0.3"/>
-                                                                        </Trigger>
-                                                                    </ControlTemplate.Triggers>
-                                                                </ControlTemplate>
-                                                            </Button.Template>
-                                                        </Button>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
                                             </ItemsControl>
                                         </StackPanel>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        </StackPanel>
                     </ScrollViewer>
                 </Border>
 

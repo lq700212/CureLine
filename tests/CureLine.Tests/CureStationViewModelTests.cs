@@ -84,7 +84,10 @@ public class CureStationViewModelTests
         Assert.NotNull(loaded);
         Assert.Equal(10, loaded!.Devices.Count);
         Assert.All(loaded.Devices, d => Assert.Equal(1, d.BlockCount));
-        Assert.All(loaded.Devices, d => Assert.Equal(18, d.Bindings.Count));
+        // 塔灯口径（V0.0.65）：第 2 台加挂机台总监塔灯 5 路 → 23，其余台 18
+        Assert.Equal(18, loaded.Devices[0].Bindings.Count);
+        Assert.Equal(23, loaded.Devices[1].Bindings.Count);
+        Assert.Equal(18, loaded.Devices[9].Bindings.Count);
         Assert.Equal("192.168.1.20", loaded.Devices[0].Ip);
         Assert.Equal("192.168.1.29", loaded.Devices[^1].Ip);
         Assert.Equal(0x1000, loaded.Devices[0].DiStartAddress);
@@ -245,7 +248,9 @@ public class CureStationViewModelTests
         Assert.Equal(3, vm.Devices.Count);
         Assert.Equal("192.168.1.20", vm.Devices[0].Ip);
         Assert.Equal("192.168.1.22", vm.Devices[^1].Ip);
-        Assert.All(vm.Devices, d => Assert.Equal(18, d.Bindings.Count)); // 1 架 3 层
+        Assert.Equal(18, vm.Devices[0].Bindings.Count);  // 1 架 3 层仓位点
+        Assert.Equal(23, vm.Devices[1].Bindings.Count);  // 塔灯宿主台：18 + 机台总监灯 5 路（自动档）
+        Assert.Equal(18, vm.Devices[2].Bindings.Count);
         Assert.Equal("IO耦合器1", vm.Devices[0].Name);
         Assert.Contains(fake.Calls, c => c.Contains("批量生成完成"));
     }

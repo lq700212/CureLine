@@ -39,6 +39,16 @@ public enum IoPointRole
     LampRed,
     LampYellow,
     LampGreen,
+    /// <summary>机台四色塔灯-红（V0.0.65：报警总指示，全机任一仓位报警即亮）。</summary>
+    BeaconRed,
+    /// <summary>机台四色塔灯-黄（有仓位计时/等门控即亮）。</summary>
+    BeaconYellow,
+    /// <summary>机台四色塔灯-绿（无报警无计时即常亮=设备就绪/放行）。</summary>
+    BeaconGreen,
+    /// <summary>机台四色塔灯-蓝（预留：状态机不写，现场按需手工绑定）。</summary>
+    BeaconBlue,
+    /// <summary>机台蜂鸣（报警长鸣，复位/放行/取件即停）。</summary>
+    Buzzer,
 }
 
 /// <summary>角色分类助手：输入侧角色 / 输出侧角色判断 + 中文文案。</summary>
@@ -46,6 +56,15 @@ public static class IoPointRoleInfo
 {
     public static bool IsInput(IoPointRole role) => role is
         IoPointRole.RackLightL or IoPointRole.RackLightR or IoPointRole.TrayDetect;
+
+    /// <summary>
+    /// 机台级角色（V0.0.65 五件套：四色塔灯红/黄/绿/蓝 + 蜂鸣）：一套灯做全机
+    /// 总监管，业务键恒为 Rack=0/Level=0（不挂仓位——绑定行落哪个块只由物理
+    /// 接线决定）。校验器强制仓位清零；点表 UI 的仓位列显示"机台"。
+    /// </summary>
+    public static bool IsMachineLevel(IoPointRole role) => role is
+        IoPointRole.BeaconRed or IoPointRole.BeaconYellow or IoPointRole.BeaconGreen
+            or IoPointRole.BeaconBlue or IoPointRole.Buzzer;
 
     /// <summary>中文文案（界面与日志用；程序①先中文缺省，双语切换后续接入语言服务）。</summary>
     public static string ToText(IoPointRole role) => role switch
@@ -57,6 +76,11 @@ public static class IoPointRoleInfo
         IoPointRole.LampRed => "状态灯_红",
         IoPointRole.LampYellow => "状态灯_黄",
         IoPointRole.LampGreen => "状态灯_绿",
+        IoPointRole.BeaconRed => "四色灯-红",
+        IoPointRole.BeaconYellow => "四色灯-黄",
+        IoPointRole.BeaconGreen => "四色灯-绿",
+        IoPointRole.BeaconBlue => "四色灯-蓝",
+        IoPointRole.Buzzer => "蜂鸣",
         _ => role.ToString(),
     };
 }
@@ -262,6 +286,17 @@ public static class PointTableValidator
         {
             if (b.Rack != 0 || b.Level != 0)
                 errors.Add($"{where} 块{b.Block}位{b.Bit}是预留点，仓位必须清零。");
+            return;
+        }
+
+        if (IoPointRoleInfo.IsMachineLevel(b.Role))
+        {
+            // 机台级（V0.0.65 塔灯/蜂鸣）：业务键恒 Rack=0/Level=0——绑定落哪个
+            // 块只由物理接线决定，不挂仓位；只允许全机一套（Key 跨设备唯一由
+            // CheckDuplicates 统一拦，多套=重复键）。
+            if (b.Rack != 0 || b.Level != 0)
+                errors.Add($"{where} 块{b.Block}位{b.Bit}的{IoPointRoleInfo.ToText(b.Role)}是机台级点，" +
+                    "仓位必须清零（一套灯管全机，不挂架/层）。");
             return;
         }
 

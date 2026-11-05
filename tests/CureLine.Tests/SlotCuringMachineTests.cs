@@ -23,6 +23,9 @@ public class SlotCuringMachineTests
         new(true, IoPointRole.RackLightR, rack, level);
     private static IoPointKey Lamp(IoPointRole role, int rack, int level) =>
         new(false, role, rack, level);
+    /// <summary>机台总监塔灯键（V0.0.65）：机台级恒 (DO, role, 0, 0)。</summary>
+    private static IoPointKey Beacon(IoPointRole role) =>
+        new(false, role, 0, 0);
 
     private (ScriptedPointBus Bus, SlotCuringMachine Machine, List<string> Logs) Make(
         CuringPolicy? policy = null, Func<int, string>? durationText = null)
@@ -53,6 +56,101 @@ public class SlotCuringMachineTests
             Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
             Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true));
             Assert.Contains(logs, m => m.Contains("架1层1 开始固化计时"));
+        }
+    }
+
+    // ---------- 机台总监塔灯（V0.0.65：红黄绿蜂全机聚合，优先级红 > 黄 > 绿） ----------
+
+    [Fact]
+    public void MachineBeacon_CrossSlots_RedPriorityThenYellowThenGreen()
+    {
+        var (bus, machine, logs) = Make(new CuringPolicy { Name = "T", GlobalMinutes = 60 });
+        using (machine)
+        {
+            // t0：1-1 开计时 → 塔灯黄（绿灭防残留；红/蜂不进“常态黄”态）
+            bus.SetInput(Tray(1, 1), true);
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconYellow), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconGreen), false));
+            Assert.DoesNotContain(bus.Writes,
+                w => w.Key == Beacon(IoPointRole.BeaconRed) && w.State); // 红未亮（常态黄态不写红亮）
+
+            // t1：2-3 再开计时 → 全机仍黄，塔灯零新写（聚合去重=稳态零网络写）
+            bus.Writes.Clear();
+            bus.SetInput(Tray(2, 3), true);
+            Assert.DoesNotContain(bus.Writes,
+                w => !w.Key.IsInput && IoPointRoleInfo.IsMachineLevel(w.Key.Role));
+
+            // t2：1-1 光栅被挡 → 报警压过所有黄：塔灯红 + 蜂鸣长鸣（黄让位红）
+            bus.Writes.Clear();
+            bus.SetInput(GrillL(1, 1), true);
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconRed), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconYellow), false));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.Buzzer), true));
+
+            // t3：光栅让空复位（2-3 仍在计时）→ 塔灯回黄：红灭/蜂停/黄复亮
+            bus.Writes.Clear();
+            bus.SetInput(GrillL(1, 1), false);
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconRed), false));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.Buzzer), false));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconYellow), true));
+
+            // t4：两仓都到点放行（Done 不算忙碌）→ 全机回绿（Pump 尾聚合兜住）
+            bus.Writes.Clear();
+            _now += TimeSpan.FromMinutes(60);
+            machine.Pump(_now);
+            Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
+            Assert.Equal(SlotPhase.Done, machine.GetStatus(2, 3)!.Phase);
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconGreen), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconYellow), false));
+
+            // t5：逐仓取件回空闲 → 塔灯绿保持（聚合去重零写）
+            bus.Writes.Clear();
+            bus.SetInput(Tray(1, 1), false);
+            bus.SetInput(Tray(2, 3), false);
+            Assert.DoesNotContain(bus.Writes,
+                w => !w.Key.IsInput && IoPointRoleInfo.IsMachineLevel(w.Key.Role));
+
+            // t6：稳态巡回继续零写（Pump 尾塔灯聚合恒幂等）
+            machine.Pump(_now.AddMinutes(1));
+            Assert.DoesNotContain(bus.Writes,
+                w => !w.Key.IsInput && IoPointRoleInfo.IsMachineLevel(w.Key.Role));
+        }
+    }
+
+    [Fact]
+    public void MachineBeacon_WaitingGateCountsAsBusy_ThenStarts()
+    {
+        var policy = new CuringPolicy { Name = "T", GlobalMinutes = 60, GrillGate = true };
+        var (bus, machine, _) = Make(policy);
+        using (machine)
+        {
+            // 门控开 + 人手在架（光栅挡）→ 托盘到位只进等门控（还没开计时）
+            bus.SetInput(GrillL(1, 1), true);
+            bus.SetInput(Tray(1, 1), true);
+            Assert.Equal(SlotPhase.WaitingGate, machine.GetStatus(1, 1)!.Phase);
+            // 等门控也算"忙碌"→ 塔灯黄（全机有未完成固化位即黄）
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconYellow), true));
+
+            // 光栅让空 → 立即开计时；相位换但聚合未变 → 塔灯黄保持零写
+            bus.Writes.Clear();
+            bus.SetInput(GrillL(1, 1), false);
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+            Assert.DoesNotContain(bus.Writes,
+                w => !w.Key.IsInput && IoPointRoleInfo.IsMachineLevel(w.Key.Role));
+        }
+    }
+
+    [Fact]
+    public void MachineBeacon_EmptySlots_GreenOnFirstPump()
+    {
+        var (bus, machine, _) = Make();
+        using (machine)
+        {
+            // 刚启动零事件：全机空闲 → 首次 Pump 塔灯绿常亮=设备就绪（蜂不响）
+            machine.Pump(_now);
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconGreen), true));
+            Assert.False(Wrote(bus.Writes, Beacon(IoPointRole.Buzzer), true));
+            Assert.False(Wrote(bus.Writes, Beacon(IoPointRole.BeaconRed), true));
         }
     }
 

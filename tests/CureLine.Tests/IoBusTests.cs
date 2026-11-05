@@ -148,14 +148,19 @@ public class IoBusTests
     [Fact]
     public void ScanPlan_SiteLayout_TenDevicesOneBlockEach_TwentyFramesTotal()
     {
-        // 现场口径（10 台 × 每台 1 块 × 18 绑定）：每台 2 帧，全场 20 帧/周期
+        // 现场口径（10 台 × 每台 1 块；V0.0.65 第 2 台 DO 段尾位 11~15 挂机台总监
+        // 塔灯五件套）：塔灯与仓位灯同块同方向同帧，帧结构不变——每台仍 DI 1 帧 +
+        // DO 1 帧，全场 20 帧/周期；仅宿主台 DO 组绑定数 9→14（9 仓位 + 5 塔灯）。
         var config = IoPointTableStore.BuildMachineTemplate();
         int total = 0;
-        foreach (var device in config.Devices)
+        for (int i = 0; i < config.Devices.Count; i++)
         {
+            var device = config.Devices[i];
             var plan = ScanPlanner.BuildScanPlan(device);
             Assert.Equal(2, plan.Count);                       // DI 1 帧 + DO 1 帧
-            Assert.All(plan, g => Assert.Equal(9, g.Bindings.Count));
+            bool beaconHost = i == 1;                          // 缺省自动档：第 2 台挂塔灯
+            foreach (var g in plan)
+                Assert.Equal(!g.IsInput && beaconHost ? 14 : 9, g.Bindings.Count);
             total += plan.Count;
         }
         Assert.Equal(20, total);
