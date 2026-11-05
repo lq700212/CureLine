@@ -500,11 +500,74 @@ public sealed class LicenseGate
         finally
         {
             _refreshing = false;
+#if DEBUG
+            // 仅 Debug 构建：真实判定坏态时给生产单例注入 90 天开发授权
+            //（口径与方法注释见下方"开发自动授权"区段；Release 客户版整段剔除）
+            ApplyDevLicenseIfUnlicensed();
+#endif
             // 只有状态真的变了才触发事件（避免每小时巡检无谓刷新 UI）
+            //（开发授权注入也并入此边沿——顶栏授权文案随事件即时刷新）
             if (old != CurrentState)
                 StateChanged?.Invoke(this, new LicenseStateChangedEventArgs(old, CurrentState));
         }
     }
+
+#if DEBUG
+    // ════════════════ 开发自动授权（仅 Debug 构建存在） ════════════════
+    //
+    // 【为什么】开发机反复编译/装机验证功能时，未激活会每次弹激活窗逼走真码
+    //   流程，太繁琐。Debug 构建给生产单例注入 90 天内存态试用授权，免激活。
+    //
+    // 【安全边界】本区段由 #if DEBUG 编译——Release（客户发布版）整个不存在
+    //   于二进制，反编译也找不到，不构成任何破解面。因此发布成品必须 Release
+    //   编译（-c Release），Debug exe 只在本机开发/验证用、禁止外发。
+    //
+    // 【口径】
+    //   ① 只认生产单例 Default（ReferenceEquals）——可测实例（单测注入假指纹/
+    //     时钟）与 Release 行为完全一致，测试口径零分叉；
+    //   ② 真实判定已有效（Trial/Permanent）或演示模式（IsSimulated）时不动
+    //     ——真码链路（含换码切换/到期退出）随时可设下面环境变量回归验证；
+    //   ③ 真实判定坏态（未激活/过期/指纹不符）才覆盖：注入 Trial 内存态，
+    //     不写 ini/注册表/SQLite——防回拨三存储基线零污染；
+    //   ④ 每次 Refresh（含每小时巡检）以"今天+90 天"重算，开发场景永不过期；
+    //     名义仍是 90 天上限——万一 Debug exe 外流也不构成永久放行（自动兜底）。
+    // 【关闭】想走真实激活链（手测激活窗/换码/过期流程）时：设环境变量
+    //   CURELINE_DEVLICENSE=off（0/false 同义）再启动即恢复真实判定；该开关
+    //   同样只存在于 Debug 二进制，Release 无此逻辑。
+    // =========================================================================
+
+    /// <summary>开发自动授权天数（仅编译进 Debug 二进制；Release 无此常量）。</summary>
+    private const int DevLicenseDays = 90;
+
+    /// <summary>
+    /// （仅 Debug 构建，<see cref="Refresh"/> 尾部调用）生产单例真实判定坏态
+    /// 时改写为 90 天内存态试用授权——开发编译免激活。详释见上方区段注释。
+    /// </summary>
+    private void ApplyDevLicenseIfUnlicensed()
+    {
+        // 逃生口：环境变量关闭（仅 Debug 二进制存在，客户版无此逻辑）
+        string? flag = Environment.GetEnvironmentVariable("CURELINE_DEVLICENSE");
+        bool suppressed = flag is not null && (
+            flag.Equals("off", StringComparison.OrdinalIgnoreCase)
+            || flag.Equals("false", StringComparison.OrdinalIgnoreCase)
+            || flag == "0");
+        if (suppressed)
+            return;
+
+        // 只对生产单例生效——单测/手动构造实例（假依赖）绝不踏入保状态
+        if (!ReferenceEquals(this, Default))
+            return;
+        // 真实判定已有效或演示模式：保持真实语义，不覆盖
+        if (CurrentState is LicenseState.Permanent or LicenseState.Trial)
+            return;
+        if (IsSimulated)
+            return;
+
+        CurrentState = LicenseState.Trial;
+        TrialExpiry = _now().Date.AddDays(DevLicenseDays);
+        LastReason = $"开发构建自动授权（{DevLicenseDays} 天试用，仅 Debug 版存在）";
+    }
+#endif
 
     /// <summary>
     /// 生产放行判据（全工程唯一口；演示模式恒 true）。
@@ -558,8 +621,10 @@ public sealed class LicenseGate
         if (!string.IsNullOrEmpty(LastReason)) return LastReason;
         return CurrentState switch
         {
-            LicenseState.Permanent => "本机已永久授权，无需再次激活。",
-            LicenseState.Trial => "试用期内可正常使用；到期后需输入新激活码。",
+            LicenseState.Permanent => "本机已永久授权。如需更换授权类型（限期↔永久），"
+                + "按当前设备码向厂商签发新激活码，粘贴到下方输入框即可切换（立即生效）。",
+            LicenseState.Trial => "试用期内可正常使用。可粘贴新激活码更换授权类型"
+                + "（限期↔永久均可，立即生效，无需重启）；到期后需输入新激活码。",
             _ => "请把设备码提供给厂商，收到激活码后粘贴到下方输入框。",
         };
     }
@@ -571,6 +636,12 @@ public sealed class LicenseGate
     /// 返回 null=成功；非 null=失败原因（中文，直接展示给用户）。
     /// 挑战值用本实例当前值（激活窗打开时 NewChallenge 生成的那个）——
     /// 收旧码重放在这里被拦下。
+    ///
+    /// 【换码切换（已激活状态下重激活）】允许覆盖现有授权：已激活（Trial/
+    /// Permanent）时再输入一枚合法新码（按窗口当前设备码重新签发）同样走本
+    /// 链路完成"限期↔永久"互切——落盘即覆盖旧记录，Refresh 即刻生效，热更
+    /// 无需重启、无需先清授权。挑战值防线保持原样：激活窗重开即换新挑战值，
+    /// 拿旧设备码签的码在这里被拦——换码必须用窗口当次显示的设备码重新签发。
     /// </summary>
     public string? TryActivate(string codeText)
     {

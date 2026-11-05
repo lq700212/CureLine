@@ -307,6 +307,67 @@ public class LicenseTests : IDisposable
         Assert.False(expired.IsProductionAllowed());
     }
 
+    // ════════════════ 换码切换（已激活状态下重激活，热更生效） ════════════════
+
+    [Fact(DisplayName = "换码：永久→限期，覆盖落盘立即生效")]
+    public void ReActivate_PermanentThenTrial_SwitchesTrial()
+    {
+        DateTime day = new(2026, 11, 4);
+        var gate = NewGate(now: () => day);
+        gate.Refresh();
+        // 先激活永久码
+        Assert.Null(gate.TryActivate(
+            MakeCode(LicenseCodec.ProductCureLine, _fp, gate.CurrentChallenge())));
+        Assert.Equal(LicenseState.Permanent, gate.CurrentState);
+
+        // 已激活状态下再输 30 天试用期码（同会话挑战值）——覆盖旧记录，Refresh 即 Trial
+        string? err = gate.TryActivate(MakeCode(LicenseCodec.ProductCureLine, _fp,
+            gate.CurrentChallenge(), LicenseCodec.TypeTrial, 30, day));
+        Assert.Null(err);
+        Assert.Equal(LicenseState.Trial, gate.CurrentState);
+        Assert.True(gate.IsProductionAllowed());
+        Assert.Equal("授权：试用剩 30 天", gate.ShortStatusText());
+    }
+
+    [Fact(DisplayName = "换码：限期→永久，覆盖落盘立即生效")]
+    public void ReActivate_TrialThenPermanent_SwitchesPermanent()
+    {
+        DateTime day = new(2026, 11, 4);
+        var gate = NewGate(now: () => day);
+        gate.Refresh();
+        Assert.Null(gate.TryActivate(MakeCode(LicenseCodec.ProductCureLine, _fp,
+            gate.CurrentChallenge(), LicenseCodec.TypeTrial, 7, day)));
+        Assert.Equal(LicenseState.Trial, gate.CurrentState);
+
+        // 再输永久码升级——覆盖落盘立即生效
+        Assert.Null(gate.TryActivate(
+            MakeCode(LicenseCodec.ProductCureLine, _fp, gate.CurrentChallenge())));
+        Assert.Equal(LicenseState.Permanent, gate.CurrentState);
+        Assert.True(gate.IsProductionAllowed());
+    }
+
+    [Fact(DisplayName = "换码后试用到期正常过期（永久码水位不误伤限期判定）")]
+    public void ReActivate_ThenTrialExpiry_WaterMarkNoInterference()
+    {
+        DateTime day = new(2026, 11, 4);
+        DateTime now = day;
+        var gate = NewGate(now: () => now);
+        gate.Refresh();
+        // 第一步：激活永久码（水位推进到 day）
+        Assert.Null(gate.TryActivate(
+            MakeCode(LicenseCodec.ProductCureLine, _fp, gate.CurrentChallenge())));
+        // 第二步：降级换 30 天试用期码（start=day，expiry=day+30）
+        Assert.Null(gate.TryActivate(MakeCode(LicenseCodec.ProductCureLine, _fp,
+            gate.CurrentChallenge(), LicenseCodec.TypeTrial, 30, day)));
+        Assert.Equal(LicenseState.Trial, gate.CurrentState);
+
+        // 第三步：时钟推进 35 天（晚于水位——无回拨误判）→ 试用期码正常到期
+        now = day.AddDays(35);
+        gate.Refresh();
+        Assert.Equal(LicenseState.Expired, gate.CurrentState);
+        Assert.False(gate.IsProductionAllowed());
+    }
+
     [Fact(DisplayName = "时钟回拨：试用按过期处理，永久不受影响")]
     public void Gate_ClockRollback()
     {

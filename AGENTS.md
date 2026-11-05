@@ -597,7 +597,24 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   必须同步替换两产品 `LicenseCodec.PubKeyB64` 并重编；⑧ **测试纪律**：
   `LicenseGate.Default` 会采集真机指纹，单测一律构造实例注入假指纹/内存
   水位/临时密钥对，不要调 `Default.Refresh`；`LicenseTests` 18 例覆盖双产品
-  设备码/隔离/挑战重放/回拨/到期/演示模式。
+  设备码/隔离/挑战重放/回拨/到期/演示模式；
+  ⑨ **换码切换语义（V0.0.60 起，全在 `LicenseGate.TryActivate` 一处）**：
+  已激活（Trial/Permanent）状态下再输入一枚合法新码即覆盖切换授权类型
+  （限期↔永久双向），落盘覆盖旧记录 + `Refresh` 内即生效——**热更：无需
+  重启、无需先清授权**；两主窗 VM 订阅 `LicenseGate.Default.StateChanged`
+  刷顶栏授权文案并记操作日志边沿（StateChanged 调用线程=UI 线程，直接赋值
+  无需封送；程序① Dispose 对称退订）；激活窗重开即换新挑战值——拿旧设备
+  码签的码被拦"设备码已刷新"属**防重放语义**，勿放开；换码必须用窗口当次
+  显示的设备码重新签发（三个换码用例锁定：降级/升级/降级后水位不误伤到期）；
+  ⑩ **开发自动授权（V0.0.60 起，仅 #if DEBUG 二进制存在，全在
+  `LicenseGate` "开发自动授权"区段一处）**：Debug 编译的 exe 在生产单例
+  `Default` 上自动注入 90 天内存态试用授权（挂 `Refresh` 尾部
+  `ApplyDevLicenseIfUnlicensed`；真实判定坏态才覆盖、不落盘不碰水位三存储、
+  每次重算"今天+90 天"，可测实例经 ReferenceEquals 判定零影响）——开发机
+  免输激活码。**发布必须 Release 编译**（客户版整段剔除，反编译无后门），
+  Debug exe 禁止外发；手测真实激活/换码/过期流程时设环境变量
+  `CURELINE_DEVLICENSE=off`（0/false 同义）关闭注入（该开关同样只在 Debug
+  二进制存在）。
 
 ## 文档同步（每次任务收尾自查）
 
