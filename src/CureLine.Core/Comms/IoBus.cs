@@ -169,7 +169,8 @@ public sealed class ModbusPointTableBus : IPointTableBus
 
     // ---------------- 内部 ----------------
 
-    // 后台轮询主循环：重连 → 扫全部设备 → 建快照 → 发边沿。异常全部落 Error 边沿。
+    // 后台轮询主循环：重连 → 扫全部设备 → 建快照 → 统一发边沿（先快照后
+    // 边沿的顺序契约见 PollOnce 注释，V0.0.64）。异常全部落 Error 边沿。
     private async void PollLoop(int pollMs)
     {
         // 为什么 catch OCE：Task.Delay 会被 Stop 的 Cancel 打断，async void 里
@@ -204,13 +205,14 @@ public sealed class ModbusPointTableBus : IPointTableBus
     private void PollOnce()
     {
         var states = new Dictionary<IoPointKey, bool>();
+        var edges = new Dictionary<IoPointKey, bool>(); // 本拍变化点：先攒集，换完快照统一发（见下）
         int connected = 0;
 
         lock (_syncRoot)
         {
             foreach (var rt in _devices)
             {
-                if (TryEnsureConnected(rt) && ScanPoints(rt, states))
+                if (TryEnsureConnected(rt) && ScanPoints(rt, states, edges))
                     connected++;
             }
 
@@ -219,6 +221,10 @@ public sealed class ModbusPointTableBus : IPointTableBus
             ConnectionSummary = _devices.Count == 0
                 ? "未配置设备"
                 : $"{connected}/{_devices.Count} 台已连";
+            // 轮询契约（V0.0.64，Mock 总线同款）：先整拍换快照，再统一发边沿——
+            // 订阅方的判定是"边沿 × 快照"双确认（状态机光栅门控/报警复位在
+            // 边沿处理时读 LatestSnapshot 查双让空），若边沿先于快照发出，判定
+            // 读到上一拍旧值，判断链必失败（V0.0.63 真机复位失效的根因）。
             _snapshot = new PointTableSnapshot(states, DateTimeOffset.Now);
 
             if (nowConnected != _lastConnectedState)
@@ -226,6 +232,9 @@ public sealed class ModbusPointTableBus : IPointTableBus
                 _lastConnectedState = nowConnected;
                 ConnectionChanged?.Invoke(this, nowConnected);
             }
+
+            foreach (var (key, value) in edges)
+                PointChanged?.Invoke(this, new PointChangedEventArgs(key, value));
         }
     }
 
@@ -252,7 +261,8 @@ public sealed class ModbusPointTableBus : IPointTableBus
     /// 扫一台的 DI/DO：按读取计划逐组各读 1 寄存器（同块同方向共用一帧）；
     /// 任一帧失败整台本轮丢弃（半失败不算 connected，与原逐绑定口径一致）。
     /// </summary>
-    private bool ScanPoints(CouplerRuntime rt, Dictionary<IoPointKey, bool> states)
+    private bool ScanPoints(CouplerRuntime rt, Dictionary<IoPointKey, bool> states,
+        Dictionary<IoPointKey, bool> edges)
     {
         foreach (var g in ScanPlanner.BuildScanPlan(rt.Device))
         {
@@ -263,21 +273,22 @@ public sealed class ModbusPointTableBus : IPointTableBus
                 return false;
             bool invert = g.IsInput ? rt.Device.InvertInputs : rt.Device.InvertOutputs;
             foreach (var b in g.Bindings)
-                StoreBit(states, b, (regs[0] & (1 << b.Bit)) != 0, invert);
+                StoreBit(states, edges, b, (regs[0] & (1 << b.Bit)) != 0, invert);
         }
         return true;
     }
 
-    // 快照与边沿：状态与上次不同才发事件（同一拍只发变了的那一条）。
-    private void StoreBit(Dictionary<IoPointKey, bool> states, IoPointBinding b,
-        bool raw, bool invert)
+    // 快照与边沿：状态与上次不同才进边沿集（同一拍只记变化的那一条）；
+    // 边沿统一由 PollOnce 在换完快照后发出（轮询契约见 PollOnce 注释）。
+    private void StoreBit(Dictionary<IoPointKey, bool> states,
+        Dictionary<IoPointKey, bool> edges, IoPointBinding b, bool raw, bool invert)
     {
         bool value = invert ? !raw : raw;
         var key = b.Key;
         bool changed = !_snapshot.States.TryGetValue(key, out var old) || old != value;
         states[key] = value;
         if (changed)
-            PointChanged?.Invoke(this, new PointChangedEventArgs(key, value));
+            edges[key] = value;
     }
 
     private static IoConfig ToKaleidoConfig(IoCouplerDevice d) => new()
@@ -464,7 +475,7 @@ public sealed class MockPointTableBus : IPointTableBus
             if (!_bindings.ContainsKey(key))
                 return false;
             _manualLamps[key.ToString()] = state;
-            PushManual(key, state);
+            RebuildSnapshot(); // 走统一重建+差异边沿（先快照后边沿，轮询契约见 RebuildSnapshot）
             return true;
         }
     }
@@ -536,12 +547,6 @@ public sealed class MockPointTableBus : IPointTableBus
         }
     }
 
-    private void PushManual(IoPointKey key, bool state)
-    {
-        PointChanged?.Invoke(this, new PointChangedEventArgs(key, state));
-        RebuildSnapshot();
-    }
-
     // 快照 = 全部绑定点的演示值（灯读人工写值，光栅/托盘按阶段）；只发变化边沿
     private void RebuildSnapshot()
     {
@@ -565,13 +570,15 @@ public sealed class MockPointTableBus : IPointTableBus
             states[key] = value;
         }
 
-        // 边沿真发：对比旧快照逐点找变化（全量重发会把无关点事件灌满订阅方，干扰 UI）
+        // 边沿真发：对比旧快照逐点找变化（全量重发会把无关点事件灌满订阅方，
+        // 干扰 UI）。顺序契约（V0.0.64，与真机总线一致）：先整份换快照再发
+        // 边沿——订阅方边沿处理时查 LatestSnapshot 必能看到本边沿的新值
+        //（状态机"OFF 边沿×快照双让空"复位判定依赖此保证）。
         var old = _snapshot;
+        _snapshot = new PointTableSnapshot(states, DateTimeOffset.Now);
         foreach (var (key, value) in states)
             if (!old.States.TryGetValue(key, out var was) || was != value)
                 PointChanged?.Invoke(this, new PointChangedEventArgs(key, value));
-
-        _snapshot = new PointTableSnapshot(states, DateTimeOffset.Now);
     }
 
     private void RaiseError(string msg)

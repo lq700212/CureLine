@@ -60,6 +60,31 @@ public class IoBusTests
     }
 
     [Fact]
+    public void MockBus_EdgeHandler_SeesSnapshotContainingEdgeValue()
+    {
+        // 边沿×快照顺序契约（V0.0.64，真机与 Mock 轮询统一）：先整份换快照、
+        // 再发差异边沿——订阅方（状态机光栅门控/报警复位在边沿处理时读
+        // LatestSnapshot 查双让空）必须能看到本边沿的新值。handler 与快照
+        // 替换同步执行（同锁内逐点发边沿），记录"事件值+事件时刻快照值"
+        // 成对比对即可锁定契约，不在后台线程内断言。
+        using var bus = new MockPointTableBus();
+        var atEdge = new System.Collections.Concurrent
+            .ConcurrentDictionary<IoPointKey, (bool State, bool SnapVal)>();
+        bus.PointChanged += (_, e) =>
+            atEdge[e.Key] = (e.State, bus.LatestSnapshot.Get(e.Key) ?? false);
+
+        bus.Start(DefaultConfig()); // 演示线程的托盘/光栅边沿同样同步进入 handler
+        var lamp = new IoPointKey(false, IoPointRole.LampRed, 1, 1);
+        Assert.True(bus.WritePoint(lamp, true));
+        Assert.True(bus.WritePoint(lamp, false));
+        bus.Stop();
+
+        Assert.True(atEdge.ContainsKey(lamp)); // 写灯回显边沿必入对表
+        Assert.All(atEdge, kv =>
+            Assert.Equal(kv.Value.State, kv.Value.SnapVal)); // 每条边沿时刻快照=事件值
+    }
+
+    [Fact]
     public void MockBus_WriteUnbound_ReturnsFalse()
     {
         using var bus = new MockPointTableBus();

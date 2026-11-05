@@ -14,6 +14,10 @@
 //      复亮）。WaitingGate（本来就在等门控）与 Done（取件伸入是正常动作）
 //      不触发报警；报警态不落盘（curingstate.json 不加字段）——重启对齐/
 //      续算恢复按当前光栅快照重判（人手仍在架内则重新进报警态）。
+//      复位是双保险（V0.0.64）：OFF 边沿即时判快照复位（总线已保证边沿
+//      处理时快照含本次边沿值，见 IoBus 轮询契约）；边沿若错过（让空与
+//      其他变化同拍/掉线期间），Pump 每秒按快照双让空兜底复位——红灯
+//      最多挂 1 秒，不再挂到到点放行。
 //
 // 线程模型（铁律 2）：灯写 WritePoint 是网络 IO，绝不能进 UI 线程——
 //   本类全部动作发生在后台：OnPointChanged 由宿主从总线后台事件转发进来，
@@ -169,6 +173,9 @@ public sealed class SlotCuringMachine : IDisposable
             // ① 让空（OFF 边沿）+ 门控等待中 → 立即开计时（Pump 有快照兜底，双保险）；
             // ② 让空（OFF 边沿）+ 计时中报警态 + 双光栅全让空 → 报警复位
             //    （红灯灭、黄灯复亮）——一侧让空另一侧仍挡不算（人手还在架区）；
+            //    GrillClear 读快照判定：V0.0.64 起总线契约保证边沿处理时快照
+            //    已含本次边沿值（先整拍换快照再发边沿），此判定永远成立；
+            //    边沿若错过由 Pump 快照兜底复位（双保险）；
             // ③ 亮起（ON 边沿）+ 计时中未报警 → 报警亮红灯（计时不动——客户口径
             //    "固化计时不需要变化，报警复位就可以"）。WaitingGate（本来就在等
             //    门控）与 Done（取件伸入是正常动作）不触发报警。如现场要求计时中
@@ -217,6 +224,13 @@ public sealed class SlotCuringMachine : IDisposable
                                 : $"架{slot.Rack}层{slot.Level} 固化到点放行（绿灯，共 {MinutesText(rt.TotalMinutes)}）");
                             PersistState(); // 状态变化落盘（开关开时）
                         }
+                        else if (rt.AlarmGrill && GrillClear(slot.Rack, slot.Level))
+                        {
+                            // 快照兜底复位（V0.0.64，与下方 WaitingGate 兜底开计时同构）：
+                            // 光栅让空边沿错过（让空与边沿同拍/掉线期间）时，边沿复位
+                            // 判定会落空——只要快照双让空立即复位，红灯不再挂到到点/取件
+                            SetGrillAlarm(rt, slot.Rack, slot.Level, on: false);
+                        }
                         else if (rt.AlarmGrill)
                         {
                             // 计时中报警态：红灯亮/黄绿灭补写自愈（去重后稳态零网络写；
@@ -228,6 +242,9 @@ public sealed class SlotCuringMachine : IDisposable
                         else
                         {
                             EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampYellow, true); // 补写自愈
+                            // 红灯补灭自愈（V0.0.64）：复位写灯失败时残留的红灯在这里
+                            // 兜住（与同轮黄灯补写同性质；去重后稳态零网络写）
+                            EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampRed, false);
                         }
                         break;
                     case SlotPhase.Done:

@@ -400,6 +400,48 @@ public class SlotCuringMachineTests
         }
     }
 
+    [Fact]
+    public void GrillClearAlarm_SnapshotFallbackResetsWhenEdgeMissed()
+    {
+        // 快照兜底复位（V0.0.64）：真机让空边沿可能错过（让空与其他变化同拍/
+        // 掉线期间）——用 SetSnapshotSilently 模拟"快照已双让空但无 OFF 边沿"，
+        // Pump 心跳必须按快照复位，红灯不再挂到到点/取件。复位不动计时。
+        var (bus, machine, logs) = Make(new CuringPolicy { Name = "T", GlobalMinutes = 60 });
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            bus.SetInput(GrillL(1, 1), true);  // 报警（人手伸入）
+            bus.SetInput(GrillR(1, 1), true);
+            bus.Writes.Clear();
+
+            bus.SetSnapshotSilently(GrillL(1, 1), false); // 快照直改：边沿错过的让空
+            bus.SetSnapshotSilently(GrillR(1, 1), false);
+            machine.Pump(_now);                // 心跳兜底 → 复位
+
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase); // 相位不动
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), false));  // 红灯灭
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true)); // 黄灯复亮
+            Assert.Contains(logs, m => m.Contains("报警复位"));
+        }
+    }
+
+    [Fact]
+    public void SteadyCuringPump_ZeroNetworkWrites()
+    {
+        // 稳态零网络写（铁律 4 的状态机侧锁定）：Curing 稳态（含红灯补灭记账）
+        // 去重后，心跳 Pump 不再产生任何灯写——防未来有人把补写改成每拍必写。
+        var (bus, machine, _) = Make(new CuringPolicy { Name = "T", GlobalMinutes = 60 });
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);    // 开计时（记录黄 true/绿 false）
+            machine.Pump(_now);                // 首拍：红灯补灭等记账巡回
+            bus.Writes.Clear();
+
+            machine.Pump(_now);                // 次拍起：稳态零网络写
+            Assert.Empty(bus.Writes);
+        }
+    }
+
     // ---------- 自愈 ----------
 
     [Fact]
