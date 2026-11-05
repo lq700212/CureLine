@@ -12,7 +12,7 @@
 
 using System.Windows;
 using System.Windows.Media;
-using CureLine.Core.Security;
+using Kaleidoscope.Security;
 
 namespace LicenseIssuer;
 

@@ -182,15 +182,14 @@ public sealed class DialogService : IDialogService
 
     /// <summary>
     /// 软件激活窗（运行时从"设置→软件激活"打开；启动门禁那次由 App 直接 new，
-    /// 因为那时还没有主窗可做 Owner）。授权逻辑/挑战值在 Core LicenseGate。
+    /// 因为那时还没有主窗可做 Owner）。授权逻辑/挑战值在 LicenseHost（真源 kaleidoscope）。
     /// </summary>
     public bool ShowLicenseActivation()
     {
         var win = new LicenseActivationWindow
         {
             Owner = Application.Current?.MainWindow,
-            DataContext = new CureLine.ViewModels.LicenseActivationViewModel(
-                CureLine.Core.Security.LicenseGate.Default, "固化程控"),
+            DataContext = new CureLine.ViewModels.LicenseActivationViewModel("固化程控"),
         };
         return win.ShowDialog() == true;
     }

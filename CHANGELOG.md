@@ -2,6 +2,59 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.62（2026-11-05，软件授权：真源收口 kaleidoscope 子模块）
+
+宿主 `Core/Security` 自研的授权三件套（`LicenseGate`/`LicenseCodec`/
+`MachineFingerprint`）与已沉淀到 kaleidoscope 的 `Kaleidoscope.Security`
+模块（HJVision 同源通用化，V1.x 起子模块资产）形成两份同语义维护线——
+用户拍板**真源收口子模块，宿主删散装实现**（铁律 9 无兼容包袱），宿主侧
+只留一层接线。
+
+- **删除宿主三件**：`Core/Security/LicenseGate.cs`（门禁 843 行）、
+  `LicenseCodec.cs`（编解码）、`MachineFingerprint.cs`（四因子指纹）——
+  子模块同语义实现逐字节等价（指纹口径/raw 串与公钥串两边同值，同机指纹
+  不变、已签码继续有效），直迁成本为零。
+- **新增 `src/CureLine.Core/Security/LicenseHost.cs`（宿主唯一接线层）**：
+  `Setup()` 幂等注入四覆盖点（产品 ID=0x434C / 注册表根
+  `Software\CureLine\License` / 演示桥=现读 `[setting] Simulate` /
+  SQLite 水位桥=`SqliteHelper` app_meta 同键 `LicenseWaterMark`）+ 顶栏/
+  激活窗文案转发（保留本项目 UI 口径）+ `StateChanged` 边沿事件（子模块
+  无事件，`Refresh` 前后差分产生）+ `TryActivate`（era 挑战收口，落盘
+  成功后补发宿主边沿）。业务层只调 `LicenseHost`，勿直碰子模块静态类。
+- **消费点改造**：两程序 `App.OnStartup`（`Setup→Refresh→门禁`，巡检
+  定时器无参化）；两主窗 VM 订阅改 `LicenseHost.StateChanged`；激活窗
+  VM 构造去 gate 参数；两 DialogService；签发工具改引
+  `Kaleidoscope.dll`（删 Compile Include LicenseCodec.cs 链接方式，
+  csproj 补 Reference；`--generate`/`--issue` CLI 与 GUI 行为不变）。
+- **行为变化三件**：
+  ① 授权记录落盘从 `config.ini [License]` 段改为 **exe 同目录
+     `MainSetting\LicenseState.ini`**（kaleidoscope 缺省自管；
+     `config.sample.ini [License]` 段删除留指引，`.gitignore` 补
+     `MainSetting/`）；
+  ② 挑战值从"每次开窗随机"改为 **era 口径（30 天档确定性派生）**——
+     档内设备码/挑战恒定：激活窗重开、激活后换码切换（限期↔永久）
+     **免重签**；跨档自动滚动、旧码作废重新抄设备码送签（防重放保持）；
+  ③ 开发兜底环境变量键 `CURELINE_DEVLICENSE` → **`KX_DEV_LICENSE`**
+     （子模块通用命名，仅 Debug 二进制存在）。
+- **水位三存储无缝衔接**：状态文件 `WaterMark` 键 + 注册表
+  `HKCU\Software\CureLine\License` + SQLite `app_meta` 键
+  `LicenseWaterMark`——与收口前同表同键同物理位置，已激活机器升级
+  零感知（运行时验证点在 SQLite 桥——宿主把 `SqliteHelper.GetMeta/
+  SetMeta` 桥进 `LicenseBridges`）。
+- **测试重写（459 → 454，全绿）**：删注入类语义用例 21 例（假指纹/
+  假时钟/临时密钥验签——子模块 `LicenseGate` 是静态类无注入点）；重写
+  13 例（编解码/设备码纯函数直迁、era 挑战档内恒定、门禁沙箱三件：状态
+  文件笔沙箱 + 注册表测试键 + env 关兜底、激活窗 VM 编排）；补真私钥
+  激活链 3 例（永久落盘重启恢复、换码永久→限期热更、HJVision 码产品
+  隔离拒绝——依赖 `tools/LicenseIssuer/LicenseSignKey.dat`，缺失环境
+  自动跳过，语义锁 kaleidoscope 回归探针 152 例）。
+- **冒烟验证（本机实测通过）**：演示模式真链（`Simulate=1` 起 exe——
+  顶栏"授权：演示" + 左上角"演示模式（已连）" + Mock 流转正常，不弹
+  激活窗）；签发工具命令行真私钥签发（`--issue` exit 0，激活码不落
+  对话/文档）。Debug 构建 0 警告 0 错误。
+- 文档同步：README 授权节重写（真源/era/记录位置/KX_DEV_LICENSE）、
+  AGENTS 授权语义节/导航表/铁律 6-7/构建命令注释。
+
 ## V0.0.61（2026-11-05，显示单位：操作日志时长文案跟随时/分口径）
 
 现场反馈（客户测试固化计时日志"开始固化计时 1440 分钟"）：策略窗已把时间

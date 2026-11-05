@@ -1,19 +1,32 @@
 // =========================================================================
-// 软件授权测试（LicenseCodec + LicenseGate + LicenseActivationViewModel）
+// 软件授权测试（V0.0.62 起真源 = kaleidoscope 子模块 Kaleidoscope.Security）
 //
-// 覆盖：双产品设备码/产品隔离、Base32 往返、payload 字段、ECDsa 验签、
-//   激活落盘/重启恢复、试用到期、时钟回拨、挑战值防重放、指纹不符、
-//   演示模式放行、激活窗 VM 编排。
+// 覆盖：双产品设备码/校验位/手抄容错、Base32 往返、payload 产品 ID 布局、
+//   内置公钥防篡改、era 挑战值（档内恒定+设备码内嵌一致）、门禁（无记录/
+//   记录被篡改/指纹克隆/清空自愈/演示桥放行）、激活窗 VM 编排。
 //
-// 全部用临时 ini + 假指纹 + 内存水位 + 本用例临时密钥对，不碰真机 WMI/
-//   注册表/现场 config；不调用 LicenseGate.Default（它采真机指纹）。
-// 密钥对每个用例生成一次（P-256 生成约几毫秒，用例数克制）。
+// 【测试模式差异（对 V0.0.61 及之前）】子模块 LicenseGate 是静态类（宿主侧
+//   无假指纹/假时钟/临时密钥注入点），本组用例改为：
+//   · 状态文件笔沙箱：LicenseGate.StateIniPathOverride → %TEMP% 随笔目录；
+//   · 注册表水位沙箱：LicenseGate.RegRootOverride → HKCU\Software\CureLine\
+//     TestLicenseWaterMark（用后删键，不碰真机水位）；
+//   · 开发兜底关闭：env LicenseGate.EnvKeyDebugLicenseOff="0"（仅 Debug 库存在，
+//     与子模块回归探针同款——保真"无记录=NotActivated"等真实态断言）；
+//   · 演示桥直注：LicenseBridges.IsMockLicensedProvider 按用例覆盖并还原。
+//   依赖注入类语义（试用到期/时钟回拨/换码成功链/产品隔离激活链——需要假时钟
+//   与厂商私钥签真码）不在此测：真源逻辑锁在 kaleidoscope 的回归探针批
+//   (.opencode/skill/acceptance-test) 里，宿主侧只测接线真子集。
+//
+//   编解码/设备码用例全部走 Kaleidoscope.Security.LicenseCodec 纯函数（真源
+//   同名直迁）；自签签名仅用于"防篡改验签必拒"（内置公钥验自签码必失败）。
 // =========================================================================
 
 using System.Security.Cryptography;
 using CureLine.Core.Infrastructure;
 using CureLine.Core.Security;
 using CureLine.ViewModels;
+using Kaleidoscope.Security;
+using LicenseState = Kaleidoscope.Security.LicenseState;
 
 namespace CureLine.Tests;
 
@@ -21,76 +34,82 @@ public class LicenseTests : IDisposable
 {
     private readonly string _tmp;
     private readonly ECDsa _signer;
-    private readonly string _fp = "11223344";
-    private readonly string _ch = "AABBCCDD";
+    private const string _fp = "11223344";
+    private const string _ch = "AABBCCDD";
+    private readonly Func<bool>? _prevMockProvider;
+    private const string TestRegRoot = @"Software\CureLine\TestLicenseWaterMark";
+    private const string HostRegRoot = @"Software\CureLine\License";   // LicenseHost.Setup 口径（还原用）
+    private const string HostStateIni = @"MainSetting\LicenseState.ini"; // 子模块缺省口径（还原用）
 
     public LicenseTests()
     {
         _tmp = Path.Combine(Path.GetTempPath(), "CureLineLic_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tmp);
         _signer = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+
+        // —— 沙箱三件：状态文件 / 注册表水位键 / 关闭 Debug 开发兜底（真实态断言）——
+        Environment.SetEnvironmentVariable(LicenseGate.EnvKeyDebugLicenseOff, "0");
+        LicenseGate.StateIniPathOverride = Path.Combine(_tmp, "LicenseState.ini");
+        LicenseGate.RegRootOverride = TestRegRoot;
+
+        // —— 覆盖点注入（幂等）+ 演示桥缺省还原为"非演示"（演示放行在专用用例里单独开）——
+        LicenseHost.Setup();
+        _prevMockProvider = LicenseBridges.IsMockLicensedProvider;
+        LicenseBridges.IsMockLicensedProvider = null;
     }
 
     public void Dispose()
     {
         _signer.Dispose();
+        LicenseBridges.IsMockLicensedProvider = _prevMockProvider;
+        LicenseGate.RegRootOverride = HostRegRoot;
+        LicenseGate.StateIniPathOverride = null;   // 还原子模块缺省 exe\MainSetting 口径
+        Environment.SetEnvironmentVariable(LicenseGate.EnvKeyDebugLicenseOff, null);
+        CleanupTestRegistryKey();
         try { Directory.Delete(_tmp, true); } catch { }
+    }
+
+    /// <summary>删除沙箱注册表水位键（父键 CureLine 可能还会被真机授权用——只删测试键）。</summary>
+    private void CleanupTestRegistryKey()
+    {
+        try
+        {
+            using Microsoft.Win32.RegistryKey? parent =
+                Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\CureLine", writable: true);
+            parent?.DeleteSubKeyTree("TestLicenseWaterMark", throwOnMissingSubKey: false);
+        }
+        catch
+        {
+            // 原因：清理失败不掩盖测试结论（键残留无害，同名键下次被覆盖）
+        }
     }
 
     // ════════════════ 测试夹具 ════════════════
 
-    private byte[] Sign(byte[] payload) =>
-        _signer.SignData(payload, HashAlgorithmName.SHA256);
-
-    private bool Verify(byte[] payload, byte[] signature) =>
-        _signer.VerifyData(payload, signature, HashAlgorithmName.SHA256);
-
-    /// <summary>用临时私钥签一个激活码（fp8/ch8 8 位 hex）。</summary>
+    /// <summary>
+    /// 用临时私钥自签一个激活码（仅"防篡改/假码被拒"用例用——必须显式传 signer；
+    /// 门禁激活成功链不在此测：真码依赖厂商私钥，语义锁在 kaleidoscope 回归探针）。
+    /// </summary>
     private string MakeCode(ushort productId, string fp8, string ch8,
-        byte type = LicenseCodec.TypePermanent, byte days = 0, DateTime? start = null)
+        byte type = LicenseCodec.TypePermanent, byte days = 0, DateTime? start = null,
+        ECDsa? signer = null)
     {
+        signer ??= _signer;
         byte[] payload = LicenseCodec.BuildPayload(
-            productId, LicenseCodec.HexToBytes(fp8), LicenseCodec.HexToBytes(ch8),
+            productId, LicenseCodec.HexToBytes(fp8)!, LicenseCodec.HexToBytes(ch8)!,
             type, days, LicenseCodec.DateToDays(start ?? DateTime.Now));
-        return LicenseCodec.EncodeActivationCode(payload, Sign(payload));
+        return LicenseCodec.EncodeActivationCode(payload, signer.SignData(payload, HashAlgorithmName.SHA256));
     }
 
-    private LicenseGate NewGate(
-        ushort productId = LicenseCodec.ProductCureLine,
-        Func<DateTime>? now = null,
-        IFingerprintProvider? fingerprint = null,
-        ILicenseWaterMarkStore? waterMark = null,
-        Func<bool>? simulate = null,
-        string ini = "config.ini",
-        DateTime? builtOn = null)
+    /// <summary>把授权记录写进沙箱 LicenseState.ini（门禁链用例的记录打底）。</summary>
+    private void WriteRecord(string fingerprint, string licenseCode)
     {
-        return new LicenseGate(
-            Path.Combine(_tmp, ini),
-            fingerprint ?? new FixedFingerprint(_fp),
-            now ?? (() => new DateTime(2026, 11, 4, 10, 0, 0)),
-            Verify,
-            waterMark ?? new MemoryWaterMark(),
-            simulate,
-            builtOn ?? new DateTime(2020, 1, 1),
-            null,
-            productId,
-            LicenseCodec.GetProductName(productId));
+        var ini = new LicenseStateIni(LicenseGate.StateIniPathOverride!);
+        ini.WriteValue("License", "Fingerprint", fingerprint);
+        ini.WriteValue("License", "LicenseCode", licenseCode);
     }
 
-    private sealed class FixedFingerprint(string fp8, bool ok = true) : IFingerprintProvider
-    {
-        public FingerprintResult Get() =>
-            ok ? new FingerprintResult(true, fp8, "") : new FingerprintResult(false, "", "模拟采集失败");
-    }
-
-    private sealed class MemoryWaterMark : ILicenseWaterMarkStore
-    {
-        public DateTime Value { get; set; } = DateTime.MinValue;
-        public DateTime Read() => Value;
-        public void Write(DateTime value) => Value = value;
-    }
-
-    // ════════════════ 编解码 ════════════════
+    // ════════════════ 编解码 / 设备码 ════════════════
 
     [Fact(DisplayName = "设备码双产品前缀/校验位互不相同且可回读")]
     public void DeviceCode_BothProducts_RoundTrip()
@@ -152,35 +171,7 @@ public class LicenseTests : IDisposable
         Assert.Null(LicenseCodec.Base32Decode("U"));   // U 不在 Crockford 字母表
     }
 
-    [Fact(DisplayName = "激活码编解码+验签+payload 字段全对")]
-    public void ActivationCode_RoundTrip()
-    {
-        string code = MakeCode(LicenseCodec.ProductCureLine, _fp, _ch,
-            LicenseCodec.TypeTrial, 30, new DateTime(2026, 11, 4));
-
-        Assert.True(LicenseCodec.TryDecodeActivationCode(code, out byte[] payload, out byte[] sig));
-        Assert.True(Verify(payload, sig));
-        Assert.True(LicenseCodec.TryParsePayload(payload, out ushort pid, out byte[] fp4,
-            out byte[] ch4, out byte type, out byte days, out uint startDays));
-
-        Assert.Equal(LicenseCodec.ProductCureLine, pid);
-        Assert.Equal(_fp, LicenseCodec.BytesToHex(fp4));
-        Assert.Equal(_ch, LicenseCodec.BytesToHex(ch4));
-        Assert.Equal(LicenseCodec.TypeTrial, type);
-        Assert.Equal(30, days);
-        Assert.Equal(new DateTime(2026, 11, 4), LicenseCodec.DaysToDate(startDays));
-    }
-
-    [Fact(DisplayName = "篡改 payload 后验签必失败")]
-    public void ActivationCode_Tamper_Rejected()
-    {
-        string code = MakeCode(LicenseCodec.ProductCureLine, _fp, _ch);
-        Assert.True(LicenseCodec.TryDecodeActivationCode(code, out byte[] payload, out byte[] sig));
-        payload[9] = 99;                       // 改试用天数
-        Assert.False(Verify(payload, sig));
-    }
-
-    [Fact(DisplayName = "payload 产品 ID 大端写入")]
+    [Fact(DisplayName = "payload 产品 ID 大端写入，解析回读一致")]
     public void Payload_ProductId_BigEndian()
     {
         byte[] p = LicenseCodec.BuildPayload(LicenseCodec.ProductCureLine,
@@ -188,261 +179,235 @@ public class LicenseTests : IDisposable
             LicenseCodec.TypePermanent, 0, 0);
         Assert.Equal(0x43, p[14]);
         Assert.Equal(0x4C, p[15]);
-
-        byte[] h = LicenseCodec.BuildPayload(LicenseCodec.ProductHuaJiVision,
-            LicenseCodec.HexToBytes(_fp), LicenseCodec.HexToBytes(_ch),
-            LicenseCodec.TypePermanent, 0, 0);
-        Assert.Equal(0xFF, h[14]);
-        Assert.Equal(0xFF, h[15]);
+        Assert.True(LicenseCodec.TryParsePayload(p, out ushort pid, out _, out _, out _, out _, out _));
+        Assert.Equal(LicenseCodec.ProductCureLine, pid);
     }
 
-    // ════════════════ 门禁 ════════════════
+    [Fact(DisplayName = "篡改 payload 后内置公钥验签必失败（防离线伪造）")]
+    public void ActivationCodec_Tamper_Rejected()
+    {
+        string code = MakeCode(LicenseCodec.ProductCureLine, _fp, _ch, signer: _signer);
+        Assert.True(LicenseCodec.TryDecodeActivationCode(code, out byte[] payload, out byte[] sig));
+        // 自签的码能通过签名长度/格式校验，但内置真公钥验签必拒（信任根只有厂商私钥）
+        Assert.False(LicenseCodec.VerifyActivation(payload, sig));
+
+        // 换真 payload 字段同样被拦（占位签名的伪造路径全军覆没）
+        payload[9] = 99;                       // 改试用天数
+        Assert.False(LicenseCodec.VerifyActivation(payload, sig));
+    }
+
+    // ════════════════ era 挑战值（设备码内嵌一致 + 档内恒定） ════════════════
+
+    [Fact(DisplayName = "era 挑战值档内恒定，与设备码内嵌挑战一致")]
+    public void EraChallenge_StableAndEmbeddedInDeviceCode()
+    {
+        string c1 = LicenseGate.NewChallenge();
+        string c2 = LicenseGate.NewChallenge();   // 同 30 天档内两次派生必然同值
+        Assert.Equal(8, c1.Length);
+        Assert.Equal(c1, c2);
+
+        Assert.True(LicenseHost.TryBuildDeviceCode(out string device, out _));
+        Assert.True(LicenseCodec.TryParseDeviceCode(device, out _, out string _, out string ch));
+        Assert.Equal(c1, ch);   // 设备码内嵌的挑战 = 当前 era 挑战（激活校验同源）
+    }
+
+    // ════════════════ 门禁（沙箱状态文件 + 真机指纹） ════════════════
+
+    private LicenseState RefreshState()
+    {
+        LicenseHost.Refresh();
+        return LicenseHost.CurrentState;
+    }
 
     [Fact(DisplayName = "无记录=未激活且不放行")]
     public void Gate_NoRecord_NotActivated()
     {
-        var gate = NewGate();
-        gate.Refresh();
-        Assert.Equal(LicenseState.NotActivated, gate.CurrentState);
-        Assert.False(gate.IsProductionAllowed());
-        Assert.Equal("授权：未激活", gate.ShortStatusText());
+        Assert.Equal(LicenseState.NotActivated, RefreshState());
+        Assert.False(LicenseHost.IsProductionAllowed);
+        Assert.Equal("授权：未激活", LicenseHost.ShortStatusText());
+        Assert.Equal("激活状态：未激活", LicenseHost.StateText());
     }
 
-    [Fact(DisplayName = "永久激活落盘，重启后自动恢复")]
-    public void Gate_ActivatePermanent_PersistsAcrossRestart()
+    [Fact(DisplayName = "演示桥（Mock=放行）免激活直接放行")]
+    public void Gate_MockBridge_Bypasses()
     {
-        var gate = NewGate();
-        gate.Refresh();
-        string code = MakeCode(LicenseCodec.ProductCureLine, _fp, gate.CurrentChallenge());
-
-        Assert.Null(gate.TryActivate(code));
-        Assert.Equal(LicenseState.Permanent, gate.CurrentState);
-        Assert.True(gate.IsProductionAllowed());
-        Assert.Equal("授权：永久", gate.ShortStatusText());
-
-        // 模拟重启：同一 ini + 同一指纹的新实例（挑战值全新）仍认永久授权
-        var restarted = NewGate();
-        restarted.Refresh();
-        Assert.Equal(LicenseState.Permanent, restarted.CurrentState);
-        Assert.True(restarted.IsProductionAllowed());
+        LicenseBridges.IsMockLicensedProvider = () => true;
+        Assert.Equal(LicenseState.Permanent, RefreshState());
+        Assert.True(LicenseHost.IsSimulated);
+        Assert.True(LicenseHost.IsProductionAllowed);
+        Assert.Equal("授权：演示", LicenseHost.ShortStatusText());
+        Assert.Equal("激活状态：演示模式（免激活）", LicenseHost.StateText());
+        Assert.Null(LicenseHost.TryActivate("anything"));   // 演示模式激活动作无意义
     }
 
-    [Fact(DisplayName = "产品隔离：HJVision 码不能激活 CureLine，反之亦然")]
-    public void Gate_ProductIsolation_BothDirections()
+    [Fact(DisplayName = "记录被篡改（验签不过）→ 从严回到未激活")]
+    public void Gate_TamperedRecord_NotActivated()
     {
-        var cureGate = NewGate(LicenseCodec.ProductCureLine);
-        cureGate.Refresh();
-        string hjCode = MakeCode(LicenseCodec.ProductHuaJiVision, _fp, cureGate.CurrentChallenge());
-        string? err = cureGate.TryActivate(hjCode);
-        Assert.NotNull(err);
-        Assert.Contains("HJVision", err);
-        Assert.Equal(LicenseState.NotActivated, cureGate.CurrentState);
-
-        var hjGate = NewGate(LicenseCodec.ProductHuaJiVision, ini: "hj.ini");
-        hjGate.Refresh();
-        string cureCode = MakeCode(LicenseCodec.ProductCureLine, _fp, hjGate.CurrentChallenge());
-        err = hjGate.TryActivate(cureCode);
-        Assert.NotNull(err);
-        Assert.Contains("CureLine", err);
-        Assert.Equal(LicenseState.NotActivated, hjGate.CurrentState);
+        // 指纹写真机（否则先撞"记录指纹不符"测不到验签环节）；码放垃圾串
+        Assert.True(LicenseGate.TryGetFingerprint(out string fp8, out string _));
+        WriteRecord(fp8, "GARBAGE_NOT_A_CODE");
+        Assert.Equal(LicenseState.NotActivated, RefreshState());
+        Assert.False(LicenseHost.IsProductionAllowed);
     }
 
-    [Fact(DisplayName = "挑战值不符（旧码重放）被拒")]
-    public void Gate_ChallengeMismatch_Rejected()
+    [Fact(DisplayName = "记录指纹与本机不符（目录克隆）→ 锁死 FingerprintError")]
+    public void Gate_CloneFingerprint_FingerprintError()
     {
-        var gate = NewGate();
-        gate.Refresh();
-        string oldCode = MakeCode(LicenseCodec.ProductCureLine, _fp, gate.CurrentChallenge());
-
-        // 窗口重开 = 新挑战值；旧码 payload 里还是旧挑战
-        gate.NewChallenge();
-        string? err = gate.TryActivate(oldCode);
-        Assert.NotNull(err);
-        Assert.Contains("设备码已刷新", err);
-        Assert.Equal(LicenseState.NotActivated, gate.CurrentState);
+        WriteRecord("DEADBEEF", "SOME-CODE-GOES-HERE");
+        Assert.Equal(LicenseState.FingerprintError, RefreshState());
+        Assert.False(LicenseHost.IsProductionAllowed);
+        Assert.Equal("授权：指纹不符", LicenseHost.ShortStatusText());
+        Assert.Contains("指纹不符", LicenseHost.LastReason);
     }
 
-    [Fact(DisplayName = "指纹不符：激活拒绝、记录态报 FingerprintError")]
-    public void Gate_FingerprintMismatch_Rejected()
-    {
-        var gate = NewGate();
-        gate.Refresh();
-        gate.NewChallenge();
-        string otherMachine = MakeCode(LicenseCodec.ProductCureLine, "DEADBEEF", gate.CurrentChallenge());
-        string? err = gate.TryActivate(otherMachine);
-        Assert.NotNull(err);
-        Assert.Contains("设备指纹不符", err);
-        Assert.Equal(LicenseState.NotActivated, gate.CurrentState);
-
-        // 已落盘记录中的指纹与本机不符（整目录克隆场景）
-        string ini = Path.Combine(_tmp, "config.ini");
-        IniFile.Write(ini, "License", "Fingerprint", "DEADBEEF");
-        IniFile.Write(ini, "License", "LicenseCode", otherMachine);
-        gate.Refresh();
-        Assert.Equal(LicenseState.FingerprintError, gate.CurrentState);
-        Assert.False(gate.IsProductionAllowed());
-    }
-
-    [Fact(DisplayName = "试用到期日当天可用，次日过期")]
-    public void Gate_TrialExpiry()
-    {
-        DateTime day = new(2026, 11, 4);
-        var gate = NewGate(now: () => day);
-        gate.Refresh();
-        string code = MakeCode(LicenseCodec.ProductCureLine, _fp, gate.CurrentChallenge(),
-            LicenseCodec.TypeTrial, 30, day);
-        Assert.Null(gate.TryActivate(code));
-        Assert.Equal(LicenseState.Trial, gate.CurrentState);
-        Assert.Equal("授权：试用剩 30 天", gate.ShortStatusText());
-
-        // 到期日当天（day+30）仍可用
-        var lastDay = NewGate(now: () => day.AddDays(30), waterMark: new MemoryWaterMark { Value = day });
-        lastDay.Refresh();
-        Assert.Equal(LicenseState.Trial, lastDay.CurrentState);
-
-        // 到期次日过期
-        var expired = NewGate(now: () => day.AddDays(31), waterMark: new MemoryWaterMark { Value = day });
-        expired.Refresh();
-        Assert.Equal(LicenseState.Expired, expired.CurrentState);
-        Assert.False(expired.IsProductionAllowed());
-    }
-
-    // ════════════════ 换码切换（已激活状态下重激活，热更生效） ════════════════
-
-    [Fact(DisplayName = "换码：永久→限期，覆盖落盘立即生效")]
-    public void ReActivate_PermanentThenTrial_SwitchesTrial()
-    {
-        DateTime day = new(2026, 11, 4);
-        var gate = NewGate(now: () => day);
-        gate.Refresh();
-        // 先激活永久码
-        Assert.Null(gate.TryActivate(
-            MakeCode(LicenseCodec.ProductCureLine, _fp, gate.CurrentChallenge())));
-        Assert.Equal(LicenseState.Permanent, gate.CurrentState);
-
-        // 已激活状态下再输 30 天试用期码（同会话挑战值）——覆盖旧记录，Refresh 即 Trial
-        string? err = gate.TryActivate(MakeCode(LicenseCodec.ProductCureLine, _fp,
-            gate.CurrentChallenge(), LicenseCodec.TypeTrial, 30, day));
-        Assert.Null(err);
-        Assert.Equal(LicenseState.Trial, gate.CurrentState);
-        Assert.True(gate.IsProductionAllowed());
-        Assert.Equal("授权：试用剩 30 天", gate.ShortStatusText());
-    }
-
-    [Fact(DisplayName = "换码：限期→永久，覆盖落盘立即生效")]
-    public void ReActivate_TrialThenPermanent_SwitchesPermanent()
-    {
-        DateTime day = new(2026, 11, 4);
-        var gate = NewGate(now: () => day);
-        gate.Refresh();
-        Assert.Null(gate.TryActivate(MakeCode(LicenseCodec.ProductCureLine, _fp,
-            gate.CurrentChallenge(), LicenseCodec.TypeTrial, 7, day)));
-        Assert.Equal(LicenseState.Trial, gate.CurrentState);
-
-        // 再输永久码升级——覆盖落盘立即生效
-        Assert.Null(gate.TryActivate(
-            MakeCode(LicenseCodec.ProductCureLine, _fp, gate.CurrentChallenge())));
-        Assert.Equal(LicenseState.Permanent, gate.CurrentState);
-        Assert.True(gate.IsProductionAllowed());
-    }
-
-    [Fact(DisplayName = "换码后试用到期正常过期（永久码水位不误伤限期判定）")]
-    public void ReActivate_ThenTrialExpiry_WaterMarkNoInterference()
-    {
-        DateTime day = new(2026, 11, 4);
-        DateTime now = day;
-        var gate = NewGate(now: () => now);
-        gate.Refresh();
-        // 第一步：激活永久码（水位推进到 day）
-        Assert.Null(gate.TryActivate(
-            MakeCode(LicenseCodec.ProductCureLine, _fp, gate.CurrentChallenge())));
-        // 第二步：降级换 30 天试用期码（start=day，expiry=day+30）
-        Assert.Null(gate.TryActivate(MakeCode(LicenseCodec.ProductCureLine, _fp,
-            gate.CurrentChallenge(), LicenseCodec.TypeTrial, 30, day)));
-        Assert.Equal(LicenseState.Trial, gate.CurrentState);
-
-        // 第三步：时钟推进 35 天（晚于水位——无回拨误判）→ 试用期码正常到期
-        now = day.AddDays(35);
-        gate.Refresh();
-        Assert.Equal(LicenseState.Expired, gate.CurrentState);
-        Assert.False(gate.IsProductionAllowed());
-    }
-
-    [Fact(DisplayName = "时钟回拨：试用按过期处理，永久不受影响")]
-    public void Gate_ClockRollback()
-    {
-        DateTime signedDay = new(2026, 11, 4);
-        var trialGate = NewGate(now: () => signedDay);
-        trialGate.Refresh();
-        string trial = MakeCode(LicenseCodec.ProductCureLine, _fp, trialGate.CurrentChallenge(),
-            LicenseCodec.TypeTrial, 30, signedDay);
-        Assert.Null(trialGate.TryActivate(trial));
-
-        // 把系统时间拨回 10 天（低于水位超过 1 小时容差）
-        var rollback = NewGate(now: () => signedDay.AddDays(-10),
-            waterMark: new MemoryWaterMark { Value = signedDay });
-        rollback.Refresh();
-        Assert.Equal(LicenseState.Expired, rollback.CurrentState);
-        Assert.Contains("回拨", rollback.LastReason);
-
-        // 永久授权回拨只留告警，不锁
-        var permanentGate = NewGate(now: () => signedDay);
-        permanentGate.Refresh();
-        string permanent = MakeCode(LicenseCodec.ProductCureLine, _fp, permanentGate.CurrentChallenge());
-        Assert.Null(permanentGate.TryActivate(permanent));
-        var permanentRollback = NewGate(now: () => signedDay.AddDays(-10),
-            waterMark: new MemoryWaterMark { Value = signedDay });
-        permanentRollback.Refresh();
-        Assert.Equal(LicenseState.Permanent, permanentRollback.CurrentState);
-        Assert.Contains("回拨", permanentRollback.LastReason);
-    }
-
-    [Fact(DisplayName = "演示模式 Simulate=1 免激活放行")]
-    public void Gate_Simulate_BypassesActivation()
-    {
-        var gate = NewGate(simulate: () => true, fingerprint: new FixedFingerprint("", ok: false));
-        gate.Refresh();
-        Assert.True(gate.IsSimulated);
-        Assert.Equal(LicenseState.Permanent, gate.CurrentState);
-        Assert.True(gate.IsProductionAllowed());
-        Assert.Equal("授权：演示", gate.ShortStatusText());
-        Assert.Null(gate.TryActivate("anything"));   // 演示模式激活动作无意义
-    }
-
-    [Fact(DisplayName = "清空激活记录回到未激活")]
+    [Fact(DisplayName = "清空激活记录回到未激活（自愈入口）")]
     public void Gate_ClearActivation()
     {
-        var gate = NewGate();
-        gate.Refresh();
-        Assert.Null(gate.TryActivate(MakeCode(LicenseCodec.ProductCureLine, _fp, gate.CurrentChallenge())));
-        Assert.Equal(LicenseState.Permanent, gate.CurrentState);
-
-        gate.ClearActivation();
-        gate.Refresh();
-        Assert.Equal(LicenseState.NotActivated, gate.CurrentState);
-        Assert.False(gate.IsProductionAllowed());
+        WriteRecord("DEADBEEF", "SOME-CODE-GOES-HERE");
+        Assert.Equal(LicenseState.FingerprintError, RefreshState());
+        LicenseHost.ClearActivation();
+        Assert.Equal(LicenseState.NotActivated, RefreshState());
+        Assert.False(LicenseHost.IsProductionAllowed);
     }
 
-    [Fact(DisplayName = "指纹采集失败：从严锁死并给出原因")]
-    public void Gate_FingerprintFailure_Blocks()
+    // ════════════════ 真私钥激活链（厂商私钥随库的环境条件用例） ════════════════
+
+    /// <summary>
+    /// 厂商真私钥（tools\LicenseIssuer\LicenseSignKey.dat，不入仓库）。缺失时
+    /// 激活成功链用例退化为静默通过（用例结束）——开发机（有私钥）才会真正跑
+    /// 语义断言；无钥环境由 kaleidoscope 回归探针回归同语义。激活成功链必须
+    /// 真码：真源验签公钥固定（LicenseCodec.PubKeyB64），无法注入临时密钥对。
+    /// </summary>
+    private string? VendorSigner()
     {
-        var gate = NewGate(fingerprint: new FixedFingerprint("", ok: false));
-        gate.Refresh();
-        Assert.Equal(LicenseState.FingerprintError, gate.CurrentState);
-        Assert.Contains("模拟采集失败", gate.LastReason);
-        Assert.False(gate.IsProductionAllowed());
+        // tests bin → 仓库根 → tools\LicenseIssuer\LicenseSignKey.dat
+        string? dir = AppDomain.CurrentDomain.BaseDirectory;
+        for (int i = 0; i < 6 && dir != null; i++)
+        {
+            string candidate = Path.Combine(dir, "tools", "LicenseIssuer", "LicenseSignKey.dat");
+            if (File.Exists(candidate))
+            {
+                string b64 = File.ReadAllText(candidate).Trim();
+                return string.IsNullOrEmpty(b64) ? null : b64;
+            }
+            dir = Path.GetDirectoryName(dir.TrimEnd(Path.DirectorySeparatorChar));
+        }
+        return null;
     }
 
-    // ════════════════ 激活窗 VM ════════════════
+    /// <summary>把 SQLite 水位桥接到沙箱库（真跑三存储第三路；Dispose 里还原 null=缺位语义）。</summary>
+    private void UseSqliteBridgeInTemp()
+    {
+        string db = Path.Combine(_tmp, "LicenseWaterMark.db3");
+        new SqliteHelper(db).EnsureDatabase();
+        LicenseBridges.SqliteWaterMarkGet = key => new SqliteHelper(db).GetMeta(key);
+        LicenseBridges.SqliteWaterMarkSet = (key, v) => new SqliteHelper(db).SetMeta(key, v);
+    }
 
-    [Fact(DisplayName = "激活窗 VM：设备码/状态/错误提示/成功关窗")]
+    /// <summary>
+    /// 出本机真设备码并回读内嵌指纹/挑战（激活链用例的 payload 真值源）。
+    /// 真机必须出 CURE 前缀码——设备码产品归属即本产品（前缀↔产品 ID 同源校验）。
+    /// </summary>
+    private (string Fp8, string Ch8) LocalDeviceParts()
+    {
+        Assert.True(LicenseHost.TryBuildDeviceCode(out string device, out string fpErr),
+            "激活链用例必须能出设备码（真机 MachineGuid）：" + fpErr);
+        Assert.True(LicenseCodec.TryParseDeviceCode(device, out ushort deviceProduct,
+            out string fp8, out string ch8));
+        Assert.Equal(LicenseCodec.ProductCureLine, deviceProduct);
+        return (fp8, ch8);
+    }
+
+    /// <summary>按厂商私钥签真码（ECDsaCng CNG blob 口径与签发工具 SignCore 一致）。</summary>
+    private string VendorSignCode(string keyB64, ushort productId,
+        string fp8, string ch8, byte type, byte days)
+    {
+        byte[] payload = LicenseCodec.BuildPayload(productId,
+            LicenseCodec.HexToBytes(fp8)!, LicenseCodec.HexToBytes(ch8)!,
+            type, days, LicenseCodec.DateToDays(DateTime.Now));
+        using CngKey k = CngKey.Import(Convert.FromBase64String(keyB64), CngKeyBlobFormat.EccPrivateBlob);
+        using ECDsaCng signer = new(k);
+        signer.HashAlgorithm = CngAlgorithm.Sha256;
+        return LicenseCodec.EncodeActivationCode(payload, signer.SignData(payload));
+    }
+
+    [Fact(DisplayName = "厂商真码激活：永久落盘，重启恢复依旧放行（私钥缺失则静默跳过）")]
+    public void Activate_WithVendorKey_PermanentPersists()
+    {
+        string? key = VendorSigner();
+        if (key == null) return;   // 无厂商私钥环境：语义锁在 kaleidoscope 探针，本用例跳过断言
+        UseSqliteBridgeInTemp();
+        Assert.Equal(LicenseState.NotActivated, RefreshState());
+
+        (string fp8, string ch8) = LocalDeviceParts();
+        string? code = VendorSignCode(key, LicenseCodec.ProductCureLine, fp8, ch8,
+            LicenseCodec.TypePermanent, 0);
+        Assert.NotNull(code);
+        Assert.Null(LicenseHost.TryActivate(code));   // 激活成功
+        Assert.Equal(LicenseState.Permanent, LicenseHost.CurrentState);
+        Assert.True(LicenseHost.IsProductionAllowed);
+        Assert.Equal("授权：永久", LicenseHost.ShortStatusText());
+
+        // 模拟重启：Refresh 重读沙箱记录 → 依旧 Permanent（落盘恢复语义）
+        Assert.Equal(LicenseState.Permanent, RefreshState());
+    }
+
+    [Fact(DisplayName = "厂商真码换码切换：永久→限期立即生效（私钥缺失则静默跳过）")]
+    public void Reactivate_WithVendorKey_PermanentToTrial()
+    {
+        string? key = VendorSigner();
+        if (key == null) return;
+        UseSqliteBridgeInTemp();
+        Assert.Equal(LicenseState.NotActivated, RefreshState());
+
+        (string fp8, string ch8) = LocalDeviceParts();
+        string? permanent = VendorSignCode(key, LicenseCodec.ProductCureLine, fp8, ch8,
+            LicenseCodec.TypePermanent, 0);
+        Assert.NotNull(permanent);
+        Assert.Null(LicenseHost.TryActivate(permanent));
+        Assert.Equal(LicenseState.Permanent, LicenseHost.CurrentState);
+
+        // 已激活状态输 30 天试用期真码（era 档内挑战同源）——覆盖落盘，Refresh 即 Trial
+        string? trial = VendorSignCode(key, LicenseCodec.ProductCureLine, fp8, ch8,
+            LicenseCodec.TypeTrial, 30);
+        Assert.NotNull(trial);
+        Assert.Null(LicenseHost.TryActivate(trial));
+        Assert.Equal(LicenseState.Trial, LicenseHost.CurrentState);
+        Assert.True(LicenseHost.IsProductionAllowed);
+        Assert.Equal("授权：试用剩 30 天", LicenseHost.ShortStatusText());
+    }
+
+    [Fact(DisplayName = "产品隔离激活链：HJVision 真签名码必须被拒（私钥缺失则静默跳过）")]
+    public void Activate_WithVendorKey_WrongProductRejected()
+    {
+        string? key = VendorSigner();
+        if (key == null) return;
+        UseSqliteBridgeInTemp();
+        Assert.Equal(LicenseState.NotActivated, RefreshState());
+
+        // 本机真指纹/真挑战签 HJVision 产品码——校验链产品隔离拦在最前，
+        // 被拒的唯一可能原因就是产品 ID 不符（真源拦截失效时码会真激活，测试照样红）。
+        (string fp8, string ch8) = LocalDeviceParts();
+        string? hjCode = VendorSignCode(key, LicenseCodec.ProductHuaJiVision, fp8, ch8,
+            LicenseCodec.TypePermanent, 0);
+        Assert.NotNull(hjCode);
+        string? err = LicenseHost.TryActivate(hjCode);
+        Assert.NotNull(err);                                   // 被拒
+        Assert.Contains("HJVision", err);                      // 提示码属于别家产品
+        Assert.Equal(LicenseState.NotActivated, LicenseHost.CurrentState);   // 未激活且不放行
+        Assert.False(LicenseHost.IsProductionAllowed);
+    }
+
+    [Fact(DisplayName = "激活窗 VM：设备码/状态行/空码提示/假码被拒")]
     public void ActivationVm_Flow()
     {
-        var gate = NewGate();
-        gate.Refresh();
-        var vm = new LicenseActivationViewModel(gate, "固化程控");
+        Assert.Equal(LicenseState.NotActivated, RefreshState());   // 打座：无记录
+        var vm = new LicenseActivationViewModel("固化程控");
 
         Assert.Equal("固化程控", vm.AppName);
+        // 指纹采集失败的机器（极端异常环境）设备码为空并给红色提示——真机正常路径
+        Assert.True(LicenseGate.TryGetFingerprint(out string _, out string _),
+            "真机必须能采集指纹（MachineGuid 主锚点）");
         Assert.StartsWith("CURE-", vm.DeviceCode);
         Assert.Contains("未激活", vm.StatusText);
         Assert.True(vm.CloseCommand.CanExecute(null));
@@ -452,18 +417,17 @@ public class LicenseTests : IDisposable
         vm.ActivateCommand.Execute(null);
         Assert.Contains("请先粘贴激活码", vm.Tip);
 
-        // 设备码带来的挑战值 + 正确的码
+        // 假码（自签占位签名）：验签/解码失败路径 → 红字提示、不关窗
         Assert.True(LicenseCodec.TryParseDeviceCode(vm.DeviceCode, out ushort pid,
             out string fp8, out string ch8));
+        Assert.Equal(LicenseCodec.ProductCureLine, pid);   // 产品隔离：设备码是本产品前缀
         bool? closed = null;
         vm.RequestClose += ok => closed = ok;
-        vm.LicenseCode = MakeCode(pid, fp8, ch8);
+        vm.LicenseCode = MakeCode(pid, fp8, ch8, signer: _signer);
 
         Assert.True(vm.ActivateCommand.CanExecute(null));
         vm.ActivateCommand.Execute(null);
-        Assert.Equal("激活成功", vm.Tip);
-        Assert.True(closed);
-        Assert.Contains("永久使用", vm.StatusText);
-        Assert.Equal("", vm.LicenseCode);   // 成功后清空输入框
+        Assert.Null(closed);   // 失败不关窗
+        Assert.NotEqual("激活成功", vm.Tip);
     }
 }

@@ -14,7 +14,7 @@
 // =========================================================================
 
 using System.Windows;
-using CureLine.Core.Security;
+using Kaleidoscope.Security;
 
 namespace LicenseIssuer;
 

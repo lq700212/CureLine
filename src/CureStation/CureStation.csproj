@@ -20,6 +20,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CureLine.Core\CureLine.Core.csproj" />
+    <!--通讯/授权子模块（net472，与 Core 同款 HintPath）：Kaleidoscope.Security.LicenseState
+        出现在 VM 事件签名（LicenseHost.StateChanged），编译态须直指此处。-->
+    <Reference Include="Kaleidoscope">
+      <HintPath>..\..\extern\kaleidoscope\Kaleidoscope\bin\Debug\Kaleidoscope.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>

@@ -1,12 +1,15 @@
 // =========================================================================
 // LicenseActivationViewModel：软件激活窗 VM（两个程序共用，View 各自一份）
 //
-// 干什么：打开时向 LicenseGate 换新挑战值 → 展示设备码；用户粘贴厂商返回的
-//   激活码 → 调 TryActivate → 成功/失败文案；成功后通知 View 关窗。
+// 干什么：打开时向 LicenseHost 要设备码（真源在 kaleidoscope 子模块
+//   LicenseGate，宿主接线层 LicenseHost 是序列里的应用侧唯一出口）→ 展示
+//   设备码；用户粘贴厂商返回的激活码 → 调 LicenseHost.TryActivate →
+//   成功/失败文案；成功后通知 View 关窗。
 // 为什么共用：程序①（固化程控）与程序②（CIM 通信网关）授权逻辑完全一致，
 //   只有窗标题/品牌文案不同——控件差异放各自 XAML，编排逻辑收在 Core。
-// 怎么改：门禁规则改动一律改 LicenseGate（本类只是薄编排）；新增按钮走
-//   RelayCommand，不直接碰 Window/MessageBox（RequestClose 事件交给 View）。
+// 怎么改：门禁规则改动一律改 kaleidoscope 子模块 LicenseGate（本类只是薄
+//   编排，宿主口径在 LicenseHost）；新增按钮走 RelayCommand，不直接碰
+//   Window/MessageBox（RequestClose 事件交给 View）。
 // =========================================================================
 
 using CureLine.Core.Security;
@@ -15,23 +18,20 @@ namespace CureLine.ViewModels;
 
 public sealed class LicenseActivationViewModel : ViewModelBase
 {
-    private readonly LicenseGate _gate;
-
     private string _deviceCode = "";
     private string _licenseCode = "";
     private string _statusText = "";
     private string _detailText = "";
     private string _tip = "";
 
-    /// <summary>构造：appName=程序展示名（"固化程控" / "CIM 通信网关"）。</summary>
-    public LicenseActivationViewModel(LicenseGate gate, string appName)
+    /// <summary>构造：appName=程序展示名（"固化程控" / "CIM通信网关"）。</summary>
+    public LicenseActivationViewModel(string appName)
     {
-        _gate = gate;
         AppName = appName;
 
-        // 每次打开换新挑战值（防重放）——设备码随之刷新，旧码失效。
-        _ = _gate.NewChallenge();
-        if (_gate.TryBuildDeviceCode(out string code, out string error))
+        // 每次打开刷新设备码（era 挑战值口径：30 天档内恒定——重开窗不必重签；
+        // 跨档自动换新，旧签发码随之失效，防重放语义保留在挑战值比对里）。
+        if (LicenseHost.TryBuildDeviceCode(out string code, out string error))
         {
             DeviceCode = code;
         }
@@ -41,8 +41,8 @@ public sealed class LicenseActivationViewModel : ViewModelBase
             Tip = "无法采集本机设备指纹：" + error;
         }
 
-        StatusText = _gate.StateText();
-        DetailText = _gate.DetailText();
+        StatusText = LicenseHost.StateText();
+        DetailText = LicenseHost.DetailText();
 
         ActivateCommand = new RelayCommand(Activate, CanActivate);
         CloseCommand = new RelayCommand(() => RequestClose?.Invoke(false));
@@ -105,9 +105,9 @@ public sealed class LicenseActivationViewModel : ViewModelBase
             Tip = "请先粘贴激活码";
             return;
         }
-        string? error = _gate.TryActivate(LicenseCode.Trim());
-        StatusText = _gate.StateText();
-        DetailText = _gate.DetailText();
+        string? error = LicenseHost.TryActivate(LicenseCode.Trim());
+        StatusText = LicenseHost.StateText();
+        DetailText = LicenseHost.DetailText();
         if (error == null)
         {
             Tip = "激活成功";

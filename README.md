@@ -122,37 +122,54 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
 
 ---
 
-## 软件授权（ECDsa 激活码）
+## 软件授权（kaleidoscope Kaleidoscope.Security，ECDsa 激活码）
 
-- **方案与 HJVision 同源**：ECDsa P-256 非对称签名，私钥只在厂商签发工具，
-  程序内置公钥验签——反编译只能拿到公钥，无法离线伪造激活码。
+- **真源收口（V0.0.62）**：授权真源在 kaleidoscope 子模块 `Kaleidoscope.Security`
+  （`LicenseGate` 门禁 + `LicenseCodec` 编解码 + 指纹采集），与 HJVision 用
+  同一套下沉代码；宿主侧只有一层薄接线 `src/CureLine.Core/Security/
+  LicenseHost.cs`——注入产品 ID/注册表根/演示桥/SQLite 水位桥四覆盖点 +
+  顶栏文案 + 状态边沿事件，业务层只调 `LicenseHost`。子模块升级（修 bug/
+  换指纹口径）两产品同步受益，宿主零改动或只改覆盖点。
+- **方案**：ECDsa P-256 非对称签名，私钥只在厂商签发工具，程序内置公钥
+  验签——反编译只能拿到公钥，无法离线伪造激活码。
 - **设备码**：`CURE-<指纹8HEX>-<挑战8HEX>-<校验4HEX>`；指纹=本机四因子
-  （MachineGuid + 主板/磁盘/CPU）SHA256 前 4 字节，挑战值每次打开激活窗
-  随机重生成（防重放，关窗重开旧码作废）。
+  （MachineGuid + 主板/磁盘/CPU）SHA256 前 4 字节；挑战值=**era 口径**——
+  按"指纹 + 30 天档号"确定性派生（SHA256 前 4 字节），**档内恒定**：
+  30 天内重开激活窗/激活后换码（限期↔永久切换）免重签；跨入新档设备码
+  自动刷新（旧码作废，重新抄设备码送签即可）。
 - **两产品隔离**：与 HJVision 共用同一把密钥对，靠激活码 payload 产品 ID
   区分（CureLine=`0x434C` / HJVision=`0xFFFF`）——HJVision 的激活码不能
   激活 CureLine，反之亦然；设备码前缀 `CURE`（HJVision 保持历史 `HUAJI`）。
 - **试用 / 永久**：厂商按设备码签发，试用 1~255 天（从签发日起算）或永久；
-  授权记录存 `config/config.ini` 的 `[License]` 段，每次启动重新验签。
-- **防回拨**：时间水位同时写 ini / `HKCU\Software\CureLine\License` /
-  SQLite `app_meta` 三处，并与构建日期、exe 文件时间取大做下限；试用机
-  改系统时间绕不过期判定。
-- **门禁**：两程序启动即校验，未授权弹激活窗，关闭仍未授权则退出；运行期
-  每小时巡检；主窗顶栏常显授权状态（永久/试用剩 N 天/未激活/已过期/
-  指纹不符/演示），设置下拉「软件激活」可随时打开激活窗。
+  授权记录存 exe 同目录 `MainSetting\LicenseState.ini`（kaleidoscope 缺省
+  自管，激活窗自动维护，现场不要手工编辑），每次启动对记录原文重新验签。
+- **防回拨**：时间水位三存储取最大——状态文件 `WaterMark` 键 +
+  `HKCU\Software\CureLine\License`（CureLine 专属注册表根，与子模块缺省
+  HuaJiVision 根共机不踩值）+ SQLite `app_meta` 键 `LicenseWaterMark`
+  （宿主 `SqliteHelper` 桥回同一物理位置），并与构建日期、exe 文件时间
+  取大做下限，容差 1 小时；试用机改系统时间绕不过期判定。
+- **门禁**：两程序启动即校验（`App.OnStartup` 先 `LicenseHost.Setup` 再
+  `Refresh`），未授权弹激活窗，关闭仍未授权则退出；运行期每小时巡检；
+  主窗顶栏常显授权状态（永久/试用剩 N 天/未激活/已过期/指纹不符/演示），
+  设置下拉「软件激活」可随时打开激活窗；主窗 VM 订阅 `LicenseHost.
+  StateChanged` 边沿即时刷新顶栏并记一行操作日志。
 - **换码切换（热更）**：已激活状态下再输一枚合法新激活码即可切换授权类型
   （限期↔永久双向）——把激活窗当前显示的设备码发厂商签新码，粘贴后落盘
-  覆盖旧记录、立即生效，顶栏状态随状态变更事件即时刷新，无需重启；激活窗
-  重开挑战值即换，旧设备码签的码作废（防重放语义，换码须用当次设备码）。
-- **演示模式**：`[setting] Simulate=1` 免激活放行（仅联调演示，不得用于生产）。
-- **开发自动授权（仅 Debug 构建）**：Debug 编译的程序启动即自动注入 90 天
-  内存态试用授权（不落盘、不污染水位三存储），开发机验证功能免输激活码；
-  该段逻辑由 `#if DEBUG` 编译——**Release 客户版二进制里不存在**，发布必须
-  Release 编译，Debug exe 不外发。手测真实激活/换码/过期流程时设环境变量
-  `CURELINE_DEVLICENSE=off`（0/false 同义）关闭注入。
-- **签发工具**：`tools/LicenseIssuer`（厂商内部，不随客户版分发）。私钥
-  `LicenseSignKey.dat` 已加入 `.gitignore`——丢失=已发激活码全部作废，
-  外泄=可伪造任意激活码，禁止入库/外发。
+  覆盖旧记录、立即生效，顶栏状态随状态变更事件即时刷新，无需重启；era
+  档内免重签，跨档旧码被拦"设备码已刷新"（防重放语义，属正常防线）。
+- **演示模式**：`[setting] Simulate=1` 免激活放行（宿主演示桥接
+  `LicenseBridges.IsMockLicensedProvider`，配置窗热改后下一拍 Refresh 即
+  生效；仅联调演示，不得用于生产）。
+- **开发自动授权（仅 Debug 构建）**：Debug 编译的程序在真实状态不可用时
+  自动注入 90 天内存态试用授权（不落盘、不污染水位三存储），开发机验证
+  功能免输激活码；该段逻辑由 `#if DEBUG` 编译——**Release 客户版二进制里
+  不存在**，发布必须 Release 编译，Debug exe 不外发。手测真实激活/换码/
+  过期流程时设环境变量 `KX_DEV_LICENSE=off`（0/false 同义）关闭注入。
+- **签发工具**：`tools/LicenseIssuer`（厂商内部，不随客户版分发；编解码
+  同引 kaleidoscope `Kaleidoscope.dll` 真源，支持 `--generate`/`--issue
+  设备码 P|T 天数` 命令行签发）。私钥 `LicenseSignKey.dat` 已加入
+  `.gitignore`——丢失=已发激活码全部作废，外泄=可伪造任意激活码，禁止
+  入库/外发。
 
 ---
 

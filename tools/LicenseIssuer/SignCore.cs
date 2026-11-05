@@ -5,7 +5,8 @@
 // 为什么单独存在：主程序只有公钥（LicenseCodec.VerifyActivation），私钥永远
 //   不进入产品程序集——这是"客户无法离线伪造激活码"的全部根基。
 // 怎么改：私钥文件固定 exe 同目录 LicenseSignKey.dat（Base64 CNG EccPrivateBlob）；
-//   换密钥对 = 删旧文件 → 重新生成 → 把公钥串替换两个产品 LicenseCodec.PubKeyB64。
+//   换密钥对 = 删旧文件 → 重新生成 → 把公钥串替换 Kaleidoscope.Security
+//   LicenseCodec.PubKeyB64（编解码真源收口子模块后，两产品共用这一处公钥）。
 //
 // 【红线】LicenseSignKey.dat 禁止入库/外发/随部署包分发；丢失 = 已发激活码
 //   全部作废（必须换钥重发）。请多处离线备份。
@@ -33,7 +34,7 @@ public static class SignCore
 
     /// <summary>
     /// 生成 P-256 密钥对：私钥落盘 LicenseSignKey.dat，返回公钥 Base64
-    /// （替换主工程 LicenseCodec.PubKeyB64）。已有私钥时拒绝覆盖——换钥是重决策，
+    /// （替换 Kaleidoscope.Security.LicenseCodec.PubKeyB64）。已有私钥时拒绝覆盖——换钥是重决策，
     /// 先手工删除旧文件并确认已发激活码作废影响。
     /// </summary>
     public static string GenerateKeyPair()

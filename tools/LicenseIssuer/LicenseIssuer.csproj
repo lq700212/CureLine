@@ -4,9 +4,9 @@
     软件激活码签发工具（厂商内部，绝不随客户现场部署包分发）。
     为什么是独立项目：签发需要私钥（LicenseSignKey.dat），主程序只内置公钥验签；
     私钥一旦随主程序分发，任何人都能离线伪造激活码——信任根必须只留在厂商侧。
-    为什么用 Compile Include 链接主工程 LicenseCodec.cs：激活码编解码/Base32/
-    设备码校验/productId 布局是单一事实源，两边各抄一份必然漂移（HJVision
-    用同款做法）。链接后签出的码与主程序验签逻辑逐字节同源。
+    编解码真源（V0.0.62 起）= Kaleidoscope.Security.LicenseCodec：引用子模块编译
+    输出（主程序同款引用方式，保持"单一事实源"——激活码编解码/Base32/设备码校验/
+    productId 布局与主程序验签逻辑逐字节同源，两边各抄一份必然漂移）。
   -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -19,10 +19,14 @@
     <!-- 纯代码入口（Program.cs）：需要命令行模式（generate/issue），
          WPF 自动生成的 Main 不读 args，故显式指定启动对象。 -->
     <StartupObject>LicenseIssuer.Program</StartupObject>
+    <!-- net472 子模块程序集引用产生 NU1701（框架兼容性警告），与主工程同款压制 -->
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\src\CureLine.Core\Security\LicenseCodec.cs" Link="LicenseCodec.cs" />
+    <Reference Include="Kaleidoscope">
+      <HintPath>..\..\extern\kaleidoscope\Kaleidoscope\bin\Debug\Kaleidoscope.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
   <!-- 私钥文件（不入库）：存在才拷到输出目录；首次使用可用命令行 generate 现生成。

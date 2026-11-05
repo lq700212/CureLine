@@ -25,6 +25,8 @@ using CureLine.Core.Mes;
 using CureLine.Core.Modes;
 using CureLine.Core.Security;
 using CureLine.Core.Services;
+using Kaleidoscope.Security;
+using LicenseState = Kaleidoscope.Security.LicenseState;
 
 namespace CimGateway.ViewModels;
 
@@ -96,12 +98,12 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         OpenLicenseCommand = new RelayCommand(OpenLicense);
         // 顶栏授权文案：启动门禁已 Refresh 过（App.OnStartup），这里只读快照，
         // 不触发指纹采集/文件 IO。
-        LicenseText = LicenseGate.Default.ShortStatusText();
-        // 授权状态热更：激活成功（TryActivate 内已 Refresh）/激活窗换码切换/每小时
-        // 巡检触发 StateChanged——顶栏文案随时跟随，换授权类型无需重启。
-        //（StateChanged 全部调用点均在 UI 线程——Refresh 的线程约定，直接赋值；
+        LicenseText = LicenseHost.ShortStatusText();
+        // 授权状态热更：激活成功（TryActivate 收口 PublishStateEdge）/激活窗换码
+        // 切换/每小时巡检产生边沿——顶栏文案随时跟随，换授权类型无需重启。
+        //（LicenseHost 边沿触发只来自 UI 线程调用点——直接赋值无需封送；
         // VM 与进程同生死，无需退订。）
-        LicenseGate.Default.StateChanged += OnLicenseStateChanged;
+        LicenseHost.StateChanged += OnLicenseStateChanged;
         // 主题按钮文案对齐 App.OnStartup 已应用的当前主题（测试态无 App：ThemeManager
         // 只记账不碰资源，Current 保持缺省 Light → 按钮显示目标"深色"）
         ToggleThemeText = ThemeManager.Current == "Dark" ? "浅色" : "深色";
@@ -337,18 +339,18 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
         finally
         {
-            LicenseText = LicenseGate.Default.ShortStatusText();
+            LicenseText = LicenseHost.ShortStatusText();
         }
     }
 
     /// <summary>
     /// 授权状态边沿（激活成功/换码切换/巡检到期）→ 顶栏授权文案即时刷新 +
-    /// 日志一行（铁律 4 只记边沿）。Refresh 的全部调用点都在 UI 线程
-    /// （线程约定见 LicenseGate 头注释），直接赋值，无需封送。
+    /// 日志一行（铁律 4 只记边沿）。LicenseHost 的边沿只来自 UI 线程的
+    /// Refresh/TryActivate 调用点，直接赋值，无需封送。
     /// </summary>
-    private void OnLicenseStateChanged(object? sender, LicenseStateChangedEventArgs e)
+    private void OnLicenseStateChanged(LicenseState oldState, LicenseState newState)
     {
-        LicenseText = LicenseGate.Default.ShortStatusText();
+        LicenseText = LicenseHost.ShortStatusText();
         LocalLog("软件授权：" + LicenseText, -1);
     }
 

@@ -90,7 +90,7 @@ public sealed class DialogService : IDialogService
 
     public bool ShowLicenseActivation()
     {
-        var vm = new LicenseActivationViewModel(LicenseGate.Default, "CIM通信网关");
+        var vm = new LicenseActivationViewModel("CIM通信网关");
         var w = Prep(new LicenseActivationWindow { DataContext = vm });
         return w.ShowDialog() == true;
     }

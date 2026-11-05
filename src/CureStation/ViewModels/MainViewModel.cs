@@ -22,6 +22,8 @@ using CureLine.Core.Infrastructure;
 using CureLine.Core.Security;
 using CureLine.Core.Services;
 using CureLine.ViewModels;
+using Kaleidoscope.Security;
+using LicenseState = Kaleidoscope.Security.LicenseState;
 
 namespace CureStation.ViewModels;
 
@@ -682,11 +684,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         OpenLicenseCommand = new RelayCommand(OpenLicense);
         // 顶栏授权文案：启动门禁已 Refresh 过（App.OnStartup），这里只读快照，
         // 不触发指纹采集/文件 IO。
-        LicenseText = LicenseGate.Default.ShortStatusText();
-        // 授权状态热更：激活成功（TryActivate 内已 Refresh）/激活窗换码切换/每小时
-        // 巡检触发 StateChanged——顶栏文案随时跟随，换授权类型无需重启。
-        //（StateChanged 全部调用点均在 UI 线程——Refresh 的线程约定，直接赋值。）
-        LicenseGate.Default.StateChanged += OnLicenseStateChanged;
+        LicenseText = LicenseHost.ShortStatusText();
+        // 授权状态热更：激活成功（TryActivate 收口 PublishStateEdge）/激活窗换码
+        // 切换/每小时巡检产生边沿——顶栏文案随时跟随，换授权类型无需重启。
+        //（LicenseHost 刷新点全在 UI 线程——边沿直接赋值，无需封送。）
+        LicenseHost.StateChanged += OnLicenseStateChanged;
         // 主题按钮文案对齐 App.OnStartup 已应用的当前主题（测试态无 App：ThemeManager
         // 缺省 Light，同样落"深色"文案，现场首点即切 G1，行为一致）。
         ToggleThemeText = ThemeManager.Current == "Dark" ? "浅色" : "深色";
@@ -1091,25 +1093,25 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
         finally
         {
-            LicenseText = LicenseGate.Default.ShortStatusText();
+            LicenseText = LicenseHost.ShortStatusText();
         }
     }
 
     /// <summary>
-    /// 授权状态边沿（激活成功/换码切换/巡检到期/开发授权注入）→ 顶栏文案即时
-    /// 刷新 + 操作日志一行（铁律 4 只记边沿）。全部调用点在 UI 线程（Refresh
-    /// 的线程约定），直接赋值，无需封送。
+    /// 授权状态边沿（激活成功/换码切换/巡检到期）→ 顶栏文案即时刷新 +
+    /// 操作日志一行（铁律 4 只记边沿）。LicenseHost 的边沿触发只来自 UI 线程
+    /// 的 Refresh/TryActivate 调用点，直接赋值无需封送。
     /// </summary>
-    private void OnLicenseStateChanged(object? sender, LicenseStateChangedEventArgs e)
+    private void OnLicenseStateChanged(LicenseState oldState, LicenseState newState)
     {
-        LicenseText = LicenseGate.Default.ShortStatusText();
+        LicenseText = LicenseHost.ShortStatusText();
         LocalLogService.Write("软件授权：" + LicenseText);
     }
 
     public void Dispose()
     {
         DurationUnit.Changed -= OnDisplayUnitChanged;   // 退订单位广播（防悬挂订阅）
-        LicenseGate.Default.StateChanged -= OnLicenseStateChanged;   // 退订授权状态边沿
+        LicenseHost.StateChanged -= OnLicenseStateChanged;   // 退订授权状态边沿
         _refreshTimer.Stop();
         lock (_busLock)
         {

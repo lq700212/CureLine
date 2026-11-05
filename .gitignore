@@ -22,6 +22,8 @@ hsl.dat
 HslLicense.dat
 # 软件激活签名私钥（厂商信任根：丢失=已发激活码全部作废，外泄=可伪造激活码）
 LicenseSignKey.dat
+# 软件授权状态落盘（kaleidoscope LicenseGate，exe 同目录；含激活记录=机密数据）
+MainSetting/
 
 # ===== 本地状态 =====
 .vs/
