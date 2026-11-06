@@ -238,6 +238,9 @@ public sealed class RackSlotViewModel : ViewModelBase
     /// machineStatus=状态机状态（非空闲时展示口径以状态机为准——剩余分钟数
     /// 灯色反推不出来）。状态词"计时中 剩X"在此按当前显示单位拼装
     /// （旧版取 Core SlotStatus.StateText——已随单位综合上移 UI 删除）。
+    /// V0.0.67：快照带出 AlarmGrill 报警标志——计时中报警照常计时 Phase 仍
+    /// Curing，报警标志优先于 Curing 分支把卡切 Alarm 口径（此前卡牌报警
+    /// 永远显示不出，红灯 DO 反推分支在精确态路线下轮不到）。
     /// </summary>
     public void Refresh(PointTableSnapshot snapshot, bool hasTable, SlotStatus? machineStatus = null,
         int planMinutes = 0)
@@ -265,15 +268,21 @@ public sealed class RackSlotViewModel : ViewModelBase
             : green == true ? "绿灯" : "灭";
         SlotStateText = machineStatus switch
         {
+            { AlarmGrill: true } => "占用",                          // V0.0.67：卡牌报警显出（与胶囊"占用"同词）
             { Phase: SlotPhase.Curing } st => DescribeCuring(st),
             { Phase: SlotPhase.Done } => "放行",
             { Phase: SlotPhase.WaitingGate } => "待门控",
             _ => mapState(tray, red, yellow, green),                 // 空闲走灯色反推
         };
         // Kind（新口径）：状态机给精确状态的仓位以状态机为准（含剩余分钟）；
+        // 计时中光栅报警照常计时但 Phase 仍 Curing（客户口径"计时不变"），
+        // 报警标志优先于 Curing 显示——卡切 Alarm 口径（红卡+脉冲+胶囊"占用"），
+        // 剩余分钟照传（数值不变量保持完整，复位后自愈回 Curing 视图）。
         // 状态机空闲/未涉足的仓位灯色反推——红=Alarm（占用）、黄=Curing（无精确
         // 数值，HasDetail=false 显示状态字）、绿=Done、托盘在=Gate（待判定）、全空=Idle。
-        if (machineStatus is { Phase: SlotPhase.Curing } cur)
+        if (machineStatus is { AlarmGrill: true } alert)
+            ApplyKind("Alarm", alert.RemainMinutes, alert.TotalMinutes);
+        else if (machineStatus is { Phase: SlotPhase.Curing } cur)
             ApplyKind("Curing", cur.RemainMinutes, cur.TotalMinutes);
         else if (machineStatus is { Phase: SlotPhase.Done })
             ApplyKind("Done", 0, 0);
@@ -309,7 +318,9 @@ public sealed class RackSlotViewModel : ViewModelBase
     /// </summary>
     public void RefreshUnitText()
     {
-        if (_lastCuring is { } s && s.RemainMinutes > 0)
+        if (_lastCuring is { AlarmGrill: true })
+            SlotStateText = "占用";   // 报警快照（Phase=Curing）重拼不回退"计时中"字面——下一次 500ms 拍才自愈
+        else if (_lastCuring is { } s && s.RemainMinutes > 0)
             SlotStateText = DescribeCuring(s);
         // 空闲计划预览随显示单位换口径（"计划 2小时"↔"计划 120 分"——用
         // 最近一拍缓存的 _planMinutes 重拼，不等 500ms 拍；非 Idle 态清空兜底）。

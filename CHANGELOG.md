@@ -2,6 +2,33 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.67（2026-11-06，固化程控：塔灯黄绿互换"待料=黄" + 卡牌报警显示修复）
+
+用户两条现场反馈：① 没有来料在固化的情况下应显示**黄灯**（待料），
+② 光栅报警主界面**卡牌上没显示出来**。
+
+- **塔灯黄绿语义互换**（`RefreshMachineBeacon` 一处，聚合优先级 红 > 绿 > 黄）：
+  - 原 V0.0.65 口径"忙碌=黄/空闲=绿"与用户现场语义相反——**有来料固化/等门控
+    → 绿常亮（设备运转中）；全机无固化任务 → 黄常亮（待料待机，含全空/Done
+    放行待取/取完——Done 不在"固化"内，同属待料）**；报警红+蜂鸣长鸣不变。
+  - `IoPointRole.BeaconYellow/BeaconGreen` 枚举注释同步换语义。
+- **卡牌报警显示修复（根因：快照缺报警标志）**：计时中光栅报警按客户口径
+  "计时不变"，`SlotPhase` 仍是 `Curing`——`RackSlotViewModel.Refresh` 的
+  `machineStatus is { Phase: Curing }` 精确分支恒先于红灯 DO 反推分支，
+  卡牌报警**永远显示不出**（红灯 DO 反推只在状态机未涉足的仓位生效）。
+  修复三件：① `SlotStatus` 加第 4 参 `AlarmGrill`（缺省 false，DocShot 演示
+  帧等 3 参构造零改动）；② `GetStatus` 透传 `rt.AlarmGrill`；③ Refresh
+  报警标志优先于 Curing 分支 `ApplyKind("Alarm", …)`（红卡+脉冲+胶囊"占用"，
+  剩余分钟照传保完整，复位下一拍自愈回计时视图）+ `SlotStateText`"占用"；
+  ④ `RefreshUnitText` 单位切换重拼同判标志，防报警态闪回"计时中"字面。
+  卡内报警视觉（红底/红边/红光圈/胶囊/脉冲/副文"红灯 · 请检查"）V0.0.46
+  起就有，XAML 本轮零改动——缺的只是把标志送进卡的数据线。
+- 测试：482/482（V0.0.66 基线 481 + 本轮 1 例 `Kind_CuringAlarmGrill_
+  ShowsAlarmCarryingMinutes`；塔灯三例断言黄绿对调更名
+  `…RedPriorityThenGreenThenYellow`/`…_YellowOnFirstPump`，报警剧本 t4/t5
+  与反剧本断言同口径——放行拍绿灯去重零写的断言按"稳态零网络写"契约改
+  DoesNotContain）。
+
 ## V0.0.66（2026-11-06，固化程控：塔灯接入"一步到位"——单台模板带塔灯 + 旧点表 Load 自愈）
 
 用户拍板（项目未上线，无兼容包袱）：把 V0.0.65 塔灯能力的两处"手工补行"

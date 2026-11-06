@@ -276,6 +276,25 @@ public class CuringDisplayTests
         Assert.Equal(0.625, slot.ProgressRatio, 6); // 同源进度比（卡内进度条 ScaleTransform 直绑）
     }
 
+    [Fact(DisplayName = "Kind：计时中光栅报警→Alarm 优先显示（V0.0.67 卡牌报警显出）")]
+    public void Kind_CuringAlarmGrill_ShowsAlarmCarryingMinutes()
+    {
+        var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
+        // 报警快照：Phase 仍 Curing（客户口径"计时不变"），报警标志优先 → Alarm 口径
+        // （红卡+脉冲+胶囊"占用"——此前 Phase=Curing 分支抢先、卡牌报警显示不出的根因修复）
+        slot.Refresh(PointTableSnapshot.Empty, true, new SlotStatus(SlotPhase.Curing, 120, 45, AlarmGrill: true));
+        Assert.Equal("Alarm", slot.Kind);
+        Assert.Equal("占用", slot.SlotStateText);
+        Assert.Equal(45, slot.RemainMin);   // 数值照传（不变量保持，复位后自愈回 Curing 视图）
+        Assert.Equal(120, slot.TotalMin);
+        Assert.Equal(63, slot.ProgressPct);
+
+        // 复位后快照（AlarmGrill=false）→ 自愈回计时口径
+        slot.Refresh(PointTableSnapshot.Empty, true, new SlotStatus(SlotPhase.Curing, 120, 45));
+        Assert.Equal("Curing", slot.Kind);
+        Assert.Contains("计时中", slot.SlotStateText);
+    }
+
     [Fact(DisplayName = "Kind：未计时（Total=0）→ Ratio/Pct 双零不变量")]
     public void Kind_ZeroTotal_RatioAndPctClampedZero()
     {

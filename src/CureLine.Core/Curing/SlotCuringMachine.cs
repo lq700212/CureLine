@@ -69,7 +69,13 @@ public enum SlotPhase
 /// 属 UI 口径——拼装收在程序① RackSlotViewModel.Refresh（缓存快照自己拼），
 /// Core 恒为分钟数据（Phase/TotalMinutes/RemainMinutes）。
 /// </remarks>
-public sealed record SlotStatus(SlotPhase Phase, int TotalMinutes, int RemainMinutes);
+/// <remarks>
+/// AlarmGrill（V0.0.67）：光栅报警标志。Curing 中报警按客户口径"计时不变"，
+/// Phase 仍是 Curing——UI 靠本标志把卡切 Alarm 口径（红灯 DO 反推分支在精确
+/// 态路线下永远轮不到，此前卡牌报警不显示的根因即缺这个标志）。
+/// 第 4 参缺省 false：既有 3 参构造点（DocShot 演示帧/测试）零改动。
+/// </remarks>
+public sealed record SlotStatus(SlotPhase Phase, int TotalMinutes, int RemainMinutes, bool AlarmGrill = false);
 
 public sealed class SlotCuringMachine : IDisposable
 {
@@ -382,7 +388,9 @@ public sealed class SlotCuringMachine : IDisposable
         _log($"架{rack}层{level} 重启恢复：续算断电前计时，剩 {MinutesText(remain)}（共 {MinutesText(rec.Minutes)}）");
     }
 
-    /// <summary>查仓位状态（UI 500ms 刷用）。空闲/没动过回 null（UI 走灯色反推口径）。</summary>
+    /// <summary>查仓位状态（UI 500ms 刷用）。空闲/没动过回 null（UI 走灯色反推口径）。
+    /// 报警标志随快照带出（AlarmGrill）——计时中光栅报警 Phase 仍是 Curing（计时不变），
+    /// UI 由此把卡切报警口径（V0.0.67，此前快照没带标志卡牌就显示不出报警）。</summary>
     public SlotStatus? GetStatus(int rack, int level)
     {
         lock (_sync)
@@ -395,7 +403,7 @@ public sealed class SlotCuringMachine : IDisposable
                 var elapsed = _clock() - start;
                 remain = Math.Max(0, rt.TotalMinutes - (int)Math.Ceiling(elapsed.TotalMinutes));
             }
-            return new SlotStatus(rt.Phase, rt.TotalMinutes, remain);
+            return new SlotStatus(rt.Phase, rt.TotalMinutes, remain, rt.AlarmGrill);
         }
     }
 
@@ -550,14 +558,16 @@ public sealed class SlotCuringMachine : IDisposable
 
     /// <summary>
     /// 机台总监塔灯聚合刷新（V0.0.65，仅 <see cref="_sync"/> 锁内调用）：
-    /// 全机一套四色塔灯+蜂鸣，优先级 红 &gt; 黄 &gt; 绿——
+    /// 全机一套四色塔灯+蜂鸣，优先级 红 &gt; 绿 &gt; 黄（V0.0.67 黄绿互换，
+    /// 现场口径"没有来料在固化=待料黄灯"）——
     ///   任一仓位 AlarmGrill → 红+蜂鸣长鸣；否则任一仓位 Curing/WaitingGate
-    ///   （计时中/等门控）→ 黄；否则 → 绿常亮（设备就绪/已全部放行）。蓝不写
+    ///   （计时中/等门控）→ 绿（设备运转中）；否则 → 黄常亮（待料待机，
+    ///   含全空与"已全部放行待取件"——放行态不在固化）。蓝不写
     ///   （预留现场自接）。每态一次性写四路（红黄绿+蜂），EnsureLamp 逐路去重，
     ///   稳态零网络写；未绑定塔灯时 WritePoint 静默 false 零网络成本。
     /// 挂点=每个可能改变聚合态的转移收尾（StartCuring/OnTrayArrived 等门控/
     /// OnTrayLeft/SetGrillAlarm/Pump 尾），到点放行走 Pump 尾兜住——覆盖清单见
-    /// DocShot 之外本方法头注释与 SlotCuringMachineTests 用例。
+    /// 本方法头注释与 SlotCuringMachineTests 用例。
     /// </summary>
     private void RefreshMachineBeacon()
     {
@@ -583,18 +593,18 @@ public sealed class SlotCuringMachine : IDisposable
         }
         else if (anyBusy)
         {
-            // 计时中/等门控：黄灯（红灯灭防复位写失败残留，蜂鸣停）
+            // 有来料在固化/等门控：绿常亮=设备运转中（黄红灭防残留，蜂停）
             EnsureLamp(0, 0, IoPointRole.BeaconRed, false);
-            EnsureLamp(0, 0, IoPointRole.BeaconYellow, true);
-            EnsureLamp(0, 0, IoPointRole.BeaconGreen, false);
+            EnsureLamp(0, 0, IoPointRole.BeaconYellow, false);
+            EnsureLamp(0, 0, IoPointRole.BeaconGreen, true);
             EnsureLamp(0, 0, IoPointRole.Buzzer, false);
         }
         else
         {
-            // 全机空闲（含刚启动无事件）：绿常亮=设备就绪
+            // 全机无固化任务（空闲/已成放行待取件）：黄常亮=待料待机（用户口径）
             EnsureLamp(0, 0, IoPointRole.BeaconRed, false);
-            EnsureLamp(0, 0, IoPointRole.BeaconYellow, false);
-            EnsureLamp(0, 0, IoPointRole.BeaconGreen, true);
+            EnsureLamp(0, 0, IoPointRole.BeaconYellow, true);
+            EnsureLamp(0, 0, IoPointRole.BeaconGreen, false);
             EnsureLamp(0, 0, IoPointRole.Buzzer, false);
         }
     }

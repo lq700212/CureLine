@@ -198,7 +198,7 @@
 | `src/CureLine.Core/Curing/CuringStateStore.cs` | `config/curingstate.json` 计时状态持久化（`PersistMinutes` 开关的落盘件；运行时数据非配置，删了即回退重计） |
 | `src/CureLine.Core/Curing/WorkOrderStore.cs` | 工单信息 `config/workorder.json`（R/L 双工位+EMP/BC/PT×2，字段名对齐 MES 16 字段）+ 自愈空工单 |
 | `src/CureLine.Core/Security/OperatorStore.cs` | 程序①三级操作员账号（V0.0.49 重做：`OperatorRole` Operator/Admin/Dev + 预置三账号 `SeedUser` 播种 + PBKDF2 复用；增删/改密全带 **actor 兜底**，VM 置灰之外的第二道防线）；**防锁死红线**：dev 账号永不可删、密码仅本人可改、Dev 角色不开放创建（预置唯一） |
-| `src/CureLine.Core/Curing/SlotCuringMachine.cs` | **仓位状态机**：托盘到位→（门控）→黄灯计时→绿灯放行→离开灭灯；边沿后台直转+1s 心跳 Pump；灯写去重补写/断连恢复对齐/策略热切换三自愈；过账挂点三事件（TrayArrived/CuringStarted/TrayLeft，只发真实边沿）；机台总监塔灯聚合 `RefreshMachineBeacon`（V0.0.65，五挂点+每拍自愈） |
+| `src/CureLine.Core/Curing/SlotCuringMachine.cs` | **仓位状态机**：托盘到位→（门控）→黄灯计时→绿灯放行→离开灭灯；边沿后台直转+1s 心跳 Pump；灯写去重补写/断连恢复对齐/策略热切换三自愈；过账挂点三事件（TrayArrived/CuringStarted/TrayLeft，只发真实边沿）；机台总监塔灯聚合 `RefreshMachineBeacon`（V0.0.65 接入，V0.0.67 口径红>绿>黄"待料=黄"）+ `SlotStatus.AlarmGrill` 报警标志供卡牌显报（V0.0.67） |
 | `src/CureLine.Core/Curing/SlotLocationCode.cs` | 客户库位编码换算（Date Matrix，10 站×3 层）：架×层↔编码互转（`Encode`/`TryDecode` 客户约定锚点）+ 双架口径（`RackGroupOf`/`StationInRack`/`EncodeInRack` 按架内站号换算，每台架独立一套 A01~J12），主窗卡片标题与后续扫码绑定的同源入口 |
 | **Core 共享（单线过账家族，P3.2 后半新增）** | |
 | `src/CureLine.Core/Curing/CuringMesOptions.cs` | 过账配置模型（ini `[CuringMes]` 节）：开关/工位/时间单位/进站时机/中途取件/静态参数五件；`NormSide` 规范化（非 L 按 R 兜底） |
@@ -334,9 +334,11 @@ dotnet build tools/LicenseIssuer/LicenseIssuer.csproj --nologo
   【生成缺省模板】V0.0.66 起显式传 `withBeacon:true`（单台模板也带塔灯），其余
   既有调用缺省不生成；**与仓位灯同块同帧，ScanPlanner
   零分帧变化**（改塔灯位号需同步 IoBusTests 的"20 帧/周期"断言）；③
-  **状态机聚合 `RefreshMachineBeacon`（仅 _sync 锁内）**：优先级红 > 黄 > 绿
-  ——任一仓位 AlarmGrill→红+蜂鸣长鸣；否则任一 Curing/**WaitingGate（等门控
-  也算忙碌）**→黄；否则绿常亮（设备就绪/Done/取完）。**蓝不写**（现场自接）；
+  **状态机聚合 `RefreshMachineBeacon`（仅 _sync 锁内）**：优先级红 > 绿 > 黄
+  （V0.0.67 黄绿互换，现场口径"没有来料在固化=黄灯待料"）——
+  任一仓位 AlarmGrill→红+蜂鸣长鸣；否则任一 Curing/**WaitingGate（等门控
+  也算在固化任务中）**→绿（设备运转中）；否则黄常亮（待料待机=无固化任务，
+  含全空/Done 放行待取/取完）。**蓝不写**（现场自接）；
   挂点五处=StartCuring 尾/等门控分支/OnTrayLeft 尾/SetGrillAlarm 尾/Pump 尾
   （每拍兜住到点放行+自愈补写）——新增可改变聚合态的转移必须挂点，否则
   塔灯滞后到下一拍；EnsureLamp 逐路去重=稳态零网络写，未绑定塔灯时
@@ -412,7 +414,12 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   WaitingGate（本来就在等门控）与 Done（取件伸入正常动作）不报警；到点
   放行时绿灯接替红灯（日志带"报警随放行解除"）；报警态不落盘——重启对齐/
   断电续算恢复按光栅快照重判（人手仍在架内则重新报警），恢复/取件路径红灯
-  补写 false 防残留；UI 零改动（卡片"占用报警"胶囊按红灯 DO 反推联动）。
+  补写 false 防残留；**卡牌联动（V0.0.67 改口）**：`SlotStatus` 快照带出
+  `AlarmGrill` 标志，`RackSlotViewModel.Refresh` 报警标志优先于 Curing 分支
+  切 Alarm 口径（红卡+胶囊"占用"）——计时中报警 Phase 仍是 Curing，红灯 DO
+  反推分支轮不到（V0.0.63 的"UI 零改动纯反推"口径已废：精确态路线下卡牌
+  报警显示不出的根因即缺标志）；单位切换重拼 `RefreshUnitText` 同判标志防
+  报警态闪回"计时中"字面。
   **复位双保险（V0.0.64）**：① 边沿路径=OFF 边沿×快照双确认——总线轮询
   契约（两总线同款）**先整拍换快照再统一发边沿**，边沿处理时 `GrillClear`
   必能看到本边沿新值（V0.0.63 曾"边沿先于快照发出"致真机复位判定恒

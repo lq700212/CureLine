@@ -99,10 +99,10 @@ public class GrillAlarmSimulationTests
             bus.SetInput(GrillR(1, 1), false);
             Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed), false));
             Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow), true));
-            // 机台塔灯同步（V0.0.65）：复位即红灭+蜂停；唯一仓位回计时中 → 塔灯黄
+            // 机台塔灯同步（V0.0.65/67）：复位即红灭+蜂停；唯一仓位回计时中 → 塔灯绿=运转中
             Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconRed), false));
             Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.Buzzer), false));
-            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconYellow), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconGreen), true));
             Assert.Contains(logs, m => m.Contains("报警复位"));
             Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
             bus.Writes.Clear();
@@ -112,7 +112,9 @@ public class GrillAlarmSimulationTests
             machine.Pump(_now);
             Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
             Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampGreen), true));
-            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconGreen), true)); // 塔灯放行绿
+            // 塔灯：放行=不再在固化（Done 不算忙碌）→ 全机回黄=待料（V0.0.67 口径）
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconYellow), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconGreen), false));
             // 复位已先行，到点放行不该再打"报警随放行解除"日志
             Assert.DoesNotContain(logs, m => m.Contains("报警随放行解除"));
             bus.Writes.Clear();
@@ -146,9 +148,13 @@ public class GrillAlarmSimulationTests
             Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
             Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampGreen), true));  // 绿灯放行
             Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed), false));   // 红灯让位
-            // 机台塔灯同步（V0.0.65）：放行即全机绿 + 蜂鸣停（报警随放行解除）
-            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconGreen), true));
+            // 机台塔灯同步（V0.0.65/67）：放行=不再在固化 → 全机黄=待料 + 蜂鸣停
+            //（报警随放行解除；放行态与空闲同属"没有来料在固化"）
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconYellow), true));
             Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.Buzzer), false));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconRed), false));
+            // 绿：报警拍已写灭入账（false），放行拍同为 false → 去重零写（稳态零网络写契约）
+            Assert.DoesNotContain(bus.Writes, w => w.Key == Beacon(IoPointRole.BeaconGreen));
             Assert.Contains(logs, m => m.Contains("报警随放行解除"));
         }
     }

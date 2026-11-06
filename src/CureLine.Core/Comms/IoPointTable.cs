@@ -41,9 +41,9 @@ public enum IoPointRole
     LampGreen,
     /// <summary>机台四色塔灯-红（V0.0.65：报警总指示，全机任一仓位报警即亮）。</summary>
     BeaconRed,
-    /// <summary>机台四色塔灯-黄（有仓位计时/等门控即亮）。</summary>
+    /// <summary>机台四色塔灯-黄（V0.0.67 改口径：全机无固化/等门控=待料待机即亮）。</summary>
     BeaconYellow,
-    /// <summary>机台四色塔灯-绿（无报警无计时即常亮=设备就绪/放行）。</summary>
+    /// <summary>机台四色塔灯-绿（V0.0.67 改口径：有仓位计时/等门控即亮=设备运转中）。</summary>
     BeaconGreen,
     /// <summary>机台四色塔灯-蓝（预留：状态机不写，现场按需手工绑定）。</summary>
     BeaconBlue,
