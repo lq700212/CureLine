@@ -189,7 +189,7 @@ public class CureStationViewModelTests
     // ---------- 点表配置 VM ----------
 
     [Fact]
-    public void PointTableVm_GenerateTemplate_Fills180Bindings()
+    public void PointTableVm_GenerateTemplate_Fills185BindingsWithBeacon()
     {
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.PointTableViewModel(fake);
@@ -201,7 +201,16 @@ public class CureStationViewModelTests
 
         var dev = Assert.Single(vm.Devices);
         Assert.Equal(10, dev.BlockCount);
-        Assert.Equal(180, dev.Bindings.Count);
+        // 单台模板带塔灯（V0.0.66）：180 仓位点 + 机台总监塔灯五件套（位 11~15）
+        Assert.Equal(185, dev.Bindings.Count);
+        var beacons = dev.Bindings.Where(b => b.Rack == 0 && b.Level == 0).ToList();
+        Assert.Equal(5, beacons.Count);
+        Assert.All(beacons, b => Assert.False(b.IsInput));
+        Assert.Equal([11, 12, 13, 14, 15], beacons.Select(b => b.Bit).OrderBy(b => b).ToArray());
+        Assert.Equal(
+            [IoPointRole.BeaconRed, IoPointRole.BeaconYellow, IoPointRole.BeaconGreen,
+                IoPointRole.BeaconBlue, IoPointRole.Buzzer],
+            beacons.OrderBy(b => b.Bit).Select(b => b.Role).ToArray());
         Assert.Contains(fake.Calls, c => c.Contains("缺省模板已生成"));
     }
 
@@ -231,7 +240,8 @@ public class CureStationViewModelTests
         Assert.True(vm.CloseDialog);
         var loaded = IoPointTableStore.Load();
         Assert.NotNull(loaded);
-        Assert.Equal(180, loaded!.Devices[0].Bindings.Count);
+        // 单台模板带塔灯（V0.0.66）：185 点（180 仓位点 + 机台总监塔灯 5 路）；回读幂等不叠加
+        Assert.Equal(185, loaded!.Devices[0].Bindings.Count);
     }
 
     [Fact]

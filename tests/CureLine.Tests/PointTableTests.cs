@@ -97,9 +97,13 @@ public class PointTableTests
         Assert.Equal("A线", dev.Name);
         Assert.Equal("192.168.1.30", dev.Ip);
         Assert.Equal(1502, dev.Port);
-        Assert.Equal(180, dev.Bindings.Count);
+        // 旧表自愈（V0.0.66）：存的是 180 点无塔灯旧表 → Load 自动补塔灯五件套=185
+        Assert.Equal(185, dev.Bindings.Count);
         Assert.Equal(IoPointRole.TrayDetect,
             Find(dev, true, IoPointRole.TrayDetect, 3, 2).Role);
+        Assert.Equal(IoPointRole.BeaconRed,
+            dev.Bindings.Single(b => b.IsInput == false && b.Role == IoPointRole.BeaconRed
+                && b.Rack == 0 && b.Level == 0).Role);
     }
 
     [Fact]
@@ -319,6 +323,101 @@ public class PointTableTests
 
         var without = IoPointTableStore.BuildDefaultTemplate("T", "192.168.1.2", 10, 3);
         Assert.Equal(180, without.Devices[0].Bindings.Count);
+    }
+
+    // ---------- 旧点表自愈迁移（V0.0.66：Load 无塔灯自动补五件套） ----------
+
+    [Fact]
+    public void EnsureBeaconFive_LegacyTwoDevices_AutoHealsToSecondDevice()
+    {
+        // 旧表口径（V0.0.64 及以前生成的盘上点表）：两台、每台 180 点、无塔灯 →
+        // 自愈按自动档挂第 2 台（与 BuildMachineTemplate 图纸硬契约同源）
+        var d1 = IoPointTableStore.BuildDefaultTemplate("1号架", "127.0.0.1", 10, 3, 1);
+        var d2 = IoPointTableStore.BuildDefaultTemplate("2号架", "127.0.0.2", 10, 3, 11);
+        var config = new PointTableConfig { Devices = { d1.Devices[0], d2.Devices[0] } };
+
+        Assert.True(IoPointTableStore.EnsureBeaconFive(config));
+
+        Assert.Equal(180, config.Devices[0].Bindings.Count);  // 其余台不加
+        Assert.Equal(185, config.Devices[1].Bindings.Count);  // 宿主 +5
+        Assert.Equal([11, 12, 13, 14, 15],
+            config.Devices[1].Bindings.Where(b => b.Rack == 0 && b.Level == 0)
+                .Select(b => b.Bit).OrderBy(b => b).ToArray());
+        Assert.True(PointTableValidator.Validate(config).Ok);
+    }
+
+    [Fact]
+    public void EnsureBeaconFive_SingleDevice_AutoHealsToOnlyHost()
+    {
+        // 单台部署：塔灯落唯一台
+        var config = IoPointTableStore.BuildDefaultTemplate("T", "127.0.0.1", 10, 3, 1);
+
+        Assert.True(IoPointTableStore.EnsureBeaconFive(config));
+        Assert.Equal(185, config.Devices[0].Bindings.Count);
+    }
+
+    [Fact]
+    public void EnsureBeaconFive_AlreadyHasBeacon_Idempotent()
+    {
+        // 新表（已有塔灯）→ 不补；手工半套（只配了红）→ 同样尊重现状不补
+        var full = IoPointTableStore.BuildDefaultTemplate("T", "127.0.0.1", 10, 3, 1, withBeacon: true);
+        Assert.False(IoPointTableStore.EnsureBeaconFive(full));
+        Assert.Equal(185, full.Devices[0].Bindings.Count);
+
+        var half = IoPointTableStore.BuildDefaultTemplate("T", "127.0.0.1", 10, 3, 1);
+        half.Devices[0].Bindings.Add(new IoPointBinding
+        {
+            Block = 1, Bit = 11, IsInput = false,
+            Role = IoPointRole.BeaconRed, Rack = 0, Level = 0, FunctionName = "四色灯-红",
+        });
+        Assert.False(IoPointTableStore.EnsureBeaconFive(half));
+        Assert.Equal(1, half.Devices[0].Bindings.Count(b => IoPointRoleInfo.IsMachineLevel(b.Role)));
+    }
+
+    [Fact]
+    public void EnsureBeaconFive_TargetBitsOccupied_DoesNotTouchConfig()
+    {
+        // 宿主第 1 块 DO 位 11~15 被其它角色占用 → 放弃不补（不动现场手工接线表，
+        // 防补出同位语义键撞车被校验拦保存）
+        var config = IoPointTableStore.BuildDefaultTemplate("T", "127.0.0.1", 10, 3, 1);
+        var dev = config.Devices[0];
+        dev.Bindings.Add(new IoPointBinding
+        {
+            Block = 1, Bit = 13, IsInput = false,
+            Role = IoPointRole.LampGreen, Rack = 0, Level = 0, FunctionName = "手工占用位",
+        });
+        int before = dev.Bindings.Count;
+
+        Assert.False(IoPointTableStore.EnsureBeaconFive(config));
+        Assert.Equal(before, dev.Bindings.Count);
+        Assert.Equal(0, dev.Bindings.Count(b => IoPointRoleInfo.IsMachineLevel(b.Role)));
+    }
+
+    [Fact]
+    public void Load_LegacyTableOnDisk_AutoHealsBeaconAndLogsReason()
+    {
+        // 端到端：盘上写一张旧表（无塔灯）→ Load 出来带塔灯且 reasons 记自愈一行；
+        // 再 Load 一次幂等（已有塔灯不重复补）
+        using var scope = new TestScope();
+        var legacy = new PointTableConfig
+        {
+            Devices =
+            {
+                IoPointTableStore.BuildDefaultTemplate("1号架", "127.0.0.1", 10, 3, 1).Devices[0],
+                IoPointTableStore.BuildDefaultTemplate("2号架", "127.0.0.2", 10, 3, 11).Devices[0],
+            },
+        };
+        IoPointTableStore.Save(legacy);
+
+        var reasons = new List<string>();
+        var loaded = IoPointTableStore.Load(reasons: reasons);
+        Assert.NotNull(loaded);
+        Assert.Equal(185, loaded!.Devices[1].Bindings.Count);
+        Assert.Contains(reasons, r => r.Contains("塔灯"));
+
+        var again = IoPointTableStore.Load();
+        Assert.NotNull(again);
+        Assert.Equal(185, again!.Devices[1].Bindings.Count);   // 幂等：不叠加
     }
 
     // ---------- 机台批量模板（V0.0.41：10 台 GFNB-1A3A 现场口径） ----------

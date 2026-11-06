@@ -56,6 +56,12 @@ public static class IoPointTableStore
                 reasons?.Add("点表配置文件内容为空，使用空配置。");
                 return null;
             }
+            // 旧点表自愈迁移（V0.0.66，2026-11-06 拍板推翻 V0.0.65"旧表不迁移"）：
+            // 旧表无机台级塔灯绑定 → 按自动档补宿主五件套（内存回填不落盘，INI
+            // 自愈同款语义；点表窗保存时自然落盘）。补光式：已配塔灯（成套或手工
+            // 半套）或宿主位被占的表原样不动。自愈动作进 reasons 供调用方记日志。
+            if (EnsureBeaconFive(config))
+                reasons?.Add("旧点表无机台总监塔灯，已自动补塔灯五件套（宿主第 1 块 DO 位 11~15）。");
             return config;
         }
         catch (Exception ex)
@@ -72,6 +78,64 @@ public static class IoPointTableStore
         path ??= DefaultPath;
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
         File.WriteAllText(path, JsonConvert.SerializeObject(config, JsonSettings));
+    }
+
+    /// <summary>
+    /// 旧点表自愈迁移（V0.0.66，2026-11-06 用户拍板推翻 V0.0.65"旧表不迁移"）：
+    /// 升级带塔灯能力的版本后，盘上旧点表没有机台级绑定——Load 时按自动档补
+    /// 宿主五件套，运行时/UI 一步可用，无须手工"批量生成"重刷。补光式自愈语义
+    /// （与 <see cref="BuildMachineTemplate"/> 自动档同源）：
+    /// ① 表里已有任何机台级角色（成套或手工半套）→ 尊重现状不补（幂等）；
+    /// ② 空表不补；③ 宿主 = ≥2 台挂第 2 台 / 单台挂唯一台（图纸硬契约同源）；
+    /// ④ 宿主第 1 块 DO 位 11~15 已被其它角色占用 → 不动（补了会同位语义键
+    /// 撞车、校验拦保存，反而把现场手工接线表弄坏）。
+    /// 只补内存，不落盘——INI 自愈同款"读时回填"语义，用户在点表窗点保存时
+    /// 自然落盘。
+    /// </summary>
+    /// <returns>true=本次补了五件套（调用方可据此记日志）。</returns>
+    public static bool EnsureBeaconFive(PointTableConfig config)
+    {
+        // 已有塔灯（完整或手工半套）→ 尊重现状，幂等不重复补
+        if (config.Devices.Any(d => d.Bindings.Any(b => IoPointRoleInfo.IsMachineLevel(b.Role))))
+            return false;
+        if (config.Devices.Count == 0)
+            return false;
+
+        // 宿主档位与 BuildMachineTemplate 自动档同源：≥2 台挂第 2 台（index 1）、单台挂唯一台
+        var host = config.Devices[config.Devices.Count >= 2 ? 1 : 0];
+
+        // 目标位已占（走到这里已无机台级绑定，占位必是其它角色）→ 放弃不补
+        if (host.Bindings.Any(b => !b.IsInput && b.Block == 1 && b.Bit is >= 11 and <= 15))
+            return false;
+
+        AppendBeaconFive(host.Bindings);
+        return true;
+    }
+
+    /// <summary>
+    /// 给一台设备的绑定列表追加机台总监塔灯五件套（V0.0.65）：全机唯一一套，落
+    /// 第 1 块 DO 位 11~15 = 红黄绿蓝+蜂鸣（与仓位灯同块同帧——扫描计划零分帧
+    /// 变化）。FunctionName 直接用角色文案（机台级不挂架/层，无仓位前缀可拼）。
+    /// BuildDefaultTemplate（单台/批量模板）与 EnsureBeaconFive（旧表自愈）共用。
+    /// </summary>
+    private static void AppendBeaconFive(List<IoPointBinding> bindings)
+    {
+        const int beaconBitBase = 11;   // 三层占位 0~10，位 11 起顺延（图纸 Y103B~F）
+        IoPointRole[] beaconRoles =
+        [
+            IoPointRole.BeaconRed, IoPointRole.BeaconYellow, IoPointRole.BeaconGreen,
+            IoPointRole.BeaconBlue, IoPointRole.Buzzer,
+        ];
+        foreach (var role in beaconRoles)
+            bindings.Add(new IoPointBinding
+            {
+                Block = 1,                  // 宿主块=本设备第 1 块（多块设备的塔灯手工挪块）
+                Bit = beaconBitBase + Array.IndexOf(beaconRoles, role),
+                IsInput = false,            // 全是 DO 输出
+                Role = role,
+                Rack = 0, Level = 0,        // 机台级恒 0（校验器强制清零）
+                FunctionName = IoPointRoleInfo.ToText(role),
+            });
     }
 
     /// <summary>
@@ -125,28 +189,11 @@ public static class IoPointTableStore
             }
         }
 
-        // 机台总监塔灯五件套（V0.0.65，withBeacon 才生成）：全机唯一一套，落第 1 块
-        // DO 位 11~15 = 红黄绿蓝+蜂鸣（与仓位灯同块同帧——扫描计划零分帧变化）。
-        // FunctionName 直接用角色文案（机台级不挂架/层，无仓位前缀可拼）。
+        // 机台总监塔灯五件套（V0.0.65，withBeacon 才生成）：位号/口径收口在
+        // AppendBeaconFive——模板生成与旧点表 Load 自愈（EnsureBeaconFive）共用，
+        // 改位号只动一处。
         if (withBeacon)
-        {
-            const int beaconBitBase = 11;   // 三层占位 0~10，位 11 起顺延（图纸 Y103B~F）
-            IoPointRole[] beaconRoles =
-            [
-                IoPointRole.BeaconRed, IoPointRole.BeaconYellow, IoPointRole.BeaconGreen,
-                IoPointRole.BeaconBlue, IoPointRole.Buzzer,
-            ];
-            foreach (var role in beaconRoles)
-                bindings.Add(new IoPointBinding
-                {
-                    Block = 1,                  // 宿主块=本设备第 1 块（多块设备的塔灯手工挪块）
-                    Bit = beaconBitBase + Array.IndexOf(beaconRoles, role),
-                    IsInput = false,            // 全是 DO 输出
-                    Role = role,
-                    Rack = 0, Level = 0,        // 机台级恒 0（校验器强制清零）
-                    FunctionName = IoPointRoleInfo.ToText(role),
-                });
-        }
+            AppendBeaconFive(bindings);
 
         var config = new PointTableConfig { Devices = { device } };
         device.Bindings = bindings;

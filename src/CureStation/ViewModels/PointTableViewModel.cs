@@ -536,7 +536,7 @@ public sealed class PointTableViewModel : ViewModelBase
         }
 
         var template = IoPointTableStore.BuildDefaultTemplate(
-            DeviceName, TemplateIp, racks, levels, rackStart);
+            DeviceName, TemplateIp, racks, levels, rackStart, withBeacon: true);
         // 保留当前设备在列表里的名字（模板用编辑区名字生成，回填即可）
         template.Devices[0].Ip = TemplateIp;
         int index = SelectedDevice == null ? -1 : Devices.IndexOf(SelectedDevice);
@@ -554,7 +554,8 @@ public sealed class PointTableViewModel : ViewModelBase
         // 此处不再重复调（改干净改彻底：双份口径容易日后改一半漏一半）。
         _dialogs.ShowMessage(
             $"已按 IO 表布局生成缺省模板：{racks} 架 × {levels} 层，" +
-            $"共 {template.Devices[0].Bindings.Count} 点。" +
+            $"共 {template.Devices[0].Bindings.Count} 点（含机台总监塔灯 5 路，" +
+            $"落块 1 DO 位 11~15）。" +
             "\n建议保存后到现场核对 IP 与首辅点位。", "缺省模板已生成");
     }
 
@@ -775,7 +776,10 @@ public sealed class PointTableViewModel : ViewModelBase
             SyncDeviceEditor();
             _dialogs.ShowMessage(
                 $"已生成 {count} 台耦合器模板：IP {template.Devices[0].Ip} ~ " +
-                $"{template.Devices[^1].Ip}，每台 1 架 3 层共 {template.Devices[0].Bindings.Count} 点。" +
+                $"{template.Devices[^1].Ip}，每台 1 架 3 层。" +
+                (count >= 2
+                    ? $"\n第 2 台（{template.Devices[1].Name}）另带机台总监塔灯 5 路（{template.Devices[1].Bindings.Count} 点），其余台各 {template.Devices[0].Bindings.Count} 点。"
+                    : $"\n单台部署：塔灯五件套落在该台上，共 {template.Devices[0].Bindings.Count} 点。") +
                 "\nIP 已按现场现值预填，如需调整逐台改名/改 IP 后保存即可。", "批量生成完成");
         }
         catch (Exception ex)

@@ -330,8 +330,9 @@ dotnet build tools/LicenseIssuer/LicenseIssuer.csproj --nologo
   全场查重拦）；② **模板生成**：`BuildDefaultTemplate(withBeacon)` 五件套落
   **本设备第 1 块** DO 位 11~15（FunctionName=角色文案）；`BuildMachineTemplate
   (beaconDeviceIndex)`：**-2=自动档（缺省，≥2 台挂第 2 台/单台挂唯一台）**、
-  -1=不生成、显式序号越界当场抛——批量生成/演示自愈走自动档，`BuildDefault`
-  `Template` 既有调用缺省不生成（零变化）；**与仓位灯同块同帧，ScanPlanner
+  -1=不生成、显式序号越界当场抛——批量生成/演示自愈走自动档；点表窗单台
+  【生成缺省模板】V0.0.66 起显式传 `withBeacon:true`（单台模板也带塔灯），其余
+  既有调用缺省不生成；**与仓位灯同块同帧，ScanPlanner
   零分帧变化**（改塔灯位号需同步 IoBusTests 的"20 帧/周期"断言）；③
   **状态机聚合 `RefreshMachineBeacon`（仅 _sync 锁内）**：优先级红 > 黄 > 绿
   ——任一仓位 AlarmGrill→红+蜂鸣长鸣；否则任一 Curing/**WaitingGate（等门控
@@ -341,8 +342,13 @@ dotnet build tools/LicenseIssuer/LicenseIssuer.csproj --nologo
   塔灯滞后到下一拍；EnsureLamp 逐路去重=稳态零网络写，未绑定塔灯时
   WritePoint 静默 false **零网络成本**（桩 ScriptedPointBus 直录——老用例的
   `Assert.Empty(bus.Writes)` 依赖"聚合态不变=零写"成立，改挂点前先想稳态）；
-  ④ **旧点表不自愈迁移（用户拍板）**：已部署现场升级走点表窗"批量生成"重刷
-  或手工补行；⑤ IO 测试窗机台级点不进 30 卡网格（Rack>0 过滤原样），顶部
+  ④ **旧点表 Load 自愈补塔灯（V0.0.66，2026-11-06 拍板推翻 V0.0.65"不迁移"）**：
+   `IoPointTableStore.EnsureBeaconFive` 在 Load 成功后补光式自愈——只在全表
+   **无任何机台级角色**时按自动档补宿主五件套；已有塔灯（成套/手工半套）=
+   幂等不动，宿主块 1 DO 位 11~15 被其它角色占用=放弃不补（防补出同位语义键
+   撞车拦保存、弄坏现场手工接线表）；**只补内存不落盘**（INI 自愈同款"读时
+   回填"语义），点表窗保存时自然落盘；自愈动作进 reasons 供调用方记日志；
+   ⑤ IO 测试窗机台级点不进 30 卡网格（Rack>0 过滤原样），顶部
   "机台总监"专条一排灯钮（与仓位卡共用 `DoPointBtnTemplate` 资源），通道
   注册进 _points 零特判；点表窗仓位列机台级显示"机台"。
 - 点表布局三键可改现场分叉：`DiStartAddress`/`DoStartAddress`/
