@@ -17,7 +17,11 @@
 //      复位是双保险（V0.0.64）：OFF 边沿即时判快照复位（总线已保证边沿
 //      处理时快照含本次边沿值，见 IoBus 轮询契约）；边沿若错过（让空与
 //      其他变化同拍/掉线期间），Pump 每秒按快照双让空兜底复位——红灯
-//      最多挂 1 秒，不再挂到到点放行。
+//      最多挂 1 秒，不再挂到到点放行。复位判定是"双侧全让空"（一侧让空
+//      另一侧仍读 ON=人手还在架区，不复位）；V0.0.68 排障增强：OFF 边沿
+//      到达但判定被拒时记边沿日志明说哪侧仍挡（此前静默，现场只能看
+//      到"复位不了"却不知道是信号没让空）——Pump 兜底不带此日志（每秒
+//      拍会刷屏）。
 //
 // 线程模型（铁律 2）：灯写 WritePoint 是网络 IO，绝不能进 UI 线程——
 //   本类全部动作发生在后台：OnPointChanged 由宿主从总线后台事件转发进来，
@@ -196,6 +200,16 @@ public sealed class SlotCuringMachine : IDisposable
                     else if (rt.Phase == SlotPhase.Curing && rt.AlarmGrill
                         && GrillClear(key.Rack, key.Level))
                         SetGrillAlarm(rt, key.Rack, key.Level, on: false);
+                    else if (rt.Phase == SlotPhase.Curing && rt.AlarmGrill)
+                    {
+                        // 报警中该侧光栅让空,但复位判定被拒(本仓位还有一侧仍读 ON)——
+                        // V0.0.68 前这里是静默的:现场拿开手后红灯不灭,程序一个字都不说,
+                        // 排障的人只能看到"复位不了"三个字。现在把拒绝原因写成边沿日志
+                        // (只在报警态的该仓位发生,边沿稀疏不会刷屏;Pump 兜底不带——
+                        // 每秒拍会刷屏),让现场一眼看到"哪侧光栅信号没让回空"。
+                        _log($"架{key.Rack}层{key.Level} 光栅让空但另一侧仍挡" +
+                            $"（{GrillSideText(key.Rack, key.Level)}），复位暂缓、红灯保持");
+                    }
                 }
                 else if (rt.Phase == SlotPhase.Curing && !rt.AlarmGrill)
                 {
@@ -616,6 +630,20 @@ public sealed class SlotCuringMachine : IDisposable
         var left = snap.Get(new IoPointKey(true, IoPointRole.RackLightL, rack, level));
         var right = snap.Get(new IoPointKey(true, IoPointRole.RackLightR, rack, level));
         return left != true && right != true;
+    }
+
+    /// <summary>
+    /// 光栅两侧读数文本（"L=挡 R=空"），供电日志说明复位判定当场被谁堵：
+    /// 与 GrillClear 同源读法（快照原子换引用），只在边沿日志路径锁内调用。
+    /// 没绑定的侧显示"—"（null=未读到，与让空同义但排障时值得区分）。
+    /// </summary>
+    private string GrillSideText(int rack, int level)
+    {
+        var snap = _bus.LatestSnapshot;
+        var left = snap.Get(new IoPointKey(true, IoPointRole.RackLightL, rack, level));
+        var right = snap.Get(new IoPointKey(true, IoPointRole.RackLightR, rack, level));
+        static string Flag(bool? v) => v == true ? "挡" : v == false ? "空" : "—";
+        return $"L={Flag(left)} R={Flag(right)}";
     }
 
     /// <summary>

@@ -89,11 +89,13 @@ public class GrillAlarmSimulationTests
 
             // t3/t4：双光栅 ON→OFF 连发（真机一帧 16 位逐位让空——两条 OFF
             // 边沿在同一轮询拍内接连到达，状态机逐条判断）
-            // t3 左先让空：右侧仍挡（人手还在架区）→ 不复位、红灯保持
+            // t3 左先让空：右侧仍挡（人手还在架区）→ 不复位、红灯保持；
+            // V0.0.68 排障增强：拒绝复位必须可见——日志明说"另一侧仍挡(L=空 R=挡)"
             bus.SetInput(GrillL(1, 1), false);
             Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
             Assert.DoesNotContain(bus.Writes,
                 w => w.Key == Lamp(IoPointRole.LampRed) && w.State == false);
+            Assert.Contains(logs, m => m.Contains("复位暂缓") && m.Contains("L=空 R=挡"));
 
             // t4 右让空：双全让空 → 复位即时生效（红灯灭/黄灯复亮），计时不动
             bus.SetInput(GrillR(1, 1), false);
