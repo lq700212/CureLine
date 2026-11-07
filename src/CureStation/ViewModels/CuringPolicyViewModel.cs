@@ -176,6 +176,37 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         Raise(nameof(ApplyTargetName));
     }
 
+    // ---------- 报警复位模式（V0.0.69，全局操作规程、不入单条策略） ----------
+
+    private GrillAlarmResetMode _grillResetMode = GrillAlarmResetMode.Auto;
+
+    /// <summary>
+    /// 光栅报警复位模式切换按钮文案（自动复位/人工复位）。真源在
+    /// GrillAlarmResetModeHub 静态中枢（为什么不随策略保存：人工/自动是
+    /// "报警怎么解除"的操作规程，与工艺时长无关——换策略不该换处置流程）。
+    /// </summary>
+    public string GrillResetModeText =>
+        _grillResetMode == GrillAlarmResetMode.Manual ? "人工复位" : "自动复位";
+
+    /// <summary>复位切换按钮 ToolTip（点按钮即生效，切窗/重启不丢）。</summary>
+    public string GrillResetModeToolTip =>
+        _grillResetMode == GrillAlarmResetMode.Manual
+            ? "人工复位：光栅让空后报警不自动解除（红灯与蜂鸣保持），弹出\"报警复位\"窗列出正在报警的库位，由操作员逐项/全部点【解除报警】确认。全局设置，立即生效。点击切回自动复位。"
+            : "自动复位：光栅双侧全让空即自动解除报警（现行为）。全局设置，立即生效。点击切换为人工复位。";
+
+    /// <summary>切换复位模式（按钮唯一入口）：中枢 Change 落盘+广播——状态机
+    /// 下一拍按新模式复位判定，主窗立即重跑弹窗决策（有挂报警当场弹/收窗）。</summary>
+    private void ToggleGrillResetMode()
+    {
+        var to = _grillResetMode == GrillAlarmResetMode.Manual
+            ? GrillAlarmResetMode.Auto
+            : GrillAlarmResetMode.Manual;
+        GrillAlarmResetModeHub.Change(to);   // 落盘 + 广播（Changed→主窗立即刷新）
+        _grillResetMode = to;
+        Raise(nameof(GrillResetModeText));
+        Raise(nameof(GrillResetModeToolTip));
+    }
+
     private PolicyTimeUnit _timeUnit = PolicyTimeUnit.Minutes;
 
     /// <summary>
@@ -530,6 +561,8 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     public RelayCommand ApplyTemplateCommand { get; }
     public RelayCommand ApplySelectionCommand { get; }
     public RelayCommand ClearSelectionOverrideCommand { get; }
+    /// <summary>报警复位模式切换（自动↔人工，全局设置；文案/说明见 GrillResetModeText）。</summary>
+    public RelayCommand ToggleGrillResetModeCommand { get; }
 
     /// <summary>保存/激活/套用成功后置 true（测试断言用；View 经 RequestClose 关窗）。</summary>
     public bool CloseDialog { get; private set; }
@@ -550,6 +583,10 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         RackCount = Math.Max(CureLine.Core.Curing.SlotLocationCode.RacksPerRow, rackCount);
         LevelCount = Math.Max(CureLine.Core.Curing.SlotLocationCode.Levels, levelCount);
         LoadTimeUnit();   // 单位真源在 DurationUnit 中枢（含 ini 记忆自愈）；加载策略前定好口径
+        // 复位模式（V0.0.69）同款：开窗重读 ini（盘上为准）——别的窗/上一进程
+        // 切过模式，这里回显现值。
+        GrillAlarmResetModeHub.LoadFromIni();
+        _grillResetMode = GrillAlarmResetModeHub.Current;
         AddPolicyCommand = new RelayCommand(AddPolicy);
         RemovePolicyCommand = new RelayCommand(RemovePolicy, () => SelectedPolicy != null);
         SaveCommand = new RelayCommand(Save);
@@ -557,6 +594,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         ApplyTemplateCommand = new RelayCommand(ApplyTemplate, () => SelectedPolicy != null);
         ApplySelectionCommand = new RelayCommand(ApplySelection, () => HasSelection);
         ClearSelectionOverrideCommand = new RelayCommand(ClearSelectionOverride, () => HasSelection);
+        ToggleGrillResetModeCommand = new RelayCommand(ToggleGrillResetMode);
 
         // 仓位覆盖行增删/行内编辑都影响预览：集合变化时对新增行挂 INPC 重建；
         // 行属性变化（Add/Remove 后集合通知 + 行内字段通知）统一走 RebuildPreview。

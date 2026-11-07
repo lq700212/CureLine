@@ -39,12 +39,12 @@ public class GrillAlarmSimulationTests
         new(false, role, 0, 0);
 
     private (ScriptedPointBus Bus, SlotCuringMachine Machine, List<string> Logs) Make(
-        CuringPolicy? policy = null)
+        CuringPolicy? policy = null, Func<GrillAlarmResetMode>? resetModeProvider = null)
     {
         var bus = new ScriptedPointBus();
         var logs = new List<string>();
         var machine = new SlotCuringMachine(bus, () => policy,
-            clock: () => _now, log: logs.Add);
+            clock: () => _now, log: logs.Add, resetModeProvider: resetModeProvider);
         // 宿主转发边沿（生产由 MainViewModel 做——machine 不直接订阅总线）
         bus.PointChanged += (_, e) => machine.OnPointChanged(e);
         return (bus, machine, logs);
@@ -158,6 +158,81 @@ public class GrillAlarmSimulationTests
             // 绿：报警拍已写灭入账（false），放行拍同为 false → 去重零写（稳态零网络写契约）
             Assert.DoesNotContain(bus.Writes, w => w.Key == Beacon(IoPointRole.BeaconGreen));
             Assert.Contains(logs, m => m.Contains("报警随放行解除"));
+        }
+    }
+
+    /// <summary>
+    /// 人工复位全剧本（V0.0.69，正剧本人工档）：真实 DI 时序同位——
+    ///   到位开计时 → 双光栅先后挡（红灯+蜂鸣） → 双光栅先后让空
+    ///   （人工档不复位：红灯全程保持，日志"待确认"） → 宿主人工复位确认
+    ///   （红灭黄复亮+蜂停，计时不动） → 原计划到点绿灯放行 → 取件回空闲。
+    /// 与边沿复位版（正剧本）同源对照：差异唯一在"让空后谁解除"。
+    /// </summary>
+    [Fact]
+    public void SimulatedCouplerDiFlow_ManualMode_ResetByOperator_FullCycle()
+    {
+        var (bus, machine, logs) = Make(
+            new CuringPolicy { Name = "T", GlobalMinutes = 60 },
+            resetModeProvider: () => GrillAlarmResetMode.Manual);
+        using (machine)
+        {
+            // t0：托盘到位 → 开计时（黄灯）
+            bus.SetInput(Tray(1, 1), true);
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow), true));
+
+            _now += TimeSpan.FromMinutes(10);
+            machine.Pump(_now);
+            bus.Writes.Clear();
+
+            // t1：人手伸入（左挡）→ 红灯 + 蜂鸣（与自动档同拍）
+            bus.SetInput(GrillL(1, 1), true);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.Buzzer), true));
+            Assert.Contains(logs, m => m.Contains("光栅被挡"));
+            bus.Writes.Clear();
+
+            // t2：右挡（双侧全挡短路，零写）
+            bus.SetInput(GrillR(1, 1), true);
+            Assert.Empty(bus.Writes);
+
+            // t3：左让空（右仍挡）——自动档会记"复位暂缓"；人工档统一口径
+            // "人工复位模式待确认"（不复位就谈不上"暂缓"，红灯保持才真相）
+            bus.SetInput(GrillL(1, 1), false);
+            Assert.DoesNotContain(bus.Writes,
+                w => w.Key == Lamp(IoPointRole.LampRed) && w.State == false);
+            Assert.Contains(logs, m => m.Contains("人工复位模式待确认"));
+
+            // t4：右让空（双全让空）——人工档不复位：红灯保持、蜂鸣不停；
+            // 快照兜底（Pump，边沿错过路径）同样不复位
+            bus.SetInput(GrillR(1, 1), false);
+            Assert.Empty(bus.Writes);   // 让空边沿不触发任何解除写
+            machine.Pump(_now.AddSeconds(1));
+            Assert.Empty(bus.Writes);   // Pump 兜底也不解除（人工档 Auto 门槛）
+            Assert.True(machine.GetStatus(1, 1)!.AlarmGrill);
+            Assert.Equal([(1, 1)], machine.GetAlarmSlots()); // 弹窗清单有此一行
+
+            // t5：操作员在"报警复位"窗点【解除报警】（宿主后台调）——
+            // 红灭/黄复亮/蜂停/塔灯回绿；计时没有被报警打断（开计时锁定 60 分）
+            bus.Writes.Clear();
+            Assert.True(machine.ManualResetGrillAlarm(1, 1));
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed), false));
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.Buzzer), false));
+            Assert.Contains(logs, m => m.Contains("人工复位确认"));
+            bus.Writes.Clear();
+
+            // t6：按原计划 t0+60 到点——人工确认链路无新增计时，到点正常放行
+            _now += TimeSpan.FromMinutes(50);
+            machine.Pump(_now);
+            Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampGreen), true));
+            bus.Writes.Clear();
+
+            // t7：取件离开 → 灭灯回空闲（人工档与自动档出口一致）
+            bus.SetInput(Tray(1, 1), false);
+            Assert.Null(machine.GetStatus(1, 1));
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampGreen), false));
         }
     }
 }

@@ -201,6 +201,13 @@
                             <CheckBox IsChecked="{Binding EditPersistMinutes, FallbackValue=False}"
                                       Content="断电续算" Margin="14,0,0,0"
                                       ToolTip="开=进行中仓位随状态变化写 config/curingstate.json，断电期间时间计入固化时长（重启按记录续算）；关（缺省）=断电重启后重新计时，宁可重计也不放行没固化够的货。"/>
+                            <!-- 报警复位模式（V0.0.69）：全局操作规程（不入单条策略），
+                                 点按钮切换即落盘+广播——状态机下一拍换口径、主窗弹窗立即决策。 -->
+                            <TextBlock Text="　报警复位：" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                            <Button Style="{StaticResource GhostButton}" MinWidth="96" VerticalAlignment="Center"
+                                    Command="{Binding ToggleGrillResetModeCommand}"
+                                    Content="{Binding GrillResetModeText, FallbackValue=自动复位}"
+                                    ToolTip="{Binding GrillResetModeToolTip, FallbackValue=自动复位：光栅双侧全让空即自动解除报警（现行为）。点击切换为人工复位。}"/>
                         </StackPanel>
                     </Border>
                     <!-- 底部按钮：预置→套用目标+套用所选模板；自定义→激活/仅保存（两组按选中项互斥显示） -->

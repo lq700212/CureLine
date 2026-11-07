@@ -95,5 +95,16 @@ public class FakeCureDialogService : CureStation.ViewModels.IDialogService
         LogSnapshot = snapshot;
     }
 
+    /// <summary>ShowGrillAlarmReset 收到的编排器（断言主窗把owner实例传对了）。</summary>
+    public GrillAlarmResetCoordinator? AlarmPresenter { get; private set; }
+
+    public void ShowGrillAlarmReset(GrillAlarmResetCoordinator presenter)
+    {
+        Calls.Add("ShowGrillAlarmReset");
+        AlarmPresenter = presenter;
+    }
+
+    public void CloseGrillAlarmReset() => Calls.Add("CloseGrillAlarmReset");
+
     public void Shutdown() => Calls.Add("Shutdown");
 }

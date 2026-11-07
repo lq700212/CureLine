@@ -2304,4 +2304,116 @@ public class CureStationViewModelTests
         Assert.False(raised);
         Assert.False(vm.CloseDialog);
     }
+
+    // ---------- 报警复位模式（V0.0.69：人工复位/自动复位，全局操作规程） ----------
+
+    [Fact]
+    public void PolicyVm_ToggleGrillResetMode_SwapsTextPersistsAndBroadcasts()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Auto); // 测试安全快照
+        try
+        {
+            IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+            var fake = new FakeCureDialogService();
+            var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+
+            // 缺省（ini 无该键）= Auto（现行为零影响）
+            Assert.Equal("自动复位", vm.GrillResetModeText);
+
+            // 切人工：文案换 + 落盘 [setting] GrillAlarmResetMode=Manual + 中枢换值
+            vm.ToggleGrillResetModeCommand.Execute(null);
+            Assert.Equal("人工复位", vm.GrillResetModeText);
+            Assert.Equal(GrillAlarmResetMode.Manual, GrillAlarmResetModeHub.Current);
+
+            // 再切回自动（双向），文案/中枢同步
+            vm.ToggleGrillResetModeCommand.Execute(null);
+            Assert.Equal("自动复位", vm.GrillResetModeText);
+            Assert.Equal(GrillAlarmResetMode.Auto, GrillAlarmResetModeHub.Current);
+        }
+        finally
+        {
+            GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Auto);
+        }
+    }
+
+    [Fact]
+    public void PolicyVm_GrillResetMode_RestoresFromIniOnOpen()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Auto);
+        try
+        {
+            // 盘上已切过人工（上一进程/别的窗）→ 开窗回显人工档（LoadFromIni 为准）
+            IniFile.Write(AppPaths.ConfigIni, "setting", "GrillAlarmResetMode", "Manual");
+            var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
+            Assert.Equal("人工复位", vm.GrillResetModeText);
+        }
+        finally
+        {
+            GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Auto);
+        }
+    }
+
+    [Fact]
+    public void MainVm_AlarmPresenter_ManualMode_ShowsWindowAndClearsFeed()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Manual);
+        try
+        {
+            IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+            var fake = new FakeCureDialogService();
+            using var vm = new CureStation.ViewModels.MainViewModel(fake);
+
+            // 人工档首帧报警（测试直驱 presenter，绕过 500ms 定时器）：
+            // → Fake 收到 ShowGrillAlarmReset 且编排器就是主窗那份（单源）
+            vm.AlarmPresenter.Refresh([(1, 1)]);
+            Assert.Contains(fake.Calls, c => c == "ShowGrillAlarmReset");
+            Assert.Same(vm.AlarmPresenter, fake.AlarmPresenter);
+
+            // 用户 ✕ 关窗（弹窗 Closed 回调）→ 旧报警不连环重弹
+            fake.AlarmPresenter!.NotifyWindowClosed();
+            fake.AlarmPresenter.Refresh([(1, 1)]);
+            Assert.Single(fake.Calls.Where(c => c == "ShowGrillAlarmReset").ToList());
+
+            // 新库位报警 → 再弹一枪（热更决策）
+            vm.AlarmPresenter.Refresh([(1, 1), (2, 2)]);
+            Assert.Equal(2, fake.Calls.Count(c => c == "ShowGrillAlarmReset"));
+
+            // 全解除 → 自动收窗（CloseGrillAlarmReset）
+            vm.AlarmPresenter.Refresh([]);
+            Assert.Contains(fake.Calls, c => c == "CloseGrillAlarmReset");
+        }
+        finally
+        {
+            GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Auto);
+        }
+    }
+
+    [Fact]
+    public void MainVm_AlarmPresenter_AutoMode_NeverShowsWindow()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Auto); // 缺省=现行为
+        try
+        {
+            IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+            var fake = new FakeCureDialogService();
+            using var vm = new CureStation.ViewModels.MainViewModel(fake);
+
+            vm.AlarmPresenter.Refresh([(1, 1)]);
+            vm.AlarmPresenter.Refresh([(1, 1), (3, 3)]);
+            Assert.DoesNotContain(fake.Calls, c => c == "ShowGrillAlarmReset");
+            Assert.Empty(vm.AlarmPresenter.Items);   // 自动档清单恒空（不接管复位）
+        }
+        finally
+        {
+            GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Auto);
+        }
+    }
 }

@@ -28,12 +28,14 @@ public class SlotCuringMachineTests
         new(false, role, 0, 0);
 
     private (ScriptedPointBus Bus, SlotCuringMachine Machine, List<string> Logs) Make(
-        CuringPolicy? policy = null, Func<int, string>? durationText = null)
+        CuringPolicy? policy = null, Func<int, string>? durationText = null,
+        Func<GrillAlarmResetMode>? resetModeProvider = null)
     {
         var bus = new ScriptedPointBus();
         var logs = new List<string>();
         var machine = new SlotCuringMachine(bus, () => policy,
-            clock: () => _now, log: logs.Add, durationText: durationText);
+            clock: () => _now, log: logs.Add, durationText: durationText,
+            resetModeProvider: resetModeProvider);
         // 宿主转发边沿（生产由 MainViewModel 做——machine 不直接订阅总线）
         bus.PointChanged += (_, e) => machine.OnPointChanged(e);
         return (bus, machine, logs);
@@ -429,6 +431,111 @@ public class SlotCuringMachineTests
             bus.SetInput(GrillL(1, 1), true);  // 取件伸入（Done 是正常取件动作，不报警）
             Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
             Assert.DoesNotContain(bus.Writes, w => w.Key == Lamp(IoPointRole.LampRed, 1, 1) && w.State);
+        }
+    }
+
+    // ---------- 报警复位模式（V0.0.69：Auto=现行为让空即复位 / Manual=
+    //            人工确认解除；队列边界：人工档让空不复位、Pump 兜底也不复位，
+    //            唯一解除口=ManualResetGrillAlarm；到点放行/取件不见滞留） ----------
+
+    [Fact]
+    public void ManualMode_GrillClearEdges_PumpFallback_KeepsAlarm()
+    {
+        // 人工档双保险都不自动解除：让空边沿不复位（日志"待确认"），快照兜底
+        // （SetSnapshotSilently+Pump，边沿错过的路径）同样不复位。
+        var mode = new Boxed<GrillAlarmResetMode>(GrillAlarmResetMode.Manual);
+        var (bus, machine, logs) = Make(
+            new CuringPolicy { Name = "T", GlobalMinutes = 60 },
+            resetModeProvider: () => mode.Value);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            bus.SetInput(GrillL(1, 1), true);  // 报警（红灯）
+            bus.Writes.Clear();
+
+            bus.SetInput(GrillL(1, 1), false); // 让空边沿：人工档不复位
+            Assert.True(machine.GetStatus(1, 1)!.AlarmGrill);   // 报警态保持
+            Assert.DoesNotContain(bus.Writes, w => w.Key == Lamp(IoPointRole.LampRed, 1, 1) && !w.State);
+            Assert.DoesNotContain(bus.Writes, w => w.Key == Lamp(IoPointRole.LampYellow, 1, 1) && w.State);
+            Assert.Contains(logs, m => m.Contains("人工复位模式待确认"));
+
+            // Pump 快照兜底路径：人工档也不自动复位（else 门槛在 Auto）
+            machine.Pump(_now.AddSeconds(1));
+            Assert.True(machine.GetStatus(1, 1)!.AlarmGrill);
+
+            // 自动档瞬间切回（不重建状态机，provider 热切语义）：下一拍兜底回归自动
+            mode.Value = GrillAlarmResetMode.Auto;
+            machine.Pump(_now.AddSeconds(1));
+            Assert.False(machine.GetStatus(1, 1)!.AlarmGrill);  // 自动档让空即复位
+        }
+    }
+
+    [Fact]
+    public void ManualReset_ClearsAlarm_TimingUnaffected()
+    {
+        // 唯一解除口：人工确认→红灭黄复亮+蜂停（塔灯回绿），计时不动，原计划到点放行。
+        var (bus, machine, logs) = Make(
+            new CuringPolicy { Name = "T", GlobalMinutes = 60 },
+            resetModeProvider: () => GrillAlarmResetMode.Manual);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            bus.SetInput(GrillL(1, 1), true);   // 报警
+            bus.SetInput(GrillL(1, 1), false);  // 让空不复位（人工档）
+            bus.Writes.Clear();
+
+            Assert.True(machine.ManualResetGrillAlarm(1, 1));
+            Assert.False(machine.GetStatus(1, 1)!.AlarmGrill);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), false));
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.Buzzer), false)); // 蜂鸣停
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconGreen), true)); // 回转绿
+            Assert.Contains(logs, m => m.Contains("人工复位确认"));
+
+            // 计时不动：开计时那一刻锁定的 60 分钟原样走完 → (1,1) 正常 Done
+            bus.Writes.Clear();
+            _now += TimeSpan.FromMinutes(60);
+            machine.Pump(_now);
+            Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampGreen, 1, 1), true));
+        }
+    }
+
+    [Fact]
+    public void ManualReset_NotInAlarm_ReturnsFalse()
+    {
+        // 幂等安全：非报警态/未知仓位一律 false（重复点按钮无害）。
+        var (bus, machine, _) = Make(
+            new CuringPolicy { Name = "T", GlobalMinutes = 60 },
+            resetModeProvider: () => GrillAlarmResetMode.Manual);
+        using (machine)
+        {
+            Assert.False(machine.ManualResetGrillAlarm(1, 1)); // 未知仓位
+            bus.SetInput(Tray(1, 1), true);                    // 计时中未报警
+            Assert.False(machine.ManualResetGrillAlarm(1, 1)); // 非报警态（幂等 no-op）
+            bus.SetInput(GrillL(1, 1), true);                  // 报警
+            Assert.True(machine.ManualResetGrillAlarm(1, 1));  // 解除
+            Assert.False(machine.ManualResetGrillAlarm(1, 1)); // 已解除→幂等 false
+        }
+    }
+
+    [Fact]
+    public void GetAlarmSlots_SortedByLevelThenRack()
+    {
+        // 弹窗清单编排的取数契约：报警清单按层→架升序（Level 主键，同层架升序）。
+        var (bus, machine, _) = Make(
+            new CuringPolicy { Name = "T", GlobalMinutes = 60 },
+            resetModeProvider: () => GrillAlarmResetMode.Manual);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 2), true); bus.SetInput(GrillL(1, 2), true);
+            bus.SetInput(Tray(2, 1), true); bus.SetInput(GrillL(2, 1), true);
+            bus.SetInput(Tray(1, 1), true); bus.SetInput(GrillL(1, 1), true);
+            bus.SetInput(Tray(2, 2), true); bus.SetInput(GrillL(2, 2), true);
+
+            var alarms = machine.GetAlarmSlots().Select(a => (a.Rack, a.Level)).ToList();
+            // 排序契约（Coordinator 弹窗同源）：层号主序 → 同层架号升序
+            Assert.Equal([(1, 1), (2, 1), (1, 2), (2, 2)], alarms);
         }
     }
 

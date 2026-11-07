@@ -75,6 +75,17 @@ public interface IDialogService
     /// <summary>打开日志/控制台悬浮窗（非模态、单例——已开则只刷新快照并置前）。</summary>
     void ShowLog(LogSystemSnapshot snapshot);
 
+    /// <summary>
+    /// 打开光栅报警人工复位窗（V0.0.69，非模态、单例）。presenter=弹窗编排器
+    /// （MainViewModel 私有资产）——窗只做装配：DataContext=presenter，清单
+    /// 热更/复位派发全在 presenter（见 GrillAlarmResetCoordinator 类头）。
+    /// 已开则置前（防连点堆窗；清单本身已热更，窗口无需重开）。
+    /// </summary>
+    void ShowGrillAlarmReset(GrillAlarmResetCoordinator presenter);
+
+    /// <summary>程序化关闭光栅报警人工复位窗（全解除/切回自动模式时收窗；未开为 no-op）。</summary>
+    void CloseGrillAlarmReset();
+
     /// <summary>程序化关闭主进程（退出）。</summary>
     void Shutdown();
 }
@@ -210,6 +221,31 @@ public sealed class DialogService : IDialogService
         _logWindow.Owner = Application.Current?.MainWindow;
         _logWindow.Present(snapshot);
         _logWindow.Activate();
+    }
+
+    // 报警复位窗单例（同日志窗：static 跨 DialogService 实例共享；关窗即清引用）。
+    private static GrillAlarmResetWindow? _alarmWindow;
+
+    public void ShowGrillAlarmReset(GrillAlarmResetCoordinator presenter)
+    {
+        // 非模态单例：已开只换 DataContext + 置前（正常热更路上 presenter 不变，
+        // 实际是同一引用；防御性换绑成本为零）。右下角定位（Present 内部处理）。
+        if (_alarmWindow == null)
+        {
+            _alarmWindow = new GrillAlarmResetWindow();
+            _alarmWindow.Closed += (_, _) => _alarmWindow = null;
+        }
+        _alarmWindow.Owner = Application.Current?.MainWindow;
+        _alarmWindow.Present(presenter);
+        _alarmWindow.Activate();
+    }
+
+    public void CloseGrillAlarmReset()
+    {
+        // 收窗（未开为 no-op）。窗关闭会经 Closed → presenter.NotifyWindowClosed
+        // 记"用户已表态"——程序化收窗要绕过该表态（全解除后收窗不算用户 ✕）：
+        // 走 SilentClose（见 GrillAlarmResetWindow）。
+        _alarmWindow?.SilentClose();
     }
 
     public void Shutdown() => Application.Current?.Shutdown();

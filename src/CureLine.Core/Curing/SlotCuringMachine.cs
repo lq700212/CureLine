@@ -23,6 +23,16 @@
 //      到"复位不了"却不知道是信号没让空）——Pump 兜底不带此日志（每秒
 //      拍会刷屏）。
 //
+// 复位模式（V0.0.69，用户拍板二选一，见 GrillAlarmResetMode）：
+//   Auto（缺省）=上述现行为：光栅让空（边沿+Pump 兜底双保险）即自动复位；
+//   Manual = 人工复位：让空不复位——红灯与机台蜂鸣保持，边沿与 Pump 兜底
+//     都不再自动解除（日志改说"等人工确认"），唯一解除口=宿主按钮链调
+//     ManualResetGrillAlarm（程序①"报警复位"窗逐项/全部确认）；到点放行
+//     （绿灯接替）与取件离开（自然回空闲）路径人工档也保留——报警只管
+//     "人能不能靠近"，固化计时/放行独立运作（客户口径"计时不变"）。
+//   模式经构造注入 Func<GrillAlarmResetMode> provider（缺省 null=恒 Auto），
+//   边沿/心跳每拍现取——宿主配置热切后下一拍即生效（勿缓存进字段）。
+//
 // 线程模型（铁律 2）：灯写 WritePoint 是网络 IO，绝不能进 UI 线程——
 //   本类全部动作发生在后台：OnPointChanged 由宿主从总线后台事件转发进来，
 //   Pump 由内部 1s 心跳 Timer（后台线程）调；测试注入虚拟时钟手动 Pump
@@ -92,6 +102,11 @@ public sealed class SlotCuringMachine : IDisposable
     private readonly Action<string> _log;
     /// <summary>日志时长文本格式化（宿主注入跟随显示单位；null=缺省"X 分钟"口径）。</summary>
     private readonly Func<int, string>? _durationText;
+    /// <summary>
+    /// 报警复位模式提供者（V0.0.69；null=恒 Auto 现行为）。边沿/心跳每拍现取，
+    /// 宿主热切模式（策略窗按钮）下一拍即生效；provider 须线程安全（后台线程逐拍调）。
+    /// </summary>
+    private readonly Func<GrillAlarmResetMode>? _resetModeProvider;
     private readonly Dictionary<(int Rack, int Level), SlotRuntime> _slots = new();
     /// <summary>成功写过的灯态（IoPointKey→值）：去重 + 失败补写的比对基准。</summary>
     private readonly Dictionary<IoPointKey, bool> _writtenLamps = new();
@@ -131,16 +146,20 @@ public sealed class SlotCuringMachine : IDisposable
     /// policyProvider 每次托盘到位现取（支持策略窗热切换）；clock/log/durationText
     /// 可注入（测试：clock/log；显示单位：durationText——缺省 null 走"X 分钟"）。
     /// durationText 在后台线程逐条调用，须线程安全（纯函数即可）。
+    /// resetModeProvider（V0.0.69，可空）=报警复位模式每拍现取（null=恒自动
+    /// 复位现行为；宿主传静态中枢读点，热切模式无需重建状态机）。
     /// </summary>
     public SlotCuringMachine(IPointTableBus bus, Func<CuringPolicy?> policyProvider,
         Func<DateTimeOffset>? clock = null, Action<string>? log = null,
-        Func<int, string>? durationText = null)
+        Func<int, string>? durationText = null,
+        Func<GrillAlarmResetMode>? resetModeProvider = null)
     {
         _bus = bus;
         _policyProvider = policyProvider;
         _clock = clock ?? (() => DateTimeOffset.Now);
         _log = log ?? (_ => { });
         _durationText = durationText;
+        _resetModeProvider = resetModeProvider;
         _pumpTimer = new Timer(_ => SafePump(), null,
             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
@@ -179,13 +198,17 @@ public sealed class SlotCuringMachine : IDisposable
         }
         else if (key.Role is IoPointRole.RackLightL or IoPointRole.RackLightR)
         {
-            // 光栅边沿按计时相位分派（口径见类头"光栅两用"）：
+            // 光栅边沿按计时相位分派（口径见类头"光栅两用/复位模式"）：
             // ① 让空（OFF 边沿）+ 门控等待中 → 立即开计时（Pump 有快照兜底，双保险）；
             // ② 让空（OFF 边沿）+ 计时中报警态 + 双光栅全让空 → 报警复位
             //    （红灯灭、黄灯复亮）——一侧让空另一侧仍挡不算（人手还在架区）；
-            //    GrillClear 读快照判定：V0.0.64 起总线契约保证边沿处理时快照
-            //    已含本次边沿值（先整拍换快照再发边沿），此判定永远成立；
-            //    边沿若错过由 Pump 快照兜底复位（双保险）；
+            //    【自动复位模式限定，人工档 ②c 处理】GrillClear 读快照判定：
+            //    V0.0.64 起总线契约保证边沿处理时快照已含本次边沿值（先整拍
+            //    换快照再发边沿），此判定永远成立；边沿若错过由 Pump 快照
+            //    兜底复位（双保险）；
+            // ②b 让空但复位判定被拒（自动档）：记"哪侧仍挡"排障日志（V0.0.68）；
+            // ②c 让空（人工复位档 V0.0.69）：不复位——红灯与蜂鸣保持，
+            //    记边沿日志"待人工确认"（解除口=ManualResetGrillAlarm）；
             // ③ 亮起（ON 边沿）+ 计时中未报警 → 报警亮红灯（计时不动——客户口径
             //    "固化计时不需要变化，报警复位就可以"）。WaitingGate（本来就在等
             //    门控）与 Done（取件伸入是正常动作）不触发报警。如现场要求计时中
@@ -197,18 +220,29 @@ public sealed class SlotCuringMachine : IDisposable
                 {
                     if (rt.Phase == SlotPhase.WaitingGate && GrillClear(key.Rack, key.Level))
                         StartCuring(rt, key.Rack, key.Level);
-                    else if (rt.Phase == SlotPhase.Curing && rt.AlarmGrill
-                        && GrillClear(key.Rack, key.Level))
+                    else if (rt.Phase == SlotPhase.Curing && rt.AlarmGrill &&
+                        ResetMode() == GrillAlarmResetMode.Auto && GrillClear(key.Rack, key.Level))
                         SetGrillAlarm(rt, key.Rack, key.Level, on: false);
-                    else if (rt.Phase == SlotPhase.Curing && rt.AlarmGrill)
+                    else if (rt.Phase == SlotPhase.Curing && rt.AlarmGrill &&
+                        ResetMode() == GrillAlarmResetMode.Auto)
                     {
-                        // 报警中该侧光栅让空,但复位判定被拒(本仓位还有一侧仍读 ON)——
-                        // V0.0.68 前这里是静默的:现场拿开手后红灯不灭,程序一个字都不说,
-                        // 排障的人只能看到"复位不了"三个字。现在把拒绝原因写成边沿日志
-                        // (只在报警态的该仓位发生,边沿稀疏不会刷屏;Pump 兜底不带——
-                        // 每秒拍会刷屏),让现场一眼看到"哪侧光栅信号没让回空"。
+                        // ②b 自动档复位被拒：该侧光栅让空,但复位判定没过(本仓位还有
+                        // 一侧仍读 ON=人手还在架区)——V0.0.68 前这里是静默的:现场
+                        // 拿开手后红灯不灭,程序一个字都不说,排障的人只能看到"复位
+                        // 不了"三个字。现在把拒绝原因写成边沿日志(只在报警态的该
+                        // 仓位发生,边沿稀疏不会刷屏;Pump 兜底不带——每秒拍会刷屏),
+                        // 让现场一眼看到"哪侧光栅信号没让回空"。
                         _log($"架{key.Rack}层{key.Level} 光栅让空但另一侧仍挡" +
                             $"（{GrillSideText(key.Rack, key.Level)}），复位暂缓、红灯保持");
+                    }
+                    else if (rt.Phase == SlotPhase.Curing && rt.AlarmGrill)
+                    {
+                        // ②c 人工档（V0.0.69）：让空不复位——红灯与机台蜂鸣保持，
+                        // 记边沿日志"待人工确认"（红灯保持是工艺要求，不是故障；
+                        // 解除口=报警复位窗的 ManualResetGrillAlarm）。侧读数带上，
+                        // 现场"这条报警为什么还挂着"有据可查；边沿稀疏不刷屏。
+                        _log($"架{key.Rack}层{key.Level} 光栅让空（" +
+                            $"{GrillSideText(key.Rack, key.Level)}），人工复位模式待确认，红灯保持");
                     }
                 }
                 else if (rt.Phase == SlotPhase.Curing && !rt.AlarmGrill)
@@ -244,11 +278,13 @@ public sealed class SlotCuringMachine : IDisposable
                                 : $"架{slot.Rack}层{slot.Level} 固化到点放行（绿灯，共 {MinutesText(rt.TotalMinutes)}）");
                             PersistState(); // 状态变化落盘（开关开时）
                         }
-                        else if (rt.AlarmGrill && GrillClear(slot.Rack, slot.Level))
+                        else if (rt.AlarmGrill && ResetMode() == GrillAlarmResetMode.Auto &&
+                            GrillClear(slot.Rack, slot.Level))
                         {
                             // 快照兜底复位（V0.0.64，与下方 WaitingGate 兜底开计时同构）：
                             // 光栅让空边沿错过（让空与边沿同拍/掉线期间）时，边沿复位
                             // 判定会落空——只要快照双让空立即复位，红灯不再挂到到点/取件
+                            // 【自动档限定，人工档保持红灯等确认（V0.0.69）】
                             SetGrillAlarm(rt, slot.Rack, slot.Level, on: false);
                         }
                         else if (rt.AlarmGrill)
@@ -418,6 +454,53 @@ public sealed class SlotCuringMachine : IDisposable
                 remain = Math.Max(0, rt.TotalMinutes - (int)Math.Ceiling(elapsed.TotalMinutes));
             }
             return new SlotStatus(rt.Phase, rt.TotalMinutes, remain, rt.AlarmGrill);
+        }
+    }
+
+    /// <summary>
+    /// 当前报警复位模式（每拍现取 provider，勿缓存）：null provider=恒 Auto。
+    /// 后台线程（边沿/心跳）逐次调用——provider 必须线程安全纯读（宿主传
+    /// 静态中枢读点，见程序① GrillAlarmResetModeHub）。
+    /// </summary>
+    private GrillAlarmResetMode ResetMode() =>
+        _resetModeProvider?.Invoke() ?? GrillAlarmResetMode.Auto;
+
+    /// <summary>
+    /// 人工复位确认（V0.0.69，宿主"报警复位"窗【解除报警】按钮的唯一解除口）：
+    /// 报警态的仓位解除报警（红灯灭、黄灯复亮、机台蜂鸣停），计时不动。
+    /// 不要求光栅已让空——操作员点按钮=人工确认现场已处理，按钮是权威；
+    /// 当时光栅读数进日志（人工复位行）供追溯。
+    /// 返回 true=确实复位了；false=该仓位不在报警态（已复位/流程已走/未知
+    /// 仓位，本身就是幂等安全——重复点按钮无害）。
+    /// 线程：任意线程可调（锁内动作；宿主从后台 Task 调，勿在 UI 线程直调——
+    /// 内部 EnsureLamp 是写灯网络 IO，铁律 2）。
+    /// </summary>
+    public bool ManualResetGrillAlarm(int rack, int level)
+    {
+        lock (_sync)
+        {
+            if (!_slots.TryGetValue((rack, level), out var rt) || !rt.AlarmGrill)
+                return false;
+            SetGrillAlarm(rt, rack, level, on: false, manual: true);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// 当前正在光栅报警的仓位清单（升序：层内架号顺序），供宿主"报警复位"
+    /// 窗列清单（人工复位模式）——与 SetGrillAlarm 记账同源（AlarmGrill 态），
+    /// 弹窗清单必能复位成功（不混入灯色反推的"红灯亮"非状态机报警）。
+    /// 线程：任意线程可调（锁内快照）。
+    /// </summary>
+    public IReadOnlyList<(int Rack, int Level)> GetAlarmSlots()
+    {
+        lock (_sync)
+        {
+            return _slots
+                .Where(kv => kv.Value.AlarmGrill)
+                .Select(kv => (kv.Key.Rack, kv.Key.Level))
+                .OrderBy(a => a.Item2).ThenBy(a => a.Item1)
+                .ToList();
         }
     }
 
@@ -653,8 +736,12 @@ public sealed class SlotCuringMachine : IDisposable
     /// （rt.AlarmGrill）就是状态比对闸——重复 ON 边沿/重复 OFF 边沿在这里短路，
     /// 日志只记边沿不刷屏（铁律 4）。写灯失败不记账 → 下轮 Pump 报警分支
     /// 补写自愈（与黄灯补写同性质）。复位不动计时（StartedAt 原样）。
+    /// manual（V0.0.69）：解除来源口径——缺省 false=光栅自动复位链（原文案）；
+    /// true=操作员在"报警复位"窗点【解除报警】（文案"人工复位确认"+当时
+    /// 光栅读数），现场对账一眼分清自动/人工。
     /// </summary>
-    private void SetGrillAlarm(SlotRuntime rt, int rack, int level, bool on)
+    private void SetGrillAlarm(SlotRuntime rt, int rack, int level, bool on,
+        bool manual = false)
     {
         if (rt.AlarmGrill == on)
             return; // 状态去重：冗余边沿不重复写灯、不重复记日志
@@ -670,7 +757,9 @@ public sealed class SlotCuringMachine : IDisposable
         {
             EnsureLamp(rack, level, IoPointRole.LampRed, false);
             EnsureLamp(rack, level, IoPointRole.LampYellow, true);
-            _log($"架{rack}层{level} 光栅让空，报警复位（红灯灭），计时继续");
+            _log(manual
+                ? $"架{rack}层{level} 人工复位确认（{GrillSideText(rack, level)}），报警解除，计时继续"
+                : $"架{rack}层{level} 光栅让空，报警复位（红灯灭），计时继续");
         }
         RefreshMachineBeacon(); // 机台塔灯同步：报警→红+蜂鸣，复位→黄（计时继续，蜂鸣即停）
     }

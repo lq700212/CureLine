@@ -435,6 +435,23 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   版本早于 V0.0.64；有拒绝行=文本直接给哪侧信号没让空；有复位行灯不
   灭=写 DO 失败走 IO 测试窗复测——**拒绝只记边沿（稀疏），Pump 兜底
   不带此日志（每秒会刷屏）**，`GrillSideText` 是文本拼装唯一出口。
+  **复位模式二选一（V0.0.69，人工复位/自动复位）**：Auto（缺省）=上述
+  全部现行为；Manual=人工复位——**边沿与 Pump 兜底双双 Auto 门槛不复位**
+  （让空日志统一"人工复位模式待确认，红灯保持"），唯一解除口=
+  `ManualResetGrillAlarm(rack,level)`（红灭黄复亮+蜂停+塔灯回绿，日志
+  "人工复位确认（L=x R=x）"——`SetGrillAlarm` 加 `manual` 参数），
+  `GetAlarmSlots()` 是弹窗清单取数唯一口（层→架升序）；模式=构造第 5
+  可选参 `Func<GrillAlarmResetMode>? resetModeProvider` **每拍现取**
+  （null=恒 Auto，勿缓存——宿主热切下一拍生效）；到点放行/取件离开
+  路径人工档保留。宿主接线=`GrillAlarmResetModeHub`（ini `[setting]
+  GrillAlarmResetMode` 缺省 Auto 非法自愈）+ 弹窗编排
+  `GrillAlarmResetCoordinator`（清单差分热更=用户拍板"报警期间新库位
+  进窗就见、解除即删行"+弹窗开关小账本，纯 VM 可测）+
+  `GrillAlarmResetWindow`（右下角非模态单例；用户 ✕ 记"用户表态"、
+  程序化收窗 `SilentClose` 不记）；复位请求事件必须 `Task.Run` 后台调
+  状态机（写灯=网络 IO，铁律 2）；`IDialogService` 新增
+  ShowGrillAlarmReset/CloseGrillAlarmReset 两方法+FakeCureDialogService 桩。
+
   改流程先改 `SlotCuringMachine` 头注释与
   `SlotCuringMachineTests` 断言。
 - **权限门禁语义（V0.0.49 三级角色起生效，全在 `OperatorStore` +
