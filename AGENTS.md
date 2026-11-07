@@ -92,14 +92,19 @@
   批量一键生成/自愈改现场口径 + 测试连接补 UI（死命令修复）+ 校验补
   重复 IP/重名闸 + 轮询按块分组读（180→20 帧/周期）+ 通道归属可见 +
   程序②机台连接保存即热重建（RestartApp 链删除）。
-  **P3.3 扫码绑定库位/产品（已完成 2026-11-07，V0.0.76；V0.0.77 补配置窗）**：
+  **P3.3 扫码绑定库位/产品（已完成 2026-11-07，V0.0.76；V0.0.77 补配置窗；
+  V0.0.78 通讯换 TCP；V0.0.79 缺省值/配置窗直预置现场 TCP——手工抄错 IP
+  （曾把 DTU 死配置里的旧上位机地址当枪侧 IP，连接恒超时）这一类坑封口）**：
   现场先扫库位码（A01~J12）再扫产品二维码绑定（`SlotBindingSession` 两段式
   会话 + `SlotBindingStore` 落盘 `config/slotbindings.json`）；托盘离开清绑定、
   下次入库重扫；未绑定只在统计条/卡片红字报警**不拦截固化流程**；扫码枪=
-  网口经 USB 转接线的虚拟串口，复用 kaleidoscope `ScannerService`（WMI 自动
-  找口/心跳断连重连），`[Scanner]` 节全参数配置；**V0.0.77 起配置界面化**：
+  **SH-5000-GHD（自动连续读码），现役接入 = 枪串口接 Eport E10 型 DTU
+  （串口转以太网，TCP-SERVER 8899 落 NVRAM），上位机复用 kaleidoscope
+  `ScannerTcpService` 作 TCP 客户端连入收码**——替代路径=串口（网口转 USB
+  转接线→虚拟 COM，复用 `ScannerService` WMI 找口/心跳断连重连）；
+  `[Scanner]` 节 `Mode` 双模式全参数配置；**V0.0.77 起配置界面化**：
   主窗「设置→扫码枪配置」（`ScannerConfigWindow`，**仅 dev 登录后可见**），
-  保存即热重启串口不重启程序。
+  **保存即热重建连接**（换方式/换参数都今存今效）不重启程序。
 
 ## 铁律（违反即返工）
 
@@ -226,8 +231,8 @@
 | **Core 共享（扫码绑定家族，P3.3 新增）** | |
 | `src/CureLine.Core/Curing/SlotBinding.cs` | 库位绑定记录 + 绑定簿（`SlotBindingBook`）+ `SlotBindingStore` 存取 `config/slotbindings.json`（缺/坏文件回 null 自愈；脏记录剔除；全量重写） |
 | `src/CureLine.Core/Curing/SlotBindingSession.cs` | **两段式扫码会话**：等库位码（A01~J12）→ 等产品码 → 绑定落盘；扫库位即清旧绑定、换库位切换、同库位刷新计时、超时/取消回空闲、`Remove` 取件作废；全部 UI 线程调用（无锁无后台线程），`Changed` 驱动主窗刷新 |
-| `src/CureLine.Core/Comms/ScannerOptions.cs` | 扫码枪配置 `[Scanner]` 节（Enabled/PortName/DeviceKeyword/串口参数/SessionTimeoutSeconds/DebugLog）+ `Norm*` 规范化（非法值回缺省，坏值不喂驱动） |
-| `src/CureLine.Core/Comms/ScannerBarcodeService.cs` | 子模块串口 `IScanner` 宿主封装（Start/Dispose 后台调用，日志桥接 `LocalLogService`，事件转发；`ScanConfig.Mode="Serial"` 必须写死——缺省是 Tcp） |
+| `src/CureLine.Core/Comms/ScannerOptions.cs` | 扫码枪配置 `[Scanner]` 节（**Serial/Tcp 双模式，V0.0.78；V0.0.79 起缺省=现场 TCP 预置**）：`Mode` 缺省 Tcp（显式 Serial 才走串口）+ TCP 三键（`TcpIp` 缺省=`FieldTcpIp` 现场常量、空值 ini 自愈回预置/`TcpPort` 缺省 8899/`TriggerCommand` 缺省空=不发）+ 串口五键（Enabled 缺省 0=不自启连接/PortName/DeviceKeyword/串口参数）+ `SessionTimeoutSeconds`/DebugLog + `Norm*` 规范化（非法值回缺省，坏值不喂驱动） |
+| `src/CureLine.Core/Comms/ScannerBarcodeService.cs` | 子模块 `IScanner` 宿主封装（Serial/Tcp 双模式，V0.0.78 起 TCP=经枪侧 DTU 透传 `ScannerTcpService`，Serial=`ScannerService`）；TCP **触发指令红线=必须显式取 NormTriggerCommand 缺省空串，绝不落子模块缺省 "LON"**（透传枪自动连续读码）；Start/Dispose 后台调用，日志桥接 `LocalLogService`，事件转发 |
 | **Core 共享（IO 家族，P1 新增）** | |
 | `src/CureLine.Core/ViewModels/` | 下沉的 VM 基建（`ViewModelBase`/`RelayCommand`，namespace 不变） |
 | `src/CureLine.Core/Comms/IoPointTable.cs` | IO 点表模型 + `PointTableValidator`（重复绑定两道闸）+ `PointTableSnapshot` |
@@ -706,10 +711,18 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   `[CuringMes] Side` 缺省 R 原样往返、`SideOfRack` 语义不变，勿把该属性
   当死代码删。
 - **扫码绑定语义（P3.3 起生效，全在 `SlotBindingSession`/`SlotBindingStore`/
-  `ScannerBarcodeService` 一处）**：① **扫码枪是串口不是 TCP**——现场枪为
-  网口输出，经"网口转 USB 转接线"接入工控机，系统里是虚拟串口
-  （`System.IO.Ports`）；复用子模块 `ScannerService`（WMI 自动找口/3 秒
-  心跳/静默重连），`ScanConfig.Mode="Serial"` 必须写死（缺省 Tcp）；
+  `ScannerBarcodeService` 一处）**：① **扫码枪双模式（V0.0.78 起 TCP 现役）**——
+  现场枪为 SH-5000-GHD（自动连续读码）：**TCP 方式**=枪串口接 Eport E10 型
+  DTU（串口转以太网，DTU socket 已配 TCP-SERVER/8899/Rout=uart 落 NVRAM；
+  改前是遗留死 TCP-CLIENT 169.254.254.96:8888），上位机复用子模块
+  `ScannerTcpService` 作 TCP 客户端连入按行收码（CR/LF/CRLF 兼容，实测
+  "条码+CR"毫秒级零丢失）；**串口方式（替代接线）**=枪经"网口转 USB 转接线"
+  直插工控机成虚拟串口，复用 `ScannerService`（WMI 找口/3 秒心跳/静默重连，
+  `ScanConfig.Mode="Serial"` 必须写死——子模块缺省 Tcp）。**TCP 触发指令红线**：
+  `ScannerBarcodeService` 必须显式取 `ScannerOptions.NormTriggerCommand`
+  （缺省空串=连上不发），**绝不能落子模块 `ScanConfig` 缺省 "LON"**（基恩士
+  口径；透传枪收到任何指令都被 DTU 当串口数据写进枪可能干扰读码）；
+  旧 UDP 推送已弃用（DTU 断电重启不恢复、可靠性差——勿回退）；
   ② **两段式会话**：等库位码（`SlotLocationCode.TryDecode` 严格 A01~J12）
   → 等产品码 → 绑定落盘 `config/slotbindings.json`；扫库位即**清除该库位
   旧绑定并落盘**（扫了新库位又取消=该库位保持未绑定，安全侧）；等产品码
@@ -722,20 +735,40 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   统计条扫码胶囊红字 + 卡片 foot 红字"未绑定" + 日志只记新出现的边沿，
   固化/过账流程零依赖绑定簿；⑥ 线程：`ScannerBarcodeService.Start/Dispose`
   必须后台调（Dispose 最坏等心跳线程 3 秒），两个事件在子模块后台线程触发、
-  订阅方必须封送；⑦ 配置二选一：`PortName` 固定口优先，留空则 `DeviceKeyword`
-  WMI 找口，两者皆空=不启动串口（`Enabled=0` 同理），程序其余功能零影响；
+  订阅方必须封送；⑦ 配置两桶按方式生效（V0.0.78）：Tcp 方式=`TcpIp` 非空即
+  目标（`TcpPort` 有 8899 兜底；**TcpIp 代码缺省=现场预置值
+  `ScannerOptions.FieldTcpIp`，ini 空值/缺键在 ReadStr 层自愈回预置——
+  无"持久未配置"态，想不连 TCP=切 Serial 或关 Enabled**）；Serial 方式=
+  `PortName` 固定口优先，留空则
+  `DeviceKeyword` WMI 找口；**当前方式**目标为空=不启动（`Enabled=0` 同理，
+  `HasPortTarget` 模式感知），且**启动装配与保存热换的"不启动"分支沿记一行
+  跳过原因日志（2026-11-07 补，`ScannerOptions.SkipReasonText` 唯一文案源、
+  服务 Start 拦截同串）——此前 Enabled=0 启动完全静默，现场"胶囊=未启用 +
+  日志无提示"排障无头**；**非当前方式**的桶不拦校验、原样落盘（切回方式
+  时保留各自上次配置，数值坏也有 Norm* 兜底），程序其余功能零影响；
   ⑧ 绑定簿是**生产追溯数据**（重启保留，现场可打开核对），不是配置——
   `SlotBindingStore.Reset()` 删文件只回到"全部未绑定"，不影响程控；
-  ⑨ **配置窗（V0.0.77）**：「设置→扫码枪配置」仅 dev 可见可进（门禁双保险
-  见权限门禁语义⑤）；`ScannerConfigWindow` 仿过账配置窗骨架，VM
-  `ScannerConfigViewModel` 负责回显（停止位 `1/1.5/2` ↔ ini `1/15/2`）/
-  校验/落盘/【检测串口】（`SerialPort.GetPortNames`，唯一口自动回填）；
-  **保存即热重启串口**：主窗 `ApplyScannerOptions()` 读盘 → 绑定簿 `Snapshot()`
+  ⑨ **配置窗（V0.0.77 建，V0.0.78 双模式化，V0.0.79 缺省=现场预置）**：「设置→
+  扫码枪配置」仅 dev 可见可进（门禁双保险见权限门禁语义⑤）；`ScannerConfigWindow`
+  仿过账配置窗骨架，VM `ScannerConfigViewModel` 负责回显（停止位 `1/1.5/2` ↔ ini
+  `1/15/2`）/
+  **按方式分桶校验**/落盘/【检测串口】（`SerialPort.GetPortNames`，唯一口自动
+  回填；仅串口方式显示）；**连接方式勾选框 `EditUseTcp`** 切换区块显隐
+  （`ShowTcpSection`/`ShowSerialSection`——Visibility 缺省值必须写进 Style
+  Setter 再 DataTrigger 切，XAML 触发器死区纪律；TCP 区块=IP/端口/触发指令
+  含"留空=不发"红线提示，右列接线指引随方式换）；
+  **保存即热重建连接**：主窗 `ApplyScannerOptions()` 读盘 → 绑定簿 `Snapshot()`
   带入新会话（在架绑定不丢、等待产品码阶段重置）→ UI 退订旧服务 → 后台
   `lock(_scannerLifecycleGate)` 内"旧 Dispose → 新 Start"串行（串口独占 +
-  子模块 Dispose 最坏等心跳 3 秒；退出释放同锁），UI 零阻塞。手工改 ini
-  仍需重启；`config.sample.ini` 按现场预置 `Enabled=1` + `DeviceKeyword=USB`，
-  配置窗对"两种定位都空"（自愈缺省形态）预填启用 + USB、只预填不落盘。
+  子模块 Dispose 最坏等心跳线程 3 秒；退出释放同锁），UI 零阻塞。手工改 ini
+  仍需重启；`config.sample.ini` 按现场 TCP 口径预置 `Enabled=1` + `Mode=Tcp` +
+  `TcpIp=169.254.173.207` + `TcpPort=8899` + `TriggerCommand=`（空），串口组键
+  留作替代路径；**出厂缺省=同一套现场预置（V0.0.79，`ScannerOptions` 常量/
+  缺省承载）**——配置窗首次打开回显即完整现场 TCP 形态（勾 TCP + 预置
+  IP/8899 + 指令空），仅"出厂缺省形态（未启用 + 串口桶全空 + TcpIp 仍=
+  FieldTcpIp）"把【启用】勾上作建议、**只预填不落盘**；串口关键字/COM 口
+  不代填（V0.0.77 的 USB 预填已随 TCP 缺省化撤销），改过 TcpIp/定位/确认过
+  Enabled=0 的机器原样回显不打扰。
 - **软件授权语义（V0.0.62 起真源收口 kaleidoscope 子模块 `Kaleidoscope.Security`
   ——子模块勿私改，跨仓库改动需用户批准；宿主侧唯一接线 `Core/Security/LicenseHost`）**：
   ① **放行唯一口**=`LicenseHost.IsProductionAllowed`（**属性**非方法——试用/永久/

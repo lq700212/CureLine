@@ -1,14 +1,17 @@
 // =========================================================================
 // ScannerConfigViewModel：扫码枪配置窗编排（程序①，dev 开发者专属）
 //
-// 干什么：把 [Scanner] 节的全部可调参数收进一个弹窗——启用开关、串口定位
-//   （固定 COM 口 / 设备名关键字自动找口）、串口参数、扫码会话超时、心跳
-//   调试日志。保存落 config.ini（ScannerOptions.Save），主窗收到 true 后
-//   按新参数重建扫码枪（保存即生效，不重启程序）。
-// 为什么界面化：现场 SH-5000-GHD 是"网口输出 + 网口转 USB 转接线"接入，
-//   系统里是虚拟串口；换 USB 口/换枪时让现场在界面里直接改，不用手翻 ini。
-//   入口只对 dev 开放（扫码枪属于设备接入参数，与点表配置同级），
-//   admin/operator/未登录在设置下拉里直接没有这一项。
+// 干什么：把 [Scanner] 节的全部可调参数收进一个弹窗——启用开关、连接方式
+//   （Serial 串口 / Tcp 以太网）、串口定位（固定 COM 口 / 设备名关键字自动
+//   找口）与串口参数、TCP 目标（IP / 端口 / 触发指令）、扫码会话超时。保存
+//   落 config.ini（ScannerOptions.Save），主窗收到 true 后按新参数重建扫码枪
+//   （保存即生效，不重启程序）。
+// 为什么界面化：现场扫码枪接入方式会演进（V0.0.77=串口「网口输出+网口转
+//   USB 转接线→虚拟串口」；V0.0.78 起=TCP「枪侧接 Eport E10 型 DTU 串口转
+//   网口，DTU 配 TCP-SERVER 8899，上位机作客户端连入收码」），换 USB 口/
+//   换接入方式都让现场在界面里直接改，不用手翻 ini。入口只对 dev 开放
+//   （扫码枪属于设备接入参数，与点表配置同级），admin/operator/未登录在
+//   设置下拉里直接没有这一项。
 // 怎么改：新增配置项 = ScannerOptions 加属性 + Load/Save + 本 VM 三处
 //   （字段/Sync/Save）+ XAML 加控件；ini 键名勿改（现场已按样例部署）。
 // =========================================================================
@@ -26,27 +29,26 @@ public sealed class ScannerConfigViewModel : ViewModelBase
 {
     private readonly IDialogService _dialogs;
 
-    /// <summary>现场预置的设备名关键字（SH-5000-GHD 经网口转 USB 转接线→虚拟串口，
-    /// 设备管理器名称通常含 "USB"，如 "USB-SERIAL CH340 (COM3)"）。</summary>
-    private const string FieldKeywordPreset = "USB";
-
     public ScannerConfigViewModel(IDialogService dialogs)
     {
         _dialogs = dialogs;
         SaveCommand = new RelayCommand(Save);
         DetectPortsCommand = new RelayCommand(DetectPorts);
-        SyncFromOptions(ScannerOptions.Load());
+        var loaded = ScannerOptions.Load();
+        SyncFromOptions(loaded);
 
-        // 现场预置（V0.0.77）：两种串口定位都空 = 这台机从未配过扫码枪
-        // （ini 自愈缺省就是 Enabled=0 + 定位全空），按现场实况给出建议值——
-        // 启用 + 设备关键字 USB（SH-5000-GHD 经"网口转 USB 转接线"接入，
-        // 系统虚拟串口设备名一般含 USB，如 "USB-SERIAL CH340 (COM3)"）。
-        // 只预填不落盘：用户点"保存配置"才算确认，没接枪的调试机不会被静默
-        // 启动串口。已配过定位（固定 COM 号或关键字）的机器原样回显、不打扰。
-        if (EditPortName.Trim().Length == 0 && EditDeviceKeyword.Trim().Length == 0)
+        // 现场预置（V0.0.79）：**缺省值本身=现场 TCP 口径**（ScannerOptions 缺省
+        // 出厂即 Mode=Tcp + 枪侧 DTU IP FieldTcpIp + 8899 + 指令留空）——首次打开
+        // 回显就是完整现场形态，这里只把【启用】勾上作提示："从未配过枪"的出厂
+        // 形态=未启用 + 串口定位全空 + TCP 目标仍是出厂预置 IP。用户改过任何定位、
+        // 或明确清空/改过 TcpIp、或确认过 Enabled=0，一律原样回显不打扰。
+        // 只预填不落盘：点"保存配置"才算确认；串口关键字/COM 口不再自动预填
+        // （现场已换 TCP 接入，串口是替代路径，由现场切到串口方式后自行填写）。
+        if (!EditEnabled && !loaded.HasSerialTarget &&
+            string.Equals(loaded.TcpIp?.Trim(), ScannerOptions.FieldTcpIp,
+                          StringComparison.OrdinalIgnoreCase))
         {
             EditEnabled = true;
-            EditDeviceKeyword = FieldKeywordPreset;
         }
     }
 
@@ -93,11 +95,61 @@ public sealed class ScannerConfigViewModel : ViewModelBase
     // ---------- 编辑区（打开回显；保存前校验并落盘） ----------
 
     private bool _editEnabled;
-    /// <summary>启用扫码枪（未接枪时保持不勾，程序不会尝试打开串口）。</summary>
+    /// <summary>启用扫码枪（未接枪时保持不勾，程序不会尝试建立连接）。</summary>
     public bool EditEnabled
     {
         get => _editEnabled;
         set => Set(ref _editEnabled, value);
+    }
+
+    private bool _editUseTcp;
+    /// <summary>
+    /// 连接方式=Tcp（勾选=以太网 TCP 读码；不勾=串口读码）。
+    /// 对应 ini [Scanner] Mode 键（Tcp/Serial）；切换即刷新上下两个参数区块的显隐。
+    /// </summary>
+    public bool EditUseTcp
+    {
+        get => _editUseTcp;
+        set
+        {
+            if (Set(ref _editUseTcp, value))
+            {
+                // 分区显隐派生属性联动——XAML DataTrigger 按这两个 bool 切区块。
+                Raise(nameof(ShowSerialSection));
+                Raise(nameof(ShowTcpSection));
+            }
+        }
+    }
+
+    /// <summary>串口区块是否可见（未勾 TCP 时显示；缺省值给 XAML 触发器兜底）。</summary>
+    public bool ShowSerialSection => !EditUseTcp;
+
+    /// <summary>TCP 区块是否可见（勾 TCP 时显示）。</summary>
+    public bool ShowTcpSection => EditUseTcp;
+
+    private string _editTcpIp = "";
+    /// <summary>TCP 目标 IP（枪侧 DTU/枪自身的地址，如 169.254.173.207）。</summary>
+    public string EditTcpIp
+    {
+        get => _editTcpIp;
+        set => Set(ref _editTcpIp, value ?? "");
+    }
+
+    private string _editTcpPort = "8899";
+    /// <summary>TCP 目标端口（字符串编辑，保存时校验 1~65535；现场 DTU TCP-SERVER 8899）。</summary>
+    public string EditTcpPort
+    {
+        get => _editTcpPort;
+        set => Set(ref _editTcpPort, value ?? "");
+    }
+
+    private string _editTriggerCommand = "";
+    /// <summary>TCP 连接成功后的触发指令（缺省空=不发；DTU 透传的自动连续读码枪必须留空，
+    /// 发了会被当串口数据写进枪——红线见 ScannerBarcodeService 头注释）。</summary>
+    public string EditTriggerCommand
+    {
+        get => _editTriggerCommand;
+        set => Set(ref _editTriggerCommand, value ?? "");
     }
 
     private string _editPortName = "";
@@ -207,6 +259,10 @@ public sealed class ScannerConfigViewModel : ViewModelBase
     private void SyncFromOptions(ScannerOptions o)
     {
         EditEnabled = o.Enabled;
+        EditUseTcp = o.NormMode == "Tcp";          // 原文非法值按规范化回显（与运行口径一致）
+        EditTcpIp = o.TcpIp;
+        EditTcpPort = o.NormTcpPort.ToString();
+        EditTriggerCommand = o.TriggerCommand ?? "";  // 原文回显（可空），不挡空值
         EditPortName = o.PortName;
         EditDeviceKeyword = o.DeviceKeyword;
         EditBaudRate = o.NormBaudRate.ToString();
@@ -218,45 +274,79 @@ public sealed class ScannerConfigViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 校验 + 落盘（保存唯一入口）。校验口径与 ScannerOptions 的 Norm* 一致
-    /// （坏值不喂串口驱动）；Enabled 勾了却没有任何串口定位=无效配置，拦下。
+    /// 校验 + 落盘（保存唯一入口）。**按连接方式分桶校验**：Tcp 方式只校验 TCP
+    /// 三件（目标 IP / 端口 / 触发指令），Serial 方式只校验串口五件——非当前
+    /// 方式的参数原样落 ini 不拦错（切回方式时保留各自上次配的值，数值坏也有
+    /// Norm* 兜底）；扫码会话超时两方式共用。Enabled 勾了却没有任何当前方式
+    /// 的接入目标=无效配置，拦下。校验口径与 ScannerOptions 的 Norm* 一致。
     /// </summary>
     private void Save()
     {
         var errors = new List<string>();
+        bool useTcp = EditUseTcp;
 
-        string port = EditPortName.Trim();
-        if (port.Length > 0 && !Regex.IsMatch(port, "^COM\\d+$", RegexOptions.IgnoreCase))
-            errors.Add($"PortName「{port}」格式无效：应为 COM 号（如 COM3），" +
-                       "在设备管理器『端口(COM 和 LPT)』下查看");
+        // ---- 两方式共用：扫码会话超时 ----
+        if (!int.TryParse(EditSessionTimeout.Trim(), out int timeoutSeconds) ||
+            timeoutSeconds is < 5 or > 600)
+            errors.Add("扫码会话超时须为 5~600 秒（缺省 15，扫库位后等产品码的最长间隔）");
 
-        if (!int.TryParse(EditBaudRate.Trim(), out int baudRate) ||
-            baudRate is < 2400 or > 921600)
-            errors.Add("波特率须为 2400~921600 的整数（常见 9600 / 115200，按扫码枪手册核对）");
+        // TCP 三件先取值（两种方式都落盘；非法端口按缺省 8899 兜底同 NormTcpPort）。
+        string tcpIp = EditTcpIp.Trim();
+        bool tcpPortOk = int.TryParse(EditTcpPort.Trim(), out int parsedPort) &&
+                         parsedPort is >= 1 and <= 65535;
+        int tcpPort = tcpPortOk ? parsedPort : 8899;
 
-        if (EditDataBits is < 5 or > 8)
-            errors.Add("数据位须在 5~8 之间（常见 8）");
-
-        string stopBits = EditStopBits switch
+        // 共用换算先取值（两种方式都落盘，切回方式时保留上次配置）：
+        // 停止位下拉恒为 "1"/"1.5"/"2" 之一；异常文本回 "" 由 NormStopBits 兜底 "1"。
+        string stopBitsValue = EditStopBits switch
         {
             "1.5" => "15",
             "1" => "1",
             "2" => "2",
             _ => "",
         };
-        if (stopBits.Length == 0)
-            errors.Add("停止位只支持 1 / 1.5 / 2");
 
-        if (!ParityOptions.Contains(EditParity))
-            errors.Add("校验位只支持 None / Odd / Even / Mark / Space");
+        if (useTcp)
+        {
+            // ---- TCP 方式专属：必须配出可连入的目标 ----
+            if (tcpIp.Length == 0)
+                errors.Add("已勾选启用，但未填 TCP 目标 IP：请先在枪侧 DTU（如 Eport E10）" +
+                           "的 Web 配置台确认 IP 与 TCP 服务端口，再回填这里" +
+                           "（现场 DTU 已配 TCP-SERVER 8899）");
 
-        if (!int.TryParse(EditSessionTimeout.Trim(), out int timeoutSeconds) ||
-            timeoutSeconds is < 5 or > 600)
-            errors.Add("扫码会话超时须为 5~600 秒（缺省 15，扫库位后等产品码的最长间隔）");
+            if (!tcpPortOk)
+                errors.Add("TCP 端口须为 1~65535 的整数（现场 DTU TCP-SERVER 8899）");
 
-        if (EditEnabled && port.Length == 0 && EditDeviceKeyword.Trim().Length == 0)
-            errors.Add("已勾选启用，但未填串口定位：请填 PortName（如 COM3）" +
-                       "或 DeviceKeyword（如 CH340）；两者都空时扫码枪不会启动");
+            // 触发指令可空（=连上不发——自动连续读码枪的口径，现场 SH-5000-GHD）；
+            // 填了不许嵌换行：发送时自动补 CRLF，嵌换行会被枪当多条指令收。
+            if (EditTriggerCommand.Contains('\r') || EditTriggerCommand.Contains('\n'))
+                errors.Add("触发指令不应包含换行（发送时会自动补 CRLF，嵌换行会被枪当多条指令）");
+        }
+        else
+        {
+            // ---- 串口方式专属：原有五件套校验 ----
+            string port = EditPortName.Trim();
+            if (port.Length > 0 && !Regex.IsMatch(port, "^COM\\d+$", RegexOptions.IgnoreCase))
+                errors.Add($"PortName「{port}」格式无效：应为 COM 号（如 COM3），" +
+                           "在设备管理器『端口(COM 和 LPT)』下查看");
+
+            if (!int.TryParse(EditBaudRate.Trim(), out int baudRate) ||
+                baudRate is < 2400 or > 921600)
+                errors.Add("波特率须为 2400~921600 的整数（常见 9600 / 115200，按扫码枪手册核对）");
+
+            if (EditDataBits is < 5 or > 8)
+                errors.Add("数据位须在 5~8 之间（常见 8）");
+
+            if (stopBitsValue.Length == 0)
+                errors.Add("停止位只支持 1 / 1.5 / 2");
+
+            if (!ParityOptions.Contains(EditParity))
+                errors.Add("校验位只支持 None / Odd / Even / Mark / Space");
+
+            if (EditEnabled && port.Length == 0 && EditDeviceKeyword.Trim().Length == 0)
+                errors.Add("已勾选启用，但未填串口定位：请填 PortName（如 COM3）" +
+                           "或 DeviceKeyword（如 CH340）；两者都空时扫码枪不会启动");
+        }
 
         if (errors.Count > 0)
         {
@@ -264,15 +354,23 @@ public sealed class ScannerConfigViewModel : ViewModelBase
             return;
         }
 
+        // 波特率在串口分桶外解析（TCP 方式下该区隐藏、值保持 ini 原样=合法；
+        // 解析失败=0，Save 内部 NormBaudRate 兜底 9600，坏值当场治愈）。
+        int.TryParse(EditBaudRate.Trim(), out int baud);
+
         var options = new ScannerOptions
         {
             Enabled = EditEnabled,
-            PortName = port,
+            Mode = useTcp ? "Tcp" : "Serial",   // Save 内部落规范化值
+            TcpIp = tcpIp,                      // TCP 三件恒落盘——切方式时保留上次配置
+            TcpPort = tcpPort,
+            TriggerCommand = EditTriggerCommand.Trim(),
+            PortName = EditPortName.Trim(),     // 串口定位同理恒落盘
             DeviceKeyword = EditDeviceKeyword.Trim(),
-            BaudRate = baudRate,
+            BaudRate = baud,
             DataBits = EditDataBits,
-            StopBits = stopBits,
-            Parity = EditParity,
+            StopBits = stopBitsValue,
+            Parity = ParityOptions.Contains(EditParity) ? EditParity : "None", // 坏值兜底
             SessionTimeoutSeconds = timeoutSeconds,
             DebugLog = EditDebugLog,
         };

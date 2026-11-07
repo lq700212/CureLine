@@ -2,6 +2,136 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.79（2026-11-07，固化程控：扫码枪配置缺省值=现场 TCP 预置（配置窗开箱即现场口径））
+
+现场实测 V0.0.78 时连环报"扫码枪连接超时"——根因是把 DTU 遗留死配置里指向
+旧上位机的"远端主机地址"（169.254.254.96）当枪侧 IP 填进了 `TcpIp`（现场
+`config\config.ini` 已修正为 169.254.173.207）。为杜绝这类手抄错，按用户
+拍板把缺省值本身做成现场预置：**无 `[Scanner]` 配置的机器开箱即现场 TCP 口径，
+配置窗打开回显就是对的**，不再依赖现场手抄 IP/端口。
+
+### 配置模型（`ScannerOptions`）
+
+- **缺省值翻转**：`Mode` 缺省 `Serial`→**`Tcp`**（规范化同步改：显式
+  "Serial" 走串口，其余/非法值一律回 Tcp——缺省口径=现场现行）；
+  `TcpIp` 缺省空→**现场预置值 `FieldTcpIp="169.254.173.207"`（公共常量
+  真源，样例/配置窗/程序缺省三处共用）**；`TcpPort` 缺省 8899、
+  `TriggerCommand` 缺省空（=不发，红线不变）不变。
+- **`TcpIp` 无"持久未配置"态**：kernel32 对空值键返回 0 字符，
+  `IniFile.ReadStr` 视为缺键自愈回预置——手工清空 TcpIp 落盘后下次启动
+  仍回到现场值；想不连 TCP=切 Serial 方式或关 Enabled（测试锁语义
+  `ScannerOptions_TcpIpEmpty_SelfHealsToPreset`）。
+- `Enabled` 代码缺省仍 0——无枪开发机/自动化测试零连接尝试；现场按样例
+  `Enabled=1` 开箱即连。
+
+### 配置窗（`ScannerConfigViewModel`）
+
+- 首次打开回显即完整现场 TCP 形态（勾 TCP + 预置 IP/8899 + 指令空）；仅
+  "出厂缺省形态（未启用 + 串口桶全空 + TcpIp 仍=FieldTcpIp）"把【启用】
+  勾上作建议，**只预填不落盘**。**V0.0.77 的"串口方式预填 USB 关键字"
+  已随 TCP 缺省化撤销**（现场已换 TCP 接入；串口桶全空、代填反而误导）——
+  用户改过 TcpIp/定位/确认过 Enabled=0 的机器原样回显不打扰。
+- XAML 提示对齐：TCP 勾选框标"缺省勾选=现场现行"，TcpIp 提示补"缺省已
+  预置现场值、勿把 DTU 死配置里的『远端主机』地址当枪侧 IP"。
+
+### 测试（567 → 568，改旧锁 + 补新锁）
+
+- 改旧锁：`InvalidMode_FallsBackToSerial`→`ExplicitSerialOnly`（仅显式
+  Serial 走串口）；`InvalidMode_RunsAsSerial`→`RunsAsTcp`（非法 Mode 整链
+  落缺省 Tcp+预置 IP）；`TCMode` 无目标用例显式 `TcpIp=""`（缺省已带预置
+  IP）；方式切换用例改锁"出厂缺省 TCP"；`SlotBindingTests` 三例显式补
+  `Mode="Serial"` 保原串口意图 + 缺键自愈用例改锁新缺省形态。
+- 新锁：出厂缺省=现场预置（内存缺省与 ini 缺键自愈同款）+ TcpIp 空值
+  自愈回预置。
+- `dotnet build` 0 警 0 错，`dotnet test` **568/568 全绿**。
+
+- 文档：`config.sample.ini`（程序内置缺省=样例同值 + TcpIp 清空不持久
+  说明 + 样例去 DTU 凭据字样）、README、根 AGENTS（P3.3 待办 + 扫码语义
+  ⑦⑨ + 导航表）、三份固化手册（客户手册键表/配置段改"出厂缺省已勾 TCP +
+  预填现场值"口径）。现场部署目录 `D:\HuaJi\CureLine\config\config.ini`
+  的 `TcpIp` 已手工修正为 169.254.173.207（程序配置窗保存或重启即生效）。
+
+### 复盘补丁（同日复核，现场实锤）
+
+- **现场复核**：用户拿通讯调试助手（TCP Client→169.254.173.207:8899）收码
+  正常，但软件"胶囊=未启用 + 日志无提示"——根因是部署配置 `[Scanner]
+  Enabled=0`（新构建覆盖部署时配置一并回到出厂缺省，程序设计上未启用不启
+  线程、此前连一行日志都不记）。直起部署目录 exe 实测：`Enabled=1` 后 1 秒
+  内连上 DTU，收码/绑定/重扫/超时全链路日志齐整。
+- **静默启动修复**：启动装配（InitScanner）与保存热换的"不启动"分支补
+  沿记一行跳过原因（`ScannerOptions.SkipReasonText` 唯一文案源——未启用/
+  TCP 无目标/串口无目标三串，服务 `Start()` 拦截改用同源文案，删散写）；
+  此后 Enabled=0 启动日志就有"扫码枪：未启用……跳过启动"可自助定位。
+- 文档：AGENTS 扫码语义⑦、客户手册排障"未启用"行、内部手册扫码口径段
+  同步补边沿日志说明。
+- 新锁：`ScannerOptions_SkipReasonText_ByConfigState`（五位数状态全查）+
+  VM 层启动日志断言（`MainVm_ScannerConfig_OnlyDevAndHotApplies` 扩展）。
+  `dotnet build` 0 警 0 错，`dotnet test` **569/569 全绿**。
+
+## V0.0.78（2026-11-07，固化程控：扫码枪通讯切换 TCP（DTU 透传）+ 配置窗双模式）
+
+现场 DTU（Eport E10 型，串口转以太网）socket 已由遗留死 TCP-CLIENT
+（169.254.254.96:8888）原位改配 **TCP-SERVER、本地端口 8899、Rout=uart、
+maxAccept=3** 并落 NVRAM（SET+RELOAD 生效）；端到端实测上位机连入毫秒级收
+4 条完整条码（条码文本+CR 结尾，零丢失）。原 UDP-CLIENT 推送可靠性差且
+**断电后不会恢复（未落 NVRAM）**，弃用不再依赖。上位机同步把扫码枪接入从
+"仅虚拟串口"扩成 Serial/Tcp 双模式，TCP 为现场现役口径。
+
+### 配置模型（`ScannerOptions`，[Scanner] 节）
+
+- 新增 4 键：`Mode`（Tcp/Serial，非法值安全侧回 Serial）、`TcpIp`（缺省空）、
+  `TcpPort`（缺省 8899=现场 DTU 现值，越界回 8899）、`TriggerCommand`
+  （**缺省空串=连上不发**；一发即中"自动连续读码枪不能收到指令"的现场红线）。
+  Load/Save 同步四键；`Save` 落规范化值（`NormMode`/`NormTcpPort`）坏值当场治愈。
+- `HasPortTarget` 改为**模式感知**：Tcp 方式看 `TcpIp` 非空、Serial 方式看
+  `PortName`/`DeviceKeyword`；未配当前方式目标时不启动收码（与 Enabled=0 同级提示）。
+
+### 服务选型（`ScannerBarcodeService`，子模块零改动直引）
+
+- `Start()` 按 `NormMode` 分支：Tcp → `ScanConfig{Enabled, Mode="Tcp",
+  IpAddress, Port, TriggerCommand=NormTriggerCommand}` + **复用 kaleidoscope
+  `ScannerTcpService`**（BeginConnect 2s 强制超时/断线 3s 节流重连/TCP
+  KeepAlive/连接失败日志 30s 节流/按行切分 CR-LF-CRLF，复用子模块 152 例回归
+  零改动引用）；Serial → 原 `ScannerService` 串口链路原样保留。
+- **触发指令红线**：TCP 模式的 `TriggerCommand` 必须显式取
+  `ScannerOptions.NormTriggerCommand`——子模块 `ScanConfig` 缺省 "LON" 是
+  基恩士 SR 口径，若漏覆盖会把 LON 经 DTU 写进枪串口（现场踩坑预防，注释与测试双锁）。未配目标/未启用文案与失败日志均按方式分文案。
+
+### 配置窗（`ScannerConfigWindow` + VM）
+
+- 左列加「连接方式」勾选框（`EditUseTcp` ↔ `Mode`），TCP/串口两参数区块
+  按 `ShowSerialSection`/`ShowTcpSection` 互斥显隐（Visibility 缺省值写进
+  Style Setter + DataTrigger 切换，守 XAML 触发器死区纪律；过时"这是虚拟
+  串口不是 TCP"文案删除）。TCP 区块=目标 IP/端口/触发指令（含"留空=不发"
+  红行提示）；`DebugLog` 收进串口区块（TCP 方式无 WMI 心跳机制）。
+- 保存改**按方式分桶校验**：Tcp 方式校验 IP 非空/端口 1~65535/触发指令
+  可空但不许嵌换行；Serial 方式沿用原五件套校验；会话超时两方式共用；
+  非当前方式桶不拦错、原样落盘（切回方式保留上次配置）。串口定位预填
+  （USB 关键字）加 `!EditUseTcp` 条件——TCP 机器不被灌无效串口参数；
+  右列接线指引随方式换份（TCP 四步含 DTU 配置台）。保存热重建链不变。
+
+### 主窗文案与状态
+
+- 扫码胶囊"未配置"分支、"未连接"排查指引、"已连接"连接名按方式分文案
+  （Tcp=检查网线与 DTU / Serial=检查转接线与 COM 口；连接名可为 "IP:端口"）；
+  日志"配置已保存"去"串口"专名，装配/退出链注释同步中性化——装配合同
+  （事件/生命周期锁/热重建）零变化。
+
+- 测试：552→567（新增 `ScannerTcpTests` 15 例：TCP 四键往返/Mode 非法回
+  Serial/端口越界回 8899/HasPortTarget 模式感知/TCP 建链配置断言含
+  TriggerCommand 缺省空串/触发指令透传/无 TcpIp 不启动/非法 Mode 整链走
+  串口/VM TCP 回显与往返/空 IP 拦/坏端口拦/嵌换行拦/TCP 方式不预填串口/
+  方式切换显隐）；`SlotBindingTests` 假工厂既有用例（Mode 缺省 Serial）
+  全兼容。`dotnet build` 0 警 0 错，`dotnet test` 567/567 全绿。
+- 文档：`config.sample.ini` [Scanner] 节重写为 TCP 现役口径（预置
+  `Enabled=1`+`Mode=Tcp`+`TcpIp=169.254.173.207`+`TcpPort=8899`，串口组键
+  留作替代路径）；README/AGENTS 扫码语义①⑦⑨与 P3.3 待办同步双模式；
+  kaleidoscope 子模块零改动（`ScanConfig` 能力本就覆盖 DTU 透传，缺省
+  "LON" 暗坑收敛在宿主接线层）。
+- 现场备注：DTU 改配前双页 socket 配置备份（`backup_socket_page1/2.json`、
+  `E10_backup.xml`）在探针工程目录，可按需回滚；UDP socket 现值仅在
+  运行时，断电即失——现场以 TCP 8899 为准。
+
 ## V0.0.77（2026-11-07，固化程控：扫码枪配置窗（dev 专属）+ 保存即热重启串口）
 
 现场要求：扫码枪参数不再手翻 ini——程序①「设置 ▾」里给一个配置弹窗，

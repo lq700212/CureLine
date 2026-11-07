@@ -8,6 +8,7 @@ using CureLine.Core.Curing;
 using CureLine.Core.Infrastructure;
 using CureLine.Core.Mes;
 using CureLine.Core.Security;
+using CureLine.Core.Services;
 using CureLine.Tests.Mocks;
 using CureStation.ViewModels;   // DurationUnit/PolicyTimeUnit（V0.0.58 顶栏全局时长用例）
 using Xunit;
@@ -1038,6 +1039,12 @@ public class CureStationViewModelTests
         IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
         var fake = new FakeCureDialogService();
         using var vm = new CureStation.ViewModels.MainViewModel(fake);
+
+        // 启动期未启用（测试 ini 无 [Scanner]）：补"跳过原因"边沿日志——此前
+        // Enabled=0 时完全静默，现场"胶囊=未启用 + 日志无提示"排障无头（本行文案
+        // 与 ScannerOptions.SkipNotEnabledText 同源；VM 层不复制文案，只断言前缀段）。
+        Assert.Contains(LocalLogService.GetRecentLines(),
+            l => l.Contains("扫码枪：未启用（config.ini [Scanner] Enabled=0）"));
 
         // 未登录：菜单项不显示 + 命令被 Gate 拦（先提示登录）
         Assert.False(vm.ShowScannerConfigItem);

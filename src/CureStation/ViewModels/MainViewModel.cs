@@ -636,9 +636,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private SlotBindingSession _bindings = new();
 
     /// <summary>
-    /// 扫码枪"关旧→开新"的生命周期锁（配置窗保存热重启用）：串口是独占资源，
-    /// 旧服务 Dispose 未完成就开新口会打开失败；Start/Dispose 都在后台任务里
-    /// 串行执行（最坏等心跳线程 3 秒，UI 不阻塞——铁律 2）。
+    /// 扫码枪"关旧→开新"的生命周期锁（配置窗保存热重启用）：串口是独占资源、
+    /// TCP 也可能与旧会话同目标竞争，旧服务 Dispose 未完成就开新口会打开失败/
+    /// 挤占；Start/Dispose 都在后台任务里串行执行（最坏等收码线程 3 秒，UI
+    /// 不阻塞——铁律 2）。
     /// </summary>
     private readonly object _scannerLifecycleGate = new();
 
@@ -687,7 +688,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     }
 
     private bool _scanConnected;
-    /// <summary>扫码枪串口已打开（绿点；未连接时灰点，子模块后台自动重连）。</summary>
+    /// <summary>扫码枪已连接（绿点；未连接时灰点，子模块后台自动重连）。</summary>
     public bool ScanConnected
     {
         get => _scanConnected;
@@ -886,7 +887,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         var config = LoadOrDefault();
         _config = config;   // 记住当前点表（重连按钮复用，勿传 null）
         BuildSlots(config);
-        // 扫码枪 + 库位绑定（P3.3）：读绑定簿 → 建会话 → 后台启动串口扫码枪。
+        // 扫码枪 + 库位绑定（P3.3）：读绑定簿 → 建会话 → 后台启动扫码枪（串口/TCP 按配置）。
         // 放在总线启动前——首拍刷新就能把已存绑定的产品码挂到卡片上。
         InitScanner();
         LoadPolicyBook();
@@ -901,8 +902,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     /// <summary>
     /// 扫码装配：读 [Scanner] 配置 + 库位绑定簿（都自愈）→ 建绑定会话 →
-    /// 后台启动串口扫码枪（WMI 找口/开串口是阻塞调用，UI 线程禁碰——铁律 2）。
-    /// 未启用/未配置串口时只把状态条置提示文案，程序其余功能零影响。
+    /// 后台启动扫码枪（串口/TCP 按配置自动选——串口 WMI 找口/开串口、TCP 后台
+    /// 连接线程，都在子模块内部起线程，UI 线程禁碰——铁律 2）。
+    /// 未启用/未配目标时只把状态条置提示文案，程序其余功能零影响。
     /// </summary>
     private void InitScanner()
     {
@@ -924,8 +926,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _scanner.ConnectionChanged += OnScannerConnectionChanged;
 
         RefreshScanState();
-        if (!_scannerOptions.Enabled || !_scannerOptions.HasPortTarget)
-            return;   // 未启用/未配置：不启动串口线程（状态条已给配置指引）
+        // 未启用/未配目标：不启动收码线程（状态条已给配置指引）。此前这里完全
+        // 静默——Enabled=0 连一行日志都没有，现场"胶囊=未启用 + 日志无提示"
+        // 排障只能去对配置文件（2026-11-07 现场实测踩坑）。现在补记一行跳过
+        // 原因（与 Start() 本会写的文案同源），启动日志即可自助定位。
+        if (_scannerOptions.SkipReasonText() is { } skip)
+        {
+            LocalLogService.Write(skip);
+            return;
+        }
 
         // 捕获局部实例（不读字段）：配置窗保存会换新实例，旧启动任务不能误启新枪。
         var scanner = _scanner;
@@ -951,11 +960,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
-    /// 按盘上新配置热重建扫码枪（V0.0.77）：
+    /// 按盘上新配置热重建扫码枪（V0.0.77 建；V0.0.78 双模式同链）：
     ///   ① 绑定簿原样带进新会话（在架绑定不丢；等待产品码阶段重置为等库位码）；
-    ///   ② 旧服务 UI 线程退订，后台串行"关旧口→按新参数开新口"（同一把锁防串口竞争）；
+    ///   ② 旧服务 UI 线程退订，后台串行"关旧连接→按新参数开新连接"（同一把锁防
+    ///      新旧实例竞争；串口独占与 TCP connect 都锁在后台线程）；
     ///   ③ 立即刷扫码胶囊与卡片（不等 500ms 拍）。
-    /// 配置全是低频项，重建开销（WMI 找口+开串口，最坏几百 ms）在后台，UI 无感。
+    /// 配置全是低频项，重建开销（串口=WMI 找口+开串口几百 ms / TCP=起后台连接
+    /// 线程立即返回）在后台，UI 无感。
     /// </summary>
     private void ApplyScannerOptions()
     {
@@ -984,14 +995,16 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         RefreshScanState();
         RefreshSlots();
-        LocalLogService.Write("扫码枪配置已保存：按新参数后台重启串口");
+        LocalLogService.Write("扫码枪配置已保存：按新连接方式后台重启扫码枪");
 
         Task.Run(() =>
         {
             lock (_scannerLifecycleGate)
             {
-                old?.Dispose();   // 先关旧口（最坏等心跳 3 秒），再开新口
-                if (options.Enabled && options.HasPortTarget)
+                old?.Dispose();   // 先关旧连接（串口最坏等心跳 3 秒 / TCP 关 socket），再开新的
+                if (options.SkipReasonText() is { } skip)
+                    LocalLogService.Write(skip);   // 新配置不启动：补一行原因，防日志层只剩"按新连接方式重启"一句造成误解
+                else
                     fresh.Start();
             }
         }).ContinueWith(_ => UiInvoke(RefreshScanState));
@@ -1036,15 +1049,22 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             ScanWarning = false;
             ScanText = "扫码：未启用";
-            ScanTip = "扫码枪未启用。现场启用：config.ini [Scanner] 设 Enabled=1，并按设备管理器填 " +
-                      "PortName（如 COM3）或 DeviceKeyword（设备名关键字，如 CH340）";
+            ScanTip = "扫码枪未启用。现场启用：设置→扫码枪配置（dev 专属）勾选启用并配好连接方式；" +
+                      "或 config.ini [Scanner] 设 Enabled=1（TCP 方式配 TcpIp/TcpPort，串口方式填 " +
+                      "PortName 或 DeviceKeyword），改 ini 需重启程序";
         }
         else if (!_scannerOptions.HasPortTarget)
         {
             ScanWarning = false;
-            ScanText = "扫码：未配置串口";
-            ScanTip = "config.ini [Scanner] 的 PortName 与 DeviceKeyword 都为空。" +
-                      "填 PortName（设备管理器里的 COM 号）或 DeviceKeyword（设备名关键字）后重启程序";
+            // 提示按接入方式说明缺哪一项（Tcp=TcpIp 空 / Serial=PortName+Keyword 空）。
+            bool tcpMode = _scannerOptions.NormMode == "Tcp";
+            ScanText = tcpMode ? "扫码：未配置 TCP 目标" : "扫码：未配置串口";
+            ScanTip = tcpMode
+                ? "config.ini [Scanner] 的 TcpIp 为空。在设置→扫码枪配置填枪侧 DTU 的 IP 与 " +
+                  "TCP 端口后保存（保存即生效）；或手工改 ini 后重启程序"
+                : "config.ini [Scanner] 的 PortName 与 DeviceKeyword 都为空。在设置→扫码枪配置填 " +
+                  "PortName（设备管理器里的 COM 号）或 DeviceKeyword（设备名关键字）后保存；" +
+                  "或手工改 ini 后重启程序";
         }
         else if (ScanWaitingProduct)
         {
@@ -1064,10 +1084,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             ScanWarning = false;
             ScanText = ScanConnected ? _bindings.Prompt : "扫码枪未连接";
+            // 未连接排查指引按接入方式给（Tcp=查网线/DTU；Serial=查转接线/COM 口）。
+            bool tcpMode = _scannerOptions.NormMode == "Tcp";
             ScanTip = ScanConnected
-                ? $"扫码枪已连接（{_scanner?.Name ?? "串口"}）：先扫库位码 A01~J12，再扫产品码；" +
+                ? $"扫码枪已连接（{_scanner?.Name ?? "扫码枪"}）：先扫库位码 A01~J12，再扫产品码；" +
                   $"{_scannerOptions.NormSessionTimeoutSeconds} 秒未扫产品码自动回到请扫库位码"
-                : "扫码枪未连接：检查 USB 转接线与 COM 口配置；服务每 3 秒后台自动重连，插回即恢复";
+                : tcpMode
+                    ? "扫码枪未连接：检查网线与枪侧 DTU（TCP 目标 IP:端口，枪/DTU 断电重启后确认 " +
+                      "TCP-SERVER 配置还在）；服务每 3 秒后台自动重连，网络恢复即接通"
+                    : "扫码枪未连接：检查 USB 转接线与 COM 口配置；服务每 3 秒后台自动重连，插回即恢复";
         }
 
         // 3 秒错误浮层（扫错码提示）：只覆盖文字，不动点色/按钮状态。
@@ -1686,7 +1711,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             new("激活策略", _policyBook?.ResolveActive()?.Name ?? "无"),
             new("过账", PostingText),
             new("扫码枪", !_scannerOptions.Enabled ? "未启用"
-                : ScanConnected ? $"已连接（{_scanner?.Name ?? "串口"}）" : "未连接"),
+                : ScanConnected ? $"已连接（{_scanner?.Name ?? "扫码枪"}）" : "未连接"),
             new("库位绑定", $"{_bindings.Count} 个（{_bindings.Prompt}）"),
             new("登录", OperatorText),
             new("仓位", $"{Slots.Count} 个（空闲{IdleCount} 计时{CuringCount} 待门控{GateCount} " +

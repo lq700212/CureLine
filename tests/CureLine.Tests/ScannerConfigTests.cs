@@ -1,9 +1,10 @@
 // =========================================================================
-// ScannerConfigTests：扫码枪配置窗 VM（V0.0.77，dev 开发者专属）
+// ScannerConfigTests：扫码枪配置窗 VM（V0.0.77 建；V0.0.79 缺省=现场 TCP 预置）
 //   ① 打开回显 ini 现值（停止位 15↔1.5 显示映射）；
-//   ② 首次未配置的现场预置（启用 + 设备关键字 USB，不落盘）；
-//   ③ 保存校验与落盘（合法值往返 / 启用但无串口定位拦下 / 坏值拦下）；
-//   ④ 尊重已配置的 Enabled=0（不强行预填启用）；
+//   ② 首次未配置=出厂缺省回显现场 TCP 预置（勾 TCP+预置 IP/8899/指令空）
+//      + 启用建议，不落盘；串口桶不代填（替代路径由现场自行填）；
+//   ③ 保存校验与落盘（合法值往返 / 启用但无定位拦下 / 坏值拦下）；
+//   ④ 尊重已配置 / 已改过 TcpIp 的 Enabled=0（不强行预填启用）；
 //   ⑤ 检测串口（枚举系统 COM 号，不依赖真机）。
 // 全部 TestScope 隔离临时目录，不碰本机 config.ini。
 // =========================================================================
@@ -48,19 +49,22 @@ public class ScannerConfigTests
         Assert.True(vm.EditDebugLog);
     }
 
-    [Fact(DisplayName = "扫码枪配置_首次未配置按现场预置（启用+USB，不落盘）")]
-    public void ScannerConfigVm_FirstOpen_PrefillsFieldValues()
+    [Fact(DisplayName = "扫码枪配置_首次未配置=出厂缺省现场 TCP 预置回显 + 启用建议（不落盘）")]
+    public void ScannerConfigVm_FirstOpen_EchoesTcpPreset()
     {
         using var scope = new TestScope();
         EnsureConfigDir();   // 目录在、ini 不存在 = 首次运行
 
         var vm = new ScannerConfigViewModel(new FakeCureDialogService());
 
-        Assert.True(vm.EditEnabled);              // 现场接了枪：默认启用
-        Assert.Equal("USB", vm.EditDeviceKeyword); // SH-5000-GHD 经 USB 转接线
-        Assert.Equal("", vm.EditPortName);         // COM 号让现场"检测串口"选
-        Assert.Equal("9600", vm.EditBaudRate);     // 常见出厂值
-        Assert.False(ScannerOptions.Load().Enabled);   // 预填不落盘，点保存才确认
+        Assert.True(vm.EditEnabled);                     // 启用建议照给（预填，不落盘）
+        Assert.True(vm.EditUseTcp);                      // 出厂缺省=现场现行 TCP
+        Assert.Equal(ScannerOptions.FieldTcpIp, vm.EditTcpIp);
+        Assert.Equal("8899", vm.EditTcpPort);
+        Assert.Equal("", vm.EditTriggerCommand);         // 自动连续读码枪：留空=不发
+        Assert.Equal("", vm.EditPortName);               // 串口桶不代填（替代路径）
+        Assert.Equal("", vm.EditDeviceKeyword);
+        Assert.False(ScannerOptions.Load().Enabled);     // 预填不落盘，点保存才确认
     }
 
     [Fact(DisplayName = "扫码枪配置_保存合法值落盘并请求关窗")]
@@ -72,6 +76,7 @@ public class ScannerConfigTests
         var vm = new ScannerConfigViewModel(fake)
         {
             EditEnabled = true,
+            EditUseTcp = false,                 // 显式串口方式（走串口五件套校验分支）
             EditPortName = "COM7",
             EditBaudRate = "115200",
             EditDataBits = 7,
@@ -92,7 +97,7 @@ public class ScannerConfigTests
         var saved = ScannerOptions.Load();
         Assert.True(saved.Enabled);
         Assert.Equal("COM7", saved.PortName);
-        Assert.Equal("USB", saved.DeviceKeyword);   // 预置值一并保存
+        Assert.Equal("", saved.DeviceKeyword);      // 串口关键字不再代预填（预填已随 TCP 缺省撤销）
         Assert.Equal(115200, saved.BaudRate);
         Assert.Equal(7, saved.DataBits);
         Assert.Equal("2", saved.StopBits);
@@ -110,6 +115,7 @@ public class ScannerConfigTests
         var vm = new ScannerConfigViewModel(fake)
         {
             EditEnabled = true,
+            EditUseTcp = false,                 // 显式串口方式（出厂缺省是 TCP，须下翻）
             EditPortName = "",
             EditDeviceKeyword = "",
         };
@@ -130,6 +136,7 @@ public class ScannerConfigTests
         var vm = new ScannerConfigViewModel(fake)
         {
             EditEnabled = true,
+            EditUseTcp = false,                 // 显式串口方式（好打 COM/波特率坏值）
             EditPortName = "COMX",
             EditDeviceKeyword = "",
             EditBaudRate = "100",
@@ -162,22 +169,20 @@ public class ScannerConfigTests
         Assert.Equal("", vm.EditDeviceKeyword);
     }
 
-    [Fact(DisplayName = "扫码枪配置_已配 Enabled=0 但定位全空=视为未配置（给启用+USB建议）")]
-    public void ScannerConfigVm_DisabledWithoutTarget_PrefillsPreset()
+    [Fact(DisplayName = "扫码枪配置_改过 TcpIp 的机器尊重现值（Enabled=0 不预填启用）")]
+    public void ScannerConfigVm_CustomizedTcpIp_RespectsValues()
     {
         using var scope = new TestScope();
         EnsureConfigDir();
-        // ini 自愈缺省就是这种形态：Enabled=0 + 两种定位都空
+        // TcpIp 不再等于出厂预置值 = 用户改过目标：只原样回显、不强行预填启用
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "Enabled", "0");
-        IniFile.Write(AppPaths.ConfigIni, "Scanner", "PortName", "");
-        IniFile.Write(AppPaths.ConfigIni, "Scanner", "DeviceKeyword", "");
+        IniFile.Write(AppPaths.ConfigIni, "Scanner", "TcpIp", "10.0.0.9");
 
         var vm = new ScannerConfigViewModel(new FakeCureDialogService());
 
-        Assert.True(vm.EditEnabled);                 // 从未配过枪 → 给出启用建议
-        Assert.Equal("USB", vm.EditDeviceKeyword);   // 现场转接线虚拟串口关键字
-        Assert.Equal("", vm.EditPortName);
-        Assert.False(ScannerOptions.Load().Enabled); // 建议值不落盘，点保存才确认
+        Assert.False(vm.EditEnabled);            // 明确关过：不强行打开
+        Assert.True(vm.EditUseTcp);              // 方式仍是现场缺省 TCP
+        Assert.Equal("10.0.0.9", vm.EditTcpIp);  // 目标原样回显
     }
 
     [Fact(DisplayName = "扫码枪配置_检测串口枚举系统 COM 号不抛异常")]

@@ -259,7 +259,13 @@ public class SlotBindingTests
         var options = ScannerOptions.Load(ini);
 
         Assert.False(options.Enabled);
-        Assert.False(options.HasPortTarget);
+        // V0.0.79 起缺省=现场 TCP 预置（Mode=Tcp + 枪侧 DTU IP + 8899 + 指令空）：
+        // 缺键自愈直接得到现场口径，目标视为"已配置"（Enabled=0 不自动连）。
+        Assert.Equal("Tcp", options.NormMode);
+        Assert.Equal(ScannerOptions.FieldTcpIp, options.TcpIp);
+        Assert.Equal(8899, options.NormTcpPort);
+        Assert.Equal("", options.TriggerCommand);
+        Assert.True(options.HasPortTarget);
         Assert.Equal(9600, options.NormBaudRate);
         Assert.Equal(8, options.NormDataBits);
         Assert.Equal("1", options.NormStopBits);
@@ -356,7 +362,7 @@ public class SlotBindingTests
         var fake = new FakeScanner();
         ScanConfig? captured = null;
         var service = new ScannerBarcodeService(
-            new ScannerOptions { Enabled = true, PortName = "COM9", BaudRate = 115200 },
+            new ScannerOptions { Enabled = true, Mode = "Serial", PortName = "COM9", BaudRate = 115200 },
             cfg => { captured = cfg; return fake; });
 
         string? scanned = null;
@@ -396,7 +402,7 @@ public class SlotBindingTests
         }
 
         using (var service = new ScannerBarcodeService(
-                   new ScannerOptions { Enabled = true, PortName = "", DeviceKeyword = "" },
+                   new ScannerOptions { Enabled = true, Mode = "Serial", PortName = "", DeviceKeyword = "" },
                    _ => { factoryCalled = true; return new FakeScanner(); }))
         {
             Assert.False(service.Start());
