@@ -78,7 +78,8 @@ public sealed class RackSlotViewModel : ViewModelBase
     }
 
     // ---------- 扫码绑定（P3.3 扫码工序） ----------
-    // 卡片 foot 中段显示产品码；未绑定且在架时显示红色"未绑定"，ToolTip 给全码。
+    // 卡片库位码正下方显示产品码（V0.0.80 从卡片 foot 底部上移——底缘太不醒目）；
+    // 未绑定且在架时红色加粗"未绑定"，ToolTip 给全码。
     // 绑定数据由会话（SlotBindingSession）维护，每拍随 Refresh 注入。
 
     private string _productCode = "";
@@ -90,7 +91,7 @@ public sealed class RackSlotViewModel : ViewModelBase
     }
 
     private string _bindingText = "";
-    /// <summary>foot 中段文案：产品码（灰）/ "未绑定"（红，托盘在架却没扫码）/ 空（空位）。</summary>
+    /// <summary>库位码下方产品码文案：产品码（主题蓝）/ "未绑定"（红加粗，托盘在架却没扫码）/ 空（空位）。</summary>
     public string BindingText
     {
         get => _bindingText;
@@ -106,7 +107,7 @@ public sealed class RackSlotViewModel : ViewModelBase
     }
 
     private string _bindingTip = "未绑定产品";
-    /// <summary>foot 产品码的悬停全文（产品码可能被省略号截断，这里给完整内容）。</summary>
+    /// <summary>库位码下方产品码的悬停全文（产品码可能被省略号截断，这里给完整内容）。</summary>
     public string BindingTip
     {
         get => _bindingTip;
@@ -114,7 +115,7 @@ public sealed class RackSlotViewModel : ViewModelBase
     }
 
     private bool _hasBindingText;
-    /// <summary>foot 中段是否需要占位（无产品码且未报警=空位，直接隐藏不留空白）。</summary>
+    /// <summary>产品码行是否需要占位（无产品码且未报警=空位，直接隐藏不留空白）。</summary>
     public bool HasBindingText
     {
         get => _hasBindingText;
@@ -286,7 +287,7 @@ public sealed class RackSlotViewModel : ViewModelBase
     /// Curing，报警标志优先于 Curing 分支把卡切 Alarm 口径（此前卡牌报警
     /// 永远显示不出，红灯 DO 反推分支在精确态路线下轮不到）。
     /// P3.3：productCode=库位绑定的产品条码（空=未绑定）；bindingMissing=
-    /// 托盘在架却没绑定（foot 显示红字"未绑定"，只提示不拦截固化流程）。
+    /// 托盘在架却没绑定（库位码下方显示红字"未绑定"，只提示不拦截固化流程）。
     /// </summary>
     public void Refresh(PointTableSnapshot snapshot, bool hasTable, SlotStatus? machineStatus = null,
         int planMinutes = 0, string productCode = "", bool bindingMissing = false)

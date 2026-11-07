@@ -155,7 +155,9 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <!-- top：库位码（大字号，空闲/未配置灰降权）+ 状态胶囊（六态彩底，设计图顶替灯点） -->
+                        <!-- top：库位码（大字号，空闲/未配置灰降权）+ 状态胶囊（六态彩底，设计图顶替灯点）
+                             + 库位码正下方一行=产品码（SN，V0.0.80 从卡片 foot 底部迁上来——
+                             底缘太不醒目；已绑=主题蓝 SemiBold 稍醒目，未绑定红字优先） -->
                         <Grid Grid.Row="0" ToolTipService.ShowDuration="12000">
                             <Grid.ToolTip>
                                 <ToolTip>
@@ -170,7 +172,11 @@
                                     </StackPanel>
                                 </ToolTip>
                             </Grid.ToolTip>
-                            <TextBlock Text="{Binding Code, FallbackValue=A01}" FontSize="17" FontWeight="ExtraBold"
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="{Binding Code, FallbackValue=A01}" FontSize="17" FontWeight="ExtraBold"
                                        VerticalAlignment="Center">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
@@ -188,7 +194,7 @@
                                 </TextBlock.Style>
                             </TextBlock>
                             <!-- 状态胶囊：全圆角小 pill，彩底白字（空闲=浅灰底灰字降档） -->
-                            <Border HorizontalAlignment="Right" VerticalAlignment="Center"
+                            <Border Grid.Row="0" HorizontalAlignment="Right" VerticalAlignment="Center"
                                     CornerRadius="10" Padding="9,2">
                                 <Border.Style>
                                     <Style TargetType="Border">
@@ -250,6 +256,33 @@
                                     </TextBlock.Style>
                                 </TextBlock>
                             </Border>
+                            <!-- 产品码（SN，P3.3；V0.0.80 从卡片 foot 底部迁到库位码正下方——
+                                 用户拍板：底缘太不醒目）：已绑产品=主题蓝（Brush.Accent 双主题
+                                 同名：浅 #1E90FF / 深 #4FC3F7）11 号 SemiBold 稍醒目；未绑定
+                                 红字 + 加粗优先（同一行红色报警）。无绑定且无报警整行 Collapsed
+                                 （Auto 行自动塌缩不占高）；码过长省略号截断、悬停看全文。
+                                 ★缺省色/可见性/字重全进 Style Setter（标签本地值会压死触发器——坑⑥）。 -->
+                            <TextBlock Grid.Row="1"
+                                       Text="{Binding BindingText, FallbackValue=未绑定产品}"
+                                       ToolTip="{Binding BindingTip, FallbackValue=未绑定产品}"
+                                       FontSize="11" Margin="0,3,0,0" HorizontalAlignment="Left"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasBindingText, FallbackValue=False}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding BindingMissing, FallbackValue=False}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush.StateRed}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                         </Grid>
 
                         <!-- mid：状态词视图（idle/gate/done/alarm/notconfig/灯色反推计时，含副文案行）
@@ -444,14 +477,12 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- foot：第一行=状态彩点（随 Kind 六态，设计图口径）+ 层名（左）+
-                             托盘（右，有货=深色半粗）；第二行=产品码（P3.3，独行整宽——
-                             窄卡里"未绑定"也不会被挤成省略号）。产品码过长省略号截断，
-                             悬停看全文；托盘在架却没绑定时红字"未绑定"（只提示不拦截流程）。
+                        <!-- foot：一行=状态彩点（随 Kind 六态，设计图口径）+ 层名（左）+
+                             托盘（右，有货=深色半粗）。产品码行已随 V0.0.80 迁到 top
+                             库位码正下方（foot 底缘太不醒目）——原第二行整行删除。
                              ★缺省色/可见性全进 Style Setter（标签本地值会压死触发器——坑⑥）。 -->
                         <Grid Grid.Row="2">
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
@@ -498,29 +529,6 @@
                                             <!-- 有货托盘：深色半粗（设计图 D 卡"托盘在"黑粗，不再用绿强调） -->
                                             <DataTrigger Binding="{Binding TrayFoot, FallbackValue=—}" Value="◈ 托盘在">
                                                 <Setter Property="Foreground" Value="{DynamicResource Brush.FgStrong}"/>
-                                                <Setter Property="FontWeight" Value="SemiBold"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                            <!-- 产品码（第二行，P3.3）：无绑定且无报警时隐藏不占位；
-                                 报警红字优先（触发器只改颜色/字重，缺省值全进 Style Setter） -->
-                            <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
-                                       Text="{Binding BindingText}"
-                                       ToolTip="{Binding BindingTip, FallbackValue=未绑定产品}"
-                                       FontSize="10" Margin="0,3,0,0" HorizontalAlignment="Left"
-                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                        <Setter Property="Foreground" Value="{DynamicResource Brush.FgDim}"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding HasBindingText, FallbackValue=False}" Value="True">
-                                                <Setter Property="Visibility" Value="Visible"/>
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding BindingMissing, FallbackValue=False}" Value="True">
-                                                <Setter Property="Foreground" Value="{DynamicResource Brush.StateRed}"/>
                                                 <Setter Property="FontWeight" Value="SemiBold"/>
                                             </DataTrigger>
                                         </Style.Triggers>

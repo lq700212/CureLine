@@ -732,7 +732,8 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   ④ **取件作废**：状态机 `TrayLeft` 边沿调 `Remove` 清该库位绑定，落盘/刷新
   一律 `UiInvoke` 回 UI（状态机锁内禁 IO；重启对齐 `AlignFromSnapshot` 不发
   `TrayLeft`，故重启不会清在架绑定）；⑤ **未绑定只提示不拦截**（客户口径）：
-  统计条扫码胶囊红字 + 卡片 foot 红字"未绑定" + 日志只记新出现的边沿，
+  统计条扫码胶囊红字 + 卡片库位码正下方红字"未绑定"（V0.0.80 SN 从卡片
+  foot 底部上移：默认主题蓝 11 号 SemiBold）+ 日志只记新出现的边沿，
   固化/过账流程零依赖绑定簿；⑥ 线程：`ScannerBarcodeService.Start/Dispose`
   必须后台调（Dispose 最坏等心跳线程 3 秒），两个事件在子模块后台线程触发、
   订阅方必须封送；⑦ 配置两桶按方式生效（V0.0.78）：Tcp 方式=`TcpIp` 非空即
