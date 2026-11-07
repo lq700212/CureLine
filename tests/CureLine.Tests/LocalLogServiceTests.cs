@@ -90,4 +90,34 @@ public class LocalLogServiceTests
         LocalLogService.Write("z2", -1);   // 退订后 → 静默
         Assert.Equal(1, count);
     }
+
+    [Fact(DisplayName = "最近缓存按写入顺序返回（最新在尾）")]
+    public void GetRecentLines_ReturnsWritten_NewestLast()
+    {
+        // 日志窗打开时预填历史的数据源：Write 同批维护进程内缓存。
+        using var scope = new TestScope();
+        LocalLogService.ClearRecentForTests();
+        LocalLogService.Write("cache-a", -1);
+        LocalLogService.Write("cache-b", -1);
+
+        var lines = LocalLogService.GetRecentLines();
+        int a = lines.FindIndex(l => l.EndsWith("cache-a"));
+        int b = lines.FindIndex(l => l.EndsWith("cache-b"));
+        Assert.True(a >= 0 && b >= 0);
+        Assert.True(a < b);   // 后写的排在后面（缓存按写入顺序）
+    }
+
+    [Fact(DisplayName = "最近缓存封顶 300 条丢最旧")]
+    public void GetRecentLines_Capped()
+    {
+        using var scope = new TestScope();
+        LocalLogService.ClearRecentForTests();
+        for (int i = 0; i < 310; i++)
+            LocalLogService.Write("cap-" + i, -1);
+
+        var lines = LocalLogService.GetRecentLines();
+        Assert.Equal(300, lines.Count);
+        Assert.DoesNotContain(lines, l => l.EndsWith("cap-0"));
+        Assert.Contains(lines, l => l.EndsWith("cap-309"));
+    }
 }

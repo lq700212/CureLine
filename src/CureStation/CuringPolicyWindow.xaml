@@ -259,7 +259,7 @@
                             <TextBlock Text="策略名：" VerticalAlignment="Center"/>
                             <TextBox Style="{StaticResource FreshInput}" Width="150"
                                      Text="{Binding EditName, FallbackValue=标准固化}"
-                                     ToolTip="策略名（库内唯一；改名后激活/保存按新名生效）"/>
+                                     ToolTip="库内唯一；改名后按新名保存/激活"/>
                             <TextBlock Text="　全局时长：" VerticalAlignment="Center" Margin="6,0,0,0"/>
                             <TextBox Style="{StaticResource FreshInput}" Width="86"
                                      Text="{Binding EditGlobalMinutes, FallbackValue=120}"
@@ -272,10 +272,10 @@
                                       Margin="18,0,0,0"
                                       ItemsSource="{Binding TimeUnitOptions, FallbackValue={x:Null}}"
                                       SelectedIndex="{Binding TimeUnitIndex, FallbackValue=1}"
-                                      ToolTip="页面时间单位（时/分）——仅显示与输入换算，底层计时精度为分钟，选择即记忆并同步主窗显示"/>
+                                      ToolTip="仅换显示单位，计时精度恒为分钟"/>
                             <CheckBox IsChecked="{Binding EditPersistMinutes, FallbackValue=False}"
                                       Content="断电续算" Margin="18,0,0,0"
-                                      ToolTip="开=进行中仓位随状态变化写 config/curingstate.json，断电期间时间计入固化时长（重启按记录续算）；关（缺省）=断电重启后重新计时，宁可重计也不放行没固化够的货。"/>
+                                      ToolTip="开=断电时间计入固化时长；关（缺省）=重启后重新计时"/>
                         </WrapPanel>
                     </Border>
                     <!-- 底部按钮：预置→套用目标+套用所选模板；自定义→激活/仅保存（两组按选中项互斥显示） -->
@@ -300,7 +300,7 @@
                             <ComboBox Style="{StaticResource FreshCombo}" Width="120" VerticalAlignment="Center" Margin="0,0,8,0"
                                       ItemsSource="{Binding ApplyTargets, FallbackValue={x:Null}}"
                                       SelectedItem="{Binding ApplyTargetName, FallbackValue=自定义}"
-                                      ToolTip="预置模板落到哪个策略：默认「自定义」，也可选自己另建的策略（整体替换其时长并激活它）"/>
+                                      ToolTip="预置模板整体替换并激活所选策略"/>
                             <Button Tag="{StaticResource Geo.Check}" Content="套用所选模板（保存并激活）"
                                     Command="{Binding ApplyTemplateCommand}" Width="230" Height="36"/>
                         </StackPanel>
@@ -353,7 +353,7 @@
                             <!-- 0 光栅标志物：门控关（缺省）整体半透明，开=满亮度 -->
                             <Grid Grid.Column="0" Width="42" Height="38" Margin="0,0,12,0"
                                   VerticalAlignment="Center"
-                                  ToolTip="安全光栅：两侧立柱相对，中间三道光束。亮=门控已启用；暗=未启用（不检测光栅）。">
+                                  ToolTip="亮=门控已启用，暗=已关闭。">
                                 <Grid.Style>
                                     <Style TargetType="Grid">
                                         <Setter Property="Opacity" Value="0.35"/>
@@ -399,7 +399,7 @@
                                           VerticalAlignment="Center"
                                           IsChecked="{Binding EditGrillGate, FallbackValue=False}"
                                           Content="{Binding GrillGateSwitchText, FallbackValue=已关闭}"
-                                          ToolTip="光栅门控（随策略保存）：开=左右光栅都让空且托盘在架才开计时（防人手在架内就计时）；关（缺省）=托盘到位即开计时，没绑光栅的仓位门控自动放行。"/>
+                                          ToolTip="开=两侧光栅让空才计时；关=托盘到位即计时（随策略保存）。"/>
 
                             <!-- 3 竖分隔 -->
                             <Border Grid.Column="3" Width="1" Margin="16,3"
@@ -408,15 +408,15 @@
                             <!-- 4 信号类型（全局接线口径）：常开/常闭分段按钮，当前档蓝底反白 -->
                             <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Text="信号类型" VerticalAlignment="Center"
-                                           ToolTip="{Binding GrillSignalToolTip, FallbackValue='信号类型：常开（遮挡=ON）——缺省口径，全局设置立即生效。'}"/>
+                                           ToolTip="{Binding GrillSignalToolTip, FallbackValue='常开：遮挡=ON（缺省）。全局设置，立即生效。'}"/>
                                 <RadioButton Style="{StaticResource GrillSegment}" Content="常开" Margin="8,0,0,0"
                                              GroupName="GrillPolarity"
                                              IsChecked="{Binding IsGrillNormallyOpen, FallbackValue=True}"
-                                             ToolTip="常开（被挡 = ON）：光栅被挡时信号 ON、让空 OFF——缺省口径（V0.0.71 及以前）。全局设置（不进策略），立即生效。"/>
+                                             ToolTip="常开：被挡=ON、让空=OFF（缺省）。"/>
                                 <RadioButton Style="{StaticResource GrillSegment}" Content="常闭" Margin="4,0,0,0"
                                              GroupName="GrillPolarity"
                                              IsChecked="{Binding IsGrillNormallyClosed, FallbackValue=False}"
-                                             ToolTip="常闭（被挡 = OFF）：光栅被挡时信号 OFF、让空 ON——现场常闭安全光栅口径。全局设置（不进策略），立即生效。"/>
+                                             ToolTip="常闭：被挡=OFF、让空=ON（常闭安全光栅）。"/>
                             </StackPanel>
 
                             <!-- 5 竖分隔 -->
@@ -426,15 +426,15 @@
                             <!-- 6 报警解除（全局操作规程）：人工/自动分段按钮 -->
                             <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Text="报警解除" VerticalAlignment="Center"
-                                           ToolTip="{Binding GrillResetModeToolTip, FallbackValue='人工复位（缺省）：光栅让空后报警不自动解除，由操作员在报警复位窗确认。全局设置，立即生效。'}"/>
+                                           ToolTip="{Binding GrillResetModeToolTip, FallbackValue='人工：报警后不自动解除，在报警复位窗确认。全局设置，立即生效。'}"/>
                                 <RadioButton Style="{StaticResource GrillSegment}" Content="人工" Margin="8,0,0,0"
                                              GroupName="GrillReset"
                                              IsChecked="{Binding IsGrillManualReset, FallbackValue=True}"
-                                             ToolTip="人工复位（缺省）：光栅让空后红灯/蜂鸣保持，弹出报警复位窗由操作员逐项/全部确认。全局设置（不进策略），立即生效。"/>
+                                             ToolTip="人工：报警后不自动解除，在报警复位窗确认。"/>
                                 <RadioButton Style="{StaticResource GrillSegment}" Content="自动" Margin="4,0,0,0"
                                              GroupName="GrillReset"
                                              IsChecked="{Binding IsGrillAutoReset, FallbackValue=False}"
-                                             ToolTip="自动复位：光栅双侧都让空即自动解除报警。全局设置（不进策略），立即生效。"/>
+                                             ToolTip="自动：两侧光栅让空即解除报警。"/>
                             </StackPanel>
                         </Grid>
                     </Border>

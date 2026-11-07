@@ -61,7 +61,8 @@
                 <Button DockPanel.Dock="Right" Style="{StaticResource WinTitleClose}"
                         Height="36" Foreground="{DynamicResource Brush.LfHeadFg}"
                         Content="✕" Click="OnCloseClick" ToolTip="关闭（Alt+F4）"/>
-                <TextBlock DockPanel.Dock="Right" Text="{Binding LogLines.Count, FallbackValue=0, StringFormat={}{0} 条}"
+                <TextBlock DockPanel.Dock="Right" Margin="12,0,0,0"
+                           Text="{Binding LogLines.Count, FallbackValue=0, StringFormat={}{0} 条}"
                            Foreground="{DynamicResource Brush.LfHeadSubFg}" VerticalAlignment="Center"/>
             </DockPanel>
         </Border>

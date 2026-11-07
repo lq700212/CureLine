@@ -204,11 +204,11 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         set { if (value) SetGrillResetMode(GrillAlarmResetMode.Auto); }
     }
 
-    /// <summary>复位模式 ToolTip（两态口径写全，分段按钮悬停读；随切换刷新）。</summary>
+    /// <summary>复位模式组 ToolTip（一句话口径；随切换刷新）。</summary>
     public string GrillResetModeToolTip =>
         _grillResetMode == GrillAlarmResetMode.Manual
-            ? "人工复位（缺省）：光栅让空后报警不自动解除（红灯与蜂鸣保持），弹出\"报警复位\"窗列出正在报警的库位，由操作员逐项/全部点【解除报警】确认。全局设置，立即生效。"
-            : "自动复位：光栅双侧全让空即自动解除报警。全局设置，立即生效。";
+            ? "人工：报警后不自动解除，在报警复位窗确认。全局设置，立即生效。"
+            : "自动：两侧光栅让空即解除报警。全局设置，立即生效。";
 
     /// <summary>切换复位模式唯一写点（V0.0.74 分段按钮入口）：中枢 Change
     /// 落盘+广播——状态机下一拍按新模式复位判定，主窗立即重跑弹窗决策
@@ -271,10 +271,10 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         Raise(nameof(GrillSignalToolTip));
     }
 
-    /// <summary>信号类型组 ToolTip（两态口径写全，现场不看文档也能切对）。</summary>
+    /// <summary>信号类型组 ToolTip（一句话接线口径；随切换刷新）。</summary>
     public string GrillSignalToolTip => _grillSignalInverted
-        ? "信号类型：常闭（遮挡=OFF）——光栅被挡时 DI 为 OFF、未被挡为 ON（现场实测常闭安全光栅口径）。全局设置，立即生效（建议停机时切换）。点【常开】切回遮挡=ON。"
-        : "信号类型：常开（遮挡=ON）——光栅被挡时 DI 为 ON、未被挡为 OFF（缺省口径，V0.0.71 及以前行为）。现场光栅\"被挡=OFF\"时选【常闭】，门控/报警/复位判定整体反相。全局设置，立即生效（建议停机时切换）。";
+        ? "常闭：遮挡=OFF（被挡 OFF / 让空 ON）。全局设置，立即生效。"
+        : "常开：遮挡=ON（被挡 ON / 让空 OFF，缺省）。全局设置，立即生效。";
 
     private PolicyTimeUnit _timeUnit = PolicyTimeUnit.Minutes;
 

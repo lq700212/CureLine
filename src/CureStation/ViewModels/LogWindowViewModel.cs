@@ -3,7 +3,8 @@
 //
 // 干什么：订阅 LocalLogService.Written（全工程日志单一汇聚口）→ 操作日志
 //   流（最新在上、封顶 200 条）+ 打开一刻的系统状态卡快照（见
-//   MainViewModel.BuildSystemSnapshot）。
+//   MainViewModel.BuildSystemSnapshot）。**构造时先从 LocalLogService 的
+//   进程内缓存预填历史**（2026-11-07 修：只订阅后续事件会让开窗即空）。
 //
 // 【线程红线落地，与状态机锁内轻量投递红线同款纪律】：
 //   Written 在后台线程甚至状态机 _sync 锁内触发——处理器只做无锁入队
@@ -45,6 +46,14 @@ public sealed class LogWindowViewModel : ViewModelBase
     {
         GeneratedAtText = snapshot.GeneratedAtText;
         StatusRows = new ObservableCollection<SystemStatusRow>(snapshot.Rows);
+        // 打开前的历史日志：从进程内缓存预填（最新在上、封顶同 200 条）——
+        // 只靠 Written 订阅的话，窗口打开前已发生的日志（启动/连接/报警）
+        // 全部看不到，用户开窗见空列表。缓存与 Written 同源（Write 一处维护）。
+        // 顺序：先取快照再 Attach；若恰在两者之间写了一条（微秒级窗口）本次
+        // 开窗可能看不到该条，日志是旁路观测，不做重/漏严格队列语义。
+        var recent = LocalLogService.GetRecentLines();
+        for (int i = recent.Count - 1; i >= 0 && LogLines.Count < MaxLines; i--)
+            LogLines.Add(recent[i]);
         _drainTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = TimeSpan.FromMilliseconds(100),

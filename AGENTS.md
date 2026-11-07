@@ -229,7 +229,7 @@
 | `src/CureStation/App.xaml.cs` / `src/CimGateway/App.xaml.cs` | 启动门禁（`LicenseHost.Setup`→`Refresh`，未授权弹窗，关闭即退出；`ShutdownMode=OnExplicitShutdown` 到主窗建好恢复）+ 每小时巡检 |
 | `tools/LicenseIssuer/` | **厂商签发工具**（.NET 8 WPF，不随客户版分发；编解码同引 `Kaleidoscope.dll` 真源）：GUI 粘贴设备码签发 + `--generate`/`--issue 设备码 P\|T 天数` 命令行；按设备码前缀自动识别产品。私钥 `LicenseSignKey.dat` 已 ignore，禁止入库/外发 |
 | **Core 共享（业务既有）** | |
-| `src/CureLine.Core/Services/LocalLogService.cs` | 本机操作日志落盘（截 50 字写文件，全量上界面） |
+| `src/CureLine.Core/Services/LocalLogService.cs` | 本机操作日志落盘（截 50 字写文件，全量上界面；进程内最近 300 条缓存供日志窗开窗预填） |
 | `src/CureLine.Core/Modes/MultiMachineGateway.cs` | 多机网关：触发→JSON→POST→回写 + Manager（Modbus 底座已接，业务零改动） |
 | `src/CureLine.Core/Comms/ModbusStationClient.cs` | **真机底座（P2 新增）**：`IStationClient` 的 Modbus TCP 实现——地址="剥 R/D 取数字"=协议地址、字符串 2 字节/寄存器 big-endian、分帧 125/123，三语义集中一处 |
 | `src/CureLine.Core/Comms/`（机台侧） | `IStationClient` + 真机 `ModbusStationClient` + 模拟 `SimulatedStationClient` + 连通测试 `StationConnectionTester`（V0.0.32 去 PLC 化命名，三菱客户端已删；kaleidoscope 外部类型 PlcMasterConfig 等保留原名） |

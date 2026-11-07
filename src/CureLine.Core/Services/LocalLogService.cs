@@ -9,6 +9,12 @@
 // 位置说明：纯逻辑无 WPF 依赖，故放 Core（可测，见 LocalLogServiceTests），
 // WPF 层只调 Write 搬运返回值上界面。
 //
+// 最近日志缓存（2026-11-07）：Write 同批写入进程内环形缓存（封顶 300 条），
+//   供日志窗打开时预填历史。只订阅 Written 的话，窗口打开前已发生的日志
+//   （启动/连接/报警）全部看不到——用户实测"日志窗一开是空的"。
+//   跨重启的历史走状态卡给出的日志目录查文件（进程内缓存随退出清空，
+//   与程序② MesLogger 的缓存语义一致）。
+//
 // Written 事件流（2026-10-29 日志/控制台悬浮窗，双主题 G2/G1 实施）：
 //   老模式"调用 Write 拿返回行自己上屏"要求每个调用点手动转发——程序①写日志
 //   的点散在主 VM/策略窗/点表窗/状态机 log 回调等多处，各点转发必漏。现在
@@ -27,6 +33,12 @@ namespace CureLine.Core.Services;
 public static class LocalLogService
 {
     private static readonly object LockObj = new();
+
+    /// <summary>进程内最近日志缓存上限（与程序② MesLogger 单机缓存同口径 300 条）。</summary>
+    private const int MaxRecentLines = 300;
+
+    /// <summary>最近日志（最新在尾部；日志窗打开时一次性预填历史）。</summary>
+    private static readonly List<string> RecentLines = new();
 
     /// <summary>
     /// 日志汇聚事件：Write 落盘成功后触发，参数=与返回值同款的完整显示行（HH:mm:ss + 全文）。
@@ -59,10 +71,34 @@ public static class LocalLogService
             {
                 // 落盘失败不影响业务（老项目无保护，新项目加固但同样静默）。
             }
+
+            RecentLines.Add(line);
+            if (RecentLines.Count > MaxRecentLines)
+                RecentLines.RemoveAt(0);
         }
         // 事件在锁外触发（锁内只包文件 IO；订阅方千变万化，不持锁更稳）。
         try { Written?.Invoke(line); }
         catch { /* 日志旁听者异常不影响业务主链 */ }
         return line;
+    }
+
+    /// <summary>
+    /// 取进程内最近日志副本（最新在尾部）——日志窗打开时预填历史用。
+    /// 只订阅 Written 会漏掉窗口打开前已发生的全部日志（用户实测开窗即空）。
+    /// </summary>
+    public static List<string> GetRecentLines()
+    {
+        lock (LockObj)
+            return new List<string>(RecentLines);
+    }
+
+    /// <summary>
+    /// 清空进程内最近日志缓存（仅测试：静态缓存跨用例常驻，不清会互相污染）。
+    /// 生产代码不要调——日志窗预填依赖它。
+    /// </summary>
+    public static void ClearRecentForTests()
+    {
+        lock (LockObj)
+            RecentLines.Clear();
     }
 }
