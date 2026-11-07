@@ -8,7 +8,7 @@
 ![WPF](https://img.shields.io/badge/UI-WPF-5C2D91)
 ![数据库](https://img.shields.io/badge/SQLite-3.x-044A64?logo=sqlite&logoColor=white)
 ![通讯](https://img.shields.io/badge/Modbus-TCP-00599C)
-![测试](https://img.shields.io/badge/xUnit-434%20passing-brightgreen)
+![测试](https://img.shields.io/badge/xUnit-543%20passing-brightgreen)
 ![平台](https://img.shields.io/badge/OS-Windows-lightgrey?logo=windows11&logoColor=white)
 
 一套 .NET 8 解决方案：两个可独立部署的 WPF 上位机程序（固化程控 + CIM 整线过账），共享一个业务内核。
@@ -75,8 +75,8 @@ IO 耦合器（Modbus TCP）**30 仓位**程控（双架 60）：
   已配过塔灯/接线位被占的表不重复补，原样保护）。
 - **仓位状态机**：托盘到位 →（门控开则等光栅让空）→ 黄灯计时 → 到点绿灯
   放行 → 托盘离开灭灯回空闲；断电续算可配置，断连恢复自动对齐重计。
-  **光栅信号极性可配（V0.0.72）**：缺省遮挡=ON，现场"被挡=OFF"在策略窗勾
-  "光栅信号取反"即整体按现场语义解释（门控/报警/复位/排障日志同源）。
+  **光栅信号极性可配（V0.0.72）**：缺省遮挡=ON，现场"被挡=OFF"在策略窗
+  光栅条选【常闭】即整体按现场语义解释（门控/报警/复位/排障日志同源）。
   计时中光栅被挡（人手伸入）不停表不重置——红灯报警（黄绿让位），解除方式
   二选一（策略窗"报警复位"钮，V0.0.69）：**人工复位**（缺省，V0.0.71 用户
   拍板）——让空不解除（红灯与蜂鸣保持），弹出"报警复位"悬浮窗列出正在报警
@@ -90,6 +90,14 @@ IO 耦合器（Modbus TCP）**30 仓位**程控（双架 60）：
   绑定表行内直编（中文语义）/ 测试连接 / 保存前两道校验（物理点+语义查重）。
 - **单线过账**：托盘到位=进站、离开=固化时间+出站（API0030 / API0027），
   出站被接受 → 已生产 +1；全参数界面可配，保存即热生效。
+- **扫码绑定库位/产品（V0.0.76）**：托盘入库前**先扫库位码（A01~J12）再扫
+  产品二维码**，绑定落盘 `config\slotbindings.json`（重启不丢，现场可追溯）；
+  固化完取件（托盘离开）绑定自动作废，下次入库必须重扫。扫码枪为网口经
+  USB 转接线接入的**虚拟串口**，`[Scanner]` 节配置（固定 COM 口或按设备名
+  关键字自动找口，断线后台静默重连）；统计条扫码胶囊实时提示当前阶段
+  （灰=未连接 · 绿=待扫库位 · 黄=待扫产品 · 红=有在架托盘未绑定），
+  扫错码 3 秒浮层提示、超时自动回"请扫库位码"；**托盘在架未绑定只红字
+  报警，不拦截固化流程**（客户口径）。
 - **IO 通讯测试窗**：按点表铺仓位卡网格，DI 只读灯 + DO 点击切换 +
   一键遍历跑马灯，现场接线快速验证；点表含塔灯时顶部另出"机台总监"
   专条（红/黄/绿/蓝/蜂鸣 5 路灯钮）逐路验接线。
@@ -240,7 +248,7 @@ CureLine/
 │   ├── CureLine.Core/    共享业务：IO 点表 / 固化工艺 / 过账 / 通讯底座 / VM 基建
 │   ├── CureStation/      程序①固化程控（30 仓位主窗 + 6 功能窗 + 双主题）
 │   └── CimGateway/       程序②CIM 整线过账（网关视图 + 配置/调试/日志窗）
-├── tests/CureLine.Tests/ 476 例 xUnit（本地桩 MES / 状态机桩 / Fake 对话框）
+├── tests/CureLine.Tests/ 543 例 xUnit（本地桩 MES / 状态机桩 / Fake 对话框）
 ├── extern/kaleidoscope/  通讯子模块（独立仓库；Modbus/HslCommunication）
 ├── docs/                 拆分设计 + 培训手册（md/pdf）+ 配图 docs/images/
 ├── tools/DocShot/        文档截图 harness

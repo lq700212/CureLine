@@ -31,6 +31,10 @@
          磁盘/CPU 序列号，.NET 8 运行时需 System.Management 包（net472 装机自带）。
          位于 net8 系统仅 Windows 可用，本工程 net8.0-windows 无跨平台问题。 -->
     <PackageReference Include="System.Management" Version="10.0.10" />
+    <!-- 扫码枪（串口）：子模块 ScannerService 用 System.IO.Ports 读虚拟串口，
+         该类库在 net472 是框架内置（Reference），net8 需显式引包。
+         现场接线=网口扫码枪经 USB 转接线接入，系统表现为虚拟串口。 -->
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

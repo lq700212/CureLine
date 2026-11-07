@@ -229,8 +229,17 @@ public partial class CuringPolicyWindow : Window
     /// </summary>
     private void OnWindowPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.OriginalSource is DependencyObject d && FindSelfOrAncestor<TextBox>(d) != null)
+        if (e.OriginalSource is not DependencyObject d)
+            return;
+        if (FindSelfOrAncestor<TextBox>(d) != null)
             return;                 // 点在输入框自身（文本区/边框）→ 正常聚焦
+        // 弹出层豁免（V0.0.76）：ComboBox 下拉项/右键菜单在 Popup 的独立视觉树里，
+        // 但鼠标隧道事件仍沿逻辑树经过本窗口——这里若 Keyboard.ClearFocus，
+        // ComboBox 会立即收起下拉（实测：ClearFocus 后 IsDropDownOpen 直接变 false），
+        // 下拉项收不到 MouseUp → 选择落空（用户报"时间单位选分却一直是时"的根因）。
+        // 判据：视觉树爬不到本窗口 = 点击在 Popup 里，一律交给弹出层自己管焦点。
+        if (FindSelfOrAncestor<Window>(d) == null)
+            return;
         // 先推源再清焦点（用户反馈 V0.0.59）：Keyboard.ClearFocus 只清键盘焦点，
         // 逻辑焦点不动，TextBox 的 LostFocus 类处理（绑定推源）不会触发——点画布/
         // 参数条空白后"全局时长/层覆盖"的新值滞留在输入框里，画布格子仍显旧值。

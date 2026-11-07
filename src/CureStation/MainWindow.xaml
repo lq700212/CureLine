@@ -444,9 +444,22 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- foot：状态彩点（随 Kind 六态，设计图口径）+ 层名（左） + 托盘（右，有货=深色半粗） -->
+                        <!-- foot：第一行=状态彩点（随 Kind 六态，设计图口径）+ 层名（左）+
+                             托盘（右，有货=深色半粗）；第二行=产品码（P3.3，独行整宽——
+                             窄卡里"未绑定"也不会被挤成省略号）。产品码过长省略号截断，
+                             悬停看全文；托盘在架却没绑定时红字"未绑定"（只提示不拦截流程）。
+                             ★缺省色/可见性全进 Style Setter（标签本地值会压死触发器——坑⑥）。 -->
                         <Grid Grid.Row="2">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Ellipse Width="7" Height="7" VerticalAlignment="Center">
                                     <Ellipse.Style>
                                         <Style TargetType="Ellipse">
@@ -475,15 +488,39 @@
                                            Foreground="{DynamicResource Brush.FgDim}"
                                            VerticalAlignment="Center" Margin="5,0,0,0"/>
                             </StackPanel>
-                            <TextBlock HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10"
-                                       Text="{Binding TrayFoot, FallbackValue=—}"
-                                       Foreground="{DynamicResource Brush.FgDim}">
+                            <TextBlock Grid.Row="0" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10"
+                                       Text="{Binding TrayFoot, FallbackValue=—}">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
+                                        <!-- ★缺省 Foreground 必须进 Style Setter（写标签本地值会压死下面触发器） -->
+                                        <Setter Property="Foreground" Value="{DynamicResource Brush.FgDim}"/>
                                         <Style.Triggers>
                                             <!-- 有货托盘：深色半粗（设计图 D 卡"托盘在"黑粗，不再用绿强调） -->
                                             <DataTrigger Binding="{Binding TrayFoot, FallbackValue=—}" Value="◈ 托盘在">
                                                 <Setter Property="Foreground" Value="{DynamicResource Brush.FgStrong}"/>
+                                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <!-- 产品码（第二行，P3.3）：无绑定且无报警时隐藏不占位；
+                                 报警红字优先（触发器只改颜色/字重，缺省值全进 Style Setter） -->
+                            <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                                       Text="{Binding BindingText}"
+                                       ToolTip="{Binding BindingTip, FallbackValue=未绑定产品}"
+                                       FontSize="10" Margin="0,3,0,0" HorizontalAlignment="Left"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource Brush.FgDim}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasBindingText, FallbackValue=False}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding BindingMissing, FallbackValue=False}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush.StateRed}"/>
                                                 <Setter Property="FontWeight" Value="SemiBold"/>
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -830,6 +867,53 @@
                     </StackPanel>
                 </Border>
             </StackPanel>
+            <!-- 扫码状态胶囊（P3.3 扫码工序，统计行中间 * 列）：点色四态
+                 （灰=未启用/未连接 · 绿=已连接待扫码 · 黄=已扫库位待产品码 ·
+                 红=有在架托盘未绑产品）；待产品码时右侧出【取消】。
+                 文案/提示由 VM RefreshScanState 唯一拼装。 -->
+            <Border Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    CornerRadius="18" Padding="11,4" Margin="8,0"
+                    Background="{DynamicResource Brush.StatBg}"
+                    BorderBrush="{DynamicResource Brush.StatBorder}" BorderThickness="1"
+                    ToolTip="{Binding ScanTip, FallbackValue=扫码枪未启用}">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,6,0">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="{DynamicResource Brush.StateIdle}"/>
+                                <Style.Triggers>
+                                    <!-- 顺序即优先级（后写的覆盖前面的）：绿 < 黄 < 红 -->
+                                    <DataTrigger Binding="{Binding ScanConnected, FallbackValue=False}" Value="True">
+                                        <Setter Property="Fill" Value="{DynamicResource Brush.StateGreen}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ScanWaitingProduct, FallbackValue=False}" Value="True">
+                                        <Setter Property="Fill" Value="{DynamicResource Brush.StateYellow}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ScanWarning, FallbackValue=False}" Value="True">
+                                        <Setter Property="Fill" Value="{DynamicResource Brush.StateRed}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                    <TextBlock Text="{Binding ScanText, FallbackValue=扫码枪未启用}" FontSize="11.5"
+                               Foreground="{DynamicResource Brush.StatFg}" VerticalAlignment="Center"/>
+                    <!-- 【取消】只在"已扫库位待产品码"时出现（浅底窗用 FreshButton 系） -->
+                    <Button Content="取消" Command="{Binding CancelScanCommand}"
+                            Margin="8,0,0,0" Padding="7,1" FontSize="10.5">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource FreshButton}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ScanWaitingProduct, FallbackValue=False}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
+            </Border>
             <!-- ⚡ 剩余最短：虚线边框白胶囊（HTML border-style:dashed 直译，Rectangle 虚线描边叠加） -->
             <Border Grid.Column="2" VerticalAlignment="Center" CornerRadius="18" Padding="12,4"
                     Background="{DynamicResource Brush.StatBg}"

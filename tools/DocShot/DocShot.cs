@@ -163,6 +163,20 @@ public static class Program
         Directory.CreateDirectory(AppPaths.ConfigDir);
         Directory.CreateDirectory(AppPaths.BaseDir + "\\DataBase");
         WriteCureSeedIni(AppPaths.ConfigIni);
+        // 扫码演示种子（P3.3）：A01 预置一条产品绑定——主窗截图同屏展示
+        // "已绑定产品码"（A01 灰字）与"托盘在架未绑定红字"（A02/A03）两态；
+        // 只写 seed 目录，不触碰现场 config。
+        SlotBindingStore.Save(new SlotBindingBook
+        {
+            Bindings =
+            {
+                new SlotBindingRecord
+                {
+                    Rack = 1, Level = 1, ProductCode = "SN-2026-000123",
+                    BoundAt = DateTimeOffset.Now,
+                },
+            },
+        });
         // 登录记忆（真实生产语义：登录窗按 SavedUser 预填 + 按账号跟出记住密码）
         RunModeSettings.SaveLogin(AppPaths.ConfigIni, true, "admin", "123456");
         try
@@ -360,7 +374,9 @@ public static class Program
                     [new IoPointKey(false, IoPointRole.LampYellow, 1, 1)] = true,
                 }, DateTimeOffset.Now);
                 vm.Slots.FirstOrDefault(s => s.Rack == 1 && s.Level == 1)
-                    ?.Refresh(snap, true, new SlotStatus(SlotPhase.Curing, 120, 47));
+                    ?.Refresh(snap, true, new SlotStatus(SlotPhase.Curing, 120, 47),
+                        productCode: SlotBindingStore.Load()?.Bindings
+                            .FirstOrDefault(b => b.Rack == 1 && b.Level == 1)?.ProductCode ?? "");
                 // 统计条（⚡剩余最短/五态计数）同拍重算——刷新停在注入拍，不手动
                 // 重算的话顶栏还挂着注入前数值，与卡内 47 分对不上（演示帧自治愈态）。
                 typeof(CureMainVm).GetMethod("RefreshStats",

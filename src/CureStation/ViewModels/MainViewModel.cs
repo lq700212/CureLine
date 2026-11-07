@@ -77,6 +77,50 @@ public sealed class RackSlotViewModel : ViewModelBase
         private set => Set(ref _slotStateText, value);
     }
 
+    // ---------- 扫码绑定（P3.3 扫码工序） ----------
+    // 卡片 foot 中段显示产品码；未绑定且在架时显示红色"未绑定"，ToolTip 给全码。
+    // 绑定数据由会话（SlotBindingSession）维护，每拍随 Refresh 注入。
+
+    private string _productCode = "";
+    /// <summary>本库位已绑定的产品条码（空=未绑定）。构造后由 Refresh 每拍注入。</summary>
+    public string ProductCode
+    {
+        get => _productCode;
+        private set => Set(ref _productCode, value);
+    }
+
+    private string _bindingText = "";
+    /// <summary>foot 中段文案：产品码（灰）/ "未绑定"（红，托盘在架却没扫码）/ 空（空位）。</summary>
+    public string BindingText
+    {
+        get => _bindingText;
+        private set => Set(ref _bindingText, value);
+    }
+
+    private bool _bindingMissing;
+    /// <summary>托盘在架但库位未绑定产品（XAML 红字触发条件；流程不拦截，仅提示）。</summary>
+    public bool BindingMissing
+    {
+        get => _bindingMissing;
+        private set => Set(ref _bindingMissing, value);
+    }
+
+    private string _bindingTip = "未绑定产品";
+    /// <summary>foot 产品码的悬停全文（产品码可能被省略号截断，这里给完整内容）。</summary>
+    public string BindingTip
+    {
+        get => _bindingTip;
+        private set => Set(ref _bindingTip, value);
+    }
+
+    private bool _hasBindingText;
+    /// <summary>foot 中段是否需要占位（无产品码且未报警=空位，直接隐藏不留空白）。</summary>
+    public bool HasBindingText
+    {
+        get => _hasBindingText;
+        private set => Set(ref _hasBindingText, value);
+    }
+
     // ---------- 卡片视觉状态（Kind，新卡模板六态状态口径，2026-10-29） ----------
     // 六态键与主题字典 Brush.Tint*/Brush.SlotBorder*/Brush.CardGlow*
     // 的 XAML 触发器同名（改键名要同步：这里 + 两字典 + MainWindow.xaml 触发器）。
@@ -241,10 +285,21 @@ public sealed class RackSlotViewModel : ViewModelBase
     /// V0.0.67：快照带出 AlarmGrill 报警标志——计时中报警照常计时 Phase 仍
     /// Curing，报警标志优先于 Curing 分支把卡切 Alarm 口径（此前卡牌报警
     /// 永远显示不出，红灯 DO 反推分支在精确态路线下轮不到）。
+    /// P3.3：productCode=库位绑定的产品条码（空=未绑定）；bindingMissing=
+    /// 托盘在架却没绑定（foot 显示红字"未绑定"，只提示不拦截固化流程）。
     /// </summary>
     public void Refresh(PointTableSnapshot snapshot, bool hasTable, SlotStatus? machineStatus = null,
-        int planMinutes = 0)
+        int planMinutes = 0, string productCode = "", bool bindingMissing = false)
     {
+        // 绑定信息与流程状态无关，每拍先落（即使点表未配置也照常显示已存绑定）。
+        ProductCode = productCode;
+        BindingMissing = bindingMissing && string.IsNullOrWhiteSpace(productCode);
+        BindingText = BindingMissing ? "未绑定" : productCode;
+        BindingTip = string.IsNullOrWhiteSpace(productCode)
+            ? (bindingMissing ? "托盘在架但库位未绑定产品：先扫库位码、再扫产品码" : "未绑定产品")
+            : $"产品：{productCode}";
+        HasBindingText = !string.IsNullOrEmpty(BindingText);
+
         _planMinutes = planMinutes;   // 缓存本拍策略解析值（ApplyKind 落 Idle 字面 / 单位切换重拼用）
         _lastCuring = machineStatus is { Phase: SlotPhase.Curing } c ? c : null;
         if (!hasTable)
@@ -564,6 +619,67 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         private set => Set(ref _simulateText, value);
     }
 
+    // ---------- 扫码枪 + 库位绑定（P3.3 扫码工序） ----------
+    // 现场流程：托盘入库前先扫库位码（A01~J12）再扫产品二维码 → 绑定；
+    // 固化完成取件后绑定作废（状态机 TrayLeft 清），下次入库必须重新扫。
+    // 未绑定的在架托盘只做界面报警提示，不拦截固化流程（客户口径）。
+
+    private ScannerOptions _scannerOptions = new();
+    private ScannerBarcodeService? _scanner;
+    private SlotBindingSession _bindings = new();
+
+    /// <summary>已提示过"未绑定"的库位（日志只记边沿：新出现的未绑定才写一行）。</summary>
+    private readonly HashSet<(int Rack, int Level)> _unboundAlerted = new();
+
+    /// <summary>最近一拍"托盘在架但未绑定产品"的库位数（扫码胶囊报警依据）。</summary>
+    private int _unboundTrayCount;
+
+    /// <summary>3 秒错误浮层文案（扫错库位码时显示；优先级高于常规文案）。</summary>
+    private string _scanHintText = "";
+
+    /// <summary>错误浮层到期时刻（过点后 RefreshScanState 自动回常规文案）。</summary>
+    private DateTime _scanHintUntil;
+
+    private string _scanText = "扫码枪未启用";
+    /// <summary>统计条扫码胶囊文案（阶段/未绑定报警/连接态三档，RefreshScanState 唯一写点）。</summary>
+    public string ScanText
+    {
+        get => _scanText;
+        private set => Set(ref _scanText, value);
+    }
+
+    private string _scanTip = "";
+    /// <summary>扫码胶囊悬停说明（怎么配置/当前在等什么码）。</summary>
+    public string ScanTip
+    {
+        get => _scanTip;
+        private set => Set(ref _scanTip, value);
+    }
+
+    private bool _scanWaitingProduct;
+    /// <summary>正在等产品码（黄点 + 显示【取消】按钮）。</summary>
+    public bool ScanWaitingProduct
+    {
+        get => _scanWaitingProduct;
+        private set => Set(ref _scanWaitingProduct, value);
+    }
+
+    private bool _scanWarning;
+    /// <summary>有在架托盘未绑产品（红点报警；只提示不拦截流程）。</summary>
+    public bool ScanWarning
+    {
+        get => _scanWarning;
+        private set => Set(ref _scanWarning, value);
+    }
+
+    private bool _scanConnected;
+    /// <summary>扫码枪串口已打开（绿点；未连接时灰点，子模块后台自动重连）。</summary>
+    public bool ScanConnected
+    {
+        get => _scanConnected;
+        private set => Set(ref _scanConnected, value);
+    }
+
     // ---------- 顶部统计条（方案 D，2026-10-29；RefreshSlots 每拍聚合） ----------
     // 五态口径与卡片 Kind 同名（Idle/Gate/Curing/Done/Alarm），详见 SlotStatistics。
 
@@ -685,6 +801,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public RelayCommand ToggleThemeCommand { get; }
     public RelayCommand ToggleSimulateCommand { get; }
     public RelayCommand OpenLicenseCommand { get; }
+    public RelayCommand CancelScanCommand { get; }
 
     public MainViewModel(IDialogService dialogs)
     {
@@ -702,6 +819,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         ToggleThemeCommand = new RelayCommand(ToggleTheme);
         ToggleSimulateCommand = new RelayCommand(ToggleSimulate);
         OpenLicenseCommand = new RelayCommand(OpenLicense);
+        // 扫码【取消】：结束当前"待扫产品码"回到等库位码（按钮只在待扫产品时显示）。
+        CancelScanCommand = new RelayCommand(() =>
+        {
+            _bindings.Cancel();
+            RefreshScanState();
+        });
         // 顶栏授权文案：启动门禁已 Refresh 过（App.OnStartup），这里只读快照，
         // 不触发指纹采集/文件 IO。
         LicenseText = LicenseHost.ShortStatusText();
@@ -747,12 +870,127 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         var config = LoadOrDefault();
         _config = config;   // 记住当前点表（重连按钮复用，勿传 null）
         BuildSlots(config);
+        // 扫码枪 + 库位绑定（P3.3）：读绑定簿 → 建会话 → 后台启动串口扫码枪。
+        // 放在总线启动前——首拍刷新就能把已存绑定的产品码挂到卡片上。
+        InitScanner();
         LoadPolicyBook();
         // 演示开关初始态：与 StartBus 同源读 ini——顶栏按钮状态与实际总线类型一致
         IsSimulate = IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Simulate", "0") == "1";
         SimulateText = IsSimulate ? "演示：开" : "演示：关";
         StartBus(config);
         _refreshTimer.Start();
+    }
+
+    // ---------- 扫码枪 / 库位绑定（P3.3 扫码工序） ----------
+
+    /// <summary>
+    /// 扫码装配：读 [Scanner] 配置 + 库位绑定簿（都自愈）→ 建绑定会话 →
+    /// 后台启动串口扫码枪（WMI 找口/开串口是阻塞调用，UI 线程禁碰——铁律 2）。
+    /// 未启用/未配置串口时只把状态条置提示文案，程序其余功能零影响。
+    /// </summary>
+    private void InitScanner()
+    {
+        _scannerOptions = ScannerOptions.Load();
+
+        var reasons = new List<string>();
+        var book = SlotBindingStore.Load(reasons);
+        foreach (var reason in reasons)
+            LocalLogService.Write(reason);
+
+        _bindings = new SlotBindingSession(
+            book,
+            timeoutSeconds: _scannerOptions.NormSessionTimeoutSeconds,
+            log: m => LocalLogService.Write(m));
+        _bindings.Changed += OnBindingsChanged;
+
+        _scanner = new ScannerBarcodeService(_scannerOptions);
+        _scanner.BarcodeScanned += OnBarcodeScanned;
+        _scanner.ConnectionChanged += OnScannerConnectionChanged;
+
+        RefreshScanState();
+        if (!_scannerOptions.Enabled || !_scannerOptions.HasPortTarget)
+            return;   // 未启用/未配置：不启动串口线程（状态条已给配置指引）
+
+        Task.Run(() => _scanner.Start())
+            .ContinueWith(_ => UiInvoke(RefreshScanState));
+    }
+
+    /// <summary>
+    /// 读码（子模块后台线程 → 封送回 UI）：交给会话解释成"扫库位/绑产品"。
+    /// 扫错库位码给 3 秒浮层提示（日志同时留一行），不改变会话阶段。
+    /// </summary>
+    private void OnBarcodeScanned(object? sender, string code) => UiInvoke(() =>
+    {
+        var outcome = _bindings.Handle(code);
+        if (outcome.Kind == ScanOutcomeKind.InvalidLocation)
+        {
+            _scanHintText = outcome.Message;
+            _scanHintUntil = DateTime.Now.AddSeconds(3);
+        }
+        RefreshScanState();
+    });
+
+    /// <summary>连接边沿（后台线程 → 封送）：只刷状态条；连接/断开的日志由子模块统一出。</summary>
+    private void OnScannerConnectionChanged(object? sender, bool connected) =>
+        UiInvoke(RefreshScanState);
+
+    /// <summary>绑定簿变化（会话阶段切换/绑定增删）：状态条 + 卡片立即刷新，不等 500ms 拍。</summary>
+    private void OnBindingsChanged()
+    {
+        RefreshScanState();
+        RefreshSlots();
+    }
+
+    /// <summary>
+    /// 扫码胶囊唯一写点（阶段/未绑定报警/连接态三档 + 3 秒错误浮层覆盖）：
+    /// 优先级 未启用 &gt; 未配置 &gt; 待扫产品码 &gt; 未绑定报警 &gt; 连接态。
+    /// </summary>
+    private void RefreshScanState()
+    {
+        ScanConnected = _scanner?.IsConnected == true;
+        ScanWaitingProduct = _bindings.Phase == SlotBindingPhase.WaitingProduct;
+
+        if (!_scannerOptions.Enabled)
+        {
+            ScanWarning = false;
+            ScanText = "扫码：未启用";
+            ScanTip = "扫码枪未启用。现场启用：config.ini [Scanner] 设 Enabled=1，并按设备管理器填 " +
+                      "PortName（如 COM3）或 DeviceKeyword（设备名关键字，如 CH340）";
+        }
+        else if (!_scannerOptions.HasPortTarget)
+        {
+            ScanWarning = false;
+            ScanText = "扫码：未配置串口";
+            ScanTip = "config.ini [Scanner] 的 PortName 与 DeviceKeyword 都为空。" +
+                      "填 PortName（设备管理器里的 COM 号）或 DeviceKeyword（设备名关键字）后重启程序";
+        }
+        else if (ScanWaitingProduct)
+        {
+            ScanWarning = false;
+            ScanText = _bindings.Prompt;   // "A01 待扫产品码"
+            ScanTip = "已扫库位码，请扫产品二维码完成绑定。扫错库位可直接扫另一个库位码切换，" +
+                      "或点【取消】回到请扫库位码";
+        }
+        else if (_unboundTrayCount > 0)
+        {
+            ScanWarning = true;
+            ScanText = $"⚠ {_unboundTrayCount} 个在架托盘未绑产品";
+            ScanTip = "托盘在架但库位没有绑定产品：请先扫库位码（A01~J12）、再扫产品码。" +
+                      "只提示，不拦截固化流程";
+        }
+        else
+        {
+            ScanWarning = false;
+            ScanText = ScanConnected ? _bindings.Prompt : "扫码枪未连接";
+            ScanTip = ScanConnected
+                ? $"扫码枪已连接（{_scanner?.Name ?? "串口"}）：先扫库位码 A01~J12，再扫产品码；" +
+                  $"{_scannerOptions.NormSessionTimeoutSeconds} 秒未扫产品码自动回到请扫库位码"
+                : "扫码枪未连接：检查 USB 转接线与 COM 口配置；服务每 3 秒后台自动重连，插回即恢复";
+        }
+
+        // 3 秒错误浮层（扫错码提示）：只覆盖文字，不动点色/按钮状态。
+        if (_scanHintUntil > DateTime.Now)
+            ScanText = _scanHintText;
     }
 
     // 点表读取：文件没了/空表 → 建缺省模板并立即落盘（现场第一次开机就有东西看）。
@@ -938,7 +1176,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 _machine.TrayArrived += (rack, level) => _poster?.OnTrayArrived(rack, level);
                 _machine.CuringStarted += (rack, level) => _poster?.OnCuringStarted(rack, level);
                 _machine.TrayLeft += (rack, level, phase, sec) =>
+                {
                     _poster?.OnTrayLeft(rack, level, phase, sec);
+                    // 取件=产品已离开库位 → 绑定作废（下次入库必须重新扫码）。
+                    // 状态机事件在 _sync 锁内触发：落盘/刷新一律 Post 回 UI，不在这里做 IO。
+                    UiInvoke(() =>
+                    {
+                        if (_bindings.Remove(rack, level))
+                            LocalLogService.Write(
+                                $"库位 {SlotLocationCode.EncodeInRack(rack, level)} 托盘离开，产品绑定已清除");
+                    });
+                };
             }
             else
                 _machine.Attach(bus);
@@ -957,12 +1205,38 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // 空闲卡"计划 X"预览（V0.0.58）：激活策略每拍现取 + 仓位三级解析
         // （仓位>层>全局）——策略窗热更后下一拍（≤500ms）空闲卡立见新时长。
         var planPolicy = GetActivePolicy();
+
+        // 扫码会话超时（P3.3）：扫了库位码走开 → 超时自动回"请扫库位码"，不让界面挂着旧库位误导。
+        _bindings.Tick();
+
+        int unboundTray = 0;   // 托盘在架但未绑定产品的库位数（扫码胶囊报警依据）
         foreach (var slot in Slots)
         {
             var status = _machine?.GetStatus(slot.Rack, slot.Level);
+            var binding = _bindings.Get(slot.Rack, slot.Level);
+            // 未绑定报警（客户口径只提示不拦截）：只要托盘在架就必须已绑产品。
+            // 日志只记边沿——新出现的未绑定写一行，绑上/托盘离开后自动解除。
+            bool missing = snapshot?.Get(new(true, IoPointRole.TrayDetect, slot.Rack, slot.Level)) == true
+                           && binding == null;
+            if (missing)
+            {
+                unboundTray++;
+                if (_unboundAlerted.Add((slot.Rack, slot.Level)))
+                    LocalLogService.Write(
+                        $"库位 {SlotLocationCode.EncodeInRack(slot.Rack, slot.Level)} 托盘在架但未绑定产品，" +
+                        "请先扫库位码再扫产品码（只提示，不拦截固化流程）");
+            }
+            else
+            {
+                _unboundAlerted.Remove((slot.Rack, slot.Level));
+            }
+
             slot.Refresh(snapshot ?? PointTableSnapshot.Empty, snapshot != null, status,
-                planPolicy?.ResolveMinutes(slot.Rack, slot.Level) ?? 0);
+                planPolicy?.ResolveMinutes(slot.Rack, slot.Level) ?? 0,
+                binding?.ProductCode ?? "", missing);
         }
+        _unboundTrayCount = unboundTray;
+
         // 统计条 + 工单带同拍刷（挂在同一 500ms tick 内，不另起定时器；UI 线程）。
         RefreshStats();
         RefreshWorkOrder();
@@ -970,6 +1244,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // presenter 内部按复位模式自行取舍（人工档差分行 + 弹窗决策，
         // 自动档清空不弹）；新报警窗开着就热进出，无需关了重开（用户拍板）。
         RefreshAlarmList();
+        // 扫码胶囊同拍兜底（连接态/超时/hint 过期都在这里自然收敛）。
+        RefreshScanState();
     }
 
     /// <summary>
@@ -1195,6 +1471,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         DurationUnit.Changed -= OnDisplayUnitChanged;   // 退订单位广播（防悬挂订阅）
         LicenseHost.StateChanged -= OnLicenseStateChanged;   // 退订授权状态边沿
+        // 扫码枪退订 + 释放（P3.3）：子模块 Dispose 会等心跳线程退出（最坏 3 秒），
+        // 放后台不卡关窗；串口句柄随进程退出由 OS 回收，无数据落盘风险。
+        _bindings.Changed -= OnBindingsChanged;
+        var scanner = _scanner;
+        _scanner = null;
+        if (scanner != null)
+        {
+            scanner.BarcodeScanned -= OnBarcodeScanned;
+            scanner.ConnectionChanged -= OnScannerConnectionChanged;
+            Task.Run(() => scanner.Dispose());
+        }
         // 报警复位链退订（V0.0.69）：四事件 + 模式广播；收掉开着的复位窗
         //（程序退出联动——窗是静态单例，不留悬挂 UI）。
         AlarmPresenter.ShowRequested -= OnAlarmShowRequested;
@@ -1310,6 +1597,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             new("连接详情", string.IsNullOrWhiteSpace(ConnectionDetailText) ? "—" : ConnectionDetailText),
             new("激活策略", _policyBook?.ResolveActive()?.Name ?? "无"),
             new("过账", PostingText),
+            new("扫码枪", !_scannerOptions.Enabled ? "未启用"
+                : ScanConnected ? $"已连接（{_scanner?.Name ?? "串口"}）" : "未连接"),
+            new("库位绑定", $"{_bindings.Count} 个（{_bindings.Prompt}）"),
             new("登录", OperatorText),
             new("仓位", $"{Slots.Count} 个（空闲{IdleCount} 计时{CuringCount} 待门控{GateCount} " +
                         $"放行{DoneCount} 红灯{AlarmCount}）"),
