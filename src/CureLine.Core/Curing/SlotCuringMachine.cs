@@ -24,14 +24,16 @@
 //      拍会刷屏）。
 //
 // 复位模式（V0.0.69，用户拍板二选一，见 GrillAlarmResetMode）：
-//   Auto（缺省）=上述现行为：光栅让空（边沿+Pump 兜底双保险）即自动复位；
-//   Manual = 人工复位：让空不复位——红灯与机台蜂鸣保持，边沿与 Pump 兜底
-//     都不再自动解除（日志改说"等人工确认"），唯一解除口=宿主按钮链调
-//     ManualResetGrillAlarm（程序①"报警复位"窗逐项/全部确认）；到点放行
-//     （绿灯接替）与取件离开（自然回空闲）路径人工档也保留——报警只管
-//     "人能不能靠近"，固化计时/放行独立运作（客户口径"计时不变"）。
-//   模式经构造注入 Func<GrillAlarmResetMode> provider（缺省 null=恒 Auto），
-//   边沿/心跳每拍现取——宿主配置热切后下一拍即生效（勿缓存进字段）。
+//   Auto = 自动复位：光栅让空（边沿+Pump 兜底双保险）即自动复位；
+//   Manual（程序①现场缺省，V0.0.71 用户拍板）= 人工复位：让空不复位——
+//     红灯与机台蜂鸣保持，边沿与 Pump 兜底都不再自动解除（日志改说"等人工
+//     确认"），唯一解除口=宿主按钮链调 ManualResetGrillAlarm（程序①"报警
+//     复位"窗逐项/全部确认）；到点放行（绿灯接替）与取件离开（自然回空闲）
+//     路径人工档也保留——报警只管"人能不能靠近"，固化计时/放行独立运作
+//     （客户口径"计时不变"）。
+//   模式经构造注入 Func<GrillAlarmResetMode> provider（缺省 null=恒 Auto，
+//   这是 Core 独立使用/测试的 API 缺省；程序①现场缺省由宿主 ini 决定=
+//   Manual），边沿/心跳每拍现取——宿主配置热切后下一拍即生效（勿缓存进字段）。
 //
 // 线程模型（铁律 2）：灯写 WritePoint 是网络 IO，绝不能进 UI 线程——
 //   本类全部动作发生在后台：OnPointChanged 由宿主从总线后台事件转发进来，
@@ -103,7 +105,8 @@ public sealed class SlotCuringMachine : IDisposable
     /// <summary>日志时长文本格式化（宿主注入跟随显示单位；null=缺省"X 分钟"口径）。</summary>
     private readonly Func<int, string>? _durationText;
     /// <summary>
-    /// 报警复位模式提供者（V0.0.69；null=恒 Auto 现行为）。边沿/心跳每拍现取，
+    /// 报警复位模式提供者（V0.0.69；null=恒 Auto——Core 独立/测试缺省，
+    /// 程序①现场缺省由 Hub 的 ini 决定=Manual）。边沿/心跳每拍现取，
     /// 宿主热切模式（策略窗按钮）下一拍即生效；provider 须线程安全（后台线程逐拍调）。
     /// </summary>
     private readonly Func<GrillAlarmResetMode>? _resetModeProvider;
@@ -147,7 +150,8 @@ public sealed class SlotCuringMachine : IDisposable
     /// 可注入（测试：clock/log；显示单位：durationText——缺省 null 走"X 分钟"）。
     /// durationText 在后台线程逐条调用，须线程安全（纯函数即可）。
     /// resetModeProvider（V0.0.69，可空）=报警复位模式每拍现取（null=恒自动
-    /// 复位现行为；宿主传静态中枢读点，热切模式无需重建状态机）。
+    /// 复位——Core 独立/测试缺省；程序①现场缺省 Manual 由 Hub 决定；宿主传
+    /// 静态中枢读点，热切模式无需重建状态机）。
     /// </summary>
     public SlotCuringMachine(IPointTableBus bus, Func<CuringPolicy?> policyProvider,
         Func<DateTimeOffset>? clock = null, Action<string>? log = null,
@@ -458,7 +462,8 @@ public sealed class SlotCuringMachine : IDisposable
     }
 
     /// <summary>
-    /// 当前报警复位模式（每拍现取 provider，勿缓存）：null provider=恒 Auto。
+    /// 当前报警复位模式（每拍现取 provider，勿缓存）：null provider=恒 Auto
+    /// （Core 独立/测试缺省；程序①现场缺省 Manual 由 Hub 决定）。
     /// 后台线程（边沿/心跳）逐次调用——provider 必须线程安全纯读（宿主传
     /// 静态中枢读点，见程序① GrillAlarmResetModeHub）。
     /// </summary>

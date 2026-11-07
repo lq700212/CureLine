@@ -2,6 +2,27 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.71（2026-11-07，固化程控：光栅报警复位缺省改为"人工复位"）
+
+用户拍板：复位模式仍是**全局操作规程**（策略窗一个开关，不随单条策略保存），
+只把**缺省值由自动翻转为人工**——现场不动按钮就按"光栅让空不解除、操作员
+逐库位确认"运行；需要旧行为时点一下切回自动（落盘记忆，重启不回弹）。
+
+- **Core**：`GrillAlarmResetModeParser.Parse` 判定方向翻转——只认 "Auto"
+  为自动，其余（"Manual"/null/空/拼错/他语言）一律回 Manual（缺省档），
+  注释写明"勿按 V0.0.69 旧注释回改"；枚举注释 Auto 去"缺省"、Manual 标缺省。
+  `SlotCuringMachine` 的 `resetModeProvider=null` 仍恒 Auto——那是 Core 独立
+  使用/测试的 API 缺省，程序①现场缺省由宿主 Hub 决定（注释已写明，防误读
+  成"程序缺省还是自动"）。
+- **程序①**：`GrillAlarmResetModeHub.ReadIni` 缺省 `Manual`（缺键/非法值
+  自愈回人工）；策略窗按钮 ToolTip 把"缺省"标注移到人工档、自动档去
+  "现行为"字样；XAML FallbackValue 同步"人工复位"。
+- **config.sample.ini**：`[setting] GrillAlarmResetMode=Manual` 说明段重写
+  （Manual=缺省；键名勿改）。
+- 测试：506/506（基线 499 + 解析器 Theory 7 组：null/空/Manual 大小写/
+  Auto 大小写/垃圾值兜底人工；策略窗缺省回显与 ini 恢复用例同步改）。
+- 验证：`dotnet build` 0 警 0 错；`dotnet test` 506/506。
+
 ## V0.0.70（2026-11-07，程序① UI 修复：策略窗"报警复位"按钮白卡上隐身）
 
 用户实测反馈（V0.0.69 交付当天目检发现）：策略窗参数条"报警复位"切换按钮

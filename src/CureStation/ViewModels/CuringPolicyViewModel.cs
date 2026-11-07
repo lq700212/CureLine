@@ -178,7 +178,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
 
     // ---------- 报警复位模式（V0.0.69，全局操作规程、不入单条策略） ----------
 
-    private GrillAlarmResetMode _grillResetMode = GrillAlarmResetMode.Auto;
+    private GrillAlarmResetMode _grillResetMode = GrillAlarmResetMode.Manual;
 
     /// <summary>
     /// 光栅报警复位模式切换按钮文案（自动复位/人工复位）。真源在
@@ -191,8 +191,8 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     /// <summary>复位切换按钮 ToolTip（点按钮即生效，切窗/重启不丢）。</summary>
     public string GrillResetModeToolTip =>
         _grillResetMode == GrillAlarmResetMode.Manual
-            ? "人工复位：光栅让空后报警不自动解除（红灯与蜂鸣保持），弹出\"报警复位\"窗列出正在报警的库位，由操作员逐项/全部点【解除报警】确认。全局设置，立即生效。点击切回自动复位。"
-            : "自动复位：光栅双侧全让空即自动解除报警（现行为）。全局设置，立即生效。点击切换为人工复位。";
+            ? "人工复位（缺省）：光栅让空后报警不自动解除（红灯与蜂鸣保持），弹出\"报警复位\"窗列出正在报警的库位，由操作员逐项/全部点【解除报警】确认。全局设置，立即生效。点击切回自动复位。"
+            : "自动复位：光栅双侧全让空即自动解除报警。全局设置，立即生效。点击切换为人工复位（缺省）。";
 
     /// <summary>切换复位模式（按钮唯一入口）：中枢 Change 落盘+广播——状态机
     /// 下一拍按新模式复位判定，主窗立即重跑弹窗决策（有挂报警当场弹/收窗）。</summary>

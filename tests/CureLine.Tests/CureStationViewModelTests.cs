@@ -2305,7 +2305,19 @@ public class CureStationViewModelTests
         Assert.False(vm.CloseDialog);
     }
 
-    // ---------- 报警复位模式（V0.0.69：人工复位/自动复位，全局操作规程） ----------
+    // ---------- 报警复位模式（V0.0.69：人工复位/自动复位，全局操作规程；
+    //            V0.0.71 缺省翻转为人工复位） ----------
+
+    [Theory]
+    [InlineData(null, GrillAlarmResetMode.Manual)]
+    [InlineData("", GrillAlarmResetMode.Manual)]
+    [InlineData("Manual", GrillAlarmResetMode.Manual)]
+    [InlineData("manual", GrillAlarmResetMode.Manual)]
+    [InlineData("Auto", GrillAlarmResetMode.Auto)]
+    [InlineData("auto", GrillAlarmResetMode.Auto)]
+    [InlineData("垃圾值", GrillAlarmResetMode.Manual)]
+    public void GrillAlarmResetModeParser_DefaultsToManual(string? raw, GrillAlarmResetMode expected)
+        => Assert.Equal(expected, GrillAlarmResetModeParser.Parse(raw));
 
     [Fact]
     public void PolicyVm_ToggleGrillResetMode_SwapsTextPersistsAndBroadcasts()
@@ -2319,18 +2331,22 @@ public class CureStationViewModelTests
             var fake = new FakeCureDialogService();
             var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
 
-            // 缺省（ini 无该键）= Auto（现行为零影响）
-            Assert.Equal("自动复位", vm.GrillResetModeText);
-
-            // 切人工：文案换 + 落盘 [setting] GrillAlarmResetMode=Manual + 中枢换值
-            vm.ToggleGrillResetModeCommand.Execute(null);
+            // 缺省（ini 无该键）= Manual（V0.0.71 用户拍板：现场默认人工确认）
             Assert.Equal("人工复位", vm.GrillResetModeText);
-            Assert.Equal(GrillAlarmResetMode.Manual, GrillAlarmResetModeHub.Current);
 
-            // 再切回自动（双向），文案/中枢同步
+            // 切自动：文案换 + 落盘 [setting] GrillAlarmResetMode=Auto + 中枢换值
             vm.ToggleGrillResetModeCommand.Execute(null);
             Assert.Equal("自动复位", vm.GrillResetModeText);
             Assert.Equal(GrillAlarmResetMode.Auto, GrillAlarmResetModeHub.Current);
+            Assert.Equal("Auto", IniFile.ReadStr(
+                AppPaths.ConfigIni, "setting", "GrillAlarmResetMode", ""));
+
+            // 再切回人工（双向），文案/中枢/落盘同步
+            vm.ToggleGrillResetModeCommand.Execute(null);
+            Assert.Equal("人工复位", vm.GrillResetModeText);
+            Assert.Equal(GrillAlarmResetMode.Manual, GrillAlarmResetModeHub.Current);
+            Assert.Equal("Manual", IniFile.ReadStr(
+                AppPaths.ConfigIni, "setting", "GrillAlarmResetMode", ""));
         }
         finally
         {
@@ -2343,13 +2359,14 @@ public class CureStationViewModelTests
     {
         using var scope = new TestScope();
         EnsureConfigDir();
-        GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Auto);
+        GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Manual);
         try
         {
-            // 盘上已切过人工（上一进程/别的窗）→ 开窗回显人工档（LoadFromIni 为准）
-            IniFile.Write(AppPaths.ConfigIni, "setting", "GrillAlarmResetMode", "Manual");
+            // 盘上已切过自动（上一进程/别的窗）→ 开窗回显自动档（LoadFromIni 为准，
+            // 不能被"缺省人工"覆盖）
+            IniFile.Write(AppPaths.ConfigIni, "setting", "GrillAlarmResetMode", "Auto");
             var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
-            Assert.Equal("人工复位", vm.GrillResetModeText);
+            Assert.Equal("自动复位", vm.GrillResetModeText);
         }
         finally
         {

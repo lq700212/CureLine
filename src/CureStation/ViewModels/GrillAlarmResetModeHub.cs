@@ -13,8 +13,9 @@
 //   （Core 不读 ini）、策略窗 VM、主窗 VM 三方要同拍——静态单例 + 事件是
 //   最轻握手（先例：DurationUnit 单位中枢、ThemeManager 主题中枢）。
 //
-// 缺省 Auto（=V0.0.68 及此前全部既有行为）：现场不动按钮就是原逻辑，升级
-//   零影响；非法值/手工改坏 ini 开机自愈回 Auto（宁可自动复位也不堆积报警）。
+// 缺省 Manual（V0.0.71 用户拍板：现场不动按钮就按人工复位跑——报警必须由
+//   操作员逐库位确认才解除）；缺键/非法值/手工改坏 ini 一律自愈回 Manual
+//   （宁可多确认一次，也不让报警被悄悄自动抹掉）。
 //
 // 线程纪律：Change/LoadFromIni 一律 UI 线程调（Changed 订阅方是 VM 刷新；
 //   状态机 provider 只读 Current——枚举静态字段读写原子，后台读安全）。
@@ -53,7 +54,7 @@ public static class GrillAlarmResetModeHub
     }
 
     /// <summary>重读记忆模式（测试 TestScope 切临时目录后用；生产启动静态初始化已读一次）。
-    /// 缺键/非法值一律回 Auto 自愈。</summary>
+    /// 缺键/非法值一律回 Manual（V0.0.71 缺省档）自愈。</summary>
     public static void LoadFromIni() => _current = ReadIni();
 
     /// <summary>测试恢复：静默置回快照值（不写盘、不广播）。public 是因测试工程
@@ -63,7 +64,7 @@ public static class GrillAlarmResetModeHub
     private static GrillAlarmResetMode ReadIni()
     {
         string text = IniFile.ReadStr(AppPaths.ConfigIni, "setting", ModeIniKey,
-            nameof(GrillAlarmResetMode.Auto));
+            nameof(GrillAlarmResetMode.Manual));
         return GrillAlarmResetModeParser.Parse(text);
     }
 }

@@ -441,16 +441,18 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   版本早于 V0.0.64；有拒绝行=文本直接给哪侧信号没让空；有复位行灯不
   灭=写 DO 失败走 IO 测试窗复测——**拒绝只记边沿（稀疏），Pump 兜底
   不带此日志（每秒会刷屏）**，`GrillSideText` 是文本拼装唯一出口。
-  **复位模式二选一（V0.0.69，人工复位/自动复位）**：Auto（缺省）=上述
-  全部现行为；Manual=人工复位——**边沿与 Pump 兜底双双 Auto 门槛不复位**
+  **复位模式二选一（V0.0.69，人工复位/自动复位；V0.0.71 缺省翻转为人工）**：
+  Manual（缺省）=人工复位——**边沿与 Pump 兜底双双 Auto 门槛不复位**
   （让空日志统一"人工复位模式待确认，红灯保持"），唯一解除口=
   `ManualResetGrillAlarm(rack,level)`（红灭黄复亮+蜂停+塔灯回绿，日志
   "人工复位确认（L=x R=x）"——`SetGrillAlarm` 加 `manual` 参数），
-  `GetAlarmSlots()` 是弹窗清单取数唯一口（层→架升序）；模式=构造第 5
+  `GetAlarmSlots()` 是弹窗清单取数唯一口（层→架升序）；Auto=自动复位（上述
+  全部现行为）；模式=构造第 5
   可选参 `Func<GrillAlarmResetMode>? resetModeProvider` **每拍现取**
-  （null=恒 Auto，勿缓存——宿主热切下一拍生效）；到点放行/取件离开
+  （null=恒 Auto，勿缓存——宿主热切下一拍生效；程序①现场缺省由 Hub 的 ini
+  缺省决定=Manual）；到点放行/取件离开
   路径人工档保留。宿主接线=`GrillAlarmResetModeHub`（ini `[setting]
-  GrillAlarmResetMode` 缺省 Auto 非法自愈）+ 弹窗编排
+  GrillAlarmResetMode` 缺省 Manual、非法自愈回 Manual）+ 弹窗编排
   `GrillAlarmResetCoordinator`（清单差分热更=用户拍板"报警期间新库位
   进窗就见、解除即删行"+弹窗开关小账本，纯 VM 可测）+
   `GrillAlarmResetWindow`（右下角非模态单例；用户 ✕ 记"用户表态"、
