@@ -2320,7 +2320,7 @@ public class CureStationViewModelTests
         => Assert.Equal(expected, GrillAlarmResetModeParser.Parse(raw));
 
     [Fact]
-    public void PolicyVm_ToggleGrillResetMode_SwapsTextPersistsAndBroadcasts()
+    public void PolicyVm_GrillResetModeSegments_PersistAndBroadcast()
     {
         using var scope = new TestScope();
         EnsureConfigDir();
@@ -2332,18 +2332,21 @@ public class CureStationViewModelTests
             var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
 
             // 缺省（ini 无该键）= Manual（V0.0.71 用户拍板：现场默认人工确认）
-            Assert.Equal("人工复位", vm.GrillResetModeText);
+            Assert.True(vm.IsGrillManualReset);
+            Assert.False(vm.IsGrillAutoReset);
 
-            // 切自动：文案换 + 落盘 [setting] GrillAlarmResetMode=Auto + 中枢换值
-            vm.ToggleGrillResetModeCommand.Execute(null);
-            Assert.Equal("自动复位", vm.GrillResetModeText);
+            // 选自动（V0.0.74 光栅条分段按钮）：中枢换值 + 落盘 + 两枚按钮状态互换
+            vm.IsGrillAutoReset = true;
+            Assert.True(vm.IsGrillAutoReset);
+            Assert.False(vm.IsGrillManualReset);
             Assert.Equal(GrillAlarmResetMode.Auto, GrillAlarmResetModeHub.Current);
             Assert.Equal("Auto", IniFile.ReadStr(
                 AppPaths.ConfigIni, "setting", "GrillAlarmResetMode", ""));
 
-            // 再切回人工（双向），文案/中枢/落盘同步
-            vm.ToggleGrillResetModeCommand.Execute(null);
-            Assert.Equal("人工复位", vm.GrillResetModeText);
+            // 再选回人工（双向），状态/中枢/落盘同步
+            vm.IsGrillManualReset = true;
+            Assert.True(vm.IsGrillManualReset);
+            Assert.False(vm.IsGrillAutoReset);
             Assert.Equal(GrillAlarmResetMode.Manual, GrillAlarmResetModeHub.Current);
             Assert.Equal("Manual", IniFile.ReadStr(
                 AppPaths.ConfigIni, "setting", "GrillAlarmResetMode", ""));
@@ -2366,7 +2369,8 @@ public class CureStationViewModelTests
             // 不能被"缺省人工"覆盖）
             IniFile.Write(AppPaths.ConfigIni, "setting", "GrillAlarmResetMode", "Auto");
             var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
-            Assert.Equal("自动复位", vm.GrillResetModeText);
+            Assert.True(vm.IsGrillAutoReset);
+            Assert.False(vm.IsGrillManualReset);
         }
         finally
         {
@@ -2402,21 +2406,29 @@ public class CureStationViewModelTests
             IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
             var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
 
-            // 缺省（ini 无该键）= 不取反（遮挡=ON，V0.0.71 及以前口径）
+            // 缺省（ini 无该键）= 常开（遮挡=ON，V0.0.71 及以前口径）
             Assert.False(vm.GrillSignalInverted);
+            Assert.True(vm.IsGrillNormallyOpen);
+            Assert.False(vm.IsGrillNormallyClosed);
             Assert.Contains("遮挡=ON", vm.GrillSignalToolTip);
 
-            // 勾选：中枢换 BlockedOff + 落盘 + 广播；ToolTip 换口径
-            vm.GrillSignalInverted = true;
+            // 选常闭（V0.0.74 光栅条分段按钮）：中枢换 BlockedOff + 落盘 + 广播；
+            // 两枚按钮状态互换、ToolTip 换口径
+            vm.IsGrillNormallyClosed = true;
             Assert.True(vm.GrillSignalInverted);
+            Assert.True(vm.IsGrillNormallyClosed);
+            Assert.False(vm.IsGrillNormallyOpen);
             Assert.Equal(GrillSignalPolarity.BlockedOff, GrillSignalPolarityHub.Current);
             Assert.Equal("BlockedOff", IniFile.ReadStr(
                 AppPaths.ConfigIni, "setting", "GrillSignalPolarity", ""));
             Assert.Contains("遮挡=OFF", vm.GrillSignalToolTip);
             Assert.Equal(1, broadcasts);
 
-            // 取消勾选：双向，回到缺省档（再广播一次）
-            vm.GrillSignalInverted = false;
+            // 再选常开：双向，回到缺省档（再广播一次）
+            vm.IsGrillNormallyOpen = true;
+            Assert.False(vm.GrillSignalInverted);
+            Assert.True(vm.IsGrillNormallyOpen);
+            Assert.False(vm.IsGrillNormallyClosed);
             Assert.Equal(GrillSignalPolarity.BlockedOn, GrillSignalPolarityHub.Current);
             Assert.Equal("BlockedOn", IniFile.ReadStr(
                 AppPaths.ConfigIni, "setting", "GrillSignalPolarity", ""));
@@ -2437,15 +2449,41 @@ public class CureStationViewModelTests
         GrillSignalPolarityHub.RecallForTest(GrillSignalPolarity.BlockedOn);
         try
         {
-            // 盘上已勾过"取反"（上一进程/现场配置）→ 开窗回显勾选态
+            // 盘上已切过常闭（上一进程/现场配置）→ 开窗回显常闭档
             IniFile.Write(AppPaths.ConfigIni, "setting", "GrillSignalPolarity", "BlockedOff");
             var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
             Assert.True(vm.GrillSignalInverted);
+            Assert.True(vm.IsGrillNormallyClosed);
+            Assert.False(vm.IsGrillNormallyOpen);
         }
         finally
         {
             GrillSignalPolarityHub.RecallForTest(GrillSignalPolarity.BlockedOn);
         }
+    }
+
+    // ---------- 光栅门控条文案（V0.0.74：开关按钮自身显示状态 + 副文换口径） ----------
+
+    [Fact]
+    public void PolicyVm_GrillGateText_FollowsSwitch()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
+
+        // 关（缺省）→ 按钮写"已关闭"、副文给"到位即计时"口径
+        vm.EditGrillGate = false;
+        Assert.Equal("已关闭", vm.GrillGateSwitchText);
+        Assert.Contains("到位即开计时", vm.GrillGateDetailText);
+
+        // 开 → 字面立即换（按钮即状态显示，副文给门控生效口径）
+        vm.EditGrillGate = true;
+        Assert.Equal("已启用", vm.GrillGateSwitchText);
+        Assert.Contains("让空", vm.GrillGateDetailText);
+
+        // 回关（双向）
+        vm.EditGrillGate = false;
+        Assert.Equal("已关闭", vm.GrillGateSwitchText);
     }
 
     [Fact]

@@ -1,9 +1,10 @@
 // =========================================================================
 // CuringPolicyViewModel：工艺策略窗编排（预置库/自定义/套用/激活/保存/画布直改）
 //
-// 干什么：策略列表（增删选）+ 参数条（名称/全局时长/光栅门控/断电续算，
-//   V0.0.44 起"每仓位覆盖行表"已删——画布取代其全部职能）+ 仓位时长画布
-//   （主编辑区：点格子/框选直接设时长，见下）+ 「激活并生效」/「仅保存」/
+// 干什么：策略列表（增删选）+ 参数条（名称/全局时长/断电续算，V0.0.44 起
+//   "每仓位覆盖行表"已删——画布取代其全部职能）+ 仓位时长画布（主编辑区：
+//   点格子/框选直接设时长，见下）+ 画布下方光栅控制带（V0.0.74：门控开关/
+//   信号类型常开常闭/报警解除，见对应属性段）+ 「激活并生效」/「仅保存」/
 //   「套用所选模板」（套用目标可选）。三级覆盖口径见 CuringPolicy 顶注释
 //   （仓位 > 层 > 全局）。
 // 预置/自定义口径（V0.0.20 对齐 AgingTestSystem 配方管理"模板+即改即落"；
@@ -177,66 +178,103 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     }
 
     // ---------- 报警复位模式（V0.0.69，全局操作规程、不入单条策略） ----------
+    //
+    // V0.0.74 起 UI 从"单按钮点击切换"改为光栅条上的【人工｜自动】分段按钮：
+    // 两项同时可见，当前档蓝底反白——不用点一下才知道现在是什么档。
+    // 真源仍是 GrillAlarmResetModeHub（人工/自动是"报警怎么解除"的操作规程，
+    // 与工艺时长无关——换策略不该换处置流程，故不入单条策略）。
 
     private GrillAlarmResetMode _grillResetMode = GrillAlarmResetMode.Manual;
 
     /// <summary>
-    /// 光栅报警复位模式切换按钮文案（自动复位/人工复位）。真源在
-    /// GrillAlarmResetModeHub 静态中枢（为什么不随策略保存：人工/自动是
-    /// "报警怎么解除"的操作规程，与工艺时长无关——换策略不该换处置流程）。
+    /// 人工复位选项（分段按钮左项，true=人工/缺省）：光栅让空后报警不自动解除，
+    /// 由报警复位窗逐项确认。RadioButton 双向绑定只写 true 分支——WPF 点新项时
+    /// 会先给旧项发 false，忽略即可（否则会把刚写的新值又抹掉）。
     /// </summary>
-    public string GrillResetModeText =>
-        _grillResetMode == GrillAlarmResetMode.Manual ? "人工复位" : "自动复位";
+    public bool IsGrillManualReset
+    {
+        get => _grillResetMode == GrillAlarmResetMode.Manual;
+        set { if (value) SetGrillResetMode(GrillAlarmResetMode.Manual); }
+    }
 
-    /// <summary>复位切换按钮 ToolTip（点按钮即生效，切窗/重启不丢）。</summary>
+    /// <summary>自动复位选项（分段按钮右项，true=自动）：光栅双侧让空即自动解除报警。</summary>
+    public bool IsGrillAutoReset
+    {
+        get => _grillResetMode == GrillAlarmResetMode.Auto;
+        set { if (value) SetGrillResetMode(GrillAlarmResetMode.Auto); }
+    }
+
+    /// <summary>复位模式 ToolTip（两态口径写全，分段按钮悬停读；随切换刷新）。</summary>
     public string GrillResetModeToolTip =>
         _grillResetMode == GrillAlarmResetMode.Manual
-            ? "人工复位（缺省）：光栅让空后报警不自动解除（红灯与蜂鸣保持），弹出\"报警复位\"窗列出正在报警的库位，由操作员逐项/全部点【解除报警】确认。全局设置，立即生效。点击切回自动复位。"
-            : "自动复位：光栅双侧全让空即自动解除报警。全局设置，立即生效。点击切换为人工复位（缺省）。";
+            ? "人工复位（缺省）：光栅让空后报警不自动解除（红灯与蜂鸣保持），弹出\"报警复位\"窗列出正在报警的库位，由操作员逐项/全部点【解除报警】确认。全局设置，立即生效。"
+            : "自动复位：光栅双侧全让空即自动解除报警。全局设置，立即生效。";
 
-    /// <summary>切换复位模式（按钮唯一入口）：中枢 Change 落盘+广播——状态机
-    /// 下一拍按新模式复位判定，主窗立即重跑弹窗决策（有挂报警当场弹/收窗）。</summary>
-    private void ToggleGrillResetMode()
+    /// <summary>切换复位模式唯一写点（V0.0.74 分段按钮入口）：中枢 Change
+    /// 落盘+广播——状态机下一拍按新模式复位判定，主窗立即重跑弹窗决策
+    /// （有挂报警当场弹/收窗）。</summary>
+    private void SetGrillResetMode(GrillAlarmResetMode to)
     {
-        var to = _grillResetMode == GrillAlarmResetMode.Manual
-            ? GrillAlarmResetMode.Auto
-            : GrillAlarmResetMode.Manual;
+        if (to == _grillResetMode)
+            return;
         GrillAlarmResetModeHub.Change(to);   // 落盘 + 广播（Changed→主窗立即刷新）
         _grillResetMode = to;
-        Raise(nameof(GrillResetModeText));
+        Raise(nameof(IsGrillManualReset));
+        Raise(nameof(IsGrillAutoReset));
         Raise(nameof(GrillResetModeToolTip));
     }
 
     // ---------- 光栅信号极性（V0.0.72，全局现场接线口径、不入单条策略） ----------
+    //
+    // V0.0.74 起 UI 从"光栅信号取反"勾选框改为【常开｜常闭】分段按钮：
+    // "取反"是工程师思维，现场看着要换算一次；常开/常闭是接线口径本身，
+    // 两项并排+当前档高亮，一眼可读（用户拍板）。
 
     private bool _grillSignalInverted;
 
     /// <summary>
-    /// 光栅信号取反（勾选=遮挡=OFF）。真源在 GrillSignalPolarityHub 静态中枢——
-    /// 与报警复位模式同款全局开关：现场光栅"被挡=OFF"时勾上，状态机门控/
-    /// 报警/复位判定整体反相；不勾=遮挡=ON（缺省，V0.0.71 及以前口径）。
-    /// setter 是唯一写点：Change 落盘 + 广播，状态机下一拍现取生效。
+    /// 光栅信号极性查询门面（true=遮挡=OFF / 常闭；false=遮挡=ON / 常开）。
+    /// 只读：写入统一走光栅条【常开｜常闭】分段按钮（SetGrillSignalInverted
+    /// 唯一写点）——外部绕过它写字段会漏发派生属性通知，按钮状态不刷新。
+    /// 真源在 GrillSignalPolarityHub 静态中枢：状态机门控/报警/复位判定整体
+    /// 按本口径解释，Change 落盘 + 广播，下一拍现取生效。
     /// </summary>
-    public bool GrillSignalInverted
+    public bool GrillSignalInverted => _grillSignalInverted;
+
+    /// <summary>常开选项（分段按钮左项）：被挡 = ON，缺省口径（V0.0.71 及以前）。</summary>
+    public bool IsGrillNormallyOpen
     {
-        get => _grillSignalInverted;
-        set
-        {
-            if (value == _grillSignalInverted)
-                return;
-            _grillSignalInverted = value;
-            GrillSignalPolarityHub.Change(value
-                ? GrillSignalPolarity.BlockedOff
-                : GrillSignalPolarity.BlockedOn);
-            Raise(nameof(GrillSignalInverted));
-            Raise(nameof(GrillSignalToolTip));
-        }
+        get => !_grillSignalInverted;
+        set { if (value) SetGrillSignalInverted(false); }
     }
 
-    /// <summary>光栅信号勾选框 ToolTip（两态口径写全，现场不看文档也能切对）。</summary>
+    /// <summary>常闭选项（分段按钮右项）：被挡 = OFF，现场常闭安全光栅口径。</summary>
+    public bool IsGrillNormallyClosed
+    {
+        get => _grillSignalInverted;
+        set { if (value) SetGrillSignalInverted(true); }
+    }
+
+    /// <summary>光栅极性唯一写点：中枢 Change 落盘 + 广播，状态机下一拍
+    /// 按新口径判门控/报警/复位；同时刷新两枚分段按钮与 ToolTip。</summary>
+    private void SetGrillSignalInverted(bool inverted)
+    {
+        if (inverted == _grillSignalInverted)
+            return;
+        _grillSignalInverted = inverted;
+        GrillSignalPolarityHub.Change(inverted
+            ? GrillSignalPolarity.BlockedOff
+            : GrillSignalPolarity.BlockedOn);
+        Raise(nameof(GrillSignalInverted));
+        Raise(nameof(IsGrillNormallyOpen));
+        Raise(nameof(IsGrillNormallyClosed));
+        Raise(nameof(GrillSignalToolTip));
+    }
+
+    /// <summary>信号类型组 ToolTip（两态口径写全，现场不看文档也能切对）。</summary>
     public string GrillSignalToolTip => _grillSignalInverted
-        ? "光栅信号取反（已勾选：遮挡=OFF）——光栅被挡时 DI 为 OFF、未被挡为 ON（现场实测常闭安全光栅口径）。全局设置，立即生效（建议停机时切换）；取消勾选切回遮挡=ON。"
-        : "光栅信号取反（当前未勾选：遮挡=ON）——光栅被挡时 DI 为 ON、未被挡为 OFF（缺省口径，V0.0.71 及以前行为）。现场光栅\"被挡=OFF\"时勾选本项，门控/报警/复位判定整体反相。全局设置，立即生效（建议停机时切换）。";
+        ? "信号类型：常闭（遮挡=OFF）——光栅被挡时 DI 为 OFF、未被挡为 ON（现场实测常闭安全光栅口径）。全局设置，立即生效（建议停机时切换）。点【常开】切回遮挡=ON。"
+        : "信号类型：常开（遮挡=ON）——光栅被挡时 DI 为 ON、未被挡为 OFF（缺省口径，V0.0.71 及以前行为）。现场光栅\"被挡=OFF\"时选【常闭】，门控/报警/复位判定整体反相。全局设置，立即生效（建议停机时切换）。";
 
     private PolicyTimeUnit _timeUnit = PolicyTimeUnit.Minutes;
 
@@ -379,7 +417,30 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     }
 
     private bool _editGrillGate;
-    public bool EditGrillGate { get => _editGrillGate; set => Set(ref _editGrillGate, value); }
+    /// <summary>
+    /// 光栅门控（策略级，随策略保存/激活；缺省关=托盘到位即计时）。
+    /// V0.0.74 起 UI 是画布下方光栅条的开关按钮；开关文案与副文是派生属性，
+    /// 这里赋值后一并通知（切换策略回显、用户拨开关都要立即换字面）。
+    /// </summary>
+    public bool EditGrillGate
+    {
+        get => _editGrillGate;
+        set
+        {
+            if (!Set(ref _editGrillGate, value))
+                return;
+            Raise(nameof(GrillGateSwitchText));
+            Raise(nameof(GrillGateDetailText));
+        }
+    }
+
+    /// <summary>光栅条开关按钮文案（开=已启用/关=已关闭，按钮自身即状态显示）。</summary>
+    public string GrillGateSwitchText => _editGrillGate ? "已启用" : "已关闭";
+
+    /// <summary>光栅条副文：开=门控生效口径；关=到位即计时（不检测光栅）。</summary>
+    public string GrillGateDetailText => _editGrillGate
+        ? "两侧光栅让空才开计时（人手在架内不计时）"
+        : "托盘到位即开计时（不检测光栅）";
 
     private bool _editPersistMinutes;
     public bool EditPersistMinutes { get => _editPersistMinutes; set => Set(ref _editPersistMinutes, value); }
@@ -592,8 +653,6 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     public RelayCommand ApplyTemplateCommand { get; }
     public RelayCommand ApplySelectionCommand { get; }
     public RelayCommand ClearSelectionOverrideCommand { get; }
-    /// <summary>报警复位模式切换（自动↔人工，全局设置；文案/说明见 GrillResetModeText）。</summary>
-    public RelayCommand ToggleGrillResetModeCommand { get; }
 
     /// <summary>保存/激活/套用成功后置 true（测试断言用；View 经 RequestClose 关窗）。</summary>
     public bool CloseDialog { get; private set; }
@@ -618,7 +677,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         // 切过模式，这里回显现值。
         GrillAlarmResetModeHub.LoadFromIni();
         _grillResetMode = GrillAlarmResetModeHub.Current;
-        // 光栅极性（V0.0.72）同款：勾选框回显上一进程/现场配置的挡/空口径。
+        // 光栅极性（V0.0.72）同款：分段按钮回显上一进程/现场配置的挡/空口径。
         GrillSignalPolarityHub.LoadFromIni();
         _grillSignalInverted = GrillSignalPolarityHub.Current == GrillSignalPolarity.BlockedOff;
         AddPolicyCommand = new RelayCommand(AddPolicy);
@@ -628,7 +687,6 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         ApplyTemplateCommand = new RelayCommand(ApplyTemplate, () => SelectedPolicy != null);
         ApplySelectionCommand = new RelayCommand(ApplySelection, () => HasSelection);
         ClearSelectionOverrideCommand = new RelayCommand(ClearSelectionOverride, () => HasSelection);
-        ToggleGrillResetModeCommand = new RelayCommand(ToggleGrillResetMode);
 
         // 仓位覆盖行增删/行内编辑都影响预览：集合变化时对新增行挂 INPC 重建；
         // 行属性变化（Add/Remove 后集合通知 + 行内字段通知）统一走 RebuildPreview。

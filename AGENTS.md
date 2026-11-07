@@ -472,7 +472,8 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   `Func<GrillSignalPolarity>? grillPolarityProvider` 每拍现取（null=恒
   BlockedOn，Core/测试缺省）；宿主接线=`GrillSignalPolarityHub`（ini
   `[setting] GrillSignalPolarity` 缺省 BlockedOn、非法自愈回 BlockedOn）+
-  策略窗参数条"光栅信号取反"勾选框（勾=BlockedOff，落盘+广播即生效）；
+  策略窗画布下方光栅条【常开｜常闭】分段按钮（常开=BlockedOn 缺省 /
+  常闭=BlockedOff，落盘+广播即生效；V0.0.74 从参数条勾选框下移改档）；
   演示 `MockPointTableBus.GrillPolarityProvider` 跟随同一中枢（演示剧本
   电平与状态机同口径，否则勾取反后演示永远不报警/一直报警）。注意主窗
   卡片的 `GrillText` 恒显示**原始电平**（L:ON R:OFF，排障看硬件真值），

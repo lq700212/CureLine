@@ -266,6 +266,9 @@ public static class Program
         // 列表里「自定义」行同时亮"生效中"徽标——两个新能力一屏看全。
         var polVm = (CurePolicyVm)pol.DataContext;
         polVm.SelectedPolicy = polVm.Policies.First(p => p.IsPreset);
+        // V0.0.74 光栅控制带演示开态：标志物点亮 + 开关"已启用" + 副文换门控口径，
+        // 一屏看全该条带能表达的三层信息（关态时图标压暗、文字换"到位即计时"）。
+        polVm.EditGrillGate = true;
         Shot(pol, "cs-policy.png", 1000);
 
         // ---------- IO 通讯测试窗（独立演示总线：确定性推进 DI 快照） ----------

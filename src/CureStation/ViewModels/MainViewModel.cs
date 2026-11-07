@@ -926,11 +926,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                     // 日志时长文本随显示单位（策略窗切小时 → 日志"开始固化计时 2小时"；
                     // 分钟口径保持"X 分钟"老字样）——LogText 是纯函数，后台线程安全。
                     durationText: DurationUnit.LogText,
-                    // 报警复位模式每拍现取（V0.0.69）：策略窗按钮切人工/自动复位，
+                    // 报警复位模式每拍现取（V0.0.69）：策略窗光栅条切人工/自动，
                     // 下一边沿/心跳即生效（Hub 只读静态枚举字段，后台线程读安全）。
                     resetModeProvider: () => GrillAlarmResetModeHub.Current,
-                    // 光栅信号极性每拍现取（V0.0.72）：策略窗勾"光栅信号取反"
-                    // 下一边沿/心跳即生效（现场被挡=OFF 时勾选，同上后台读安全）。
+                    // 光栅信号极性每拍现取（V0.0.72）：策略窗光栅条选常开/常闭
+                    // 下一边沿/心跳即生效（现场被挡=OFF 时选常闭，同上后台读安全）。
                     grillPolarityProvider: () => GrillSignalPolarityHub.Current);
                 // 过账挂点（P3.2 后半）：状态机三事件 → 过账服务（只在创建时订阅
                 // 一次——重连 Attach 换通道不重复订阅）。事件在状态机锁内触发，

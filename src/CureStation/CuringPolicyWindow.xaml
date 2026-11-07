@@ -24,6 +24,76 @@
              DataTrigger 的 Condition 只认静态值，两段动态绑定不能直接互比，
              用 MultiBinding 一并喂给转换器返回 bool（详见转换器类头注释）。 -->
         <local:StringEqualsConverter x:Key="StringEquals"/>
+
+        <!-- ===== 光栅条控件样式（V0.0.74）=====
+             开关=轨道+滑块+文字（开=蓝底白字/滑块靠右；关=浅底灰字/滑块靠左），
+             分段按钮=两枚并排小胶囊（选中蓝底反白，未选浅底）。
+             色全走 Brush.Fresh.* 语义键，深浅主题自动跟随。 -->
+        <Style x:Key="GrillSwitch" TargetType="ToggleButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.FgMid}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" CornerRadius="4" BorderThickness="1" Padding="10,4"
+                                Background="{DynamicResource Brush.Fresh.ButtonBg}"
+                                BorderBrush="{DynamicResource Brush.Fresh.Border}">
+                            <StackPanel Orientation="Horizontal">
+                                <Border x:Name="Track" Width="30" Height="14" CornerRadius="7"
+                                        Background="{DynamicResource Brush.Fresh.DotOff}" VerticalAlignment="Center">
+                                    <Ellipse x:Name="Knob" Width="10" Height="10"
+                                             Fill="{DynamicResource Brush.Fresh.CardBg}"
+                                             HorizontalAlignment="Left" Margin="2,0,0,0"/>
+                                </Border>
+                                <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Fresh.ButtonHoverBorder}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Fresh.Accent}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Fresh.AccentBorder}"/>
+                                <Setter TargetName="Track" Property="Background" Value="{DynamicResource Brush.Fresh.OnAccent}"/>
+                                <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/>
+                                <Setter TargetName="Knob" Property="Margin" Value="0,0,2,0"/>
+                                <Setter TargetName="Knob" Property="Fill" Value="{DynamicResource Brush.Fresh.Accent}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.OnAccent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GrillSegment" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.FgMid}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" CornerRadius="3" BorderThickness="1" Padding="9,3"
+                                Background="{DynamicResource Brush.Fresh.ButtonBg}"
+                                BorderBrush="{DynamicResource Brush.Fresh.Border}">
+                            <TextBlock Text="{TemplateBinding Content}" HorizontalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Fresh.ButtonHoverBorder}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Fresh.Accent}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Fresh.AccentBorder}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.OnAccent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
     <shell:WindowChrome.WindowChrome>
         <!-- 无边框自绘（V0.0.27 弹窗统一）：标题条命中拖动 + 边沿 6px 缩放 -->
@@ -35,9 +105,11 @@
          V0.0.44 布局重排（用户拍板：画布能直接改后，原"策略编辑面板+每仓位覆盖表"
          两个区域整体删除）——
          左：策略库（预置策略带【预置】标记，激活一个生效）+ 每层覆盖折叠（高级）；
-         右上：参数条（策略名/全局时长+时间单位 时·分/光栅门控/断电续算，
+         右上：参数条（策略名/全局时长+时间单位 时·分/断电续算，
          长说明收 ToolTip；单位只换显示口径，存储恒为分钟，V0.0.56 秒档删除）；
-         右主：仓位时长画布（全宽，主编辑区，傻瓜式）——左键单击选格直接浮层输
+         画布下方：光栅控制带（V0.0.74 从参数条下移）——标志物 + 门控开关 +
+          信号类型（常开/常闭）+ 报警解除（人工/自动），光栅配置一处可改；
+          右主：仓位时长画布（全宽，主编辑区，傻瓜式）——左键单击选格直接浮层输
          时长、左键拖框批量选（橡皮筋透明只描边，Ctrl 叠加）、Ctrl+单击加选/减选、
          中键平移、滚轮缩放、双击空白复位、右键适应图像、Esc 清选择；普通格=
          时长四档色（绿/黄/橙/红），特殊格（SlotMinutes 配了独立覆盖，VM 真识别）
@@ -173,12 +245,15 @@
                     </DockPanel>
                 </Border>
 
-                <!-- 右列：参数条 + 画布（主编辑区）+ 底部按钮 -->
+                <!-- 右列：参数条（策略属性）+ 画布（主编辑区）+ 光栅条（光栅配置）+
+                     底部按钮。V0.0.74 用户拍板：光栅门控/信号类型/报警解除从参数条
+                     下移到画布下方成一条独立控制带（图标+开关+分段按钮），参数条
+                     只留纯工艺项（策略名/全局时长/时间单位/断电续算），语义分区：
+                     上面=这条策略的时长，下面=光栅怎么用。 -->
                 <DockPanel Grid.Column="1">
                     <!-- 参数条（V0.0.44 精简：原"策略编辑"面板只剩这几项，一行横排；
-                         长说明收 ToolTip 不占版面。V0.0.72 加"光栅信号取反"后
-                         改用 WrapPanel：窗口缩到最小宽/加项时自动换行，不挤出
-                         右边界（1280 宽度一行放不下时第二行从行首续排）。 -->
+                         长说明收 ToolTip 不占版面。保留 WrapPanel：窗口缩到最小宽时
+                         自动换行，不挤出右边界。 -->
                     <Border DockPanel.Dock="Top" Style="{StaticResource FreshCardBorder}" Padding="10,8" Margin="0,0,0,8">
                         <WrapPanel Orientation="Horizontal">
                             <TextBlock Text="策略名：" VerticalAlignment="Center"/>
@@ -189,37 +264,18 @@
                             <TextBox Style="{StaticResource FreshInput}" Width="86"
                                      Text="{Binding EditGlobalMinutes, FallbackValue=120}"
                                      ToolTip="{Binding GlobalMinutesToolTip, FallbackValue=全局固化时长（分钟）——所有仓位的打底值，被每层/每仓位覆盖}"/>
-                            <TextBlock Text="{Binding TimeUnitSuffix, FallbackValue=分}" VerticalAlignment="Center" Margin="4,0,0,0"/>
                             <!-- 时间单位切换（V0.0.53）：只换页面显示/输入口径，策略存储恒为分钟。
-                                 切换即把编辑区/画布/图例/浮层全部文本换算（VM 一处处理）。 -->
-                            <TextBlock Text="　单位：" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                 切换即把编辑区/画布/图例/浮层全部文本换算（VM 一处处理）。
+                                 V0.0.73 精简：删掉时长框后的单位后缀与"单位："标签——
+                                 下拉本身显示"时/分"，用户一眼看懂，不再重复两处文案。 -->
                             <ComboBox Style="{StaticResource FreshCombo}" Width="64" VerticalAlignment="Center"
+                                      Margin="18,0,0,0"
                                       ItemsSource="{Binding TimeUnitOptions, FallbackValue={x:Null}}"
                                       SelectedIndex="{Binding TimeUnitIndex, FallbackValue=1}"
                                       ToolTip="页面时间单位（时/分）——仅显示与输入换算，底层计时精度为分钟，选择即记忆并同步主窗显示"/>
-                            <CheckBox IsChecked="{Binding EditGrillGate, FallbackValue=False}"
-                                      Content="光栅门控" Margin="18,0,0,0"
-                                      ToolTip="开=左右光栅都灭且托盘在架才开计时（防人手在架内就计时）；关（缺省）=托盘到位即开计时，没绑光栅的仓位门控自动放行。"/>
-                            <!-- 光栅信号极性（V0.0.72）：现场接线口径全局开关（不入单条策略），
-                                 勾选=遮挡=OFF（现场实测常闭安全光栅），不勾=遮挡=ON（缺省）。
-                                 勾选即落盘+广播，状态机下一拍按新口径判定门控/报警/复位。 -->
-                            <CheckBox IsChecked="{Binding GrillSignalInverted, FallbackValue=False}"
-                                      Content="光栅信号取反" Margin="14,0,0,0"
-                                      ToolTip="{Binding GrillSignalToolTip, FallbackValue=光栅信号取反（当前未勾选：遮挡 ON）——光栅被挡时 DI 为 ON，未被挡为 OFF（缺省口径）。现场光栅“被挡 OFF”时勾选本项，门控/报警/复位判定整体反相。全局设置，立即生效。}"/>
                             <CheckBox IsChecked="{Binding EditPersistMinutes, FallbackValue=False}"
-                                      Content="断电续算" Margin="14,0,0,0"
+                                      Content="断电续算" Margin="18,0,0,0"
                                       ToolTip="开=进行中仓位随状态变化写 config/curingstate.json，断电期间时间计入固化时长（重启按记录续算）；关（缺省）=断电重启后重新计时，宁可重计也不放行没固化够的货。"/>
-                            <!-- 报警复位模式（V0.0.69）：全局操作规程（不入单条策略），
-                                 点按钮切换即落盘+广播——状态机下一拍换口径、主窗弹窗立即决策。
-                                 样式用 FreshButton（V0.0.70）：GhostButton 的 Light 三键是
-                                 深色顶栏专用（半透明白底+纯白字），放白卡参数条上=白底白字
-                                 完美隐身（用户实测"根本用不了"——按钮在但看不见）；浅底深字
-                                 FreshButton 与左列按钮/参数条控件同语义键板。 -->
-                            <TextBlock Text="　报警复位：" VerticalAlignment="Center" Margin="10,0,0,0"/>
-                            <Button Style="{StaticResource FreshButton}" MinWidth="96" VerticalAlignment="Center"
-                                    Command="{Binding ToggleGrillResetModeCommand}"
-                                    Content="{Binding GrillResetModeText, FallbackValue=人工复位}"
-                                    ToolTip="{Binding GrillResetModeToolTip, FallbackValue=人工复位（缺省）：光栅让空后报警不自动解除（红灯与蜂鸣保持），弹出“报警复位”窗列出正在报警的库位，由操作员逐项/全部点【解除报警】确认。全局设置，立即生效。点击切回自动复位。}"/>
                         </WrapPanel>
                     </Border>
                     <!-- 底部按钮：预置→套用目标+套用所选模板；自定义→激活/仅保存（两组按选中项互斥显示） -->
@@ -272,6 +328,117 @@
                             </Button.Style>
                         </Button>
                     </StackPanel>
+
+                    <!-- ===== 光栅控制带（V0.0.74 用户拍板：从参数条下移到库位画布下方）=====
+                         一条横带收拢全部光栅配置，左→右：标志物｜门控开关｜信号类型｜报警解除。
+                         语义分区写在副文/提示里：
+                           · 门控 = 策略级（随策略保存/激活，换策略会回显该策略的开关）；
+                           · 信号类型 + 报警解除 = 全局接线/规程（不进策略，点了立刻落盘广播）。
+                         标志物=两根立柱+三道光束，门控开=蓝光束常亮、关=整体压暗——
+                         不读文字也能一眼看出光栅用没在用。DockPanel 顺序：声明在底部
+                         按钮之后 → 停在按钮上方、画布正下方。 -->
+                    <Border DockPanel.Dock="Bottom" Style="{StaticResource FreshCardBorder}"
+                            Padding="12,7" Margin="0,8,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- 0 光栅标志物：门控关（缺省）整体半透明，开=满亮度 -->
+                            <Grid Grid.Column="0" Width="42" Height="38" Margin="0,0,12,0"
+                                  VerticalAlignment="Center"
+                                  ToolTip="安全光栅：两侧立柱相对，中间三道光束。亮=门控已启用；暗=未启用（不检测光栅）。">
+                                <Grid.Style>
+                                    <Style TargetType="Grid">
+                                        <Setter Property="Opacity" Value="0.35"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding EditGrillGate, FallbackValue=False}" Value="True">
+                                                <Setter Property="Opacity" Value="1"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Grid.Style>
+                                <Rectangle Width="6" Height="36" RadiusX="3" RadiusY="3"
+                                           Fill="{DynamicResource Brush.Fresh.FgStrong}"
+                                           HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                <Rectangle Width="6" Height="36" RadiusX="3" RadiusY="3"
+                                           Fill="{DynamicResource Brush.Fresh.FgStrong}"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Rectangle Width="30" Height="2" RadiusX="1" RadiusY="1"
+                                               Fill="{DynamicResource Brush.Fresh.Accent}"/>
+                                    <Rectangle Width="30" Height="2" RadiusX="1" RadiusY="1" Margin="0,6,0,0"
+                                               Fill="{DynamicResource Brush.Fresh.Accent}"/>
+                                    <Rectangle Width="30" Height="2" RadiusX="1" RadiusY="1" Margin="0,6,0,0"
+                                               Fill="{DynamicResource Brush.Fresh.Accent}"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- 1 标题+状态副文（开关按钮本身显示已启用/已关闭，标题旁标"随策略保存"区分全局项） -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="光栅门控" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Brush.Fresh.FgStrong}"/>
+                                    <TextBlock Text="随策略保存" FontSize="10" Margin="7,1,0,0"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Brush.Fresh.FgDim}"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding GrillGateDetailText, FallbackValue=托盘到位即开计时（不检测光栅）}"
+                                           FontSize="10" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource Brush.Fresh.FgDim}"/>
+                            </StackPanel>
+
+                            <!-- 2 门控开关（ToggleButton：文字+轨道滑块，按钮自身就是状态显示） -->
+                            <ToggleButton Grid.Column="2" Style="{StaticResource GrillSwitch}"
+                                          VerticalAlignment="Center"
+                                          IsChecked="{Binding EditGrillGate, FallbackValue=False}"
+                                          Content="{Binding GrillGateSwitchText, FallbackValue=已关闭}"
+                                          ToolTip="光栅门控（随策略保存）：开=左右光栅都让空且托盘在架才开计时（防人手在架内就计时）；关（缺省）=托盘到位即开计时，没绑光栅的仓位门控自动放行。"/>
+
+                            <!-- 3 竖分隔 -->
+                            <Border Grid.Column="3" Width="1" Margin="16,3"
+                                    Background="{DynamicResource Brush.Fresh.PanelBorder}"/>
+
+                            <!-- 4 信号类型（全局接线口径）：常开/常闭分段按钮，当前档蓝底反白 -->
+                            <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="信号类型" VerticalAlignment="Center"
+                                           ToolTip="{Binding GrillSignalToolTip, FallbackValue='信号类型：常开（遮挡=ON）——缺省口径，全局设置立即生效。'}"/>
+                                <RadioButton Style="{StaticResource GrillSegment}" Content="常开" Margin="8,0,0,0"
+                                             GroupName="GrillPolarity"
+                                             IsChecked="{Binding IsGrillNormallyOpen, FallbackValue=True}"
+                                             ToolTip="常开（被挡 = ON）：光栅被挡时信号 ON、让空 OFF——缺省口径（V0.0.71 及以前）。全局设置（不进策略），立即生效。"/>
+                                <RadioButton Style="{StaticResource GrillSegment}" Content="常闭" Margin="4,0,0,0"
+                                             GroupName="GrillPolarity"
+                                             IsChecked="{Binding IsGrillNormallyClosed, FallbackValue=False}"
+                                             ToolTip="常闭（被挡 = OFF）：光栅被挡时信号 OFF、让空 ON——现场常闭安全光栅口径。全局设置（不进策略），立即生效。"/>
+                            </StackPanel>
+
+                            <!-- 5 竖分隔 -->
+                            <Border Grid.Column="5" Width="1" Margin="16,3"
+                                    Background="{DynamicResource Brush.Fresh.PanelBorder}"/>
+
+                            <!-- 6 报警解除（全局操作规程）：人工/自动分段按钮 -->
+                            <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="报警解除" VerticalAlignment="Center"
+                                           ToolTip="{Binding GrillResetModeToolTip, FallbackValue='人工复位（缺省）：光栅让空后报警不自动解除，由操作员在报警复位窗确认。全局设置，立即生效。'}"/>
+                                <RadioButton Style="{StaticResource GrillSegment}" Content="人工" Margin="8,0,0,0"
+                                             GroupName="GrillReset"
+                                             IsChecked="{Binding IsGrillManualReset, FallbackValue=True}"
+                                             ToolTip="人工复位（缺省）：光栅让空后红灯/蜂鸣保持，弹出报警复位窗由操作员逐项/全部确认。全局设置（不进策略），立即生效。"/>
+                                <RadioButton Style="{StaticResource GrillSegment}" Content="自动" Margin="4,0,0,0"
+                                             GroupName="GrillReset"
+                                             IsChecked="{Binding IsGrillAutoReset, FallbackValue=False}"
+                                             ToolTip="自动复位：光栅双侧都让空即自动解除报警。全局设置（不进策略），立即生效。"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
                     <!-- 仓位时长画布（主编辑区）：交互（点选/框选/平移/缩放）在 xaml.cs -->
                     <Grid>
                         <Grid.ColumnDefinitions>
