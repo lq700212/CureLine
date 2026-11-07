@@ -763,6 +763,21 @@
                                         </Style>
                                     </Button.Style>
                                 </Button>
+                                <!-- 扫码枪配置=仅 dev 登录后显示（V0.0.77，VM ShowScannerConfigItem）：
+                                     未登录/admin/operator 设置下拉里直接没有这一项 -->
+                                <Button Content="扫码枪配置" Command="{Binding OpenScannerConfigCommand}" Click="OnMenuClick"
+                                        Tag="{StaticResource Geo.Scanner}"
+                                        ToolTip="扫码枪串口参数，保存即生效（开发者专属）">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource SettingsMenuBtn}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ShowScannerConfigItem, FallbackValue=False}" Value="False">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
                                 <Border Style="{StaticResource SettingsMenuSep}"/>
                                 <Button Style="{StaticResource SettingsMenuBtn}" Tag="{StaticResource Geo.Check}"
                                         Content="软件激活" Command="{Binding OpenLicenseCommand}" Click="OnMenuClick"

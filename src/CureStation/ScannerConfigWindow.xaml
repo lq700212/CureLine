@@ -1,0 +1,180 @@
+<Window x:Class="CureStation.ScannerConfigWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:CureStation.ViewModels"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:ScannerConfigViewModel, IsDesignTimeCreatable=False}"
+        Title="扫码枪配置（SH-5000-GHD）" Height="720" Width="860"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None" Background="Transparent" AllowsTransparency="True"
+        Foreground="{DynamicResource Brush.Fresh.FgMid}"
+        Icon="Assets/app.ico" FontSize="12">
+    <shell:WindowChrome.WindowChrome>
+        <!-- 无边框自绘（全弹窗统一）：标题条命中拖动 + 边沿 6px 缩放 -->
+        <shell:WindowChrome CaptionHeight="34" GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False"
+                            ResizeBorderThickness="6"/>
+    </shell:WindowChrome.WindowChrome>
+    <!--★★ 扫码枪配置窗（dev 开发者专属，V0.0.77）：现场 SH-5000-GHD 为网口
+         输出，因工控机网口不够用，经"网口转 USB 转接线"接入——系统里是
+         虚拟串口（不是 TCP）。左列=串口定位与参数（现场可直接检测 COM 口），
+         右列=接线/操作指引与配置文件路径；保存即热重启串口，不重启程序。 -->
+    <Grid Margin="14">
+    <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+            BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+            Effect="{StaticResource Fx.WinShadow}">
+        <DockPanel>
+            <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
+                <Grid>
+                    <TextBlock Style="{StaticResource WinTitleText}"
+                               Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=扫码枪配置（SH-5000-GHD）}"/>
+                    <Button Style="{StaticResource WinTitleClose}" Content="✕" HorizontalAlignment="Right"
+                            Click="OnCloseClick" ToolTip="关闭（不保存）"/>
+                </Grid>
+            </Border>
+            <Grid Margin="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.12*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 左列：启用 + 串口定位 + 串口参数 -->
+                    <Border Grid.Column="0" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="扫码枪"/>
+                                <CheckBox IsChecked="{Binding EditEnabled, FallbackValue=False}"
+                                          Content="启用扫码枪（保存后按下面参数启动串口读码）"
+                                          Margin="0,6,0,0"/>
+                                <TextBlock Text="现场型号 SH-5000-GHD：网口输出，经『网口转 USB 转接线』接入工控机——系统里是虚拟串口（设备管理器『端口(COM 和 LPT)』下多出的 COM 号）。"
+                                           Foreground="{DynamicResource Brush.Fresh.FgDim}" FontSize="11"
+                                           TextWrapping="Wrap" Margin="0,6,0,0"/>
+
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="串口定位（二选一，固定 COM 口优先）" Margin="0,14,0,0"/>
+                                <TextBlock Text="固定 COM 口（PortName）：" Margin="0,6,0,0"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" Style="{StaticResource FreshInput}"
+                                             Text="{Binding EditPortName, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="设备管理器『端口(COM 和 LPT)』里的 COM 号，如 COM3；填了就用它（换 USB 口要改）"/>
+                                    <Button Grid.Column="1" Style="{StaticResource FreshButton}"
+                                            Content="检测串口" Command="{Binding DetectPortsCommand}"
+                                            Height="32" Margin="8,0,0,0"
+                                            ToolTip="枚举本机现有 COM 口（拔插转接线看哪个号变化，就是扫码枪）"/>
+                                </Grid>
+                                <!-- 检测结果：选择即回填上面的 PortName；未检测时收起（避免像第二个空输入框） -->
+                                <ComboBox Margin="0,6,0,0"
+                                          ItemsSource="{Binding DetectedPorts, FallbackValue={x:Null}}"
+                                          SelectedItem="{Binding SelectedDetectedPort, Mode=TwoWay}"
+                                          ToolTip="点『检测串口』后在这里选：选中即回填上面的固定 COM 口">
+                                    <ComboBox.Style>
+                                        <Style TargetType="ComboBox" BasedOn="{StaticResource FreshCombo}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DetectedPorts.Count, FallbackValue=0}" Value="0">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ComboBox.Style>
+                                </ComboBox>
+
+                                <TextBlock Text="或 设备名关键字（DeviceKeyword，PortName 留空时自动找口）："
+                                           Margin="0,10,0,0"/>
+                                <TextBox Style="{StaticResource FreshInput}"
+                                         Text="{Binding EditDeviceKeyword, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="设备管理器设备名称里的关键字，如 USB / CH340 / Prolific；换 USB 口免改配置"/>
+                                <TextBlock Text="现场预置『USB』：SH-5000-GHD 经 USB 转接线后设备名一般含 USB（如 USB-SERIAL CH340 (COM3)）。本机有多个 USB 串口设备时，请改用上面的固定 COM 口。"
+                                           Foreground="{DynamicResource Brush.Fresh.FgDim}" FontSize="11"
+                                           TextWrapping="Wrap" Margin="0,3,0,0"/>
+
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="串口参数（按扫码枪手册核对）" Margin="0,14,0,0"/>
+                                <TextBlock Text="波特率（常见 9600 / 115200，可直接输入）：" Margin="0,6,0,0"/>
+                                <ComboBox Style="{StaticResource FreshCombo}" IsEditable="True"
+                                          ItemsSource="{Binding BaudRateOptions, FallbackValue={x:Null}}"
+                                          Text="{Binding EditBaudRate, UpdateSourceTrigger=PropertyChanged}"
+                                          ToolTip="SH-5000-GHD 出厂常见 9600；扫不出码时按手册核对"/>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                                        <TextBlock Text="数据位："/>
+                                        <ComboBox Style="{StaticResource FreshCombo}" Margin="0,3,0,0"
+                                                  ItemsSource="{Binding DataBitsOptions, FallbackValue={x:Null}}"
+                                                  SelectedItem="{Binding EditDataBits, FallbackValue=8}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="3,0">
+                                        <TextBlock Text="停止位："/>
+                                        <ComboBox Style="{StaticResource FreshCombo}" Margin="0,3,0,0"
+                                                  ItemsSource="{Binding StopBitsOptions, FallbackValue={x:Null}}"
+                                                  SelectedItem="{Binding EditStopBits, FallbackValue=1}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Margin="6,0,0,0">
+                                        <TextBlock Text="校验位："/>
+                                        <ComboBox Style="{StaticResource FreshCombo}" Margin="0,3,0,0"
+                                                  ItemsSource="{Binding ParityOptions, FallbackValue={x:Null}}"
+                                                  SelectedItem="{Binding EditParity, FallbackValue=None}"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Text="扫码会话超时（秒，5~600）：" Margin="0,10,0,0"/>
+                                <TextBox Style="{StaticResource FreshInput}"
+                                         Text="{Binding EditSessionTimeout, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="扫了库位码后等产品码的最长间隔，超时自动回到『请扫库位码』；缺省 15"/>
+                                <CheckBox IsChecked="{Binding EditDebugLog, FallbackValue=False}"
+                                          Content="心跳调试日志（排障用：WMI 找口过程写操作日志，正常不勾）"
+                                          Margin="0,10,0,0"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- 右列：现场接线指引 + 生效口径 + 配置文件路径 -->
+                    <Border Grid.Column="1" Style="{StaticResource FreshCardBorder}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="现场接线与操作步骤"/>
+                                <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Brush.Fresh.FgDim}"
+                                           Text="① 转接线插好后，打开设备管理器『端口(COM 和 LPT)』确认 COM 号（拔插转接线看哪个号出现/消失最稳）。&#x0a;② 最直接=把 COM 号填进『固定 COM 口』；想换 USB 口免改配置=PortName 留空、用设备关键字『USB』自动找口。&#x0a;③ 勾选『启用扫码枪』→ 保存 → 主窗统计条扫码胶囊变绿即接通。&#x0a;④ 扫一下任意条码验证：统计条会提示『请扫库位码』阶段变化。"/>
+
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="生效口径" Margin="0,16,0,0"/>
+                                <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Brush.Fresh.FgDim}"
+                                           Text="• 保存即生效：程序按新参数后台重启串口，不需要重启程序。&#x0a;• 断线/换 USB 口：服务每 3 秒后台自动重连，插回即恢复。&#x0a;• 未启用或没有串口定位时不启动串口，程序其余功能零影响。&#x0a;• 扫码只做库位/产品绑定与提示，不拦截固化流程。"/>
+
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="配置文件" Margin="0,16,0,0"/>
+                                <TextBlock Text="config\config.ini"
+                                           TextWrapping="Wrap" Foreground="{DynamicResource Brush.Fresh.FgDim}"
+                                           ToolTip="{Binding IniPath}"
+                                           FontSize="11"/>
+                                <TextBlock Text="（本窗保存会写回该文件的 [Scanner] 节，也可手工编辑；悬停上面一行看完整路径）"
+                                           TextWrapping="Wrap" Foreground="{DynamicResource Brush.Fresh.FgDim}"
+                                           FontSize="11" Margin="0,3,0,0"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+
+                <!-- 底：保存 / 取消 -->
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                    <Button Tag="{StaticResource Geo.CloseX}" Style="{StaticResource FreshButton}" Content="取消"
+                            Click="OnCloseClick" Width="100" Height="34" Margin="0,0,8,0"/>
+                    <Button Tag="{StaticResource Geo.Save}" Style="{StaticResource FreshButton}"
+                            Content="保存配置" Command="{Binding SaveCommand}" Width="160" Height="34"/>
+                </StackPanel>
+            </Grid>
+        </DockPanel>
+    </Border>
+    </Grid>
+</Window>

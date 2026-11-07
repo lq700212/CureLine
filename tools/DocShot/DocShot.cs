@@ -51,6 +51,7 @@ using CwIoTest = CureStation.IoTestWindow;
 using CwPointTable = CureStation.PointTableWindow;
 using CwAccounts = CureStation.AccountManagerWindow;
 using CwMesPost = CureStation.MesPostConfigWindow;
+using CwScannerConfig = CureStation.ScannerConfigWindow;
 using CureDialogs = CureStation.ViewModels.IDialogService;
 using CureMainVm = CureStation.ViewModels.MainViewModel;
 using CureLoginVm = CureStation.ViewModels.LoginViewModel;
@@ -60,6 +61,7 @@ using CureIoTestVm = CureStation.ViewModels.IoTestViewModel;
 using CurePointTableVm = CureStation.ViewModels.PointTableViewModel;
 using CureAccountVm = CureStation.ViewModels.AccountManagerViewModel;
 using CureMesPostVm = CureStation.ViewModels.MesPostConfigViewModel;
+using CureScannerVm = CureStation.ViewModels.ScannerConfigViewModel;
 using CureLogSnap = CureStation.ViewModels.LogSystemSnapshot;
 
 using GwMain = CimGateway.MainWindow;
@@ -304,6 +306,12 @@ public static class Program
         // ---------- 过账配置窗（L4） ----------
         var mp = new CwMesPost { DataContext = new CureMesPostVm(fake) };
         Shot(mp, "cs-mespost.png", 900);
+
+        // ---------- 扫码枪配置窗（V0.0.77，**dev 专属**，客户向文档不得引用） ----------
+        // 种子 ini 无 [Scanner] 定位 → VM 打开即现场预置态（启用 + USB 关键字），
+        // 正好展示"转接线虚拟串口自动找口"的推荐口径（保存才落盘）。
+        var sc = new CwScannerConfig { DataContext = new CureScannerVm(fake) };
+        Shot(sc, "cs-scanner.png", 900);
 
         // ---------- 主窗流转后期（更多仓位走过一轮；避开 Mock 演示掉线窗口） ----------
         Pump(6000);
@@ -781,6 +789,7 @@ public static class Program
         public void ShowAccounts(OperatorRole actor) { }
         public bool ShowWorkOrder(OperatorRole? currentRole) => false;
         public bool ShowMesPostConfig() => false;
+        public bool ShowScannerConfig() => false;   // V0.0.77 桩跟进（镜头段显式构造配置窗）
         public bool ShowLicenseActivation() => false;   // V0.0.54 桩跟进（演示态不会开激活窗）
         public void ShowIoTest(IPointTableBus bus, PointTableConfig config) { }
         public void ShowLog(CureLogSnap snapshot) { }                 // 日志窗桩（截图段另开真实 LogWindow）

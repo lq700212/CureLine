@@ -576,6 +576,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// </summary>
     public bool ShowPointTableItem => _currentRole != OperatorRole.Admin;
 
+    /// <summary>
+    /// "扫码枪配置"菜单项可见性（V0.0.77）：**仅 dev 登录后显示**——
+    /// 扫码枪属设备接入参数，与点表同级；未登录/admin/operator 一律直接没有
+    /// 这一项（不是置灰）。命令入口另有 Gate(Dev) 兜底。
+    /// </summary>
+    public bool ShowScannerConfigItem => _currentRole == OperatorRole.Dev;
+
     /// <summary>单线过账状态（顶栏展示；过账服务后台线程回调，经 UiInvoke 封送）。</summary>
     private string _postingText = "过账：—";
     public string PostingText
@@ -627,6 +634,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private ScannerOptions _scannerOptions = new();
     private ScannerBarcodeService? _scanner;
     private SlotBindingSession _bindings = new();
+
+    /// <summary>
+    /// 扫码枪"关旧→开新"的生命周期锁（配置窗保存热重启用）：串口是独占资源，
+    /// 旧服务 Dispose 未完成就开新口会打开失败；Start/Dispose 都在后台任务里
+    /// 串行执行（最坏等心跳线程 3 秒，UI 不阻塞——铁律 2）。
+    /// </summary>
+    private readonly object _scannerLifecycleGate = new();
 
     /// <summary>已提示过"未绑定"的库位（日志只记边沿：新出现的未绑定才写一行）。</summary>
     private readonly HashSet<(int Rack, int Level)> _unboundAlerted = new();
@@ -792,6 +806,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public RelayCommand OpenPointTableCommand { get; }
     public RelayCommand OpenCuringPolicyCommand { get; }
     public RelayCommand OpenPostConfigCommand { get; }
+    public RelayCommand OpenScannerConfigCommand { get; }
     public RelayCommand ReconnectCommand { get; }
     public RelayCommand LoginCommand { get; }
     public RelayCommand OpenWorkOrderCommand { get; }
@@ -810,6 +825,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         OpenPointTableCommand = new RelayCommand(OpenPointTable);
         OpenCuringPolicyCommand = new RelayCommand(OpenCuringPolicy);
         OpenPostConfigCommand = new RelayCommand(OpenPostConfig);
+        OpenScannerConfigCommand = new RelayCommand(OpenScannerConfig);
         ReconnectCommand = new RelayCommand(() => StartBus(_config));
         LoginCommand = new RelayCommand(Login);
         OpenWorkOrderCommand = new RelayCommand(OpenWorkOrder);
@@ -911,8 +927,74 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         if (!_scannerOptions.Enabled || !_scannerOptions.HasPortTarget)
             return;   // 未启用/未配置：不启动串口线程（状态条已给配置指引）
 
-        Task.Run(() => _scanner.Start())
-            .ContinueWith(_ => UiInvoke(RefreshScanState));
+        // 捕获局部实例（不读字段）：配置窗保存会换新实例，旧启动任务不能误启新枪。
+        var scanner = _scanner;
+        Task.Run(() =>
+        {
+            lock (_scannerLifecycleGate)
+                scanner.Start();
+        }).ContinueWith(_ => UiInvoke(RefreshScanState));
+    }
+
+    /// <summary>
+    /// 扫码枪配置窗入口（dev 专属）：保存成功→按新参数热重建扫码枪（不重启程序）。
+    /// 主窗统一提示"已保存"（与点表/策略窗同款）。
+    /// </summary>
+    private void OpenScannerConfig()
+    {
+        if (!Gate(OperatorRole.Dev, "扫码枪配置"))
+            return;
+        if (!_dialogs.ShowScannerConfig())
+            return;
+        ApplyScannerOptions();
+        _dialogs.ShowMessage("扫码枪配置已保存并生效。", "保存成功");
+    }
+
+    /// <summary>
+    /// 按盘上新配置热重建扫码枪（V0.0.77）：
+    ///   ① 绑定簿原样带进新会话（在架绑定不丢；等待产品码阶段重置为等库位码）；
+    ///   ② 旧服务 UI 线程退订，后台串行"关旧口→按新参数开新口"（同一把锁防串口竞争）；
+    ///   ③ 立即刷扫码胶囊与卡片（不等 500ms 拍）。
+    /// 配置全是低频项，重建开销（WMI 找口+开串口，最坏几百 ms）在后台，UI 无感。
+    /// </summary>
+    private void ApplyScannerOptions()
+    {
+        var options = ScannerOptions.Load();
+        _scannerOptions = options;
+
+        var old = _scanner;
+        if (old != null)
+        {
+            old.BarcodeScanned -= OnBarcodeScanned;
+            old.ConnectionChanged -= OnScannerConnectionChanged;
+        }
+
+        var book = _bindings.Snapshot();
+        _bindings.Changed -= OnBindingsChanged;
+        _bindings = new SlotBindingSession(
+            book,
+            timeoutSeconds: options.NormSessionTimeoutSeconds,
+            log: m => LocalLogService.Write(m));
+        _bindings.Changed += OnBindingsChanged;
+
+        var fresh = new ScannerBarcodeService(options);
+        fresh.BarcodeScanned += OnBarcodeScanned;
+        fresh.ConnectionChanged += OnScannerConnectionChanged;
+        _scanner = fresh;
+
+        RefreshScanState();
+        RefreshSlots();
+        LocalLogService.Write("扫码枪配置已保存：按新参数后台重启串口");
+
+        Task.Run(() =>
+        {
+            lock (_scannerLifecycleGate)
+            {
+                old?.Dispose();   // 先关旧口（最坏等心跳 3 秒），再开新口
+                if (options.Enabled && options.HasPortTarget)
+                    fresh.Start();
+            }
+        }).ContinueWith(_ => UiInvoke(RefreshScanState));
     }
 
     /// <summary>
@@ -1359,6 +1441,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // 设置按钮可用性/点表菜单项随角色刷新（operator 登录后设置按钮置灰、admin 点表项隐藏）。
         Raise(nameof(IsSettingsEnabled));
         Raise(nameof(ShowPointTableItem));
+        Raise(nameof(ShowScannerConfigItem));
     }
 
     /// <summary>工单信息窗：登录即可开（窗内编辑区按角色再细分禁用）。</summary>
@@ -1480,7 +1563,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             scanner.BarcodeScanned -= OnBarcodeScanned;
             scanner.ConnectionChanged -= OnScannerConnectionChanged;
-            Task.Run(() => scanner.Dispose());
+            // 与配置热重启共用生命周期锁：退出释放排在"关旧/开新"之后，不抢串口。
+            Task.Run(() =>
+            {
+                lock (_scannerLifecycleGate)
+                    scanner.Dispose();
+            });
         }
         // 报警复位链退订（V0.0.69）：四事件 + 模式广播；收掉开着的复位窗
         //（程序退出联动——窗是静态单例，不留悬挂 UI）。

@@ -2,6 +2,52 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.77（2026-11-07，固化程控：扫码枪配置窗（dev 专属）+ 保存即热重启串口）
+
+现场要求：扫码枪参数不再手翻 ini——程序①「设置 ▾」里给一个配置弹窗，
+**只有 dev 账号登录后可见可进**（与点表配置同级；admin/operator/未登录
+设置下拉里直接没有这一项）；保存即生效，不重启程序。同时按现场实况
+（SH-5000-GHD 网口输出 + 网口转 USB 转接线→虚拟串口）预置好缺省值。
+
+### 配置窗（`ScannerConfigWindow` + `ScannerConfigViewModel`）
+
+- 入口：主窗「设置 ▾」→「扫码枪配置」，VM 门禁 `ShowScannerConfigItem`
+  （`_currentRole == OperatorRole.Dev`）+ 命令入口 `Gate(Dev)` 双保险；
+  菜单图标 `Geo.Scanner` 自绘（galaxy 无条码样例）。
+- 左列：启用开关、固定 COM 口（`PortName`）/ 设备名关键字（`DeviceKeyword`
+  二选一，前者优先）、【检测串口】枚举本机 COM 号（`SerialPort.GetPortNames`，
+  唯一口自动回填，无口给转接线/驱动检查提示）、串口参数（波特率可手输）、
+  `SessionTimeoutSeconds`、`DebugLog`；右列：现场接线四步、生效口径、
+  配置文件实际路径。
+- 保存校验与 `ScannerOptions.Norm*` 同口径：COM 号 `^COM\d+$`、波特率
+  2400~921600、数据位 5~8、停止位 1/1.5/2、校验位五枚举、超时 5~600；
+  **勾启用但两种串口定位都空**当场拦下并一次列全原因，不落盘。
+- **现场预置**：`config.sample.ini` 的 `[Scanner]` 预置 `Enabled=1` +
+  `DeviceKeyword=USB`（转接线虚拟串口设备名一般含 USB）；配置窗打开时
+  "两种定位都空"（=从未配过枪，ini 自愈缺省形态）预填启用 + USB，**只预填
+  不落盘**，点保存才确认——没接枪的调试机不会被静默启动串口。已配过定位
+  （固定 COM 或关键字）的机器原样回显、不打扰；`ScannerOptions.Load` 缺省
+  仍是 `Enabled=false` / 空关键字（无枪开发机/测试零串口尝试）。
+- 停止位显示值 `1/1.5/2` ↔ ini 存储 `1/15/2`（沿用子模块约定）。
+
+### 保存即热重启串口（不重启程序）
+
+- 主窗 `ApplyScannerOptions()`：读盘 → 绑定簿 `Snapshot()` 带进新
+  `SlotBindingSession`（在架绑定不丢；等待产品码阶段重置）→ UI 线程退订
+  旧服务 → 后台 `lock(_scannerLifecycleGate)` 内"旧 `Dispose` → 新 `Start`"
+  串行执行（串口独占 + 子模块 Dispose 最坏等心跳 3 秒，UI 零阻塞——铁律 2），
+  完成后 `UiInvoke` 刷扫码胶囊/卡片。退出释放同锁，不抢串口。
+- 主窗统一提示"扫码枪配置已保存并生效。"（与点表/策略窗同款）。
+
+- 测试：543→552（`ScannerConfigTests` 8 例：回显映射/现场预置/保存往返/
+  启用无定位拦下/坏值一次列全/已配置尊重现值/定位空给建议/检测串口；
+  `MainVm_ScannerConfig_OnlyDevAndHotApplies` 锁三级门禁与热更新）。
+  `dotnet build` 0 警 0 错，`dotnet test` 552/552 全绿。
+- 文档：三份固化手册（操作员/客户技术工艺/内部）把"手改 ini"改为
+  "设置→扫码枪配置（dev）优先、ini 兜底"；内部手册新增 `cs-scanner.png`
+  配置窗截图（dev 专属图，客户向文档禁引用，`check_config.py` 已登记）；
+  README/AGENTS/重构设计同步配置窗门禁与热重启语义。
+
 ## V0.0.76（2026-11-07，固化程控：扫码枪绑定库位/产品 + 策略窗时间单位切换修复）
 
 现场要求：托盘入库前先扫库位码、再扫产品二维码，把产品与库位绑定；固化完

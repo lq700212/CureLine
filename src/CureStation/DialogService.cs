@@ -60,6 +60,12 @@ public interface IDialogService
     bool ShowMesPostConfig();
 
     /// <summary>
+    /// 打开扫码枪配置窗（模态，dev 开发者专属）。返回 true 表示保存了配置
+    /// （调用方按新参数热重启扫码枪，不重启程序）。
+    /// </summary>
+    bool ShowScannerConfig();
+
+    /// <summary>
     /// 打开软件激活窗（模态）。返回 true 表示激活成功（主窗刷新授权状态文案）。
     /// 两个程序各自实现（窗是程序私有资产），编排在 Core 的 LicenseActivationViewModel。
     /// </summary>
@@ -187,6 +193,17 @@ public sealed class DialogService : IDialogService
         {
             Owner = Application.Current?.MainWindow,
             DataContext = new MesPostConfigViewModel(new DialogService()),
+        };
+        return win.ShowDialog() == true;
+    }
+
+    public bool ShowScannerConfig()
+    {
+        // 生产装配：扫码枪配置窗（dev 门禁在主窗；VM 在服务里 new，测试用 Fake 桩）。
+        var win = new ScannerConfigWindow
+        {
+            Owner = Application.Current?.MainWindow,
+            DataContext = new ScannerConfigViewModel(new DialogService()),
         };
         return win.ShowDialog() == true;
     }

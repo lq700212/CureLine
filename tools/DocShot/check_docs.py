@@ -75,11 +75,11 @@ def check_md(name):
 
     # 内部版全量断言（对应程序全部截图都要在场）
     if name == "固化程控_内部手册.md":
-        need = [i for i in cfg.IMG_WHITE[:12] if i not in refs]
+        need = [i for i in cfg.IMG_WHITE[:13] if i not in refs]
         if need:
             fail(name, f"内部版应含程序①全部截图，缺: {need}")
     if name == "整线网关_内部手册.md":
-        need = [i for i in cfg.IMG_WHITE[12:] if i not in refs]
+        need = [i for i in cfg.IMG_WHITE[13:] if i not in refs]
         if need:
             fail(name, f"内部版应含程序②全部截图，缺: {need}")
     return text

@@ -83,6 +83,15 @@ public class FakeCureDialogService : CureStation.ViewModels.IDialogService
         return LicenseActivationResult;
     }
 
+    /// <summary>ShowScannerConfig 的桩返回值（true=保存成功）。</summary>
+    public bool ScannerConfigResult { get; set; }
+
+    public bool ShowScannerConfig()
+    {
+        Calls.Add("ShowScannerConfig");
+        return ScannerConfigResult;
+    }
+
     public void ShowIoTest(CureLine.Core.Comms.IPointTableBus bus, CureLine.Core.Comms.PointTableConfig config)
         => Calls.Add("ShowIoTest");
 

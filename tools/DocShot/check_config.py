@@ -34,24 +34,25 @@ DOC_TITLES = {
     "整线网关_内部手册.md": "# 整线网关 内部手册",
 }
 
-# ---- 截图白名单（docs/images 实际落盘；V0.0.50 重拍后 18 张）----
-# 程序① 12 张（cs-*，主窗三帧 idle/flow/dark + 工单两视角 operator/admin，
+# ---- 截图白名单（docs/images 实际落盘；V0.0.77 增 cs-scanner）----
+# 程序① 13 张（cs-*，主窗三帧 idle/flow/dark + 工单两视角 operator/admin，
 #   cs-main/ -light/ -pwd/ workorder 旧名已随重拍一并删除）+ 程序② 6 张（gw-*）；
-# 顺序约定：前 12 张属程序①，其后属程序②（check_docs.py 内部版"全量"断言
+# 顺序约定：前 13 张属程序①，其后属程序②（check_docs.py 内部版"全量"断言
 # 按此切片，改动须同步）。
 IMG_WHITE = [
     "cs-main-idle.png", "cs-main-flow.png", "cs-main-dark.png",
     "cs-login.png", "cs-workorder-operator.png", "cs-workorder-admin.png",
     "cs-pointtable.png", "cs-policy.png", "cs-iotest.png",
-    "cs-operators.png", "cs-mespost.png", "cs-log.png",
+    "cs-operators.png", "cs-mespost.png", "cs-scanner.png", "cs-log.png",
     "gw-main.png", "gw-login.png", "gw-log.png",
     "gw-debug.png", "gw-changepwd.png", "gw-config.png",
 ]
 
 # dev（最高权限）专属窗截图——客户向文档严禁出现。
 # gw-config.png = 网关配置窗（仅 dev 可见入口）；
+# cs-scanner.png = 扫码枪配置窗（V0.0.77，仅 dev 可见入口）；
 # gw-changepwd.png 为 admin 登录态拍摄（顶栏无"网关设置"钮），客户向可用。
-DEV_ONLY_IMGS = ["gw-config.png"]
+DEV_ONLY_IMGS = ["gw-config.png", "cs-scanner.png"]
 
 # 客户向 4 份的文本禁词（权限红线：dev 专属页零出现）
 CUSTOMER_BANNED = [
@@ -71,7 +72,7 @@ REQUIRED_IMGS = {
         "cs-main-idle.png", "cs-policy.png", "cs-pointtable.png",
         "cs-mespost.png", "cs-iotest.png", "cs-workorder-admin.png",
     ],
-    "固化程控_内部手册.md": IMG_WHITE[:12],
+    "固化程控_内部手册.md": IMG_WHITE[:13],
     "整线网关_操作员手册.md": [
         "gw-main.png", "gw-login.png", "gw-log.png", "gw-debug.png",
         "gw-changepwd.png",
@@ -80,7 +81,7 @@ REQUIRED_IMGS = {
         "gw-main.png", "gw-login.png", "gw-log.png", "gw-debug.png",
         "gw-changepwd.png",
     ],
-    "整线网关_内部手册.md": IMG_WHITE[12:],
+    "整线网关_内部手册.md": IMG_WHITE[13:],
 }
 
 # 客户面向份（禁词 + DEV_ONLY 图两道闸都跑）

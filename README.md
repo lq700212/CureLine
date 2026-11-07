@@ -93,8 +93,11 @@ IO 耦合器（Modbus TCP）**30 仓位**程控（双架 60）：
 - **扫码绑定库位/产品（V0.0.76）**：托盘入库前**先扫库位码（A01~J12）再扫
   产品二维码**，绑定落盘 `config\slotbindings.json`（重启不丢，现场可追溯）；
   固化完取件（托盘离开）绑定自动作废，下次入库必须重扫。扫码枪为网口经
-  USB 转接线接入的**虚拟串口**，`[Scanner]` 节配置（固定 COM 口或按设备名
-  关键字自动找口，断线后台静默重连）；统计条扫码胶囊实时提示当前阶段
+  USB 转接线接入的**虚拟串口**（`[Scanner]` 节，固定 COM 口或按设备名关键字
+  自动找口，断线后台静默重连）；**V0.0.77 起「设置→扫码枪配置」（dev 开发者
+  专属）界面化**：启用/COM 口检测/串口参数/会话超时一窗改，保存即热重启串口
+  不重启程序；`config.sample.ini` 按现场预置 `Enabled=1` + `DeviceKeyword=USB`。
+  统计条扫码胶囊实时提示当前阶段
   （灰=未连接 · 绿=待扫库位 · 黄=待扫产品 · 红=有在架托盘未绑定），
   扫错码 3 秒浮层提示、超时自动回"请扫库位码"；**托盘在架未绑定只红字
   报警，不拦截固化流程**（客户口径）。
@@ -248,7 +251,7 @@ CureLine/
 │   ├── CureLine.Core/    共享业务：IO 点表 / 固化工艺 / 过账 / 通讯底座 / VM 基建
 │   ├── CureStation/      程序①固化程控（30 仓位主窗 + 6 功能窗 + 双主题）
 │   └── CimGateway/       程序②CIM 整线过账（网关视图 + 配置/调试/日志窗）
-├── tests/CureLine.Tests/ 543 例 xUnit（本地桩 MES / 状态机桩 / Fake 对话框）
+├── tests/CureLine.Tests/ 552 例 xUnit（本地桩 MES / 状态机桩 / Fake 对话框）
 ├── extern/kaleidoscope/  通讯子模块（独立仓库；Modbus/HslCommunication）
 ├── docs/                 拆分设计 + 培训手册（md/pdf）+ 配图 docs/images/
 ├── tools/DocShot/        文档截图 harness

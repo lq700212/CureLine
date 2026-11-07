@@ -1030,6 +1030,44 @@ public class CureStationViewModelTests
         Assert.Contains(fake.Calls, c => c == "ShowPointTable");
     }
 
+    [Fact(DisplayName = "扫码枪配置：仅 dev 可见可开，保存后主窗热更新")]
+    public void MainVm_ScannerConfig_OnlyDevAndHotApplies()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+        var fake = new FakeCureDialogService();
+        using var vm = new CureStation.ViewModels.MainViewModel(fake);
+
+        // 未登录：菜单项不显示 + 命令被 Gate 拦（先提示登录）
+        Assert.False(vm.ShowScannerConfigItem);
+        vm.OpenScannerConfigCommand.Execute(null);
+        Assert.Contains(fake.Calls, c => c.Contains("未登录"));
+        Assert.DoesNotContain(fake.Calls, c => c == "ShowScannerConfig");
+
+        // operator / admin：菜单项都不显示；admin 命令被权限拦
+        fake.LoginResult = ("operator", OperatorRole.Operator);
+        vm.LoginCommand.Execute(null);
+        Assert.False(vm.ShowScannerConfigItem);
+
+        fake.LoginResult = ("admin", OperatorRole.Admin);
+        vm.LoginCommand.Execute(null);
+        Assert.False(vm.ShowScannerConfigItem);
+        vm.OpenScannerConfigCommand.Execute(null);
+        Assert.Contains(fake.Calls, c => c.Contains("权限不足"));
+        Assert.DoesNotContain(fake.Calls, c => c == "ShowScannerConfig");
+
+        // dev：菜单项显示 + 保存后主窗按新配置热重建（测试 ini 无 [Scanner] → 未启用）
+        fake.LoginResult = ("dev", OperatorRole.Dev);
+        vm.LoginCommand.Execute(null);
+        Assert.True(vm.ShowScannerConfigItem);
+        fake.ScannerConfigResult = true;
+        vm.OpenScannerConfigCommand.Execute(null);
+        Assert.Contains(fake.Calls, c => c == "ShowScannerConfig");
+        Assert.Contains(fake.Calls, c => c.Contains("扫码枪配置已保存并生效"));
+        Assert.Equal("扫码：未启用", vm.ScanText);
+    }
+
     // ---------- 日志悬浮窗 + 主题切换（方案 D · 双主题，2026-10-29） ----------
 
     [Fact(DisplayName = "ShowLog 门禁：未登录先拦")]

@@ -92,12 +92,14 @@
   批量一键生成/自愈改现场口径 + 测试连接补 UI（死命令修复）+ 校验补
   重复 IP/重名闸 + 轮询按块分组读（180→20 帧/周期）+ 通道归属可见 +
   程序②机台连接保存即热重建（RestartApp 链删除）。
-  **P3.3 扫码绑定库位/产品（已完成 2026-11-07，V0.0.76）**：现场先扫库位码
-  （A01~J12）再扫产品二维码绑定（`SlotBindingSession` 两段式会话 +
-  `SlotBindingStore` 落盘 `config/slotbindings.json`）；托盘离开清绑定、
+  **P3.3 扫码绑定库位/产品（已完成 2026-11-07，V0.0.76；V0.0.77 补配置窗）**：
+  现场先扫库位码（A01~J12）再扫产品二维码绑定（`SlotBindingSession` 两段式
+  会话 + `SlotBindingStore` 落盘 `config/slotbindings.json`）；托盘离开清绑定、
   下次入库重扫；未绑定只在统计条/卡片红字报警**不拦截固化流程**；扫码枪=
   网口经 USB 转接线的虚拟串口，复用 kaleidoscope `ScannerService`（WMI 自动
-  找口/心跳断连重连），`[Scanner]` 节全参数配置（不新建配置窗）。
+  找口/心跳断连重连），`[Scanner]` 节全参数配置；**V0.0.77 起配置界面化**：
+  主窗「设置→扫码枪配置」（`ScannerConfigWindow`，**仅 dev 登录后可见**），
+  保存即热重启串口不重启程序。
 
 ## 铁律（违反即返工）
 
@@ -114,13 +116,13 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 543/543（V0.0.76 全量；V0.0.34~75 各轮增量明细见各版本
+   `dotnet test` 552/552（V0.0.77 全量；V0.0.34~76 各轮增量明细见各版本
    CHANGELOG——基线此后只增不减，V0.0.62 授权真源收口 kaleidoscope：删
    宿主授权注入类语义用例 −21，重写编解码/era/门禁接线 +13，补真私钥
    激活链 +3，净减 5；V0.0.63 光栅报警链 +8，V0.0.64 总线时序契约+光栅
    兜底复位 +3，V0.0.69 人工复位 +13，V0.0.71 复位缺省解析/回显 +7，
    V0.0.72 光栅极性 +14，V0.0.73~75 日志窗/策略窗 UI +4，V0.0.76 扫码
-   绑定 +19）；禁止交付编译不过/测试不过的代码。
+   绑定 +19，V0.0.77 扫码枪配置窗 +9）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
    **`LicenseSignKey.dat`（软件激活签名私钥）** 只留厂商签发工具目录，已
@@ -219,6 +221,7 @@
 | `src/CureLine.Core/Curing/CuringMesOptions.cs` | 过账配置模型（ini `[CuringMes]` 节）：开关/工位/时间单位/进站时机/中途取件/静态参数五件；`NormSide` 规范化（非 L 按 R 兜底） |
 | `src/CureLine.Core/Curing/CuringMesPoster.cs` | **过账服务**：状态机边沿→MES 报文（进站/出站链/物料上传）；出站被接受→已生产+1；门槛双保险（开关+URL）；全 Task.Run 后台+异常兜底；`UpdateOptions` 热更新；`PostingChanged` 顶栏事件（后台线程触发，UI 须封送） |
 | `src/CureStation/MesPostConfigWindow.*` + `ViewModels/MesPostConfigViewModel.cs` | 过账配置窗（管理员+）：全参数一窗改，URL 校验→写 ini→`MesConfig` 本进程生效；主窗保存后热更新 |
+| `src/CureStation/ScannerConfigWindow.*` + `ViewModels/ScannerConfigViewModel.cs` | 扫码枪配置窗（V0.0.77，**仅 dev 可见**）：启用/COM 口检测/串口参数/会话超时；保存落 `[Scanner]` → 主窗 `ApplyScannerOptions` 后台热重启串口（生命周期锁串行，UI 零阻塞） |
 | `src/CureStation/DialogService.cs` | 生产 `IDialogService` + `CuringMesPosterHolder`（工单窗上传动作的静态桥接点，收在程序①内） |
 | **Core 共享（扫码绑定家族，P3.3 新增）** | |
 | `src/CureLine.Core/Curing/SlotBinding.cs` | 库位绑定记录 + 绑定簿（`SlotBindingBook`）+ `SlotBindingStore` 存取 `config/slotbindings.json`（缺/坏文件回 null 自愈；脏记录剔除；全量重写） |
@@ -248,7 +251,7 @@
 | `src/CureLine.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段）+ `MockMesServer`（内置模拟 MES 桩，仅 Simulate=1 且 URL 空/占位时接管，自配 URL 透传） |
 | `src/CureLine.Core/Data/CureRecordStore.cs` | `cure_record` 表 CRUD（V0.0.32 由 PLCtable 改名，项目未上线无兼容包袱）+ `ComputeStats` 纯统计 |
 | `src/CureLine.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/机台连接配置（`StationConfig.cs`：StationConfigStore/Validator） |
-| `tests/CureLine.Tests/` | 543 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用；`LicenseTests` 16 例锁 kaleidoscope 接线与双产品授权——有厂商私钥环境自动加跑真码激活链 3 例，无钥自动跳过；`SlotBindingTests` 19 例锁扫码绑定工序） |
+| `tests/CureLine.Tests/` | 552 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用；`LicenseTests` 16 例锁 kaleidoscope 接线与双产品授权——有厂商私钥环境自动加跑真码激活链 3 例，无钥自动跳过；`SlotBindingTests` 19 例锁扫码绑定工序；`ScannerConfigTests` 8 例锁扫码枪配置窗校验/预置/落盘） |
 | `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
 | `tools/DocShot/` | **文档截图 harness（V0.0.50 重作）**：`run_docshot.ps1` 一键 build 两程序→build harness→组装 runner→起 exe 全自动；**完全后台静默纪律（用户拍板）**——所有窗（含两主窗）`ShowActivated=false`+`ShowInTaskbar=false`+Left/Top=-20000 离屏，绝不抢焦点/不进任务栏/不落用户屏幕；**成品口径=RTB 优先**（`ShotRtb` 按 DPI 缩放渲染视觉树——无 DWM 阴影黑边、与窗口位置无关），PrintWindow 降为兜底（离屏下拍出黑边已被用户目检否决）；镜头名与文档引用全对齐（`cs-workorder-operator/admin.png` 三级视角、`cs-main-idle/flow/dark.png` 三帧），万象清单校验走 `check_config.py`（IMG_WHITE/REQUIRED_IMGS 两张表）+`check_docs.py`；**深色帧换装坑**：斜杠 URI `"/Themes/Dark.xaml"` 相对 Application 根（harness=DocShot 组件 404 FATAL）——必须手 Build `pack://…/CureStation;component/Themes/Dark.xaml` 并**按 Source 认出主题槽替换**（盲替 merged[0] 会把主样式字典换没，半坏视觉），`ThemeManager.Current` 私有 setter 反射同步防顶栏按钮文案不符；工单镜头演示数据用种子 `WorkOrderBook` 不落盘（R1 纪律） |
 
@@ -257,7 +260,7 @@
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build CureLine.slnx --nologo
-# 全量测试（543/543 全绿，串行，约 30s；含本地 HttpListener 桩 MES 端到端
+# 全量测试（552/552 全绿，串行，约 30s；含本地 HttpListener 桩 MES 端到端
 #   + 模拟链路 VM 全链路用例：按钮→注入→扫触发→POST 内置桩→回写→观测
 #   + 授权 16 例——其中真私钥激活链 3 例依赖 tools/LicenseIssuer 私钥，
 #   无钥环境自动跳过）
@@ -512,10 +515,12 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   Level1~4 文本 `FromText` 就地映射（L4→Admin、L1~3→Operator）——纯防老
   测试库崩，勿据此新增"兼容老分级"逻辑；
   ⑤ 门禁矩阵（三级）：工单/日志=登录即可；工艺策略/IO 测试/过账配置/
-  演示开关/用户管理=管理员+；点表配置=开发者专属且 **admin 登录后设置
-  下拉里直接没有该项**（`ShowPointTableItem` → XAML DataTrigger 收起项，
-  不是置灰）；演示开关收管理员的理由：Mock 边沿会照常驱动状态机与过账链
-  （影响生产数据口径）——改门禁只动 `MainViewModel.Gate` 调用处；
+  演示开关/用户管理=管理员+；点表配置/扫码枪配置=开发者专属且 **admin
+  登录后设置下拉里直接没有这两项**（`ShowPointTableItem` /
+  `ShowScannerConfigItem` → XAML DataTrigger 收起项，不是置灰；扫码枪
+  配置连未登录/operator 也没有——`ShowScannerConfigItem == Dev`）；演示
+  开关收管理员的理由：Mock 边沿会照常驱动状态机与过账链（影响生产数据
+  口径）——改门禁只动 `MainViewModel.Gate` 调用处；
   ⑥ **operator 登录后设置整钮禁用**（`IsSettingsEnabled` → XAML 半透明
   触发器）——不是逐项隐藏，勿拆成逐项控制；
   ⑦ **operator 无改密权**（登录窗改密面板已删勿加回）：改密全走用户管理窗
@@ -720,7 +725,17 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   订阅方必须封送；⑦ 配置二选一：`PortName` 固定口优先，留空则 `DeviceKeyword`
   WMI 找口，两者皆空=不启动串口（`Enabled=0` 同理），程序其余功能零影响；
   ⑧ 绑定簿是**生产追溯数据**（重启保留，现场可打开核对），不是配置——
-  `SlotBindingStore.Reset()` 删文件只回到"全部未绑定"，不影响程控。
+  `SlotBindingStore.Reset()` 删文件只回到"全部未绑定"，不影响程控；
+  ⑨ **配置窗（V0.0.77）**：「设置→扫码枪配置」仅 dev 可见可进（门禁双保险
+  见权限门禁语义⑤）；`ScannerConfigWindow` 仿过账配置窗骨架，VM
+  `ScannerConfigViewModel` 负责回显（停止位 `1/1.5/2` ↔ ini `1/15/2`）/
+  校验/落盘/【检测串口】（`SerialPort.GetPortNames`，唯一口自动回填）；
+  **保存即热重启串口**：主窗 `ApplyScannerOptions()` 读盘 → 绑定簿 `Snapshot()`
+  带入新会话（在架绑定不丢、等待产品码阶段重置）→ UI 退订旧服务 → 后台
+  `lock(_scannerLifecycleGate)` 内"旧 Dispose → 新 Start"串行（串口独占 +
+  子模块 Dispose 最坏等心跳 3 秒；退出释放同锁），UI 零阻塞。手工改 ini
+  仍需重启；`config.sample.ini` 按现场预置 `Enabled=1` + `DeviceKeyword=USB`，
+  配置窗对"两种定位都空"（自愈缺省形态）预填启用 + USB、只预填不落盘。
 - **软件授权语义（V0.0.62 起真源收口 kaleidoscope 子模块 `Kaleidoscope.Security`
   ——子模块勿私改，跨仓库改动需用户批准；宿主侧唯一接线 `Core/Security/LicenseHost`）**：
   ① **放行唯一口**=`LicenseHost.IsProductionAllowed`（**属性**非方法——试用/永久/
