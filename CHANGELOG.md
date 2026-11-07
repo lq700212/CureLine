@@ -2,6 +2,55 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.81（2026-11-07，固化程控：扫码枪出厂缺省收口（Enabled 缺省=启用 + [Scanner] 缺键自愈落盘））
+
+现场二次踩同一坑：部署目录重建/新构建覆盖后配置回到出厂，`[Scanner] Enabled`
+回到 0、启动日志"扫码枪：未启用"——上一版（V0.0.79）已把 Mode/TcpIp 缺省
+翻成现场口径，**唯独 Enabled 还缺省 0**；配置窗"启用建议只预填不落盘"的
+旧过渡设计又造成"界面上勾着启用、ini 里没有"的错觉，用户点一次保存才回正。
+本轮把这两处错位一次收口：**出厂缺省=现场口径包含启用**，且缺省值字面落盘。
+
+### 配置模型（`ScannerOptions`）
+
+- **`Enabled` 缺省翻转 false→true**：`Load()` 对 `[Scanner] Enabled` 的
+  ini 缺省 "0"→"1"——部署目录重建/新构建覆盖部署后**开箱即连**（与
+  Mode=Tcp/TcpIp 预置/8899 的现场口径完整对齐）；想不连=配置窗取消【启用】
+  勾选保存，或 ini 显式写 Enabled=0（唯一关闭口）。
+- **新增 `EnsureDefaultsPersisted()`：[Scanner] 缺键自愈落盘**——启动装配
+  （`InitScanner`）调用一次，把 ini 里"根本没写"的键按出厂缺省值字面回填
+  （哨兵探测缺键，**幂等：已写的键一律不碰**——现场手工改过的 TcpIp、
+  显式 Enabled=0、手工留空的串口键原样保留）。此后现场打开 config.ini
+  直接看到完整扫码枪段（Enabled=1/Mode=Tcp/TcpIp=169.254.173.207/
+  TcpPort=8899/TriggerCommand=），不再有"内存里有缺省、文件里空白"的两本账，
+  备份/核对/重部署都有字面锚点。
+
+### 配置窗（`ScannerConfigViewModel`）
+
+- **删除"启用建议只预填不落盘"分支**（V0.0.79 的过渡设计）：出厂数据源
+  本身=启用后回显与文件零错位，"界面勾着、ini 没生效"的错觉坑随之消失；
+  保存仍是唯一落盘口（`Save()` 全量写节），显式关闭后原样回显不打扰。
+
+### UI 附带修正（V0.0.80 卡片 SN 行的位置回归）
+
+- 库位码下 SN 行把 mid 区（状态词/大数字）整体推下了约 9 逻辑 px——
+  卡片 mid Grid 挂**动态补偿 Margin**（`HasBindingText` 时 Margin-bottom
+  = SN 行占高 18px）：显示 SN 的卡与相邻无 SN 卡的 mid 文本回到**完全
+  同一水平线**（几何补偿：居中锚点抵消 top 行高增量），foot 贴底不变，
+  无绑定卡与 V0.0.79 之前像素级一致（用户实测"不要动位置"拍板）。
+
+### 测试（569 → 570，旧锁更新 + 新锁）
+
+- **`TestScope` 统一预写 `[Scanner] Enabled=0`**（测试护栏）：出厂缺省
+  翻转后凡构造 `MainViewModel` 的用例不会真起 TCP 连接线程（测试域统一
+  无枪边界，一处改全域生效）；要测"启用"的用例显式写 1 或直接 new 对象。
+- 旧锁更新：`ScannerOptions_Defaults_AreFieldTcpPreset`、
+  `ScannerOptions_Defaults_SelfHeal`、`ScannerConfigVm_FirstOpen_EchoesTcpPreset`
+  改锁"缺省=启用"（首开用例删 TestScope 预写行再锁真·无 ini 场景）；
+  SkipReasonText 注释口径同步（显式关闭=跳过，出厂不再此态）。
+- 新锁：`EnsureDefaultsPersisted_WritesMissingKeys_KeepsExplicitValues`
+  （缺键全节字面回填 + 显式值三键保留）。
+- `dotnet build` 0 警 0 错，`dotnet test` **570/570 全绿**。
+
 ## V0.0.80（2026-11-07，固化程控：主窗卡片产品码（SN）上移显示——从卡片底部迁到库位码正下方）
 
 用户反馈：产品 SN 码写在卡片最底部（foot 第二行）太不醒目，扫码登记后

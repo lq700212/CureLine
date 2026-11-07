@@ -739,9 +739,14 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   订阅方必须封送；⑦ 配置两桶按方式生效（V0.0.78）：Tcp 方式=`TcpIp` 非空即
   目标（`TcpPort` 有 8899 兜底；**TcpIp 代码缺省=现场预置值
   `ScannerOptions.FieldTcpIp`，ini 空值/缺键在 ReadStr 层自愈回预置——
-  无"持久未配置"态，想不连 TCP=切 Serial 或关 Enabled**）；Serial 方式=
+  无"持久未配置"态，想不连 TCP=切 Serial 或关 Enabled**）；**Enabled
+  代码缺省也=1（V0.0.81 收口，2026-11-07 复盘补丁实测二次踩"未启用"坑后
+  翻转：部署目录重建/新构建覆盖部署后开箱即连，不再手工点一次配置窗保存；
+  显式 Enabled=0=唯一关闭口）；且启动装配 `InitScanner` 先调
+  `ScannerOptions.EnsureDefaultsPersisted()`——[Scanner] 节缺的键按出厂缺省
+  字面回填 ini（幂等，已写键一律不碰），文件所见即程序所得**；Serial 方式=
   `PortName` 固定口优先，留空则
-  `DeviceKeyword` WMI 找口；**当前方式**目标为空=不启动（`Enabled=0` 同理，
+  `DeviceKeyword` WMI 找口；**当前方式**目标为空=不启动（Enabled=0 同理，
   `HasPortTarget` 模式感知），且**启动装配与保存热换的"不启动"分支沿记一行
   跳过原因日志（2026-11-07 补，`ScannerOptions.SkipReasonText` 唯一文案源、
   服务 Start 拦截同串）——此前 Enabled=0 启动完全静默，现场"胶囊=未启用 +

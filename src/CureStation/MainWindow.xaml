@@ -287,8 +287,22 @@
 
                         <!-- mid：状态词视图（idle/gate/done/alarm/notconfig/灯色反推计时，含副文案行）
                              与大数字视图（状态机精确计时+进度条）互斥；文本随 Kind 分支给字面量
-                             （对齐设计图文案），不绑 VM -->
+                             （对齐设计图文案），不绑 VM。
+                             ★V0.0.81 位置锁定：库位码下的 SN 行占约 18 逻辑 px——
+                             HasBindingText 时 mid 加同值 Margin-bottom 抵消，居中锚点
+                             回到与"无 SN 卡"完全一致的水平线（相邻卡不减不添同高）；
+                             无绑定/未关联行 Collapsed 时 Margin=0 与旧版像素级一致。 -->
                         <Grid Grid.Row="1" VerticalAlignment="Center">
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Setter Property="Margin" Value="0"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasBindingText, FallbackValue=False}" Value="True">
+                                            <Setter Property="Margin" Value="0,0,0,18"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
                             <!-- 状态词视图：词 15px + 副文 10.5px（各态一句，设计图口径） -->
                             <StackPanel HorizontalAlignment="Left" VerticalAlignment="Center">
                                 <StackPanel.Style>

@@ -258,9 +258,10 @@ public class SlotBindingTests
         var ini = scope.IniPath();
         var options = ScannerOptions.Load(ini);
 
-        Assert.False(options.Enabled);
-        // V0.0.79 起缺省=现场 TCP 预置（Mode=Tcp + 枪侧 DTU IP + 8899 + 指令空）：
-        // 缺键自愈直接得到现场口径，目标视为"已配置"（Enabled=0 不自动连）。
+        // V0.0.81 缺省=现场口径收口：启用也进缺省（部署目录重建/覆盖部署开箱即连）；
+        Assert.True(options.Enabled);
+        // TCP 预置三键照旧（Mode=Tcp + 枪侧 DTU IP + 8899 + 指令空）——
+        // 缺键自愈直接得到现场口径，目标视为"已配置"。
         Assert.Equal("Tcp", options.NormMode);
         Assert.Equal(ScannerOptions.FieldTcpIp, options.TcpIp);
         Assert.Equal(8899, options.NormTcpPort);

@@ -7,10 +7,10 @@
 //      上位机作 TCP 客户端连枪侧，按行收条码）；
 //   ② Serial = 串口读码（System.IO.Ports，替代接线路径）。
 //
-// **缺省即现场预置（V0.0.79）**：无 [Scanner] 节的机器（ini 缺键自愈）直接得到
+// **缺省即现场预置（V0.0.79 建，V0.0.81 收口）**：无 [Scanner] 节的机器（ini 缺键自愈）直接得到
 //   现场口径——Mode=Tcp + 枪侧 DTU IP（FieldTcpIp=169.254.173.207）+ 端口 8899
-//   + 触发指令留空（=不发）；Enabled 仍缺省 false（无枪开发机不自启连接），
-//   现场按 config.sample.ini 的 Enabled=1 开箱即连。配置窗首次打开回显的就是
+//   + 触发指令留空（=不发）+ **Enabled=true（缺省即连——部署目录重建/新构建
+//   覆盖后不再掉回"未启用"，现场不用再手工点一次配置窗保存）。配置窗首次打开回显的就是
 //   这套预置值——现场不再手抄 IP（2026-11 现场曾把 DTU 死配置里的旧上位机
 //   地址 169.254.254.96 当枪侧 IP 填进来，连接超时的教训→预置值收敛一处）。
 //
@@ -46,10 +46,13 @@ namespace CureLine.Core.Comms;
 public sealed class ScannerOptions
 {
     /// <summary>
-    /// 是否启用扫码枪。缺省 false——现场没接枪时程序不尝试建立连接，
-    /// 避免"每次启动都报连不上"的噪声；接好枪后在配置窗勾选（或 ini 改 1）。
+    /// 是否启用扫码枪。**缺省 true（V0.0.81，出厂缺省=现场口径的收口）**——
+    /// 无 [Scanner] 节的机器开箱即按所配方式连接（现场部署目录重建/新构建
+    /// 覆盖部署后不再需要手工点一次配置窗保存；这正是 V0.0.79 现场反复踩
+    /// "未启用"坑的根因收口）。想不连：配置窗取消【启用】勾选并保存，或
+    /// ini 显式写 Enabled=0。
     /// </summary>
-    public bool Enabled { get; set; }
+    public bool Enabled { get; set; } = true;
 
     /// <summary>
     /// 接入方式（ini 存原文，规范化取 <see cref="NormMode"/>）：
@@ -224,13 +227,14 @@ public sealed class ScannerOptions
 
     private const string Section = "Scanner";
 
-    /// <summary>从 config.ini 读（缺省值见各属性；非法数值在 Norm* 属性里兜底）。</summary>
+    /// <summary>从 config.ini 读（缺省值见各属性；非法数值在 Norm* 属性里兜底）。
+    /// Enabled 缺省 "1"（V0.0.81 出厂缺省=现场口径：无 [Scanner] 节的机器开箱即连）。</summary>
     public static ScannerOptions Load(string? iniPath = null)
     {
         string ini = iniPath ?? AppPaths.ConfigIni;
         return new ScannerOptions
         {
-            Enabled = IniFile.ReadStr(ini, Section, "Enabled", "0") == "1",
+            Enabled = IniFile.ReadStr(ini, Section, "Enabled", "1") == "1",
             Mode = IniFile.ReadStr(ini, Section, "Mode", "Tcp"),
             TcpIp = IniFile.ReadStr(ini, Section, "TcpIp", FieldTcpIp).Trim(),
             TcpPort = IniFile.ReadInt(ini, Section, "TcpPort", 8899),
@@ -267,5 +271,48 @@ public sealed class ScannerOptions
         IniFile.Write(ini, Section, "Parity", NormParity);
         IniFile.Write(ini, Section, "SessionTimeoutSeconds", NormSessionTimeoutSeconds.ToString());
         IniFile.Write(ini, Section, "DebugLog", DebugLog ? "1" : "0");
+    }
+
+    // ---------------- 缺键自愈落盘（V0.0.81） ----------------
+    //
+    // 为什么：出厂缺省=现场口径（Tcp/预置 IP/8899/启用）最初只活在内存缺省里，
+    //   config.ini 里一行都没有——现场拿文件核对/备份看到的是"程序没配过扫码枪"
+    //   （2026-11-07 实录：部署目录重建 → ini 没了 → 配置窗 UI 上勾着启用（预填）
+    //   实际没启动，用户点一次保存才回正）；此函数把"缺省=字面落盘"，文件所见
+    //   即程序所得，部署目录重建也不再依赖手工操作。
+
+    /// <summary>
+    /// [Scanner] 节缺键自愈落盘：把 config.ini 里"根本没写"的键按出厂缺省值
+    /// （现场口径）补写进去。**幂等**——已存在的键一律不碰（显式 Enabled=0、
+    /// 用户改过的 TcpIp、手工留空的串口键都原样保留，kernel32 层"空字符串值"
+    /// 与"缺键"无法区分、一视同仁当缺键回填，与 Load 的"无持久未配置态"拍板
+    /// 同构）；宿主启动装配（InitScanner）调用一次。不伦配置窗是否打开过，
+    /// 现场打开 config.ini 直接看到完整扫码枪段。
+    /// </summary>
+    public static void EnsureDefaultsPersisted(string? iniPath = null)
+    {
+        string ini = iniPath ?? AppPaths.ConfigIni;
+        var defaults = new ScannerOptions();   // 当前缺省=现场口径（Enabled 含 1）
+        // 哨兵探测缺键：IniFile.ReadStr 缺键返回缺省值——用不可能被现场使用的
+        // 哨兵当"缺省"即可区分"键在"（返回实值≠哨兵）与"键缺"（返回哨兵）。
+        const string unset = "&missing-key&";
+        void Heal(string key, string value)
+        {
+            if (IniFile.ReadStr(ini, Section, key, unset) == unset)
+                IniFile.Write(ini, Section, key, value);
+        }
+        Heal("Enabled", defaults.Enabled ? "1" : "0");
+        Heal("Mode", defaults.NormMode);
+        Heal("TcpIp", defaults.TcpIp);
+        Heal("TcpPort", defaults.NormTcpPort.ToString());
+        Heal("TriggerCommand", defaults.NormTriggerCommand);
+        Heal("PortName", defaults.PortName);
+        Heal("DeviceKeyword", defaults.DeviceKeyword);
+        Heal("BaudRate", defaults.NormBaudRate.ToString());
+        Heal("DataBits", defaults.NormDataBits.ToString());
+        Heal("StopBits", defaults.NormStopBits);
+        Heal("Parity", defaults.NormParity);
+        Heal("SessionTimeoutSeconds", defaults.NormSessionTimeoutSeconds.ToString());
+        Heal("DebugLog", "0");
     }
 }

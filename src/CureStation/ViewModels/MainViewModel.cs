@@ -909,6 +909,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// </summary>
     private void InitScanner()
     {
+        // 缺键自愈落盘（V0.0.81）：config.ini 里没写的 [Scanner] 键按出厂缺省
+        // （现场口径）补写进文件——文件所见即程序所得，现场核对/备份/重部署
+        // 都有字面值，不再有"内存里有缺省、文件里空白"的两本账（幂等，已写
+        // 的键一律不碰）。主窗每次启动装配先校一遍；配置窗保存本来就走
+        // Save() 全量落盘，与此不冲突。
+        ScannerOptions.EnsureDefaultsPersisted();
         _scannerOptions = ScannerOptions.Load();
 
         var reasons = new List<string>();

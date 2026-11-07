@@ -28,6 +28,37 @@ public class ScannerTcpTests
     // ① ScannerOptions：配置模型与规范化
     // ============================================================
 
+    [Fact(DisplayName = "扫码枪配置_缺键自愈落盘：缺的键按出厂缺省字面回填 ini、已写的键原样保留")]
+    public void EnsureDefaultsPersisted_WritesMissingKeys_KeepsExplicitValues()
+    {
+        // 缺键场景：ini 里一个 [Scanner] 键都没有 → 全节按现场口径字面落盘
+        // （文件所见即程序所得；2026-11-07 现场实录：部署目录重建后 ini 空白，
+        // 配置窗 UI 勾着启用实际没启动——出厂缺省从此不靠内存两本账）。
+        using var scope = new TestScope();
+        var ini = scope.IniPath();
+        ScannerOptions.EnsureDefaultsPersisted(ini);
+
+        var healed = ScannerOptions.Load(ini);
+        Assert.True(healed.Enabled);                        // 缺省=启用（现场口径）
+        Assert.Equal("Tcp", healed.NormMode);
+        Assert.Equal(ScannerOptions.FieldTcpIp, healed.TcpIp);
+        Assert.Equal(8899, healed.NormTcpPort);
+        Assert.Equal("", healed.TriggerCommand);
+        Assert.Equal(9600, healed.NormBaudRate);
+        Assert.Equal("None", healed.NormParity);
+        Assert.Equal(15, healed.NormSessionTimeoutSeconds);
+        Assert.Equal("0", IniFile.ReadStr(ini, "Scanner", "DebugLog", "?"));
+
+        // 显式值保护：已写的键一律不碰（现场手工改过的 IP/显式关闭都原样保留）
+        IniFile.Write(ini, "Scanner", "Enabled", "0");
+        IniFile.Write(ini, "Scanner", "TcpIp", "10.0.0.9");
+        IniFile.Write(ini, "Scanner", "TcpPort", "9999");
+        ScannerOptions.EnsureDefaultsPersisted(ini);
+        Assert.Equal("0", IniFile.ReadStr(ini, "Scanner", "Enabled", "?"));
+        Assert.Equal("10.0.0.9", IniFile.ReadStr(ini, "Scanner", "TcpIp", "?"));
+        Assert.Equal("9999", IniFile.ReadStr(ini, "Scanner", "TcpPort", "?"));
+    }
+
     [Fact(DisplayName = "扫码枪配置_TCP 四键 ini 往返（Load/Save 含 Mode 规范化）")]
     public void ScannerOptions_TcpKeys_Roundtrip()
     {
@@ -57,14 +88,15 @@ public class ScannerTcpTests
         Assert.Equal("LON", back.TriggerCommand);
     }
 
-    [Fact(DisplayName = "扫码枪配置_出厂缺省=现场 TCP 预置（Mode=Tcp+DTU IP+8899+指令空，Enabled 仍关）")]
+    [Fact(DisplayName = "扫码枪配置_出厂缺省=现场 TCP 预置（启用+Mode=Tcp+DTU IP+8899+指令空）")]
     public void ScannerOptions_Defaults_AreFieldTcpPreset()
     {
         // 无 ini 的机器（内存缺省）与 ini 缺键自愈（Load）必须同款现场形态——
         // 现场教训：手抄 IP 抄错（把 DTU 死配置里的旧上位机地址填进来）连接超时；
-        // V0.0.79 起预置值收敛在 FieldTcpIp 一处，配置窗回显即现场口径。
+        // V0.0.79 起预置值收敛在 FieldTcpIp 一处，V0.0.81 起 Enabled 缺省=启用
+        // （部署目录重建/新构建覆盖后开箱即连，不再掉回"未启用"）。
         var fresh = new ScannerOptions();
-        Assert.False(fresh.Enabled);                       // 无枪开发机不自动连
+        Assert.True(fresh.Enabled);                        // 出厂缺省=现场口径（含启用）
         Assert.Equal("Tcp", fresh.NormMode);
         Assert.Equal(ScannerOptions.FieldTcpIp, fresh.TcpIp);
         Assert.Equal(8899, fresh.TcpPort);
@@ -72,14 +104,15 @@ public class ScannerTcpTests
         Assert.True(fresh.HasTcpTarget);
         Assert.True(fresh.HasPortTarget);
 
+        // ini 缺键自愈同款（用独立 ini 文件——避开 TestScope 预写的 Enabled=0）
         using var scope = new TestScope();
-        EnsureConfigDir();
-        var loaded = ScannerOptions.Load();
+        var selfHealPath = scope.IniPath();
+        var loaded = ScannerOptions.Load(selfHealPath);
+        Assert.True(loaded.Enabled);                       // 缺键=回出厂缺省（启用）
         Assert.Equal(fresh.NormMode, loaded.NormMode);
         Assert.Equal(fresh.TcpIp, loaded.TcpIp);
         Assert.Equal(fresh.TcpPort, loaded.NormTcpPort);
         Assert.Equal(fresh.TriggerCommand, loaded.TriggerCommand);
-        Assert.False(loaded.Enabled);
     }
 
     [Fact(DisplayName = "扫码枪配置_仅显式 Serial 走串口方式（其余回 Tcp=缺省现场口径）")]
@@ -144,7 +177,7 @@ public class ScannerTcpTests
     [Fact(DisplayName = "扫码枪配置_SkipReasonText 跳过原因按配置给（null=就绪；启动装配/服务同源文案）")]
     public void ScannerOptions_SkipReasonText_ByConfigState()
     {
-        // 未启用：只看 Enabled（缺省件全齐也拦——出厂缺省正是这一态）
+        // 未启用：只看 Enabled（显式关闭就是这态——V0.0.81 起出厂缺省已翻转为启用）
         Assert.Equal(ScannerOptions.SkipNotEnabledText,
             new ScannerOptions { Enabled = false }.SkipReasonText());
 

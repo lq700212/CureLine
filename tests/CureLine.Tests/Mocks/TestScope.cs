@@ -74,6 +74,15 @@ public sealed class TestScope : IDisposable
             "PlcBridge_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(TempDir);
         AppPaths.BaseDir = TempDir;
+        // [Scanner] Enabled=0 统一预写（V0.0.81 出厂缺省翻转 Enabled=1 后的测试
+        // 护栏）：测试域统一"无枪"边界——凡构造 MainViewModel 的用例不会真起
+        // TCP 连接线程（现场 DTU/枪不在测试进程里）；要测"启用"的扫码用例自己
+        // 显式写 Enabled=1 或直接 new ScannerOptions 对象。缺失该行=几十个 VM
+        // 用例各自挂一条后台连接循环，测试又慢又脏。
+        // ★先建目录：kernel32 对 ini 的写不自动建目录（AGENTS 已知坑"config/
+        //   目录 kernel32 不会自动建"），不开这条目录预写就是静默失败。
+        Directory.CreateDirectory(AppPaths.ConfigDir);
+        IniFile.Write(AppPaths.ConfigIni, "Scanner", "Enabled", "0");
         DurationUnit.LoadFromIni();   // 静态单位重读 ini（临时目录无键回 Minutes——防上例残留）
         MesLogger.ClearForTests();
     }

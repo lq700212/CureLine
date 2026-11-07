@@ -1040,9 +1040,10 @@ public class CureStationViewModelTests
         var fake = new FakeCureDialogService();
         using var vm = new CureStation.ViewModels.MainViewModel(fake);
 
-        // 启动期未启用（测试 ini 无 [Scanner]）：补"跳过原因"边沿日志——此前
-        // Enabled=0 时完全静默，现场"胶囊=未启用 + 日志无提示"排障无头（本行文案
-        // 与 ScannerOptions.SkipNotEnabledText 同源；VM 层不复制文案，只断言前缀段）。
+        // 启动期未启用（TestScope 统一预写 [Scanner] Enabled=0 的测试护栏）：
+        // 补"跳过原因"边沿日志——此前 Enabled=0 时完全静默，现场"胶囊=未启用 +
+        // 日志无提示"排障无头（本行文案与 ScannerOptions.SkipNotEnabledText
+        // 同源；VM 层不复制文案，只断言前缀段）。
         Assert.Contains(LocalLogService.GetRecentLines(),
             l => l.Contains("扫码枪：未启用（config.ini [Scanner] Enabled=0）"));
 
@@ -1064,7 +1065,7 @@ public class CureStationViewModelTests
         Assert.Contains(fake.Calls, c => c.Contains("权限不足"));
         Assert.DoesNotContain(fake.Calls, c => c == "ShowScannerConfig");
 
-        // dev：菜单项显示 + 保存后主窗按新配置热重建（测试 ini 无 [Scanner] → 未启用）
+        // dev：菜单项显示 + 保存后主窗按新配置热重建（TestScope 预写 Enabled=0 → 未启用）
         fake.LoginResult = ("dev", OperatorRole.Dev);
         vm.LoginCommand.Execute(null);
         Assert.True(vm.ShowScannerConfigItem);

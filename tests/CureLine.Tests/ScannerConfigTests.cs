@@ -49,22 +49,25 @@ public class ScannerConfigTests
         Assert.True(vm.EditDebugLog);
     }
 
-    [Fact(DisplayName = "扫码枪配置_首次未配置=出厂缺省现场 TCP 预置回显 + 启用建议（不落盘）")]
+    [Fact(DisplayName = "扫码枪配置_首开无任何配置=缺省回显即现场完整形态（启用勾上）")]
     public void ScannerConfigVm_FirstOpen_EchoesTcpPreset()
     {
         using var scope = new TestScope();
-        EnsureConfigDir();   // 目录在、ini 不存在 = 首次运行
+        EnsureConfigDir();
+        // 删掉 TestScope 预写的 Enabled=0——本用例锁"硬盘上没有任何 [Scanner]
+        // 配置"的首次运行场景（出厂缺省回显，V0.0.81 起含启用）。
+        File.Delete(AppPaths.ConfigIni);
 
         var vm = new ScannerConfigViewModel(new FakeCureDialogService());
 
-        Assert.True(vm.EditEnabled);                     // 启用建议照给（预填，不落盘）
+        Assert.True(vm.EditEnabled);                     // 出厂缺省=启用（现场口径）
         Assert.True(vm.EditUseTcp);                      // 出厂缺省=现场现行 TCP
         Assert.Equal(ScannerOptions.FieldTcpIp, vm.EditTcpIp);
         Assert.Equal("8899", vm.EditTcpPort);
         Assert.Equal("", vm.EditTriggerCommand);         // 自动连续读码枪：留空=不发
         Assert.Equal("", vm.EditPortName);               // 串口桶不代填（替代路径）
         Assert.Equal("", vm.EditDeviceKeyword);
-        Assert.False(ScannerOptions.Load().Enabled);     // 预填不落盘，点保存才确认
+        Assert.True(ScannerOptions.Load().Enabled);      // 缺省语义=启用（程序启动时 EnsureDefaultsPersisted 会把全套字面回填进 ini）
     }
 
     [Fact(DisplayName = "扫码枪配置_保存合法值落盘并请求关窗")]

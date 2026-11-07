@@ -36,20 +36,10 @@ public sealed class ScannerConfigViewModel : ViewModelBase
         DetectPortsCommand = new RelayCommand(DetectPorts);
         var loaded = ScannerOptions.Load();
         SyncFromOptions(loaded);
-
-        // 现场预置（V0.0.79）：**缺省值本身=现场 TCP 口径**（ScannerOptions 缺省
-        // 出厂即 Mode=Tcp + 枪侧 DTU IP FieldTcpIp + 8899 + 指令留空）——首次打开
-        // 回显就是完整现场形态，这里只把【启用】勾上作提示："从未配过枪"的出厂
-        // 形态=未启用 + 串口定位全空 + TCP 目标仍是出厂预置 IP。用户改过任何定位、
-        // 或明确清空/改过 TcpIp、或确认过 Enabled=0，一律原样回显不打扰。
-        // 只预填不落盘：点"保存配置"才算确认；串口关键字/COM 口不再自动预填
-        // （现场已换 TCP 接入，串口是替代路径，由现场切到串口方式后自行填写）。
-        if (!EditEnabled && !loaded.HasSerialTarget &&
-            string.Equals(loaded.TcpIp?.Trim(), ScannerOptions.FieldTcpIp,
-                          StringComparison.OrdinalIgnoreCase))
-        {
-            EditEnabled = true;
-        }
+        // V0.0.81：出厂缺省=现场形态**含 Enabled**（缺省即启用回显）——与 ini 真实
+        // 状态零错位，V0.0.79 的"启用建议只预填不落盘"分支（曾造成"界面勾着启用、
+        // ini 里 0"的错觉坑，用户点过一次保存才回正）随之删除。想不连枪=取消
+        // 勾选明点【保存配置】（写 Enabled=0），或手改 ini——不再有"只动 UI 不动盘"的中间态。
     }
 
     public RelayCommand SaveCommand { get; }
@@ -277,7 +267,7 @@ public sealed class ScannerConfigViewModel : ViewModelBase
     /// 校验 + 落盘（保存唯一入口）。**按连接方式分桶校验**：Tcp 方式只校验 TCP
     /// 三件（目标 IP / 端口 / 触发指令），Serial 方式只校验串口五件——非当前
     /// 方式的参数原样落 ini 不拦错（切回方式时保留各自上次配的值，数值坏也有
-    /// Norm* 兜底）；扫码会话超时两方式共用。Enabled 勾了却没有任何当前方式
+    /// Norm* 兜底）；扫码会话超时两方式共用。勾了启用却没有当前方式
     /// 的接入目标=无效配置，拦下。校验口径与 ScannerOptions 的 Norm* 一致。
     /// </summary>
     private void Save()
