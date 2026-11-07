@@ -202,9 +202,13 @@
                                       Content="断电续算" Margin="14,0,0,0"
                                       ToolTip="开=进行中仓位随状态变化写 config/curingstate.json，断电期间时间计入固化时长（重启按记录续算）；关（缺省）=断电重启后重新计时，宁可重计也不放行没固化够的货。"/>
                             <!-- 报警复位模式（V0.0.69）：全局操作规程（不入单条策略），
-                                 点按钮切换即落盘+广播——状态机下一拍换口径、主窗弹窗立即决策。 -->
+                                 点按钮切换即落盘+广播——状态机下一拍换口径、主窗弹窗立即决策。
+                                 样式用 FreshButton（V0.0.70）：GhostButton 的 Light 三键是
+                                 深色顶栏专用（半透明白底+纯白字），放白卡参数条上=白底白字
+                                 完美隐身（用户实测"根本用不了"——按钮在但看不见）；浅底深字
+                                 FreshButton 与左列按钮/参数条控件同语义键板。 -->
                             <TextBlock Text="　报警复位：" VerticalAlignment="Center" Margin="10,0,0,0"/>
-                            <Button Style="{StaticResource GhostButton}" MinWidth="96" VerticalAlignment="Center"
+                            <Button Style="{StaticResource FreshButton}" MinWidth="96" VerticalAlignment="Center"
                                     Command="{Binding ToggleGrillResetModeCommand}"
                                     Content="{Binding GrillResetModeText, FallbackValue=自动复位}"
                                     ToolTip="{Binding GrillResetModeToolTip, FallbackValue=自动复位：光栅双侧全让空即自动解除报警（现行为）。点击切换为人工复位。}"/>

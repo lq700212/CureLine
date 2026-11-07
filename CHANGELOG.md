@@ -2,6 +2,24 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.70（2026-11-07，程序① UI 修复：策略窗"报警复位"按钮白卡上隐身）
+
+用户实测反馈（V0.0.69 交付当天目检发现）：策略窗参数条"报警复位"切换按钮
+**看不见也点不到**（"根本用不了"）。DocShot `cs-policy.png` 镜头复现实锤。
+
+- **根因**：`GhostButton` 的 Light 三键（`Brush.GhostBg/Border/Fg` =
+  半透明白底/半透明白框/纯白字）是**主窗深色品牌顶栏专用**——放策略窗
+  白色卡片参数条上 = 白底白字白框**完美隐身**（按钮渲染/占位/命令热区全在，
+  纯视觉不可辨；config.ini 现值 Auto 佐证用户始终没点中过）。
+- **修复**：按钮样式换 `FreshButton`（浅底深字+悬停/按压态，与左列
+  "添加策略"同款同键板，双主题同名键）；MinWidth=96 与命令/ToolTip 链零
+  改动。补充纪律：**浅底窗体禁用 GhostButton**——它是深底专用幽灵键。
+- **DocShot**：`SilentCureDialogs` 补 V0.0.69 给 `IDialogService` 新开的
+  `ShowGrillAlarmReset`/`CloseGrillAlarmReset` 两桩（tests 侧 Fake 补了、
+  harness 桩漏了——上次提交未跑 harness 编译，本次重拍镜头时暴露）。
+- 验证：`dotnet build` 0 警 0 错；`dotnet test` 499/499（纯样式修正，
+  基线不动）；DocShot 全 PASS，`cs-policy.png` 重拍目检按钮可见。
+
 ## V0.0.69（2026-11-07，固化程控：光栅报警新增"人工复位"模式 + 报警复位弹窗热更清单）
 
 现场口径升级：自动复位（光栅让空即解除）之外，客户要求可切"人工复位"——

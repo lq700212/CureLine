@@ -766,6 +766,10 @@ public static class Program
         public void ShowIoTest(IPointTableBus bus, PointTableConfig config) { }
         public void ShowLog(CureLogSnap snapshot) { }                 // 日志窗桩（截图段另开真实 LogWindow）
         public void Shutdown() { }                                    // harness 不退出
+        // 报警复位窗桩（V0.0.69 接口补齐）：harness 截图不弹真实复位窗（镜头
+        // 另拍该窗时需显式构造，与日志窗同款口径）。
+        public void ShowGrillAlarmReset(CureStation.ViewModels.GrillAlarmResetCoordinator presenter) { }
+        public void CloseGrillAlarmReset() { }
     }
 
     private sealed class SilentGatewayDialogs : GwDialogs
