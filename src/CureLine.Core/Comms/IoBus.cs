@@ -379,7 +379,8 @@ internal static class ScanPlanner
 
 /// <summary>
 /// Mock 总线（Amsterdam 演示态，无硬件跑通全流程）：
-///   托盘/光栅按仓位顺序流转：托盘到 → 左右光栅亮 → 保持 → 下一仓位。
+///   托盘/光栅按仓位顺序流转：托盘到 → 左右光栅"被挡" → 保持 → 下一仓位
+///   （光栅原始电平按 GrillPolarityProvider 反相，与现场极性配置同口径）。
 ///   灯（DO）由状态机写入，直接在快照可见——演示"写生效"。
 ///   每 30 秒随机"断连 3 秒"一次，演示重连与黄牌（可关）。
 /// </summary>
@@ -395,6 +396,15 @@ public sealed class MockPointTableBus : IPointTableBus
 
     private volatile PointTableSnapshot _snapshot = PointTableSnapshot.Empty;
     private readonly Dictionary<string, bool> _manualLamps = new();
+
+    /// <summary>
+    /// 演示光栅信号极性（V0.0.72，可空）：Mock 内部按"被挡"语义生成信号，
+    /// 输出电平再按本 provider 反相——现场配置"被挡=OFF"时演示剧本与状态机
+    /// 判定保持同口径（否则演示里永远不报警/一直报警）。null=BlockedOn 缺省
+    /// （既有演示行为零变化）。provider 在演示线程逐拍调用，须线程安全纯读
+    ///（程序①传 GrillSignalPolarityHub.Current 读点）。
+    /// </summary>
+    public Func<CureLine.Core.Curing.GrillSignalPolarity>? GrillPolarityProvider { get; set; }
 
     public bool IsConnected { get; private set; }
     public string ConnectionSummary { get; private set; } = "未启动";
@@ -559,11 +569,16 @@ public sealed class MockPointTableBus : IPointTableBus
             else
             {
                 int stage = _stageByRack.TryGetValue(b.Rack, out var s) ? s : 0;
+                // 光栅演示语义="stage 2~3 被挡"；输出电平按宿主配置的极性反相
+                //（V0.0.72：现场"被挡=OFF"时 Mock 也要发 OFF 才与状态机同口径）。
+                bool grillBlocked = stage is >= 2 and <= 3;
+                bool grillInvert = GrillPolarityProvider?.Invoke()
+                    == CureLine.Core.Curing.GrillSignalPolarity.BlockedOff;
                 value = key.Role switch
                 {
                     IoPointRole.TrayDetect => stage is >= 1 and <= 3,
-                    IoPointRole.RackLightL => stage is >= 2 and <= 3,
-                    IoPointRole.RackLightR => stage is >= 2 and <= 3,
+                    IoPointRole.RackLightL => grillBlocked ^ grillInvert,
+                    IoPointRole.RackLightR => grillBlocked ^ grillInvert,
                     _ => false,
                 };
             }

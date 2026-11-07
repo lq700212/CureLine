@@ -9,19 +9,28 @@
 // 光栅两用（V0.0.63 客户口径收口："计时不变，报警复位"）：
 //   ① 门控闸：只在托盘到位那一瞬间当闸门（防人手还在架内就开计时）；
 //   ② 报警：计时一经开始，光栅任何 ON/OFF 都不停表、不重置、不作废——
-//      唯一能打断计时的仍是托盘离开（取件）。中途光栅 ON（人手伸入）只
-//      做安全报警：红灯点亮（黄绿灭），光栅让空即自动复位（红灯灭、黄灯
+//      唯一能打断计时的仍是托盘离开（取件）。中途光栅"被挡"（人手伸入）
+//      只做安全报警：红灯点亮（黄绿灭），光栅让空即自动复位（红灯灭、黄灯
 //      复亮）。WaitingGate（本来就在等门控）与 Done（取件伸入是正常动作）
 //      不触发报警；报警态不落盘（curingstate.json 不加字段）——重启对齐/
 //      续算恢复按当前光栅快照重判（人手仍在架内则重新进报警态）。
-//      复位是双保险（V0.0.64）：OFF 边沿即时判快照复位（总线已保证边沿
+//      复位是双保险（V0.0.64）：让空边沿即时判快照复位（总线已保证边沿
 //      处理时快照含本次边沿值，见 IoBus 轮询契约）；边沿若错过（让空与
 //      其他变化同拍/掉线期间），Pump 每秒按快照双让空兜底复位——红灯
 //      最多挂 1 秒，不再挂到到点放行。复位判定是"双侧全让空"（一侧让空
-//      另一侧仍读 ON=人手还在架区，不复位）；V0.0.68 排障增强：OFF 边沿
+//      另一侧仍挡=人手还在架区，不复位）；V0.0.68 排障增强：让空边沿
 //      到达但判定被拒时记边沿日志明说哪侧仍挡（此前静默，现场只能看
 //      到"复位不了"却不知道是信号没让空）——Pump 兜底不带此日志（每秒
 //      拍会刷屏）。
+//
+// 光栅信号极性（V0.0.72，见 GrillSignalPolarity）：
+//   BlockedOn（缺省）= 遮挡=ON：ON=被挡、OFF=让空——V0.0.63~V0.0.71 口径；
+//   BlockedOff      = 遮挡=OFF：OFF=被挡、ON=让空——现场实测常闭安全光栅。
+//   本类只认"被挡/让空"语义（IsBlocked 一处解释原始电平），门控/报警/复位/
+//   排障日志全部经它判定——加新光栅品牌先看枚举注释，别在调用点散写
+//   "== true"（极性切换即全部反相）。provider 与复位模式同款：边沿/心跳
+//   每拍现取，宿主勾选后下一拍生效；缺省 null=恒 BlockedOn（Core 独立/
+//   测试 API 缺省——程序①现场由 Hub 的 ini 决定）。
 //
 // 复位模式（V0.0.69，用户拍板二选一，见 GrillAlarmResetMode）：
 //   Auto = 自动复位：光栅让空（边沿+Pump 兜底双保险）即自动复位；
@@ -110,6 +119,12 @@ public sealed class SlotCuringMachine : IDisposable
     /// 宿主热切模式（策略窗按钮）下一拍即生效；provider 须线程安全（后台线程逐拍调）。
     /// </summary>
     private readonly Func<GrillAlarmResetMode>? _resetModeProvider;
+    /// <summary>
+    /// 光栅信号极性提供者（V0.0.72；null=恒 BlockedOn——Core 独立/测试缺省，
+    /// 程序①现场由 Hub 的 ini 决定，策略窗勾选框热切）。边沿/心跳每拍现取；
+    /// provider 须线程安全（后台线程逐拍调）。
+    /// </summary>
+    private readonly Func<GrillSignalPolarity>? _grillPolarityProvider;
     private readonly Dictionary<(int Rack, int Level), SlotRuntime> _slots = new();
     /// <summary>成功写过的灯态（IoPointKey→值）：去重 + 失败补写的比对基准。</summary>
     private readonly Dictionary<IoPointKey, bool> _writtenLamps = new();
@@ -152,11 +167,15 @@ public sealed class SlotCuringMachine : IDisposable
     /// resetModeProvider（V0.0.69，可空）=报警复位模式每拍现取（null=恒自动
     /// 复位——Core 独立/测试缺省；程序①现场缺省 Manual 由 Hub 决定；宿主传
     /// 静态中枢读点，热切模式无需重建状态机）。
+    /// grillPolarityProvider（V0.0.72，可空）=光栅信号极性每拍现取（null=恒
+    /// BlockedOn 遮挡=ON——现场"被挡=OFF"由程序①策略窗勾选切换，宿主同样
+    /// 传静态中枢读点，无需重建状态机）。
     /// </summary>
     public SlotCuringMachine(IPointTableBus bus, Func<CuringPolicy?> policyProvider,
         Func<DateTimeOffset>? clock = null, Action<string>? log = null,
         Func<int, string>? durationText = null,
-        Func<GrillAlarmResetMode>? resetModeProvider = null)
+        Func<GrillAlarmResetMode>? resetModeProvider = null,
+        Func<GrillSignalPolarity>? grillPolarityProvider = null)
     {
         _bus = bus;
         _policyProvider = policyProvider;
@@ -164,6 +183,7 @@ public sealed class SlotCuringMachine : IDisposable
         _log = log ?? (_ => { });
         _durationText = durationText;
         _resetModeProvider = resetModeProvider;
+        _grillPolarityProvider = grillPolarityProvider;
         _pumpTimer = new Timer(_ => SafePump(), null,
             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
@@ -202,9 +222,13 @@ public sealed class SlotCuringMachine : IDisposable
         }
         else if (key.Role is IoPointRole.RackLightL or IoPointRole.RackLightR)
         {
-            // 光栅边沿按计时相位分派（口径见类头"光栅两用/复位模式"）：
-            // ① 让空（OFF 边沿）+ 门控等待中 → 立即开计时（Pump 有快照兜底，双保险）；
-            // ② 让空（OFF 边沿）+ 计时中报警态 + 双光栅全让空 → 报警复位
+            // 光栅边沿按计时相位分派（口径见类头"光栅两用/复位模式/信号极性"）。
+            // 【极性】原始电平先经 IsBlocked 解释成本义的"挡/空"（V0.0.72）：
+            //   BlockedOn 时 ON=挡、OFF=空；BlockedOff 时 OFF=挡、ON=空。
+            //   下面所有分支只谈"让空/被挡"，勿再直接判 e.State（换光栅品牌
+            //   改配置即整体反相，散写 == true 会漏改一处就反一半）。
+            // ① 让空边沿 + 门控等待中 → 立即开计时（Pump 有快照兜底，双保险）；
+            // ② 让空边沿 + 计时中报警态 + 双光栅全让空 → 报警复位
             //    （红灯灭、黄灯复亮）——一侧让空另一侧仍挡不算（人手还在架区）；
             //    【自动复位模式限定，人工档 ②c 处理】GrillClear 读快照判定：
             //    V0.0.64 起总线契约保证边沿处理时快照已含本次边沿值（先整拍
@@ -213,14 +237,15 @@ public sealed class SlotCuringMachine : IDisposable
             // ②b 让空但复位判定被拒（自动档）：记"哪侧仍挡"排障日志（V0.0.68）；
             // ②c 让空（人工复位档 V0.0.69）：不复位——红灯与蜂鸣保持，
             //    记边沿日志"待人工确认"（解除口=ManualResetGrillAlarm）；
-            // ③ 亮起（ON 边沿）+ 计时中未报警 → 报警亮红灯（计时不动——客户口径
+            // ③ 被挡边沿 + 计时中未报警 → 报警亮红灯（计时不动——客户口径
             //    "固化计时不需要变化，报警复位就可以"）。WaitingGate（本来就在等
             //    门控）与 Done（取件伸入是正常动作）不触发报警。如现场要求计时中
             //    暂停表，属新分支：加 SlotPhase.Paused 处理。
             lock (_sync)
             {
                 var rt = GetOrAdd(key.Rack, key.Level);
-                if (!e.State)
+                bool blocked = IsBlocked(e.State, Polarity());
+                if (!blocked)
                 {
                     if (rt.Phase == SlotPhase.WaitingGate && GrillClear(key.Rack, key.Level))
                         StartCuring(rt, key.Rack, key.Level);
@@ -231,7 +256,7 @@ public sealed class SlotCuringMachine : IDisposable
                         ResetMode() == GrillAlarmResetMode.Auto)
                     {
                         // ②b 自动档复位被拒：该侧光栅让空,但复位判定没过(本仓位还有
-                        // 一侧仍读 ON=人手还在架区)——V0.0.68 前这里是静默的:现场
+                        // 一侧仍挡=人手还在架区)——V0.0.68 前这里是静默的:现场
                         // 拿开手后红灯不灭,程序一个字都不说,排障的人只能看到"复位
                         // 不了"三个字。现在把拒绝原因写成边沿日志(只在报警态的该
                         // 仓位发生,边沿稀疏不会刷屏;Pump 兜底不带——每秒拍会刷屏),
@@ -469,6 +494,15 @@ public sealed class SlotCuringMachine : IDisposable
     /// </summary>
     private GrillAlarmResetMode ResetMode() =>
         _resetModeProvider?.Invoke() ?? GrillAlarmResetMode.Auto;
+
+    /// <summary>
+    /// 当前光栅信号极性（V0.0.72，每拍现取 provider，勿缓存）：null provider=
+    /// 恒 BlockedOn（遮挡=ON——Core 独立/测试缺省；程序①现场由 Hub 的 ini 决定，
+    /// 策略窗勾选切换）。后台线程（边沿/心跳）逐次调用——provider 必须线程安全
+    /// 纯读（宿主传静态中枢读点，见程序① GrillSignalPolarityHub）。
+    /// </summary>
+    private GrillSignalPolarity Polarity() =>
+        _grillPolarityProvider?.Invoke() ?? GrillSignalPolarity.BlockedOn;
 
     /// <summary>
     /// 人工复位确认（V0.0.69，宿主"报警复位"窗【解除报警】按钮的唯一解除口）：
@@ -711,26 +745,42 @@ public sealed class SlotCuringMachine : IDisposable
         }
     }
 
-    /// <summary>光栅是否让空：左右都没亮才算让（没绑定 null 视为让空，不卡没配光栅的仓位）。</summary>
+    /// <summary>
+    /// 光栅是否让空：左右都没被挡才算让（没绑定 null 视为让空，不卡没配光栅的仓位）。
+    /// 两侧共用同一次 Polarity 快照（V0.0.72）——极端情况下热切极性恰好插在
+    /// 两次读之间时，不会一侧按旧档、一侧按新档解释（判定自相矛盾）。
+    /// </summary>
     private bool GrillClear(int rack, int level)
     {
+        var polarity = Polarity();
         var snap = _bus.LatestSnapshot;
         var left = snap.Get(new IoPointKey(true, IoPointRole.RackLightL, rack, level));
         var right = snap.Get(new IoPointKey(true, IoPointRole.RackLightR, rack, level));
-        return left != true && right != true;
+        return !IsBlocked(left, polarity) && !IsBlocked(right, polarity);
     }
 
     /// <summary>
+    /// 原始电平 → 业务语义"是否被挡"（V0.0.72 光栅极性唯一解释口）：
+    /// 状态机的门控/报警/复位全走这里，禁止在调用点直接判 `== true`。
+    /// null（未绑定/未读到）恒 false=不让——与 GrillClear 的旧口径一致，
+    /// 没配光栅的仓位永不卡流程。
+    /// </summary>
+    private static bool IsBlocked(bool? raw, GrillSignalPolarity polarity) =>
+        raw is bool value && (polarity == GrillSignalPolarity.BlockedOff ? !value : value);
+
+    /// <summary>
     /// 光栅两侧读数文本（"L=挡 R=空"），供电日志说明复位判定当场被谁堵：
-    /// 与 GrillClear 同源读法（快照原子换引用），只在边沿日志路径锁内调用。
+    /// 与 GrillClear 同源（快照原子换引用）+ 按当前极性解释原始电平（V0.0.72，
+    /// 现场日志说"挡/空"就与亲眼看到的一致，不用自己换算 ON/OFF）。
     /// 没绑定的侧显示"—"（null=未读到，与让空同义但排障时值得区分）。
     /// </summary>
     private string GrillSideText(int rack, int level)
     {
+        var polarity = Polarity();
         var snap = _bus.LatestSnapshot;
         var left = snap.Get(new IoPointKey(true, IoPointRole.RackLightL, rack, level));
         var right = snap.Get(new IoPointKey(true, IoPointRole.RackLightR, rack, level));
-        static string Flag(bool? v) => v == true ? "挡" : v == false ? "空" : "—";
+        string Flag(bool? v) => v == null ? "—" : IsBlocked(v, polarity) ? "挡" : "空";
         return $"L={Flag(left)} R={Flag(right)}";
     }
 
@@ -738,7 +788,7 @@ public sealed class SlotCuringMachine : IDisposable
     /// 光栅报警收口（V0.0.63 客户口径"固化计时不需要变化，报警复位就可以"）：
     /// 仅 Curing 相位有意义。亮起：红灯独亮（黄绿灭——三色灯"红=禁止靠近"现场
     /// 语义）+ 一条边沿日志；复位：红灯灭、黄灯复亮 + 一条边沿日志。报警态
-    /// （rt.AlarmGrill）就是状态比对闸——重复 ON 边沿/重复 OFF 边沿在这里短路，
+    /// （rt.AlarmGrill）就是状态比对闸——重复遮挡/重复让空边沿在这里短路，
     /// 日志只记边沿不刷屏（铁律 4）。写灯失败不记账 → 下轮 Pump 报警分支
     /// 补写自愈（与黄灯补写同性质）。复位不动计时（StartedAt 原样）。
     /// manual（V0.0.69）：解除来源口径——缺省 false=光栅自动复位链（原文案）；

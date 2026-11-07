@@ -881,7 +881,14 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             // 演示开关：config.ini [setting] Simulate=1 → Mock 总线（无硬件全流程），
             // key 与主程序 CimGateway（原 PlcMesBridge）同名沿用（跨程序一致的运维习惯）。
             bool simulate = IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Simulate", "0") == "1";
-            IPointTableBus bus = simulate ? new MockPointTableBus() : new ModbusPointTableBus();
+            IPointTableBus bus = simulate
+                ? new MockPointTableBus
+                {
+                    // 演示光栅电平跟随现场极性配置（V0.0.72）：勾"信号取反"后
+                    // 演示剧本发"被挡=OFF"，与状态机判定同口径。
+                    GrillPolarityProvider = () => GrillSignalPolarityHub.Current,
+                }
+                : new ModbusPointTableBus();
             bus.Start(config);
 
             // 状态机接线（全部后台线程——铁律 2）：边沿直转（machine 内部有锁）；
@@ -921,7 +928,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                     durationText: DurationUnit.LogText,
                     // 报警复位模式每拍现取（V0.0.69）：策略窗按钮切人工/自动复位，
                     // 下一边沿/心跳即生效（Hub 只读静态枚举字段，后台线程读安全）。
-                    resetModeProvider: () => GrillAlarmResetModeHub.Current);
+                    resetModeProvider: () => GrillAlarmResetModeHub.Current,
+                    // 光栅信号极性每拍现取（V0.0.72）：策略窗勾"光栅信号取反"
+                    // 下一边沿/心跳即生效（现场被挡=OFF 时勾选，同上后台读安全）。
+                    grillPolarityProvider: () => GrillSignalPolarityHub.Current);
                 // 过账挂点（P3.2 后半）：状态机三事件 → 过账服务（只在创建时订阅
                 // 一次——重连 Attach 换通道不重复订阅）。事件在状态机锁内触发，
                 // Poster 方法内部 Task.Run 立即返回，不重入不阻塞。

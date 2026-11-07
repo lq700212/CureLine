@@ -39,12 +39,14 @@ public class GrillAlarmSimulationTests
         new(false, role, 0, 0);
 
     private (ScriptedPointBus Bus, SlotCuringMachine Machine, List<string> Logs) Make(
-        CuringPolicy? policy = null, Func<GrillAlarmResetMode>? resetModeProvider = null)
+        CuringPolicy? policy = null, Func<GrillAlarmResetMode>? resetModeProvider = null,
+        Func<GrillSignalPolarity>? polarityProvider = null)
     {
         var bus = new ScriptedPointBus();
         var logs = new List<string>();
         var machine = new SlotCuringMachine(bus, () => policy,
-            clock: () => _now, log: logs.Add, resetModeProvider: resetModeProvider);
+            clock: () => _now, log: logs.Add, resetModeProvider: resetModeProvider,
+            grillPolarityProvider: polarityProvider);
         // 宿主转发边沿（生产由 MainViewModel 做——machine 不直接订阅总线）
         bus.PointChanged += (_, e) => machine.OnPointChanged(e);
         return (bus, machine, logs);
@@ -230,6 +232,69 @@ public class GrillAlarmSimulationTests
             bus.Writes.Clear();
 
             // t7：取件离开 → 灭灯回空闲（人工档与自动档出口一致）
+            bus.SetInput(Tray(1, 1), false);
+            Assert.Null(machine.GetStatus(1, 1));
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampGreen), false));
+        }
+    }
+
+    /// <summary>
+    /// 现场实测极性全剧本（V0.0.72）：光栅"未挡=ON、被挡=OFF"（常闭安全光栅）
+    /// ——策略窗勾"光栅信号取反"后，门控/报警/复位/日志"挡/空"全部按现场
+    /// 看到的语义走。本剧本与正剧本同构，差异唯一边沿电平相反。
+    /// </summary>
+    [Fact]
+    public void SimulatedCouplerDiFlow_BlockedOffSitePolarity_FullCycle()
+    {
+        var (bus, machine, logs) = Make(
+            new CuringPolicy { Name = "T", GlobalMinutes = 60 },
+            polarityProvider: () => GrillSignalPolarity.BlockedOff);
+        using (machine)
+        {
+            // t0 上电基线：未挡=ON；托盘到位（门控关）→ 复核让空 → 开计时
+            bus.SetSnapshotSilently(GrillL(1, 1), true);
+            bus.SetSnapshotSilently(GrillR(1, 1), true);
+            bus.SetInput(Tray(1, 1), true);
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow), true));
+            _now += TimeSpan.FromMinutes(10);
+            machine.Pump(_now);
+            bus.Writes.Clear();
+
+            // t1：人手伸入（被挡=OFF）→ 红灯+蜂鸣，计时继续
+            bus.SetInput(GrillL(1, 1), false);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconRed), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.Buzzer), true));
+            Assert.Contains(logs, m => m.Contains("光栅被挡"));
+            bus.Writes.Clear();
+
+            // t2：右也挡（双挡）→ 报警态已立，短路零写
+            bus.SetInput(GrillR(1, 1), false);
+            Assert.Empty(bus.Writes);
+
+            // t3：左让空（ON）、右仍挡 → 自动档拒绝复位，日志"L=空 R=挡"
+            bus.SetInput(GrillL(1, 1), true);
+            Assert.DoesNotContain(bus.Writes,
+                w => w.Key == Lamp(IoPointRole.LampRed) && w.State == false);
+            Assert.Contains(logs, m => m.Contains("复位暂缓") && m.Contains("L=空 R=挡"));
+
+            // t4：右让空（ON）→ 双全让空即复位（红灭黄复亮+蜂停）
+            bus.SetInput(GrillR(1, 1), true);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed), false));
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.Buzzer), false));
+            Assert.Contains(logs, m => m.Contains("报警复位"));
+            bus.Writes.Clear();
+
+            // t5：按原计划到点放行（全程未打断计时）
+            _now += TimeSpan.FromMinutes(50);
+            machine.Pump(_now);
+            Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampGreen), true));
+            bus.Writes.Clear();
+
+            // t6：取件离开 → 回空闲
             bus.SetInput(Tray(1, 1), false);
             Assert.Null(machine.GetStatus(1, 1));
             Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampGreen), false));

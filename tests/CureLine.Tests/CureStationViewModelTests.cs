@@ -2374,6 +2374,80 @@ public class CureStationViewModelTests
         }
     }
 
+    // ---------- 光栅信号极性（V0.0.72：BlockedOn=遮挡 ON（缺省）/
+    //            BlockedOff=遮挡 OFF（现场实测）——策略窗勾选框全局开关） ----------
+
+    [Theory]
+    [InlineData(null, GrillSignalPolarity.BlockedOn)]
+    [InlineData("", GrillSignalPolarity.BlockedOn)]
+    [InlineData("BlockedOn", GrillSignalPolarity.BlockedOn)]
+    [InlineData("blockedon", GrillSignalPolarity.BlockedOn)]
+    [InlineData("BlockedOff", GrillSignalPolarity.BlockedOff)]
+    [InlineData("blockedoff", GrillSignalPolarity.BlockedOff)]
+    [InlineData("垃圾值", GrillSignalPolarity.BlockedOn)]
+    public void GrillSignalPolarityParser_DefaultsToBlockedOn(string? raw, GrillSignalPolarity expected)
+        => Assert.Equal(expected, GrillSignalPolarityParser.Parse(raw));
+
+    [Fact]
+    public void PolicyVm_GrillSignalInverted_TogglesPersistsAndBroadcasts()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        GrillSignalPolarityHub.RecallForTest(GrillSignalPolarity.BlockedOn);
+        int broadcasts = 0;
+        void OnChanged() => broadcasts++;
+        GrillSignalPolarityHub.Changed += OnChanged;
+        try
+        {
+            IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+            var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
+
+            // 缺省（ini 无该键）= 不取反（遮挡=ON，V0.0.71 及以前口径）
+            Assert.False(vm.GrillSignalInverted);
+            Assert.Contains("遮挡=ON", vm.GrillSignalToolTip);
+
+            // 勾选：中枢换 BlockedOff + 落盘 + 广播；ToolTip 换口径
+            vm.GrillSignalInverted = true;
+            Assert.True(vm.GrillSignalInverted);
+            Assert.Equal(GrillSignalPolarity.BlockedOff, GrillSignalPolarityHub.Current);
+            Assert.Equal("BlockedOff", IniFile.ReadStr(
+                AppPaths.ConfigIni, "setting", "GrillSignalPolarity", ""));
+            Assert.Contains("遮挡=OFF", vm.GrillSignalToolTip);
+            Assert.Equal(1, broadcasts);
+
+            // 取消勾选：双向，回到缺省档（再广播一次）
+            vm.GrillSignalInverted = false;
+            Assert.Equal(GrillSignalPolarity.BlockedOn, GrillSignalPolarityHub.Current);
+            Assert.Equal("BlockedOn", IniFile.ReadStr(
+                AppPaths.ConfigIni, "setting", "GrillSignalPolarity", ""));
+            Assert.Equal(2, broadcasts);
+        }
+        finally
+        {
+            GrillSignalPolarityHub.Changed -= OnChanged;
+            GrillSignalPolarityHub.RecallForTest(GrillSignalPolarity.BlockedOn);
+        }
+    }
+
+    [Fact]
+    public void PolicyVm_GrillSignalInverted_RestoresFromIniOnOpen()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        GrillSignalPolarityHub.RecallForTest(GrillSignalPolarity.BlockedOn);
+        try
+        {
+            // 盘上已勾过"取反"（上一进程/现场配置）→ 开窗回显勾选态
+            IniFile.Write(AppPaths.ConfigIni, "setting", "GrillSignalPolarity", "BlockedOff");
+            var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
+            Assert.True(vm.GrillSignalInverted);
+        }
+        finally
+        {
+            GrillSignalPolarityHub.RecallForTest(GrillSignalPolarity.BlockedOn);
+        }
+    }
+
     [Fact]
     public void MainVm_AlarmPresenter_ManualMode_ShowsWindowAndClearsFeed()
     {

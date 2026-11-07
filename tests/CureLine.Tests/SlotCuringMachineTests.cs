@@ -29,13 +29,15 @@ public class SlotCuringMachineTests
 
     private (ScriptedPointBus Bus, SlotCuringMachine Machine, List<string> Logs) Make(
         CuringPolicy? policy = null, Func<int, string>? durationText = null,
-        Func<GrillAlarmResetMode>? resetModeProvider = null)
+        Func<GrillAlarmResetMode>? resetModeProvider = null,
+        Func<GrillSignalPolarity>? polarityProvider = null)
     {
         var bus = new ScriptedPointBus();
         var logs = new List<string>();
         var machine = new SlotCuringMachine(bus, () => policy,
             clock: () => _now, log: logs.Add, durationText: durationText,
-            resetModeProvider: resetModeProvider);
+            resetModeProvider: resetModeProvider,
+            grillPolarityProvider: polarityProvider);
         // 宿主转发边沿（生产由 MainViewModel 做——machine 不直接订阅总线）
         bus.PointChanged += (_, e) => machine.OnPointChanged(e);
         return (bus, machine, logs);
@@ -431,6 +433,99 @@ public class SlotCuringMachineTests
             bus.SetInput(GrillL(1, 1), true);  // 取件伸入（Done 是正常取件动作，不报警）
             Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
             Assert.DoesNotContain(bus.Writes, w => w.Key == Lamp(IoPointRole.LampRed, 1, 1) && w.State);
+        }
+    }
+
+    // ---------- 光栅信号极性（V0.0.72：BlockedOn=遮挡 ON（缺省）/
+    //            BlockedOff=遮挡 OFF（现场实测常闭光栅）——门控、报警、
+    //            复位、重启复核全部经同一解释口，provider 每拍现取） ----------
+
+    [Fact]
+    public void PolarityBlockedOff_Gate_OffMeansBlocked_OnStarts()
+    {
+        // 现场口径"被挡=OFF"：门控等待时 OFF=挡（不推进），ON=让空才开计时。
+        var (bus, machine, logs) = Make(
+            new CuringPolicy { Name = "T", GlobalMinutes = 60, GrillGate = true },
+            polarityProvider: () => GrillSignalPolarity.BlockedOff);
+        using (machine)
+        {
+            // 上电基线：人手在架内（被挡=OFF）——托盘到位应入门控等待
+            bus.SetSnapshotSilently(GrillL(1, 1), false);
+            bus.SetSnapshotSilently(GrillR(1, 1), false);
+            bus.SetInput(Tray(1, 1), true);
+            Assert.Equal(SlotPhase.WaitingGate, machine.GetStatus(1, 1)!.Phase);
+
+            bus.SetInput(GrillL(1, 1), true);    // ON=让空，另一侧仍挡 → 仍在等
+            Assert.Equal(SlotPhase.WaitingGate, machine.GetStatus(1, 1)!.Phase);
+
+            bus.SetInput(GrillR(1, 1), true);    // 双侧让空 → 开计时
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+            Assert.Contains(logs, m => m.Contains("开始固化计时"));
+        }
+    }
+
+    [Fact]
+    public void PolarityBlockedOff_Curing_OffEdgeAlarms_OnEdgeAutoResets()
+    {
+        // 计时中：OFF 边沿=被挡 → 红灯报警；ON 边沿=让空 → 自动复位（缺省 Auto）。
+        var (bus, machine, logs) = Make(
+            new CuringPolicy { Name = "T", GlobalMinutes = 60 },
+            polarityProvider: () => GrillSignalPolarity.BlockedOff);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);      // 门控关，直接开计时
+            bus.SetInput(GrillL(1, 1), false);   // OFF=被挡
+            Assert.True(machine.GetStatus(1, 1)!.AlarmGrill);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), true));
+            Assert.Contains(logs, m => m.Contains("光栅被挡"));
+            bus.Writes.Clear();
+
+            bus.SetInput(GrillL(1, 1), true);    // ON=让空 → 自动复位
+            Assert.False(machine.GetStatus(1, 1)!.AlarmGrill);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), false));
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true));
+            Assert.Contains(logs, m => m.Contains("报警复位"));
+        }
+    }
+
+    [Fact]
+    public void PolarityBlockedOff_Align_SnapshotOffIsBlocked()
+    {
+        // 重启对齐复核与 GrillSideText 同源：OFF=挡 → 恢复即报警（不能说反）。
+        var (bus, machine, logs) = Make(
+            new CuringPolicy { Name = "T", GlobalMinutes = 60 },
+            polarityProvider: () => GrillSignalPolarity.BlockedOff);
+        using (machine)
+        {
+            bus.SetSnapshotSilently(Tray(1, 1), true);
+            bus.SetSnapshotSilently(GrillL(1, 1), false);   // 人手仍在（被挡=OFF）
+            machine.AlignFromSnapshot();
+
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+            Assert.True(machine.GetStatus(1, 1)!.AlarmGrill);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), true));
+            Assert.Contains(logs, m => m.Contains("光栅被挡"));
+        }
+    }
+
+    [Fact]
+    public void Polarity_HotSwitch_NextPumpUsesNewInterpretation()
+    {
+        // provider 每拍现取：BlockedOn 下 ON=挡（报警）；切 BlockedOff 后
+        // raw ON 变成"让空"，自动档下一拍兜底即复位——无需重建状态机。
+        var polarity = new Boxed<GrillSignalPolarity>(GrillSignalPolarity.BlockedOn);
+        var (bus, machine, _) = Make(
+            new CuringPolicy { Name = "T", GlobalMinutes = 60 },
+            polarityProvider: () => polarity.Value);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            bus.SetInput(GrillL(1, 1), true);   // BlockedOn：ON=挡 → 报警
+            Assert.True(machine.GetStatus(1, 1)!.AlarmGrill);
+
+            polarity.Value = GrillSignalPolarity.BlockedOff;
+            machine.Pump(_now.AddSeconds(1));
+            Assert.False(machine.GetStatus(1, 1)!.AlarmGrill);
         }
     }
 

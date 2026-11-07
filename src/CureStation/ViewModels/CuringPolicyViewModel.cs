@@ -207,6 +207,37 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         Raise(nameof(GrillResetModeToolTip));
     }
 
+    // ---------- 光栅信号极性（V0.0.72，全局现场接线口径、不入单条策略） ----------
+
+    private bool _grillSignalInverted;
+
+    /// <summary>
+    /// 光栅信号取反（勾选=遮挡=OFF）。真源在 GrillSignalPolarityHub 静态中枢——
+    /// 与报警复位模式同款全局开关：现场光栅"被挡=OFF"时勾上，状态机门控/
+    /// 报警/复位判定整体反相；不勾=遮挡=ON（缺省，V0.0.71 及以前口径）。
+    /// setter 是唯一写点：Change 落盘 + 广播，状态机下一拍现取生效。
+    /// </summary>
+    public bool GrillSignalInverted
+    {
+        get => _grillSignalInverted;
+        set
+        {
+            if (value == _grillSignalInverted)
+                return;
+            _grillSignalInverted = value;
+            GrillSignalPolarityHub.Change(value
+                ? GrillSignalPolarity.BlockedOff
+                : GrillSignalPolarity.BlockedOn);
+            Raise(nameof(GrillSignalInverted));
+            Raise(nameof(GrillSignalToolTip));
+        }
+    }
+
+    /// <summary>光栅信号勾选框 ToolTip（两态口径写全，现场不看文档也能切对）。</summary>
+    public string GrillSignalToolTip => _grillSignalInverted
+        ? "光栅信号取反（已勾选：遮挡=OFF）——光栅被挡时 DI 为 OFF、未被挡为 ON（现场实测常闭安全光栅口径）。全局设置，立即生效（建议停机时切换）；取消勾选切回遮挡=ON。"
+        : "光栅信号取反（当前未勾选：遮挡=ON）——光栅被挡时 DI 为 ON、未被挡为 OFF（缺省口径，V0.0.71 及以前行为）。现场光栅\"被挡=OFF\"时勾选本项，门控/报警/复位判定整体反相。全局设置，立即生效（建议停机时切换）。";
+
     private PolicyTimeUnit _timeUnit = PolicyTimeUnit.Minutes;
 
     /// <summary>
@@ -587,6 +618,9 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         // 切过模式，这里回显现值。
         GrillAlarmResetModeHub.LoadFromIni();
         _grillResetMode = GrillAlarmResetModeHub.Current;
+        // 光栅极性（V0.0.72）同款：勾选框回显上一进程/现场配置的挡/空口径。
+        GrillSignalPolarityHub.LoadFromIni();
+        _grillSignalInverted = GrillSignalPolarityHub.Current == GrillSignalPolarity.BlockedOff;
         AddPolicyCommand = new RelayCommand(AddPolicy);
         RemovePolicyCommand = new RelayCommand(RemovePolicy, () => SelectedPolicy != null);
         SaveCommand = new RelayCommand(Save);

@@ -2,6 +2,36 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.72（2026-11-07，固化程控：光栅信号极性可配——现场"被挡=OFF"不改代码）
+
+用户现场实测：安全光栅"未被挡=ON、被挡=OFF"（常闭输出），与代码原有
+"被挡=ON"假设相反——门控/报警/复位会整体判反。用户要求做成勾选框配置：
+**缺省保持现行"遮挡=ON"**（既有部署行为不漂移），现场勾"光栅信号取反"
+即按实测口径运行；以后换项目/换光栅品牌只改配置不动代码。
+
+- **Core**：新增 `GrillSignalPolarity{BlockedOn（缺省）/ BlockedOff}` +
+  解析器（只认 "BlockedOff"，其余回 BlockedOn——缺省方向勿翻）。
+  `SlotCuringMachine` 新增第 7 可选构造参 `Func<GrillSignalPolarity>?
+  grillPolarityProvider`（null=恒 BlockedOn，升级零影响）；新增唯一解释口
+  `IsBlocked(raw, polarity)`（null=不让），门控 `GrillClear`、计时中报警
+  边沿、自动/人工复位、重启对齐复核、`GrillSideText` 日志全部改经它——
+  移除"直判 ON=挡"的散写；provider 每拍现取，勾选热切下一拍生效。
+- **程序①**：新增 `GrillSignalPolarityHub`（ini `[setting]
+  GrillSignalPolarity` 缺省 BlockedOn、缺键/非法值自愈回 BlockedOn）；
+  策略窗参数条加「光栅信号取反」勾选框（勾=BlockedOff），setter 走
+  Hub.Change 落盘+广播，开窗回读盘上值；参数条 `StackPanel` 改
+  `WrapPanel`（新增一项后 1280 宽一行放不下，自动换行防挤出右边界）。
+  主窗状态机注入 `grillPolarityProvider`；演示 `MockPointTableBus` 加
+  `GrillPolarityProvider`（程序①传 Hub 读点），勾取反后演示剧本电平同步
+  反相，避免"演示里永远不报警/一直报警"。
+- **config.sample.ini**：新增 `[setting] GrillSignalPolarity=BlockedOn`
+  说明段（两档语义 + 现场怎么改）。
+- 测试：520/520（基线 506 + 14）——解析器 Theory 7 组、BlockedOff 门控/
+  报警自动复位/重启对齐/极性热切 4 例、现场极性全剧本 1 例（报警→拒绝
+  复位→复位→到点→取件）、策略窗勾选落盘广播与开窗回显 2 例。
+- 验证：`dotnet build` 0 警 0 错；`dotnet test` 520/520；DocShot 重拍
+  `cs-policy.png`（勾选框入镜目检）。
+
 ## V0.0.71（2026-11-07，固化程控：光栅报警复位缺省改为"人工复位"）
 
 用户拍板：复位模式仍是**全局操作规程**（策略窗一个开关，不随单条策略保存），

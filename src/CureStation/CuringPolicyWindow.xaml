@@ -175,10 +175,12 @@
 
                 <!-- 右列：参数条 + 画布（主编辑区）+ 底部按钮 -->
                 <DockPanel Grid.Column="1">
-                    <!-- 参数条（V0.0.44 精简：原"策略编辑"面板只剩这四项，一行横排；
-                         长说明收 ToolTip 不占版面） -->
+                    <!-- 参数条（V0.0.44 精简：原"策略编辑"面板只剩这几项，一行横排；
+                         长说明收 ToolTip 不占版面。V0.0.72 加"光栅信号取反"后
+                         改用 WrapPanel：窗口缩到最小宽/加项时自动换行，不挤出
+                         右边界（1280 宽度一行放不下时第二行从行首续排）。 -->
                     <Border DockPanel.Dock="Top" Style="{StaticResource FreshCardBorder}" Padding="10,8" Margin="0,0,0,8">
-                        <StackPanel Orientation="Horizontal">
+                        <WrapPanel Orientation="Horizontal">
                             <TextBlock Text="策略名：" VerticalAlignment="Center"/>
                             <TextBox Style="{StaticResource FreshInput}" Width="150"
                                      Text="{Binding EditName, FallbackValue=标准固化}"
@@ -198,6 +200,12 @@
                             <CheckBox IsChecked="{Binding EditGrillGate, FallbackValue=False}"
                                       Content="光栅门控" Margin="18,0,0,0"
                                       ToolTip="开=左右光栅都灭且托盘在架才开计时（防人手在架内就计时）；关（缺省）=托盘到位即开计时，没绑光栅的仓位门控自动放行。"/>
+                            <!-- 光栅信号极性（V0.0.72）：现场接线口径全局开关（不入单条策略），
+                                 勾选=遮挡=OFF（现场实测常闭安全光栅），不勾=遮挡=ON（缺省）。
+                                 勾选即落盘+广播，状态机下一拍按新口径判定门控/报警/复位。 -->
+                            <CheckBox IsChecked="{Binding GrillSignalInverted, FallbackValue=False}"
+                                      Content="光栅信号取反" Margin="14,0,0,0"
+                                      ToolTip="{Binding GrillSignalToolTip, FallbackValue=光栅信号取反（当前未勾选：遮挡 ON）——光栅被挡时 DI 为 ON，未被挡为 OFF（缺省口径）。现场光栅“被挡 OFF”时勾选本项，门控/报警/复位判定整体反相。全局设置，立即生效。}"/>
                             <CheckBox IsChecked="{Binding EditPersistMinutes, FallbackValue=False}"
                                       Content="断电续算" Margin="14,0,0,0"
                                       ToolTip="开=进行中仓位随状态变化写 config/curingstate.json，断电期间时间计入固化时长（重启按记录续算）；关（缺省）=断电重启后重新计时，宁可重计也不放行没固化够的货。"/>
@@ -212,7 +220,7 @@
                                     Command="{Binding ToggleGrillResetModeCommand}"
                                     Content="{Binding GrillResetModeText, FallbackValue=人工复位}"
                                     ToolTip="{Binding GrillResetModeToolTip, FallbackValue=人工复位（缺省）：光栅让空后报警不自动解除（红灯与蜂鸣保持），弹出“报警复位”窗列出正在报警的库位，由操作员逐项/全部点【解除报警】确认。全局设置，立即生效。点击切回自动复位。}"/>
-                        </StackPanel>
+                        </WrapPanel>
                     </Border>
                     <!-- 底部按钮：预置→套用目标+套用所选模板；自定义→激活/仅保存（两组按选中项互斥显示） -->
                     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right"
