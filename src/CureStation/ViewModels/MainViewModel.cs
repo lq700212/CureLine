@@ -114,6 +114,37 @@ public sealed class RackSlotViewModel : ViewModelBase
         private set => Set(ref _hasBindingText, value);
     }
 
+    // ---------- SN 换行区分档（V0.0.84：两行装不下递增三行/四行，用户拍板） ----------
+    // V0.0.83 是"固定两行区 + 摘要兜底"；本轮把摘要兜底的起征点后移，长码先按
+    // 需要多占一两行、仍装不下才摘要。行数按显示文本长度分档（调用 SnZoneOf，
+    // 随 Refresh 一拍同步落 Height 与 mid 补偿，防两者异步抖动）。
+
+    private double _snZoneHeight = 32;
+    /// <summary>
+    /// SN 换行区高度（MainWindow.xaml SN 区 Border.Height 直绑，FallbackValue=32）：
+    /// 按最终显示文本长度分档——1~2 行恒 32（V0.0.83 两行区定标，短码与摘要码
+    /// 锚点零移动）、3 行 48、4 行 64；行数按保守容量 13 字符/行估算、峰值四行。
+    /// </summary>
+    public double SnZoneHeight
+    {
+        get => _snZoneHeight;
+        private set => Set(ref _snZoneHeight, value);
+    }
+
+    private System.Windows.Thickness _snZoneCompensation = new(0);
+    /// <summary>
+    /// mid 区补偿 Margin（MainWindow.xaml mid Grid.Margin 直绑）：无 SN 整区
+    /// Collapsed 时 =0（与旧版像素一致）；有 SN 时 = (0,0,0, Margin-top 4 + 区高)
+    /// ——区高 32/48/64 对应补偿 36/52/68，mid 大数字居中锚点始终与无 SN 卡一致。
+    /// 用 Thickness 直绑替代 V0.0.83 的 Style+DataTrigger（补偿值不再恒 36，
+    /// 需随行数变化，触发器表达不了动态值）。
+    /// </summary>
+    public System.Windows.Thickness SnZoneCompensation
+    {
+        get => _snZoneCompensation;
+        private set => Set(ref _snZoneCompensation, value);
+    }
+
     // ---------- 卡片视觉状态（Kind，新卡模板六态状态口径，2026-10-29） ----------
     // 六态键与主题字典 Brush.Tint*/Brush.SlotBorder*/Brush.CardGlow*
     // 的 XAML 触发器同名（改键名要同步：这里 + 两字典 + MainWindow.xaml 触发器）。
@@ -281,16 +312,18 @@ public sealed class RackSlotViewModel : ViewModelBase
     /// P3.3：productCode=库位绑定的产品条码（空=未绑定）；bindingMissing=
     /// 托盘在架却没绑定（库位码下方显示红字"未绑定"，只提示不拦截固化流程）。
     /// </summary>
-    /// <summary>产品码行文案（V0.0.83 摘要口径）：未绑定返回"未绑定"（红字触发器吃
-    /// BindingMissing）；码短原样；超 26 字符 =「头 6 位 + … + 尾 10 位」（共 17 字符）。
+    /// <summary>产品码行文案（V0.0.84 摘要口径）：未绑定返回"未绑定"（红字触发器吃
+    /// BindingMissing）；码短原样；超 52 字符 =「头 6 位 + … + 尾 10 位」（共 17 字符）。
     /// 为什么掐中间：现场扫码对货以**尾号**对账、头部是型号/批次前缀，中间流水段
-    /// 剩余价值最低。V0.0.83 视图改两行换行区域（高 32 ≈ 11 号字 ×2 行，见
-    /// MainWindow.xaml「产品码 SN」注释）——26 = 两行容量的保守口径（最窄正常
-    /// 窗口 ≈1280 宽下 10 列卡 ≈128px，去内边距文本 ≈104px，11 号 ≈7.5px/字符
-    /// → 两行 ≈27.7 字符），26 以内在区域内换行完整可见；摘要 17 字符 ≈1.2 行，
-    /// 两行区域必装下，头尾双可见。更窄窗口（卡 &lt;120px）两行容不下 26 → 底行
-    /// 被 ClipToBounds 裁尾，属极限窄窗口的既知边界（卡本身已挤不下）。
-    /// 想调阈值：改 summaryThreshold 并同步 CuringDisplayTests 的两句边界用例。</summary>
+    /// 剩余价值最低。V0.0.84 视图改动态行数区（V0.0.83 两行高 32 原样保留，两行
+    /// 装不下递增到三行 48 / 四行 64——用户拍板"两行显示不完就三行，三行不行就
+    /// 四行"，见 MainWindow.xaml「产品码 SN」注释与 SnZoneOf）——52 = 四行容量
+    /// 保守口径（最窄正常窗口 ≈1280 宽下 10 列卡 ≈128px，去内边距文本 ≈104px，
+    /// 11 号 ≈7.5px/字符 → 单行 13 字符 ×4 行 = 52），52 以内在区域内换行 2~4 行
+    /// 完整可见；摘要 17 字符 ≈1.3 行，两行区必装下，头尾双可见。更窄窗口（卡
+    /// &lt;120px）四行容不下 52 → 底行被 ClipToBounds 裁尾，属极限窄窗口的既知
+    /// 边界（卡本身已挤不下）。想调阈值：改 summaryThreshold 并同步
+    /// CuringDisplayTests 的 SN 边界用例。</summary>
     private static string SnDisplayText(string productCode, bool bindingMissing)
     {
         if (bindingMissing)
@@ -299,12 +332,37 @@ public sealed class RackSlotViewModel : ViewModelBase
         }
 
         var code = productCode ?? string.Empty;
-        const int summaryThreshold = 26;   // 超过此长度才摘要（两行换行区域保守容量 ≈27.7，26 留余）
+        const int summaryThreshold = 52;   // 超过此长度才摘要（动态行数区四行容量 ≈52，恰为上限）
         const int keepHead = 6;            // 头部保留：型号/批次前缀
         const int keepTail = 10;           // 尾部保留：对货核号的流水段
         return code.Length <= summaryThreshold
             ? code
             : code.Substring(0, keepHead) + "…" + code.Substring(code.Length - keepTail, keepTail);
+    }
+
+    /// <summary>
+    /// SN 换行区分档（V0.0.84，Height 与 mid 补偿的唯一计算口）：行数按**显示
+    /// 文本**（摘要后的 BindingText）长度保守估算——最窄正常窗口单行 ≈13 字符
+    /// （104px / 7.5px，V0.0.83 口径），ceil(len/13) 封顶 4 行；1~2 行恒 32 高
+    /// （V0.0.83 定标：短码/摘要码锚点零移动），3 行 48、4 行 64（用户拍板
+    /// "两行显示不完就三行，三行不行就四行"）。估算只可能 ≥ 实际需要行数
+    /// （窗口更宽时每行装更多、实际换行更少），偏高方向的底部留白由垂直居中
+    /// 消化，永不裁字。补偿 = Margin-top 4 + 区高（32→36、48→52、64→68），
+    /// mid 大数字锚点恒与无 SN 卡一致。
+    /// </summary>
+    private static (double Height, System.Windows.Thickness Compensation) SnZoneOf(string shown)
+    {
+        const double charsPerLine = 13;   // 单行保守容量（最窄正常窗口口径，V0.0.83 定标）
+        const double lineHeight = 16;     // 11 号字单行高（32=两行区，V0.0.83 定标）
+        const double zoneTopMargin = 4;   // SN 区 Margin-top（视口总占高并入补偿）
+        if (string.IsNullOrEmpty(shown))
+        {
+            return (32, new(0));          // 整区 Collapsed：区高回缺省、补偿清零
+        }
+
+        var lines = Math.Min(4, (int)Math.Ceiling(shown.Length / charsPerLine));
+        var height = Math.Max(32, lines * lineHeight);   // 1~2 行保 32：锚点零移动
+        return (height, new(0, 0, 0, zoneTopMargin + height));
     }
 
     public void Refresh(PointTableSnapshot snapshot, bool hasTable, SlotStatus? machineStatus = null,
@@ -315,6 +373,10 @@ public sealed class RackSlotViewModel : ViewModelBase
         BindingMissing = bindingMissing && string.IsNullOrWhiteSpace(productCode);
         BindingText = SnDisplayText(productCode, BindingMissing);
         HasBindingText = !string.IsNullOrEmpty(BindingText);
+        // 换行区分档与 mid 补偿同拍落（V0.0.84：Height 随显示文本长度递增三行/四行）。
+        var zone = SnZoneOf(BindingText);
+        SnZoneHeight = zone.Height;
+        SnZoneCompensation = zone.Compensation;
 
         _planMinutes = planMinutes;   // 缓存本拍策略解析值（ApplyKind 落 Idle 字面 / 单位切换重拼用）
         _lastCuring = machineStatus is { Phase: SlotPhase.Curing } c ? c : null;

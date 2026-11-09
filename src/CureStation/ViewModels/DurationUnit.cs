@@ -12,7 +12,10 @@
 //   的握手方式（先例：CuringMesPosterHolder 静态桥接、ThemeManager 静态主题）。
 //
 // 秒档删除（用户拍板）：没有秒级的固化工艺，PolicyTimeUnit 只留 时/分 两档——
-//   ini 存量 "Seconds" 值不在新枚举内，LoadFromIni 非法值自愈回 Minutes。
+//   ini 存量 "Seconds" 值不在新枚举内，LoadFromIni 非法值自愈回缺省 Hours。
+//
+// 缺省单位=时（2026-11-09 用户拍板）：缺键/空值/非法值一律回 Hours——开箱即
+//   小时口径；现场显式写 Minutes 不受影响（读盘为准，缺省只兜兜底）。
 //
 // 线程纪律：Change/LoadFromIni/恢复 一律 UI 线程调（Changed 订阅方是 VM 集合
 //   刷新，与主窗 500ms 拍同线程口径）；Text/SplitBig 纯函数任意线程可调。
@@ -61,7 +64,8 @@ public static class DurationUnit
 
     /// <summary>
     /// 重读记忆单位（测试 TestScope 切临时目录后用；生产启动静态初始化已读一次）。
-    /// 缺键/非法值/旧版 "Seconds"（档已删）一律回 Minutes 自愈。
+    /// 缺键/非法值/旧版 "Seconds"（档已删）一律回缺省 Hours 自愈（缺省单位=时，
+    /// 2026-11-09 用户拍板；显式 Minutes 在盘中不受影响）。
     /// </summary>
     public static void LoadFromIni() => _current = ReadIni();
 
@@ -72,11 +76,11 @@ public static class DurationUnit
     private static PolicyTimeUnit ReadIni()
     {
         string text = IniFile.ReadStr(AppPaths.ConfigIni, "setting", TimeUnitIniKey,
-            nameof(PolicyTimeUnit.Minutes));
+            nameof(PolicyTimeUnit.Hours));
         return Enum.TryParse<PolicyTimeUnit>(text, ignoreCase: true, out var unit) &&
                Enum.IsDefined(unit)
             ? unit
-            : PolicyTimeUnit.Minutes;
+            : PolicyTimeUnit.Hours;
     }
 
     // ---------- 分钟数 → 显示文本（纯函数） ----------

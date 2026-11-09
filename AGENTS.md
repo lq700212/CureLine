@@ -570,8 +570,10 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
 - **策略窗时间单位语义（V0.0.53 起，V0.0.56 删秒档+主窗联动，真源在
   `DurationUnit`（src/CureStation/ViewModels/DurationUnit.cs）+ 两 VM 各自
   消费）**：① 页面可切 **时/分**（秒档已删——用户拍板没有秒级的固化；
-  `PolicyTimeUnit` 枚举 Hours=0/Minutes=1，存量 ini 值 "Seconds" 不在新枚举
-  内开机自愈回 Minutes），**仅显示/输入口径**——`CuringPolicy` 的 int 分钟
+  `PolicyTimeUnit` 枚举 Hours=0/Minutes=1；**缺省单位=时（V0.0.84，2026-11-09
+  用户拍板）**：缺键/空值/非法值/存量 ini "Seconds"（档已删）开机一律自愈回
+  Hours，现场显式写 Minutes 读盘为准不受缺省影响），**仅显示/输入口径**——
+  `CuringPolicy` 的 int 分钟
   存储、状态机计时、断电续算、过账时间单位一律不动；
   ② **策略窗↔主窗联动（用户拍板）**：策略窗 `TimeUnit` setter 唯一写点 →
   `DurationUnit.Change()` 落盘记忆 + 广播 `Changed` → 主窗 MainViewModel 订阅
@@ -592,7 +594,8 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   全走 VM 派生属性，勿在 XAML 写死时间文案；
   ⑤ **架号/层号恒十进制解析**（`ParseIndexOrError`，不走单位换算——否则小时
   模式下架号 3 被当 180 分钟绑错仓位，V0.0.53 实测坑）；
-  ⑥ 选择记忆 `[setting] PolicyTimeUnit`（程序①专用 UI 键，非法回 Minutes，
+  ⑥ 选择记忆 `[setting] PolicyTimeUnit`（程序①专用 UI 键，**缺省=时**（V0.0.84
+   2026-11-09 拍板），非法回缺省 Hours，
   与 PointBitStyle 同款自愈）；**文本拼装全收 UI 层**：Core `SlotStatus`
   已无 `StateText`、`SlotStatistics.NextClose` 返回最小项不给全文——加显示
   场景勿回 Core 拼带单位的串；
@@ -732,8 +735,19 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   ④ **取件作废**：状态机 `TrayLeft` 边沿调 `Remove` 清该库位绑定，落盘/刷新
   一律 `UiInvoke` 回 UI（状态机锁内禁 IO；重启对齐 `AlignFromSnapshot` 不发
   `TrayLeft`，故重启不会清在架绑定）；⑤ **未绑定只提示不拦截**（客户口径）：
-  统计条扫码胶囊红字 + 卡片库位码正下方红字"未绑定"（V0.0.80 SN 从卡片
-  foot 底部上移：默认主题蓝 11 号 SemiBold；**V0.0.83 换行口径（用户拍板「长短都不影响其他布局」）**：SN 区=固定两行高 Border（Height=32≈11 号×2 行，Margin-top 4）+ TextWrapping=Wrap 在区内自行换行消化——短码一行垂直居中、长码两行，区域高度恒定 → 同卡 1 行↔2 行及有/无 SN 时 mid/foot 零移动（SN 区 Collapsed 时 mid 补偿 Margin=36 恒准，V0.0.81 双补偿机制按新占位改值）；>26 字符走 VM 摘要「头 6+…+尾 10」保头尾双可见（26=两行容量保守口径 ≈窄卡 104px 文本/7.5px×2 行，改阈值同步 CuringDisplayTests 两句边界用例；ClipToBounds 防字体回退出界仅保险）；V0.0.82 的 Viewbox 等比缩/SnMaxWidthConverter/BindingTip 已全部退役删除——用户否决 tooltip 看全、否决无下限整串缩小（字太小））+ 日志只记新出现的边沿，
+   统计条扫码胶囊红字 + 卡片库位码正下方红字"未绑定"（V0.0.80 SN 从卡片
+   foot 底部上移：默认主题蓝 11 号 SemiBold；**V0.0.84 动态行数区（用户拍板
+   「两行显示不完就三行，三行不行就四行」）**：SN 区 1~2 行恒高 32（V0.0.83
+   定标，短码/摘要码锚点零移动）、3 行 48、4 行 64——分档唯一口 =
+   `RackSlotViewModel.SnZoneOf`（按显示文本长度保守 13 字符/行估算），Height
+   直绑 `SnZoneHeight`、mid 补偿直绑 `SnZoneCompensation`（=Margin-top 4+
+   区高 → 36/52/68，无绑定整区 Collapsed 时=0，V0.0.81 双补偿语义保留、
+   V0.0.83 的 Style+DataTrigger 恒 36 已随动态值删除）；>52 字符才走 VM
+   摘要「头 6+…+尾 10」保头尾双可见（52=四行容量保守口径 ≈窄卡 104px
+   文本/7.5px×4 行，改阈值同步 CuringDisplayTests 的 SN 边界用例；摘要 17
+   字符回两行区必装下；ClipToBounds 防字体回退出界仅保险）；V0.0.82 的
+   Viewbox 等比缩/SnMaxWidthConverter/BindingTip 已全部退役删除——用户
+   否决 tooltip 看全、否决无下限整串缩小（字太小））+ 日志只记新出现的边沿，
   固化/过账流程零依赖绑定簿；⑥ 线程：`ScannerBarcodeService.Start/Dispose`
   必须后台调（Dispose 最坏等心跳线程 3 秒），两个事件在子模块后台线程触发、
   订阅方必须封送；⑦ 配置两桶按方式生效（V0.0.78）：Tcp 方式=`TcpIp` 非空即

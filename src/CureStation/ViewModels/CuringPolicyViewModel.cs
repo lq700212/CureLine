@@ -43,7 +43,8 @@
 //   解析统一走 TryParseDisplay（支持小数、AwayFromZero 四舍五入到整分钟）。
 //   单位真源在 DurationUnit 静态中枢（本程序集共享）：Change() 落盘记忆
 //   config.ini [setting] PolicyTimeUnit + 广播主窗立即重刷时长文本；非法值/
-//   旧版 "Seconds" 自愈回 Minutes（与 PointBitStyle 同款自愈）。
+//   旧版 "Seconds" 自愈回缺省 Hours（与 PointBitStyle 同款自愈；缺省单位=时，
+//   2026-11-09 用户拍板）。
 // 怎么改：新增策略字段 = CuringPolicy 加属性 + 编辑区加控件 + BuildDraft
 //   /ApplyDraft 两处同步 + Validator 加规则；预览分档改 PreviewTiers。
 // =========================================================================
@@ -276,7 +277,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         ? "常闭：遮挡=OFF（被挡 OFF / 让空 ON）。全局设置，立即生效。"
         : "常开：遮挡=ON（被挡 ON / 让空 OFF，缺省）。全局设置，立即生效。";
 
-    private PolicyTimeUnit _timeUnit = PolicyTimeUnit.Minutes;
+    private PolicyTimeUnit _timeUnit = PolicyTimeUnit.Hours;   // 缺省口径=时（DurationUnit.ReadIni 同款兜底，构造即被覆盖）
 
     /// <summary>
     /// 页面时间单位（时/分）：只换显示/输入口径，策略存储与状态机恒为分钟。

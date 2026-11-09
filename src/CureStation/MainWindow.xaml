@@ -260,19 +260,21 @@
                                  用户拍板：底缘太不醒目）：已绑产品=主题蓝（Brush.Accent 双主题
                                  同名：浅 #1E90FF / 深 #4FC3F7）11 号 SemiBold 稍醒目；未绑定
                                  红字 + 加粗优先（同一行红色报警）。
-                                  ★V0.0.83 换行口径（拍板「SN 长短都不影响其他布局」）：
-                                  区域固定两行高（Height=32 ≈ 11 号字 ×2 行），短码一行在
-                                  区域内垂直居中、长码 TextWrapping=Wrap 自动换行消化——
-                                  同卡 1 行↔2 行时 mid/foot 位置零变化；超长的极端（>26 字符、
-                                  两行装不下）由 VM 摘要（头 6+…+尾 10）兜底（阈值两行容量
-                                  口径见 SnDisplayText），ClipToBounds 只是防字体回退把第三
-                                  行画出界外的保险，正常口径永不触发。
-                                  V0.0.82 的「Viewbox 等比缩小」口径已废（SN 需要换行+缩放
-                                  字号与两行区域互相打架，一并退役 SnMaxWidthConverter）。
-                                  无绑定整区 Collapsed（mid 区加同值 Margin-bottom 补偿，
+                                  ★V0.0.84 动态行数口径（拍板「两行显示不完就三行，三行不行
+                                  就四行」）：区高按显示文本长度分档（VM SnZoneOf 唯一计算
+                                  口）——1~2 行恒 32（V0.0.83 两行区定标，短码与摘要码锚点
+                                  零移动）、3 行 48、4 行 64（保守 13 字符/行估算）——
+                                  Border.Height 直绑 SnZoneHeight（数值绑定给 FallbackValue
+                                  纪律），TextWrapping=Wrap 在区内自动换行消化；摘要阈值
+                                  同步 26→52（四行容量），>52 才由 VM 摘要（头 6+…+尾 10）
+                                  兜底、摘要 17 字符回两行区。ClipToBounds 只是防字体回退
+                                  把行画出区外的保险，正常口径永不触发。
+                                  V0.0.82 的「Viewbox 等比缩小」口径已废（换行+缩放字号两不
+                                  相宜，一并退役 SnMaxWidthConverter）。
+                                  无绑定整区 Collapsed（mid 区补偿 Margin 同步清零，
                                   锚点与「无 SN 卡」一致，见 mid 注释）。
                                  ★缺省色/可见性/字重全进 Style Setter（标签本地值会压死触发器——坑⑥）。 -->
-                            <Border Grid.Row="1" Height="32" Margin="0,4,0,0" ClipToBounds="True">
+                            <Border Grid.Row="1" Height="{Binding SnZoneHeight, FallbackValue=32}" Margin="0,4,0,0" ClipToBounds="True">
                                 <Border.Style>
                                     <Style TargetType="Border">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -305,23 +307,13 @@
                         <!-- mid：状态词视图（idle/gate/done/alarm/notconfig/灯色反推计时，含副文案行）
                              与大数字视图（状态机精确计时+进度条）互斥；文本随 Kind 分支给字面量
                              （对齐设计图文案），不绑 VM。
-                             ★V0.0.81 位置锁定（V0.0.83 随 SN 换行区域改值）：库位码下的 SN
-                             区域=Margin-top 4 + Height 32 恒占 36 逻辑 px（V0.0.82 及以前
-                             单行 18）——HasBindingText 时 mid 加同值 Margin-bottom 抵消，
-                             居中锚点回到与"无 SN 卡"完全一致的水平线（相邻卡不减不添同高；
-                             SN 在区域内 1 行或 2 行区域高度恒定，mid 锚点也不动）；
-                             无绑定/未关联整区 Collapsed 时 Margin=0 与旧版像素级一致。 -->
-                        <Grid Grid.Row="1" VerticalAlignment="Center">
-                            <Grid.Style>
-                                <Style TargetType="Grid">
-                                    <Setter Property="Margin" Value="0"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding HasBindingText, FallbackValue=False}" Value="True">
-                                            <Setter Property="Margin" Value="0,0,0,36"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Grid.Style>
+                             ★V0.0.84 动态补偿（V0.0.81 位置锁定语义保留）：库位码下的 SN
+                             区总占高 = Margin-top 4 + 区高（1~2 行 32 / 3 行 48 / 4 行 64，
+                             分档唯一口=VM SnZoneOf）——mid Margin-bottom 直绑
+                             SnZoneCompensation（=4+区高 → 36/52/68），居中锚点始终与
+                             "无 SN 卡"完全一致的水平线（区高变化同步增减，mid 不漂）；
+                             无绑定/未关联整区 Collapsed 时补偿=0 与旧版像素级一致。 -->
+                        <Grid Grid.Row="1" VerticalAlignment="Center" Margin="{Binding SnZoneCompensation}">
                             <!-- 状态词视图：词 15px + 副文 10.5px（各态一句，设计图口径） -->
                             <StackPanel HorizontalAlignment="Left" VerticalAlignment="Center">
                                 <StackPanel.Style>

@@ -116,6 +116,31 @@ public class CuringDisplayTests
         DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);   // 收尾还原（TestScope Dispose 双保险）
     }
 
+    [Fact(DisplayName = "DurationUnit：缺键/非法/旧 Seconds 一律回缺省 Hours（2026-11-09 拍板：默认单位=时）")]
+    public void DurationUnit_ReadIniDefault_MissingAndInvalidFallsBackToHours()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        // 缺键（出厂态）→ 缺省 Hours：开箱即小时口径
+        DurationUnit.LoadFromIni();
+        Assert.Equal(PolicyTimeUnit.Hours, DurationUnit.Current);
+
+        // 非法值 / 旧版存量 "Seconds"（档已删）→ 同回缺省 Hours（自愈同源）
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Bogus");
+        DurationUnit.LoadFromIni();
+        Assert.Equal(PolicyTimeUnit.Hours, DurationUnit.Current);
+
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Seconds");
+        DurationUnit.LoadFromIni();
+        Assert.Equal(PolicyTimeUnit.Hours, DurationUnit.Current);
+
+        // 显式 Minutes 在盘中不受缺省影响（读盘为准）
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
+        DurationUnit.LoadFromIni();
+        Assert.Equal(PolicyTimeUnit.Minutes, DurationUnit.Current);
+        DurationUnit.RecallForTest(PolicyTimeUnit.Minutes);   // 收尾还原（TestScope Dispose 双保险）
+    }
+
     [Fact(DisplayName = "DurationUnit：Change 落盘 ini 记忆 + 触发广播")]
     public void DurationUnit_Change_PersistsAndRaises()
     {
@@ -324,9 +349,13 @@ public class CuringDisplayTests
         Assert.Equal("未配置", nc.SlotStateText);
     }
 
-    // ---------- 产品码（SN）展示文案（V0.0.82 超长摘要口径） ----------
+    // ---------- 产品码（SN）展示文案与区高（V0.0.84 动态行数区：摘要阈值 26→52） ----------
+    // 行数按显示文本长度保守估算（13 字符/行）：≤26=两行区 32（V0.0.83 口径原样）、
+    // 27~39=三行区 48、40~52=四行区 64（用户拍板「两行显示不完就三行，三行不行就
+    // 四行」）；>52 才摘要（头6+…+尾10 → 17 字符回两行区 32）。
+    // mid 补偿 = Margin-top 4 + 区高：32→36、48→52、64→68；无 SN 整区 Collapsed 补偿=0。
 
-    [Fact(DisplayName = "SN：未绑定 → 文案'未绑定'（红字触发器吃 BindingMissing）")]
+    [Fact(DisplayName = "SN：未绑定 → 文案'未绑定'（红字触发器吃 BindingMissing），两行区 32/补 36")]
     public void Sn_BindingMissing_ShowsMissingText()
     {
         var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
@@ -334,35 +363,70 @@ public class CuringDisplayTests
         Assert.Equal("未绑定", slot.BindingText);
         Assert.True(slot.BindingMissing);
         Assert.True(slot.HasBindingText);
+        Assert.Equal(32, slot.SnZoneHeight);
+        Assert.Equal(new System.Windows.Thickness(0, 0, 0, 36), slot.SnZoneCompensation);
     }
 
-    [Fact(DisplayName = "SN：空码非缺失 → 空文案整行收起")]
+    [Fact(DisplayName = "SN：空码非缺失 → 空文案整行收起，mid 补偿清零")]
     public void Sn_EmptyCode_CollapsedRow()
     {
         var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
         slot.Refresh(PointTableSnapshot.Empty, true, null, 0, "");
         Assert.Equal("", slot.BindingText);
         Assert.False(slot.HasBindingText);
+        Assert.Equal(new System.Windows.Thickness(0), slot.SnZoneCompensation);
     }
 
-    [Fact(DisplayName = "SN：26 字符以内原样显示（两行区域内换行消化，不摘要）")]
+    [Fact(DisplayName = "SN：≤26 字符原样显示（两行区内换行消化，区高 32 补偿 36 不变）")]
     public void Sn_AtOrUnderThreshold_KeptAsIs()
     {
         var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
         var code = new string('A', 26);
         slot.Refresh(PointTableSnapshot.Empty, true, null, 0, code);
         Assert.Equal(code, slot.BindingText);
+        Assert.Equal(32, slot.SnZoneHeight);   // V0.0.83 两行区定标：短码锚点零移动
+        Assert.Equal(new System.Windows.Thickness(0, 0, 0, 36), slot.SnZoneCompensation);
     }
 
-    [Fact(DisplayName = "SN：>26 字符摘要=头6+…+尾10（头尾双可见，中段省略）")]
+    [Fact(DisplayName = "SN：27~39 字符=三行区（高 48 补 52，原样不摘要）")]
+    public void Sn_ThreeLineZone_27To39()
+    {
+        var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
+        var code = "AAAA-20260909-BK" + new string('X', 9) + "1234567890";   // 35 字符
+        slot.Refresh(PointTableSnapshot.Empty, true, null, 0, code);
+        Assert.Equal(code, slot.BindingText);          // ≤52 原样完整显示
+        Assert.Equal(48, slot.SnZoneHeight);           // ceil(35/13)=3 行
+        Assert.Equal(new System.Windows.Thickness(0, 0, 0, 52), slot.SnZoneCompensation);
+    }
+
+    [Fact(DisplayName = "SN：40~52 字符=四行区（高 64 补 68，原样不摘要；40/52 双边界）")]
+    public void Sn_FourLineZone_40To52()
+    {
+        var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
+        var code40 = "AAAA-20260909-BK" + new string('Y', 14) + "1234567890";  // 40 字符
+        slot.Refresh(PointTableSnapshot.Empty, true, null, 0, code40);
+        Assert.Equal(code40, slot.BindingText);
+        Assert.Equal(64, slot.SnZoneHeight);           // ceil(40/13)=4 行（四行下边界）
+        Assert.Equal(new System.Windows.Thickness(0, 0, 0, 68), slot.SnZoneCompensation);
+
+        var slot2 = new RackSlotViewModel { Rack = 1, Level = 1 };
+        var code52 = "AAAA-20260909-BK" + new string('Z', 26) + "1234567890";  // 52 字符
+        slot2.Refresh(PointTableSnapshot.Empty, true, null, 0, code52);
+        Assert.Equal(code52, slot2.BindingText);
+        Assert.Equal(64, slot2.SnZoneHeight);          // 恰四行容量（上边界）
+    }
+
+    [Fact(DisplayName = "SN：>52 字符摘要=头6+…+尾10（17 字符回落两行区 32/36）")]
     public void Sn_OverThreshold_SummaryKeepsHeadAndTail()
     {
         var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
-        // 35 字符超长码：头 6 位"AAAA-2"（型号/批次前缀）+ 尾 10 位流水（对货核号）
-        var code = "AAAA-20260909-BK" + new string('X', 9) + "1234567890";
+        // 53 字符超长码：头 6 位"AAAA-2"（型号/批次前缀）+ 尾 10 位流水（对货核号）
+        var code = "AAAA-20260909-BK" + new string('W', 27) + "1234567890";
         slot.Refresh(PointTableSnapshot.Empty, true, null, 0, code);
         Assert.Equal("AAAA-2…1234567890", slot.BindingText);
-        Assert.Equal(17, slot.BindingText.Length); // 头6+"…"+尾10=17 字符，落在两行换行区域容量内
+        Assert.Equal(17, slot.BindingText.Length);     // 头6+"…"+尾10=17 字符，两行区必装下
+        Assert.Equal(32, slot.SnZoneHeight);           // 摘要后回两行区（≈1.3 行）
+        Assert.Equal(new System.Windows.Thickness(0, 0, 0, 36), slot.SnZoneCompensation);
     }
 
     [Fact(DisplayName = "Kind：状态机空闲快照全空 → Idle")]

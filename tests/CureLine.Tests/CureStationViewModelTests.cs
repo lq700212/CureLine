@@ -547,6 +547,9 @@ public class CureStationViewModelTests
     {
         using var scope = new TestScope();
         EnsureConfigDir();
+        // 缺省口径 2026-11-09 改=时；本用例断言按分钟字面编写，显式写盘铺分口径
+        // （策略 VM 构造 LoadTimeUnit 以盘上 ini 为准，仅改内存静态无效）
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
         var book = new CuringPolicyBook
         {
             Policies =
@@ -574,6 +577,8 @@ public class CureStationViewModelTests
     {
         using var scope = new TestScope();
         EnsureConfigDir();
+        // 缺省口径 2026-11-09 改=时；本用例按分钟字面输入/断言，显式写盘铺分口径
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
 
@@ -646,6 +651,8 @@ public class CureStationViewModelTests
     {
         using var scope = new TestScope();
         EnsureConfigDir();
+        // 缺省口径 2026-11-09 改=时；本用例按分钟字面输入/断言，显式写盘铺分口径
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
 
@@ -674,6 +681,8 @@ public class CureStationViewModelTests
     {
         using var scope = new TestScope();
         EnsureConfigDir();
+        // 缺省口径 2026-11-09 改=时；本用例按分钟字面输入/断言，显式写盘铺分口径
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
         // 已有手填行 3-2=20（画布应用应更新它而不是加重复行）
@@ -769,6 +778,8 @@ public class CureStationViewModelTests
         // 不同步——V0.0.55 起"每格同值"在语义上就等价设全局，数据归一不铺覆盖行）。
         using var scope = new TestScope();
         EnsureConfigDir();
+        // 缺省口径 2026-11-09 改=时；本用例按分钟字面输入/断言，显式写盘铺分口径
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
         // 先制造"全局 120 + 两处覆盖（仓位行 + 手填 SlotRow）"的脏状态
@@ -825,6 +836,8 @@ public class CureStationViewModelTests
         // 非全选（≤ 格子总数）照旧写仓位覆盖行，全局框不动——升格只认"铺满画布"。
         using var scope = new TestScope();
         EnsureConfigDir();
+        // 缺省口径 2026-11-09 改=时；本用例按分钟字面输入/断言，显式写盘铺分口径
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
         vm.EditGlobalMinutes = "120";
@@ -844,6 +857,8 @@ public class CureStationViewModelTests
     {
         using var scope = new TestScope();
         EnsureConfigDir();
+        // 缺省口径 2026-11-09 改=时；本用例按分钟字面输入/断言，显式写盘铺分口径
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
         // 全局 45；再给 5-1 单独配 45（覆盖值=全局值）——真识别按覆盖字典判，
@@ -867,6 +882,8 @@ public class CureStationViewModelTests
     {
         using var scope = new TestScope();
         EnsureConfigDir();
+        // 缺省口径 2026-11-09 改=时；本用例按分钟字面输入/断言，显式写盘铺分口径
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
         vm.EditLevel2Min = "90";   // 层覆盖 90（跟随目标）
@@ -905,6 +922,8 @@ public class CureStationViewModelTests
     {
         using var scope = new TestScope();
         EnsureConfigDir();
+        // 缺省口径 2026-11-09 改=时；顶栏/编辑链断言按分钟字面编写，写盘铺分口径
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
         IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
         var fake = new FakeCureDialogService();
         using var vm = new CureStation.ViewModels.MainViewModel(fake);
@@ -1841,6 +1860,8 @@ public class CureStationViewModelTests
     {
         using var scope = new TestScope();
         EnsureConfigDir();
+        // 缺省口径 2026-11-09 改=时；本用例按分钟字面输入/断言，显式写盘铺分口径
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
 
@@ -1922,6 +1943,8 @@ public class CureStationViewModelTests
     {
         using var scope = new TestScope();
         EnsureConfigDir();
+        // 缺省口径 2026-11-09 改=时；本用例按分钟字面输入/断言，显式写盘铺分口径
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
         // 盘面只有预置（无自定义）→ 自愈补回后套用照常落到"自定义"并激活（旧
         // CreatesCustomIfMissing 用例替换而来：自愈补对象后套用走"整体替换"分支）。
         var book = new CuringPolicyBook
@@ -1969,6 +1992,8 @@ public class CureStationViewModelTests
         using var scope = new TestScope();
         EnsureConfigDir();
         CuringPolicyStore.Save(CuringPolicyStore.BuildDefaultBook());
+        // 缺省口径 2026-11-09 改=时；本用例按分钟字面输入/断言，显式写盘铺分口径
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
 
@@ -2143,6 +2168,8 @@ public class CureStationViewModelTests
     {
         using var scope = new TestScope();
         EnsureConfigDir();
+        // 缺省口径 2026-11-09 改=时；本用例按分钟字面输入/断言，显式写盘铺分口径
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
 
@@ -2204,10 +2231,13 @@ public class CureStationViewModelTests
         using var scope = new TestScope();
         EnsureConfigDir();
         var fake = new FakeCureDialogService();
+        // 本用例测"分→时→分"转换链——VM 构造 LoadTimeUnit 以盘上 ini 为准
+        // （临时目录无键会落到缺省 Hours），必须先写盘铺分口径
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
         var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
         vm.ReplaceSelection(new[] { Cell(vm, 1, 1) });
 
-        // 缺省分钟：与旧版文案一致
+        // 分：编辑区保持分钟字面
         Assert.Equal(CureStation.ViewModels.PolicyTimeUnit.Minutes, vm.TimeUnit);
         Assert.Equal("分", vm.TimeUnitSuffix);
         Assert.Equal("120", vm.EditGlobalMinutes);
@@ -2242,6 +2272,8 @@ public class CureStationViewModelTests
     {
         using var scope = new TestScope();
         EnsureConfigDir();
+        // 缺省口径 2026-11-09 改=时；本用例测"分→时→分"无损转换，先写盘铺分口径
+        IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Minutes");
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
 
@@ -2284,7 +2316,7 @@ public class CureStationViewModelTests
     }
 
     [Fact]
-    public void PolicyVm_TimeUnit_RememberedInIni_InvalidFallsBackToMinutes()
+    public void PolicyVm_TimeUnit_RememberedInIni_InvalidFallsBackToHours()
     {
         using var scope = new TestScope();
         EnsureConfigDir();
@@ -2299,15 +2331,15 @@ public class CureStationViewModelTests
         Assert.Equal(CureStation.ViewModels.PolicyTimeUnit.Hours, reopened.TimeUnit);
         Assert.Equal("2", reopened.EditGlobalMinutes);
 
-        // 非法值（含旧版存量 "Seconds"，档已删）自愈回分钟
+        // 非法值（含旧版存量 "Seconds"，档已删）自愈回缺省（2026-11-09 拍板：缺省=时）
         IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Bogus");
         var bad = new CureStation.ViewModels.CuringPolicyViewModel(fake);
-        Assert.Equal(CureStation.ViewModels.PolicyTimeUnit.Minutes, bad.TimeUnit);
+        Assert.Equal(CureStation.ViewModels.PolicyTimeUnit.Hours, bad.TimeUnit);
 
         IniFile.Write(AppPaths.ConfigIni, "setting", "PolicyTimeUnit", "Seconds");
         var legacy = new CureStation.ViewModels.CuringPolicyViewModel(fake);
-        Assert.Equal(CureStation.ViewModels.PolicyTimeUnit.Minutes, legacy.TimeUnit);
-        Assert.Equal("120", legacy.EditGlobalMinutes);
+        Assert.Equal(CureStation.ViewModels.PolicyTimeUnit.Hours, legacy.TimeUnit);
+        Assert.Equal("2", legacy.EditGlobalMinutes);   // 120 分钟按小时口径回显
     }
 
     [Fact]
