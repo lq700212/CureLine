@@ -745,7 +745,16 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
    V0.0.83 的 Style+DataTrigger 恒 36 已随动态值删除）；>52 字符才走 VM
    摘要「头 6+…+尾 10」保头尾双可见（52=四行容量保守口径 ≈窄卡 104px
    文本/7.5px×4 行，改阈值同步 CuringDisplayTests 的 SN 边界用例；摘要 17
-   字符回两行区必装下；ClipToBounds 防字体回退出界仅保险）；V0.0.82 的
+   字符回两行区必装下；ClipToBounds 防字体回退出界仅保险；**V0.0.85 小屏
+   自适应（拍板「重叠风险下优先固化时间，SN 减行 + 中段 …」）**：摘要
+   阈值随行数档联动=档×13——主窗 code-behind 实测首张卡渲染高（30 卡
+   UniformGrid 均分同高量一张代表全部）→ `SnMaxRowsForCardHeight`（卡内
+   除 SN 必需 ≈139 定标宁紧勿松）得 1~4 档 → `UpdateSnCardHeight` 档位
+   变化才统一发 30 卡（`SnMaxRows` setter 即重算不等 Refresh——窗口拖动
+   中立刻反映）；正常窗档恒 4、行为与 V0.0.84 完全一致，找不到实测点
+   静默不接管（fail-safe 旧行为）；1 档是极矮卡底线：区塌单行 16、摘要
+   缩「头4+…+尾6」=11 字符；卡高档界 ≥207→4 / ≥191→3 / ≥175→2 / 更低
+   →1（改定标同步 CuringDisplayTests 卡高分档用例）；**V0.0.85 二轮收口（用户实测"缩小窗口 SN 与固化时间重叠、Mock 刷新才恢复"回归）**：①档界公式改 Chrome+双份 SN 占高（SN 区 Row0 一份 + mid Margin-bottom 同值再一份，一轮漏计后者档界低估 30~62px——缩小窗口必穿溢出带），r=floor((h−143)/32)、档界 >271→4 / >239→3 / >207→2 / >175→1（最大化卡高≈277 仍 4 档）；②mid 内容整包 Viewbox(DownOnly MaxHeight=70) 兜底——垂直 StackPanel 量 child 传 ∞ 高使内部 Viewbox 缩放失效，Row1 扣补偿装不下大数字 70 时 Row1 Grid 不裁溢出绘制进 SN 区（Mock 切状态词视图才"恢复"的根源，生产低频数据下重叠持续），包后 mid Desired 被可用高压住等比缩、任何窗高永不溢出（正常窗 70 原样零变化），Viewbox 单 child 纪律=两互斥视图先装一格 Grid）；V0.0.82 的
    Viewbox 等比缩/SnMaxWidthConverter/BindingTip 已全部退役删除——用户
    否决 tooltip 看全、否决无下限整串缩小（字太小））+ 日志只记新出现的边沿，
   固化/过账流程零依赖绑定簿；⑥ 线程：`ScannerBarcodeService.Start/Dispose`

@@ -429,6 +429,102 @@ public class CuringDisplayTests
         Assert.Equal(new System.Windows.Thickness(0, 0, 0, 36), slot.SnZoneCompensation);
     }
 
+    // ---------- SN 小屏自适应（V0.0.85，拍板"重叠风险下优先固化时间，SN 减行 + 中段 …"） ----------
+    // 主窗实测卡高 → SnMaxRowsForCardHeight 得行数档（1~4）→ UpdateSnCardHeight
+    // 统一下发；被截时阈值联动（档×13）：2 档同 V0.0.83（26/摘要17 回两行区）、
+    // 1 档极端时摘要缩"头4+…+尾6"=11 字符单行（区 16/补 20）。
+    // V0.0.85 二轮档界改"Chrome+双份 SN 占高"口径（SN 区 Row0 一份 + mid
+    // Margin-bottom 再一份），档界 175/207/239/271——修复缩小窗口中卡高穿过
+    // 低估档界的溢出带（mid 大数字与 SN 重叠）。
+    // 缺省档 4：上面 6 例即档 4 全量口径（零变化）。
+
+    [Fact(DisplayName = "SN 降档 3 行：39 原样区 48 / 40 超容摘要→两行区 32")]
+    public void Sn_AdaptiveMaxRows3_Threshold39ThenSummary()
+    {
+        var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
+        var code39 = "AAAA-20260909-BK" + new string('X', 13) + "1234567890";   // 39 字符
+        slot.Refresh(PointTableSnapshot.Empty, true, null, 0, code39);
+        slot.SnMaxRows = 3;                            // 降档即时重算（不等下一拍）
+        Assert.Equal(code39, slot.BindingText);        // 恰填 3×13=39 容量：原样
+        Assert.Equal(48, slot.SnZoneHeight);
+
+        var over = new RackSlotViewModel { Rack = 1, Level = 1 };
+        var code40 = "AAAA-20260909-BK" + new string('Y', 14) + "1234567890";   // 40 字符
+        over.SnMaxRows = 3;                            // 先降档再进码（两顺序都成立）
+        over.Refresh(PointTableSnapshot.Empty, true, null, 0, code40);
+        Assert.Equal("AAAA-2…1234567890", over.BindingText);   // >39 摘要头6尾10
+        Assert.Equal(17, over.BindingText.Length);
+        Assert.Equal(32, over.SnZoneHeight);           // 摘要 17 字符 ceil=2 行 → 两行区
+    }
+
+    [Fact(DisplayName = "SN 降档 2 行：26 原样区 32 / 27 摘要（同 V0.0.83 两行区口径）")]
+    public void Sn_AdaptiveMaxRows2_Threshold26()
+    {
+        var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
+        slot.SnMaxRows = 2;
+        var code26 = new string('A', 26);
+        slot.Refresh(PointTableSnapshot.Empty, true, null, 0, code26);
+        Assert.Equal(code26, slot.BindingText);        // 恰两行容量原样
+        Assert.Equal(32, slot.SnZoneHeight);
+        Assert.Equal(new System.Windows.Thickness(0, 0, 0, 36), slot.SnZoneCompensation);
+
+        var over = new RackSlotViewModel { Rack = 1, Level = 1 };
+        var code27 = "AAAA-20260909-BK" + new string('Z', 1) + "1234567890";    // 27 字符
+        over.SnMaxRows = 2;
+        over.Refresh(PointTableSnapshot.Empty, true, null, 0, code27);
+        Assert.Equal("AAAA-2…1234567890", over.BindingText);   // >26 摘要回 17 字符
+        Assert.Equal(32, over.SnZoneHeight);
+    }
+
+    [Fact(DisplayName = "SN 极端 1 行档：区塌 16/补 20，摘要缩头4+…+尾6（11 字符单行装下）")]
+    public void Sn_AdaptiveMaxRows1_SingleLineShortSummary()
+    {
+        var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
+        slot.SnMaxRows = 1;
+        var code20 = "AAAA-20260909-BK" + new string('W', 4);   // 20 字符（>13 必摘要）
+        slot.Refresh(PointTableSnapshot.Empty, true, null, 0, code20);
+        Assert.Equal("AAAA…BKWWWW", slot.BindingText);         // 头4+"…"+尾6=11 字符
+        Assert.Equal(11, slot.BindingText.Length);
+        Assert.Equal(16, slot.SnZoneHeight);           // 单行区（两行 32 让位不重叠底线）
+        Assert.Equal(new System.Windows.Thickness(0, 0, 0, 20), slot.SnZoneCompensation);
+
+        var shortCode = new RackSlotViewModel { Rack = 1, Level = 1 };
+        shortCode.SnMaxRows = 1;
+        var code13 = new string('B', 13);
+        shortCode.Refresh(PointTableSnapshot.Empty, true, null, 0, code13);
+        Assert.Equal(code13, shortCode.BindingText);   // ≤13 恰单行容量：原样
+        Assert.Equal(16, shortCode.SnZoneHeight);
+    }
+
+    [Fact(DisplayName = "SN 档位钳制：0 档钳回 1、超 4 钳回 4；缺省=4")]
+    public void Sn_AdaptiveMaxRows_ClampAndDefault()
+    {
+        var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
+        Assert.Equal(4, slot.SnMaxRows);               // 缺省档 4（正常窗口=V0.0.84 行为）
+        slot.SnMaxRows = 0;
+        Assert.Equal(1, slot.SnMaxRows);               // 底线 1：极矮卡也保 SN 单行
+        slot.SnMaxRows = 9;
+        Assert.Equal(4, slot.SnMaxRows);               // 封顶 4
+    }
+
+    [Fact(DisplayName = "SN 卡高→档位换算（二轮双份 SN 补偿口径）：>271→4 / >239→3 / >207→2 / >175→1（档界双边）")]
+    public void Sn_AdaptiveRowsForCardHeight_Tiers()
+    {
+        // 档 r 需要 = Chrome(135) + 2×(4+16r)：SN 区 Row0 一份 + mid Margin-bottom 再一份
+        // （一轮公式只计 Row0 一份，档界低估 30~62px→缩小窗口穿过溢出带的重叠根因之一）
+        Assert.Equal(4, RackSlotViewModel.SnMaxRowsForCardHeight(300));  // 大屏全档
+        Assert.Equal(4, RackSlotViewModel.SnMaxRowsForCardHeight(275));  // 4 档段中部
+        Assert.Equal(4, RackSlotViewModel.SnMaxRowsForCardHeight(271));  // 4 档精确下界
+        Assert.Equal(3, RackSlotViewModel.SnMaxRowsForCardHeight(270));  // 差 1px 即降档
+        Assert.Equal(3, RackSlotViewModel.SnMaxRowsForCardHeight(239));  // 3 档下界
+        Assert.Equal(2, RackSlotViewModel.SnMaxRowsForCardHeight(238));  // 差 1px 即降档
+        Assert.Equal(2, RackSlotViewModel.SnMaxRowsForCardHeight(207));  // 2 档下界
+        Assert.Equal(1, RackSlotViewModel.SnMaxRowsForCardHeight(206));  // 差 1px 即降档
+        Assert.Equal(1, RackSlotViewModel.SnMaxRowsForCardHeight(175));  // 1 档下界
+        Assert.Equal(1, RackSlotViewModel.SnMaxRowsForCardHeight(120));  // 极矮钳 1
+        Assert.Equal(1, RackSlotViewModel.SnMaxRowsForCardHeight(0));    // 缺测钳 1
+    }
+
     [Fact(DisplayName = "Kind：状态机空闲快照全空 → Idle")]
     public void Kind_IdleWhenAllQuiet()
     {

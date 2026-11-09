@@ -269,6 +269,11 @@
                                   同步 26→52（四行容量），>52 才由 VM 摘要（头 6+…+尾 10）
                                   兜底、摘要 17 字符回两行区。ClipToBounds 只是防字体回退
                                   把行画出区外的保险，正常口径永不触发。
+                                  ★V0.0.85 小屏自适应（拍板"重叠风险下优先固化时间"）：
+                                  行数档上限来自主窗实测卡高（SnMaxRows，缺省 4=正常窗口
+                                  本注释全部口径不变）——卡矮时档降、阈值随档缩、1 档区高
+                                  塌到 16 单行，中段摘要"头4+…+尾6"（详见 VM 注释链），
+                                  mid 补偿同拍收窄、固化时间不再被挤压/重叠。
                                   V0.0.82 的「Viewbox 等比缩小」口径已废（换行+缩放字号两不
                                   相宜，一并退役 SnMaxWidthConverter）。
                                   无绑定整区 Collapsed（mid 区补偿 Margin 同步清零，
@@ -307,13 +312,27 @@
                         <!-- mid：状态词视图（idle/gate/done/alarm/notconfig/灯色反推计时，含副文案行）
                              与大数字视图（状态机精确计时+进度条）互斥；文本随 Kind 分支给字面量
                              （对齐设计图文案），不绑 VM。
-                             ★V0.0.84 动态补偿（V0.0.81 位置锁定语义保留）：库位码下的 SN
-                             区总占高 = Margin-top 4 + 区高（1~2 行 32 / 3 行 48 / 4 行 64，
+                             ★V0.0.85 动态补偿（V0.0.81 位置锁定语义保留；V0.0.84 动态
+                             行数区扩展）：库位码下的 SN 区总占高 = Margin-top 4 + 区高
+                             （正常窗 32/48/64，卡矮时 16/32/48——分档随实测卡高降，
                              分档唯一口=VM SnZoneOf）——mid Margin-bottom 直绑
-                             SnZoneCompensation（=4+区高 → 36/52/68），居中锚点始终与
+                             SnZoneCompensation（=4+区高），居中锚点始终与
                              "无 SN 卡"完全一致的水平线（区高变化同步增减，mid 不漂）；
                              无绑定/未关联整区 Collapsed 时补偿=0 与旧版像素级一致。 -->
                         <Grid Grid.Row="1" VerticalAlignment="Center" Margin="{Binding SnZoneCompensation}">
+                            <!-- ★mid 内容整包 Viewbox（V0.0.85 二轮，用户实测"缩小窗口时 SN 与
+                                 固化时间重叠、Mock 刷新后才恢复"的根治）：外层垂直 StackPanel 量
+                                 child 传 ∞ 高，内部 Viewbox(MaxHeight=36/16) 的 DownOnly 缩放失效
+                                 ——Row1 减去 SN 补偿装不下大数字全套 70px 时 Grid 不裁 child，
+                                 大数字/进度条溢出绘制进 SN 区（下溢进 foot）。包一层
+                                 Viewbox(DownOnly) 后 mid Desired 被可用高压住：够高时 70 原样
+                                 （正常窗零变化），不够高时 mid 内容整体等比缩（与 V0.0.56 卡窄
+                                 缩字、V0.0.85 SN 减行同一拍板哲学——重叠之下缩中保可读），
+                                 任何窗高/任何档位下永不与 SN 区相互侵入。 -->
+                            <Viewbox MaxHeight="70" Stretch="Uniform" StretchDirection="DownOnly">
+                                <!-- Viewbox 只收单 child：两个互斥视图 StackPanel 先装进一格 Grid
+                                     （无行列=单 cell 重叠布局，Visibility 互斥照旧） -->
+                                <Grid>
                             <!-- 状态词视图：词 15px + 副文 10.5px（各态一句，设计图口径） -->
                             <StackPanel HorizontalAlignment="Left" VerticalAlignment="Center">
                                 <StackPanel.Style>
@@ -500,6 +519,8 @@
                                     </Rectangle>
                                 </Grid>
                             </StackPanel>
+                                </Grid>
+                            </Viewbox>
                         </Grid>
 
                         <!-- foot：一行=状态彩点（随 Kind 六态，设计图口径）+ 层名（左）+
@@ -978,7 +999,8 @@
 
         <!-- ③ 主内容：固化架分组（双架纵向堆两组；组标题条=N号固化架，单架 1 组无标题条；
              组内三排十站随窗口拉伸均分；组间 12px 间隙=HTML stage gap 直译） -->
-        <ItemsControl Grid.Row="2" ItemsSource="{Binding RackGroups, FallbackValue={x:Null}}"
+        <ItemsControl Grid.Row="2" x:Name="RackGroupsHost"
+                      ItemsSource="{Binding RackGroups, FallbackValue={x:Null}}"
                       Margin="12,10,14,0">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
