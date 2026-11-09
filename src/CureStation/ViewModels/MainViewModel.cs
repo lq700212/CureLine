@@ -265,8 +265,8 @@ public sealed class RackSlotViewModel : ViewModelBase
         private set => Set(ref _remainNum1, value);
     }
 
-    private string _remainUnit1 = "分";
-    /// <summary>第一段单位字（11 号；"分"/"小时"）。</summary>
+    private string _remainUnit1 = "小时";
+    /// <summary>第一段单位字（11 号；"分"/"小时"——缺省=小时口径，V0.0.84）。</summary>
     public string RemainUnit1
     {
         get => _remainUnit1;
@@ -297,7 +297,7 @@ public sealed class RackSlotViewModel : ViewModelBase
         private set => Set(ref _remainHasTail, value);
     }
 
-    private string _totalDisplay = "0 分";
+    private string _totalDisplay = "0分";
     /// <summary>卡内副文中段："共 {文本} · 已固化 N%"（分钟="120 分"；小时="2小时"）。
     /// TotalMin=0 的卡片走状态字视图不显示，数值仍落缺省（不变量兜底）。</summary>
     public string TotalDisplay

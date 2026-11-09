@@ -491,9 +491,9 @@
                                     <!-- V0.0.56 三轮（用户拍板"等比缩放"）：卡窄时整行只缩不放——
                                          正常宽度原样 26/11 号，不够宽时数字+单位字等比缩到正好放下 -->
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{Binding RemainNum1, FallbackValue=47}" FontSize="26" FontWeight="ExtraBold"
+                                        <TextBlock Text="{Binding RemainNum1, FallbackValue=2}" FontSize="26" FontWeight="ExtraBold"
                                                    Foreground="{DynamicResource Brush.NumCuring}" VerticalAlignment="Bottom"/>
-                                        <TextBlock Text="{Binding RemainUnit1, FallbackValue=分}" FontSize="11" FontWeight="Medium"
+                                        <TextBlock Text="{Binding RemainUnit1, FallbackValue=小时}" FontSize="11" FontWeight="Medium"
                                                    Foreground="{DynamicResource Brush.NumCuring}"
                                                    VerticalAlignment="Bottom" Margin="4,0,0,3"/>
                                         <!-- 第二组"28分"：仅小时口径且 >1 小时（SplitBig Num2 非空）时显示；
@@ -520,7 +520,7 @@
                                 <Viewbox MaxHeight="16" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left" Margin="0,3,0,0">
                                     <TextBlock FontSize="10.5"
                                                Foreground="{DynamicResource Brush.NumSmall}">
-                                        <Run Text="共 "/><Run Text="{Binding TotalDisplay, Mode=OneWay, FallbackValue=120 分}"/>
+                                        <Run Text="共 "/><Run Text="{Binding TotalDisplay, Mode=OneWay, FallbackValue=2小时}"/>
                                         <Run Text=" · 已固化 "/><Run Text="{Binding ProgressPct, Mode=OneWay, FallbackValue=0}"/>
                                         <Run Text="%"/>
                                     </TextBlock>

@@ -262,8 +262,8 @@
                                      ToolTip="库内唯一；改名后按新名保存/激活"/>
                             <TextBlock Text="　全局时长：" VerticalAlignment="Center" Margin="6,0,0,0"/>
                             <TextBox Style="{StaticResource FreshInput}" Width="86"
-                                     Text="{Binding EditGlobalMinutes, FallbackValue=120}"
-                                     ToolTip="{Binding GlobalMinutesToolTip, FallbackValue=全局固化时长（分钟）——所有仓位的打底值，被每层/每仓位覆盖}"/>
+                                     Text="{Binding EditGlobalMinutes, FallbackValue=2}"
+                                     ToolTip="{Binding GlobalMinutesToolTip, FallbackValue=全局固化时长（小时）——所有仓位的打底值，被每层/每仓位覆盖}"/>
                             <!-- 时间单位切换（V0.0.53）：只换页面显示/输入口径，策略存储恒为分钟。
                                  切换即把编辑区/画布/图例/浮层全部文本换算（VM 一处处理）。
                                  V0.0.73 精简：删掉时长框后的单位后缀与"单位："标签——
@@ -271,7 +271,7 @@
                             <ComboBox Style="{StaticResource FreshCombo}" Width="64" VerticalAlignment="Center"
                                       Margin="18,0,0,0"
                                       ItemsSource="{Binding TimeUnitOptions, FallbackValue={x:Null}}"
-                                      SelectedIndex="{Binding TimeUnitIndex, FallbackValue=1}"
+                                      SelectedIndex="{Binding TimeUnitIndex, FallbackValue=0}"
                                       ToolTip="仅换显示单位，计时精度恒为分钟"/>
                             <CheckBox IsChecked="{Binding EditPersistMinutes, FallbackValue=False}"
                                       Content="断电续算" Margin="18,0,0,0"
@@ -530,7 +530,7 @@
                                                         </Style>
                                                     </Border.Style>
                                                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                                        <TextBlock Text="{Binding MinutesText, FallbackValue=120}"
+                                                        <TextBlock Text="{Binding MinutesText, FallbackValue=2}"
                                                                    FontSize="14" FontWeight="Bold"
                                                                    HorizontalAlignment="Center">
                                                             <!-- 字色：普通=TierFg；特殊（蓝底）=OnAccent。
@@ -586,14 +586,14 @@
                                         IsVisibleChanged="OnQuickEditVisibleChanged"
                                         Effect="{StaticResource Fx.WinShadow}">
                                     <StackPanel>
-                                        <TextBlock Text="{Binding SelectionSummaryText, FallbackValue=架3-层2 · 当前 45 分}"
+                                        <TextBlock Text="{Binding SelectionSummaryText, FallbackValue=架3-层2 · 当前 2小时}"
                                                    FontSize="11" Foreground="{DynamicResource Brush.Fresh.FgMid}"/>
                                         <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                                             <TextBox x:Name="QuickEditBox" Style="{StaticResource FreshInput}" Width="88"
                                                      Text="{Binding SelectionMinutesText, UpdateSourceTrigger=PropertyChanged}"
                                                      KeyDown="OnQuickEditKeyDown"
-                                                     ToolTip="{Binding SelectionInputToolTip, FallbackValue='时长（分钟，计时精度为分钟），回车应用'}"/>
-                                            <TextBlock Text="{Binding TimeUnitSuffix, FallbackValue=分}" VerticalAlignment="Center" Margin="6,0,8,0"/>
+                                                     ToolTip="{Binding SelectionInputToolTip, FallbackValue='时长（小时，计时精度为分钟），回车应用'}"/>
+                                            <TextBlock Text="{Binding TimeUnitSuffix, FallbackValue=时}" VerticalAlignment="Center" Margin="6,0,8,0"/>
                                             <Button Style="{StaticResource FreshPrimaryButton}" Content="应用"
                                                     Width="56" Command="{Binding ApplySelectionCommand}"
                                                     Click="OnQuickEditApply"/>
