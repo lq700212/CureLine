@@ -121,13 +121,14 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 552/552（V0.0.77 全量；V0.0.34~76 各轮增量明细见各版本
+   `dotnet test` 602/602（V0.0.92 全量；V0.0.34~91 各轮增量明细见各版本
    CHANGELOG——基线此后只增不减，V0.0.62 授权真源收口 kaleidoscope：删
    宿主授权注入类语义用例 −21，重写编解码/era/门禁接线 +13，补真私钥
    激活链 +3，净减 5；V0.0.63 光栅报警链 +8，V0.0.64 总线时序契约+光栅
    兜底复位 +3，V0.0.69 人工复位 +13，V0.0.71 复位缺省解析/回显 +7，
    V0.0.72 光栅极性 +14，V0.0.73~75 日志窗/策略窗 UI +4，V0.0.76 扫码
-   绑定 +19，V0.0.77 扫码枪配置窗 +9）；禁止交付编译不过/测试不过的代码。
+   绑定 +19，V0.0.77 扫码枪配置窗 +9，V0.0.88 幽灵模态护栏 7 例，
+   V0.0.90 光栅报警总开关 +11，V0.0.92 判据放宽补 1 例）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
    **`LicenseSignKey.dat`（软件激活签名私钥）** 只留厂商签发工具目录，已
@@ -863,6 +864,26 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   `tools\LicenseIssuer\LicenseSignKey.dat`（缺失自动跳过），注入类语义锁定在
   kaleidoscope 回归探针（152 例）回归；测试不得碰真机注册表测试键之外的宿主
   水位。
+- **模态弹窗"切后台再切回自动找回"护栏（V0.0.88 建，V0.0.92 用户实测加固，
+  全在 `Core/Infrastructure/ModalForegroundGuard` 一处）**：① 现象=主界面开着
+  ShowDialog 弹窗时把软件切到后台（Win+D 等）再切回，前台落到被模态禁用的
+  主窗——"看得见点不动"像死机，真弹窗压在后面；② 机制=主窗 HwndSource 挂
+  WndProc 收 `WM_ACTIVATEAPP(wParam=TRUE)`（跨应用回前台广播）+ 主窗
+  `Activated`（V0.0.92 双保险第二条——进程内 Alt+Tab/任务视图选中被禁主窗
+  不发跨应用广播）→ Dispatcher 延迟一拍把"还活着的最上层模态弹窗"
+  Restore+Activate 回前台（最小化先恢复 WindowState）；③ **判据红线：不锚定
+  "哪个窗是主窗"**——存在"可见且被禁"的窗口 ⇔ 有 ShowDialog 在跑（WPF
+  ShowDialog 禁本线程全部其它窗口；项目无窗口级 IsEnabled 手动赋值，非模态
+  窗零误伤），目标=可见 enabled 的最后一个（Application.Windows 序=打开序，
+  多层弹窗自动取真正接客层）。**Application.MainWindow 随激活漂移**（模态
+  弹窗打开后指向弹窗），V0.0.88 靠它判主窗曾致判据整体失灵、护栏不动作
+  （用户实测 Win+D→任务视图点主窗切回复现）——判定"谁是主窗"只能用
+  Install 锚定的 `_mainWin` 引用，快照判据永不写主窗身份；④ 接线只有两程序
+  App.xaml.cs 主窗 Show() 后各一行 `Install(win)`，新增弹窗零接线；
+  MessageBox 是 Win32 原生对话框（不进 Application.Windows、不禁 WPF
+  IsEnabled），判据覆盖不到，靠 OS owner 关系兜底，现场若反馈再升级自绘
+  确认窗；⑤ 改判据先补 `ModalForegroundGuardTests` 用例（快照 record 纯
+  函数可测，8 例）。
 
 ## 文档同步（每次任务收尾自查）
 
