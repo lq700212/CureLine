@@ -345,16 +345,16 @@ public class CuringDisplayTests
         Assert.False(slot.HasBindingText);
     }
 
-    [Fact(DisplayName = "SN：22 字符以内原样显示（不摘要）")]
+    [Fact(DisplayName = "SN：26 字符以内原样显示（两行区域内换行消化，不摘要）")]
     public void Sn_AtOrUnderThreshold_KeptAsIs()
     {
         var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
-        var code = new string('A', 22);
+        var code = new string('A', 26);
         slot.Refresh(PointTableSnapshot.Empty, true, null, 0, code);
         Assert.Equal(code, slot.BindingText);
     }
 
-    [Fact(DisplayName = "SN：>22 字符摘要=头6+…+尾10（头尾双可见，中段省略）")]
+    [Fact(DisplayName = "SN：>26 字符摘要=头6+…+尾10（头尾双可见，中段省略）")]
     public void Sn_OverThreshold_SummaryKeepsHeadAndTail()
     {
         var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
@@ -362,7 +362,7 @@ public class CuringDisplayTests
         var code = "AAAA-20260909-BK" + new string('X', 9) + "1234567890";
         slot.Refresh(PointTableSnapshot.Empty, true, null, 0, code);
         Assert.Equal("AAAA-2…1234567890", slot.BindingText);
-        Assert.Equal(17, slot.BindingText.Length); // 头6+"…"+尾10=17 字符，落在字号下限容量内
+        Assert.Equal(17, slot.BindingText.Length); // 头6+"…"+尾10=17 字符，落在两行换行区域容量内
     }
 
     [Fact(DisplayName = "Kind：状态机空闲快照全空 → Idle")]

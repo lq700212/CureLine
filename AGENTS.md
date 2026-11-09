@@ -733,7 +733,7 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   一律 `UiInvoke` 回 UI（状态机锁内禁 IO；重启对齐 `AlignFromSnapshot` 不发
   `TrayLeft`，故重启不会清在架绑定）；⑤ **未绑定只提示不拦截**（客户口径）：
   统计条扫码胶囊红字 + 卡片库位码正下方红字"未绑定"（V0.0.80 SN 从卡片
-  foot 底部上移：默认主题蓝 11 号 SemiBold；V0.0.82 超长完整显示：SN 行外包 Viewbox（Uniform+DownOnly）且里层 TextBlock 挂 MaxWidth=卡宽×1.35（SnMaxWidthConverter：缩放因子下限 ≈0.74 视觉 ≈8 号，码再长不缩成小蚂蚁；>22 字符由 VM 摘要「头 6+…+尾 10」保头尾双可见——用户否决 tooltip 看全、否决无下限整串缩小（字太小），BindingTip 已删；盒高恒 15，mid 补偿 Margin=18 恒准））+ 日志只记新出现的边沿，
+  foot 底部上移：默认主题蓝 11 号 SemiBold；**V0.0.83 换行口径（用户拍板「长短都不影响其他布局」）**：SN 区=固定两行高 Border（Height=32≈11 号×2 行，Margin-top 4）+ TextWrapping=Wrap 在区内自行换行消化——短码一行垂直居中、长码两行，区域高度恒定 → 同卡 1 行↔2 行及有/无 SN 时 mid/foot 零移动（SN 区 Collapsed 时 mid 补偿 Margin=36 恒准，V0.0.81 双补偿机制按新占位改值）；>26 字符走 VM 摘要「头 6+…+尾 10」保头尾双可见（26=两行容量保守口径 ≈窄卡 104px 文本/7.5px×2 行，改阈值同步 CuringDisplayTests 两句边界用例；ClipToBounds 防字体回退出界仅保险）；V0.0.82 的 Viewbox 等比缩/SnMaxWidthConverter/BindingTip 已全部退役删除——用户否决 tooltip 看全、否决无下限整串缩小（字太小））+ 日志只记新出现的边沿，
   固化/过账流程零依赖绑定簿；⑥ 线程：`ScannerBarcodeService.Start/Dispose`
   必须后台调（Dispose 最坏等心跳线程 3 秒），两个事件在子模块后台线程触发、
   订阅方必须封送；⑦ 配置两桶按方式生效（V0.0.78）：Tcp 方式=`TcpIp` 非空即

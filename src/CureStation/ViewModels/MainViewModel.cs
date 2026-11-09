@@ -79,7 +79,7 @@ public sealed class RackSlotViewModel : ViewModelBase
 
     // ---------- 扫码绑定（P3.3 扫码工序） ----------
     // 卡片库位码正下方显示产品码（V0.0.80 从卡片 foot 底部上移——底缘太不醒目）；
-    // 未绑定且在架时红色加粗"未绑定"，ToolTip 给全码。
+    // 未绑定且在架时红色加粗"未绑定"；ToolTip 不给全码（V0.0.82 用户否决）。
     // 绑定数据由会话（SlotBindingSession）维护，每拍随 Refresh 注入。
 
     private string _productCode = "";
@@ -281,11 +281,16 @@ public sealed class RackSlotViewModel : ViewModelBase
     /// P3.3：productCode=库位绑定的产品条码（空=未绑定）；bindingMissing=
     /// 托盘在架却没绑定（库位码下方显示红字"未绑定"，只提示不拦截固化流程）。
     /// </summary>
-    /// <summary>产品码行文案（V0.0.82 摘要口径）：未绑定返回"未绑定"（红字触发器吃
-    /// BindingMissing）；码短原样；超 22 字符 =「头 6 位 + … + 尾 10 位」（共 17 字符）。
+    /// <summary>产品码行文案（V0.0.83 摘要口径）：未绑定返回"未绑定"（红字触发器吃
+    /// BindingMissing）；码短原样；超 26 字符 =「头 6 位 + … + 尾 10 位」（共 17 字符）。
     /// 为什么掐中间：现场扫码对货以**尾号**对账、头部是型号/批次前缀，中间流水段
-    /// 剩余价值最低——17 字符在视图的字号下限容量（卡宽×1.2≈18 字符，见
-    /// SnMaxWidthConverter）以内，窄屏/宽屏都完整可见，省略号兜底不再触发。</summary>
+    /// 剩余价值最低。V0.0.83 视图改两行换行区域（高 32 ≈ 11 号字 ×2 行，见
+    /// MainWindow.xaml「产品码 SN」注释）——26 = 两行容量的保守口径（最窄正常
+    /// 窗口 ≈1280 宽下 10 列卡 ≈128px，去内边距文本 ≈104px，11 号 ≈7.5px/字符
+    /// → 两行 ≈27.7 字符），26 以内在区域内换行完整可见；摘要 17 字符 ≈1.2 行，
+    /// 两行区域必装下，头尾双可见。更窄窗口（卡 &lt;120px）两行容不下 26 → 底行
+    /// 被 ClipToBounds 裁尾，属极限窄窗口的既知边界（卡本身已挤不下）。
+    /// 想调阈值：改 summaryThreshold 并同步 CuringDisplayTests 的两句边界用例。</summary>
     private static string SnDisplayText(string productCode, bool bindingMissing)
     {
         if (bindingMissing)
@@ -294,7 +299,7 @@ public sealed class RackSlotViewModel : ViewModelBase
         }
 
         var code = productCode ?? string.Empty;
-        const int summaryThreshold = 22;   // 超过此长度才摘要（11 号字窄屏容量 ≈15~18，22 保守取大）
+        const int summaryThreshold = 26;   // 超过此长度才摘要（两行换行区域保守容量 ≈27.7，26 留余）
         const int keepHead = 6;            // 头部保留：型号/批次前缀
         const int keepTail = 10;           // 尾部保留：对货核号的流水段
         return code.Length <= summaryThreshold
