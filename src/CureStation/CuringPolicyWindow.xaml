@@ -10,7 +10,7 @@
         d:DataContext="{d:DesignInstance Type=vm:CuringPolicyViewModel, IsDesignTimeCreatable=False}"
         Title="工艺策略（固化时长 / 光栅门控）"
         Height="760" Width="1280"
-        WindowStartupLocation="CenterScreen" MinWidth="1080" MinHeight="660"
+        WindowStartupLocation="CenterScreen" MinWidth="1180" MinHeight="660"
         PreviewKeyDown="OnWindowPreviewKeyDown"
         PreviewMouseDown="OnWindowPreviewMouseDown"
         WindowStyle="None" Background="Transparent" AllowsTransparency="True"
@@ -25,24 +25,27 @@
              用 MultiBinding 一并喂给转换器返回 bool（详见转换器类头注释）。 -->
         <local:StringEqualsConverter x:Key="StringEquals"/>
 
-        <!-- ===== 光栅条控件样式（V0.0.74）=====
+        <!-- ===== 光栅条控件样式（V0.0.74；V0.0.91 触摸屏放大）=====
              开关=轨道+滑块+文字（开=蓝底白字/滑块靠右；关=浅底灰字/滑块靠左），
-             分段按钮=两枚并排小胶囊（选中蓝底反白，未选浅底）。
+             分段按钮=两枚并排胶囊（选中蓝底反白，未选浅底）。
+             V0.0.91 客户实机反馈：触摸屏上按钮太小难点准——开关/胶囊统一放大
+             （视觉高 22→34px、字 11→13、轨道 30×14→40×20/Padding 加厚），
+             多占的宽度由竖分隔 Margin 16→8 补回，整条带总宽基本不变。
              色全走 Brush.Fresh.* 语义键，深浅主题自动跟随。 -->
         <Style x:Key="GrillSwitch" TargetType="ToggleButton">
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.FgMid}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="Bd" CornerRadius="4" BorderThickness="1" Padding="10,4"
+                        <Border x:Name="Bd" CornerRadius="5" BorderThickness="1" Padding="12,6"
                                 Background="{DynamicResource Brush.Fresh.ButtonBg}"
                                 BorderBrush="{DynamicResource Brush.Fresh.Border}">
                             <StackPanel Orientation="Horizontal">
-                                <Border x:Name="Track" Width="30" Height="14" CornerRadius="7"
+                                <Border x:Name="Track" Width="40" Height="20" CornerRadius="10"
                                         Background="{DynamicResource Brush.Fresh.DotOff}" VerticalAlignment="Center">
-                                    <Ellipse x:Name="Knob" Width="10" Height="10"
+                                    <Ellipse x:Name="Knob" Width="16" Height="16"
                                              Fill="{DynamicResource Brush.Fresh.CardBg}"
                                              HorizontalAlignment="Left" Margin="2,0,0,0"/>
                                 </Border>
@@ -70,23 +73,23 @@
 
         <Style x:Key="GrillSegment" TargetType="RadioButton">
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.FgMid}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="Bd" CornerRadius="3" BorderThickness="1" Padding="9,3"
-                                Background="{DynamicResource Brush.Fresh.ButtonBg}"
-                                BorderBrush="{DynamicResource Brush.Fresh.Border}">
-                            <TextBlock Text="{TemplateBinding Content}" HorizontalAlignment="Center"/>
+                        <!-- 单枚胶囊不带边框：外框由使用处的"分段容器"Border 提供，
+                             本枚只负责底色/悬停/选中三态（悬停微底、选中蓝底反白） -->
+                        <Border x:Name="Bd" CornerRadius="4" Padding="14,4" Background="Transparent">
+                            <TextBlock Text="{TemplateBinding Content}" HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Fresh.ButtonHoverBorder}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Fresh.ButtonBg}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Fresh.Accent}"/>
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Fresh.AccentBorder}"/>
                                 <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.OnAccent}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -404,7 +407,7 @@
                                           ToolTip="开=两侧光栅让空才计时；关=托盘到位即计时（随策略保存）。"/>
 
                             <!-- 3 竖分隔 -->
-                            <Border Grid.Column="3" Width="1" Margin="16,3"
+                            <Border Grid.Column="3" Width="1" Margin="8,3"
                                     Background="{DynamicResource Brush.Fresh.PanelBorder}"/>
 
                             <!-- 4 报警总开关（V0.0.90 全局功能开关）：开=被挡即报警（缺省），
@@ -421,39 +424,54 @@
                             </StackPanel>
 
                             <!-- 5 竖分隔 -->
-                            <Border Grid.Column="5" Width="1" Margin="16,3"
+                            <Border Grid.Column="5" Width="1" Margin="8,3"
                                     Background="{DynamicResource Brush.Fresh.PanelBorder}"/>
 
-                            <!-- 6 信号类型（全局接线口径）：常开/常闭分段按钮，当前档蓝底反白 -->
+                            <!-- 6 信号类型（全局接线口径）：常开/常闭一体式分段控件——
+                                 外框浅底圆角胶囊，选中一枚蓝底反白；触摸目标高≈35px -->
                             <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Text="信号类型" VerticalAlignment="Center"
                                            ToolTip="{Binding GrillSignalToolTip, FallbackValue='常开：遮挡=ON（缺省）。全局设置，立即生效。'}"/>
-                                <RadioButton Style="{StaticResource GrillSegment}" Content="常开" Margin="8,0,0,0"
-                                             GroupName="GrillPolarity"
-                                             IsChecked="{Binding IsGrillNormallyOpen, FallbackValue=True}"
-                                             ToolTip="常开：被挡=ON、让空=OFF（缺省）。"/>
-                                <RadioButton Style="{StaticResource GrillSegment}" Content="常闭" Margin="4,0,0,0"
-                                             GroupName="GrillPolarity"
-                                             IsChecked="{Binding IsGrillNormallyClosed, FallbackValue=False}"
-                                             ToolTip="常闭：被挡=OFF、让空=ON（常闭安全光栅）。"/>
+                                <Border CornerRadius="5" BorderThickness="1" Padding="3" Margin="8,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Background="{DynamicResource Brush.Fresh.CanvasBg}"
+                                        BorderBrush="{DynamicResource Brush.Fresh.Border}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton Style="{StaticResource GrillSegment}" Content="常开"
+                                                     GroupName="GrillPolarity"
+                                                     IsChecked="{Binding IsGrillNormallyOpen, FallbackValue=True}"
+                                                     ToolTip="常开：被挡=ON、让空=OFF（缺省）。"/>
+                                        <RadioButton Style="{StaticResource GrillSegment}" Content="常闭" Margin="2,0,0,0"
+                                                     GroupName="GrillPolarity"
+                                                     IsChecked="{Binding IsGrillNormallyClosed, FallbackValue=False}"
+                                                     ToolTip="常闭：被挡=OFF、让空=ON（常闭安全光栅）。"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
 
                             <!-- 7 竖分隔 -->
-                            <Border Grid.Column="7" Width="1" Margin="16,3"
+                            <Border Grid.Column="7" Width="1" Margin="8,3"
                                     Background="{DynamicResource Brush.Fresh.PanelBorder}"/>
 
-                            <!-- 8 报警解除（全局操作规程）：人工/自动分段按钮 -->
+                            <!-- 8 报警解除（全局操作规程）：人工/自动一体式分段控件，同信号类型 -->
                             <StackPanel Grid.Column="8" Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Text="报警解除" VerticalAlignment="Center"
                                            ToolTip="{Binding GrillResetModeToolTip, FallbackValue='人工：报警后不自动解除，在报警复位窗确认。全局设置，立即生效。'}"/>
-                                <RadioButton Style="{StaticResource GrillSegment}" Content="人工" Margin="8,0,0,0"
-                                             GroupName="GrillReset"
-                                             IsChecked="{Binding IsGrillManualReset, FallbackValue=True}"
-                                             ToolTip="人工：报警后不自动解除，在报警复位窗确认。"/>
-                                <RadioButton Style="{StaticResource GrillSegment}" Content="自动" Margin="4,0,0,0"
-                                             GroupName="GrillReset"
-                                             IsChecked="{Binding IsGrillAutoReset, FallbackValue=False}"
-                                             ToolTip="自动：两侧光栅让空即解除报警。"/>
+                                <Border CornerRadius="5" BorderThickness="1" Padding="3" Margin="8,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Background="{DynamicResource Brush.Fresh.CanvasBg}"
+                                        BorderBrush="{DynamicResource Brush.Fresh.Border}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton Style="{StaticResource GrillSegment}" Content="人工"
+                                                     GroupName="GrillReset"
+                                                     IsChecked="{Binding IsGrillManualReset, FallbackValue=True}"
+                                                     ToolTip="人工：报警后不自动解除，在报警复位窗确认。"/>
+                                        <RadioButton Style="{StaticResource GrillSegment}" Content="自动" Margin="2,0,0,0"
+                                                     GroupName="GrillReset"
+                                                     IsChecked="{Binding IsGrillAutoReset, FallbackValue=False}"
+                                                     ToolTip="自动：两侧光栅让空即解除报警。"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </Grid>
                     </Border>
