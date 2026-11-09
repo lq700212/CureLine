@@ -277,6 +277,47 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         ? "常闭：遮挡=OFF（被挡 OFF / 让空 ON）。全局设置，立即生效。"
         : "常开：遮挡=ON（被挡 ON / 让空 OFF，缺省）。全局设置，立即生效。";
 
+    // ---------- 报警总开关（V0.0.90 用户拍板"关闭则不报警，默认开启"，全局功能开关、不入单条策略） ----------
+    //
+    // 光栅带"光栅报警"滑块开关（ToggleButton，与门控开关同款样式）：开=计时中
+    // 被挡即报警（既有行为）；关=整条报警链静默——被挡不再报警、已挂着的报警
+    // 当场解除（红灯灭黄灯复亮/蜂鸣停/报警复位窗清单即清），门控闸不受影响。
+    // 真源在 GrillAlarmEnabledHub 静态中枢：Change 落盘 + 广播，主窗立即收敛
+    // 报警态，状态机每拍现取下一拍生效（详见两侧类头注释）。
+
+    private bool _grillAlarmEnabled = true;   // 缺省=开启（Hub 同款缺省口径，构造即被覆盖）
+
+    /// <summary>
+    /// 光栅报警总开关（滑块开关双向绑定：开=报警，关=静默）。写入统一走
+    /// SetGrillAlarmEnabled 唯一写点——Hub.Change 落盘+广播，防绕过漏通知。
+    /// </summary>
+    public bool IsGrillAlarmEnabled
+    {
+        get => _grillAlarmEnabled;
+        set => SetGrillAlarmEnabled(value);
+    }
+
+    /// <summary>开关按钮自身显示"已开启/已关闭"（与门控开关按钮同款口径，随切换刷新）。</summary>
+    public string GrillAlarmSwitchText => _grillAlarmEnabled ? "已开启" : "已关闭";
+
+    /// <summary>开关组 ToolTip（一句话口径；随切换刷新）。</summary>
+    public string GrillAlarmSwitchToolTip => _grillAlarmEnabled
+        ? "开：计时中光栅被挡即报警（仓位红灯+机台蜂鸣）。全局设置，立即生效。"
+        : "关：不产生任何报警（门控放行判定不受影响）。全局设置，立即生效。";
+
+    /// <summary>报警总开关唯一写点：中枢 Change 落盘 + 广播（主窗收敛现存报警），
+    /// 同时刷新开关文字与 ToolTip。</summary>
+    private void SetGrillAlarmEnabled(bool enabled)
+    {
+        if (enabled == _grillAlarmEnabled)
+            return;
+        _grillAlarmEnabled = enabled;
+        GrillAlarmEnabledHub.Change(enabled);   // 落盘 + 广播（Changed→主窗立即收敛报警）
+        Raise(nameof(IsGrillAlarmEnabled));
+        Raise(nameof(GrillAlarmSwitchText));
+        Raise(nameof(GrillAlarmSwitchToolTip));
+    }
+
     private PolicyTimeUnit _timeUnit = PolicyTimeUnit.Hours;   // 缺省口径=时（DurationUnit.ReadIni 同款兜底，构造即被覆盖）
 
     /// <summary>
@@ -681,6 +722,9 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         // 光栅极性（V0.0.72）同款：分段按钮回显上一进程/现场配置的挡/空口径。
         GrillSignalPolarityHub.LoadFromIni();
         _grillSignalInverted = GrillSignalPolarityHub.Current == GrillSignalPolarity.BlockedOff;
+        // 报警总开关（V0.0.90）同款：滑块开关回显上一进程/现场配置（缺省开启）。
+        GrillAlarmEnabledHub.LoadFromIni();
+        _grillAlarmEnabled = GrillAlarmEnabledHub.Current;
         AddPolicyCommand = new RelayCommand(AddPolicy);
         RemovePolicyCommand = new RelayCommand(RemovePolicy, () => SelectedPolicy != null);
         SaveCommand = new RelayCommand(Save);

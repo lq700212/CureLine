@@ -1057,6 +1057,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // 策略窗切"人工复位/自动复位"（GrillAlarmResetModeHub.Change）立即重新
         // 决策：人工档有挂着的报警当场弹窗、切回自动收窗——不等 500ms 拍。
         GrillAlarmResetModeHub.Changed += OnGrillResetModeChanged;
+        // 报警总开关切换广播（V0.0.90）：切【关】立即收敛现存报警（红灯当场
+        // 灭/复位窗即清），不等心跳拍；切【开】零动作（补报由状态机兜底）。
+        GrillAlarmEnabledHub.Changed += OnGrillAlarmSwitchChanged;
 
         // 单线过账装配（P3.2 后半）：读 [CuringMes] 配置 → 建过账服务 →
         // 顶栏状态随 PostingChanged 刷新（后台线程回调，UiInvoke 封送）。
@@ -1466,7 +1469,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                     resetModeProvider: () => GrillAlarmResetModeHub.Current,
                     // 光栅信号极性每拍现取（V0.0.72）：策略窗光栅条选常开/常闭
                     // 下一边沿/心跳即生效（现场被挡=OFF 时选常闭，同上后台读安全）。
-                    grillPolarityProvider: () => GrillSignalPolarityHub.Current);
+                    grillPolarityProvider: () => GrillSignalPolarityHub.Current,
+                    // 报警总开关每拍现取（V0.0.90）：策略窗"光栅报警"开关，
+                    // false=整条报警链静默（被挡不报/已挂的立即解除），门控不受影响。
+                    grillAlarmEnabledProvider: () => GrillAlarmEnabledHub.Current);
                 // 过账挂点（P3.2 后半）：状态机三事件 → 过账服务（只在创建时订阅
                 // 一次——重连 Attach 换通道不重复订阅）。事件在状态机锁内触发，
                 // Poster 方法内部 Task.Run 立即返回，不重入不阻塞。
@@ -1578,6 +1584,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     /// <summary>复位模式切换广播（策略窗按钮）：立即重新决策弹窗/收窗，不等下拍。</summary>
     private void OnGrillResetModeChanged() => RefreshAlarmList();
+
+    /// <summary>
+    /// 报警总开关切换广播（V0.0.90，策略窗"光栅报警"开关）：后台调状态机
+    /// ApplyAlarmSwitch 收敛报警态——切【关】现存报警当场解除（写灯=网络 IO，
+    /// 必须抛后台），完成后回 UI 立即刷报警复位清单（挂着的解除即收窗）；
+    /// 切【开】零动作（重开后的被挡补报警由状态机 Pump 兜底，下一拍生效）。
+    /// 事件在 UI 线程触发（Hub 线程纪律），网络动作一律 Task.Run。
+    /// </summary>
+    private void OnGrillAlarmSwitchChanged() =>
+        Task.Run(() => _machine?.ApplyAlarmSwitch())
+            .ContinueWith(_ => UiInvoke(RefreshAlarmList));
 
     /// <summary>
     /// 策略窗切显示单位（时↔分）的同步刷：卡片时长文本立即按新单位重写 +
@@ -1792,6 +1809,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         AlarmPresenter.ResetRequested -= OnAlarmResetRequested;
         AlarmPresenter.ResetAllRequested -= OnAlarmResetAllRequested;
         GrillAlarmResetModeHub.Changed -= OnGrillResetModeChanged;
+        GrillAlarmEnabledHub.Changed -= OnGrillAlarmSwitchChanged;   // 报警总开关退订（V0.0.90）
         _dialogs.CloseGrillAlarmReset();
         _refreshTimer.Stop();
         lock (_busLock)

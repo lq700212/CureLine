@@ -2575,6 +2575,96 @@ public class CureStationViewModelTests
         }
     }
 
+    // ---------- 报警总开关（V0.0.90：策略窗光栅带"光栅报警"滑块——开=报警
+    //            （缺省），关=整条报警链静默（门控不受影响）；真源
+    //            GrillAlarmEnabledHub，[setting] GrillAlarmEnabled "1"/"0"） ----------
+
+    [Fact]
+    public void PolicyVm_GrillAlarmEnabled_TogglesPersistsAndBroadcasts()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        GrillAlarmEnabledHub.RecallForTest(true);
+        int broadcasts = 0;
+        void OnChanged() => broadcasts++;
+        GrillAlarmEnabledHub.Changed += OnChanged;
+        try
+        {
+            IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+            var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
+
+            // 缺省（ini 无该键）=开启（用户拍板"默认开启报警"）
+            Assert.True(vm.IsGrillAlarmEnabled);
+            Assert.Equal("已开启", vm.GrillAlarmSwitchText);
+
+            // 切【关】：中枢换值 + 落盘 + 广播，开关文字/ToolTip 换口径
+            vm.IsGrillAlarmEnabled = false;
+            Assert.False(vm.IsGrillAlarmEnabled);
+            Assert.Equal("已关闭", vm.GrillAlarmSwitchText);
+            Assert.False(GrillAlarmEnabledHub.Current);
+            Assert.Equal("0", IniFile.ReadStr(
+                AppPaths.ConfigIni, "setting", "GrillAlarmEnabled", ""));
+            Assert.Equal(1, broadcasts);
+
+            // 再切回【开】：双向（ToggleButton 两侧绑定都能写）
+            vm.IsGrillAlarmEnabled = true;
+            Assert.True(vm.IsGrillAlarmEnabled);
+            Assert.True(GrillAlarmEnabledHub.Current);
+            Assert.Equal("1", IniFile.ReadStr(
+                AppPaths.ConfigIni, "setting", "GrillAlarmEnabled", ""));
+            Assert.Equal(2, broadcasts);
+        }
+        finally
+        {
+            GrillAlarmEnabledHub.Changed -= OnChanged;
+            GrillAlarmEnabledHub.RecallForTest(true);
+        }
+    }
+
+    [Fact]
+    public void PolicyVm_GrillAlarmEnabled_RestoresFromIniOnOpen()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        GrillAlarmEnabledHub.RecallForTest(true);
+        try
+        {
+            // 盘上已切过关（上一进程/现场配置）→ 开窗回显关态（LoadFromIni 为准）
+            IniFile.Write(AppPaths.ConfigIni, "setting", "GrillAlarmEnabled", "0");
+            var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
+            Assert.False(vm.IsGrillAlarmEnabled);
+            Assert.Equal("已关闭", vm.GrillAlarmSwitchText);
+        }
+        finally
+        {
+            GrillAlarmEnabledHub.RecallForTest(true);
+        }
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData("1", true)]
+    [InlineData("0", false)]
+    [InlineData("garbage", true)]   // 非法值回缺省开（宁可多报不漏报）
+    public void GrillAlarmEnabledIni_OnlyExplicitZeroMeansOff(string? raw, bool expected)
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        GrillAlarmEnabledHub.RecallForTest(true);
+        try
+        {
+            if (raw != null)
+                IniFile.Write(AppPaths.ConfigIni, "setting", "GrillAlarmEnabled", raw);
+            GrillAlarmEnabledHub.LoadFromIni();   // 仿生产启动/回归读点
+            Assert.Equal(expected, GrillAlarmEnabledHub.Current);
+        }
+        finally
+        {
+            GrillAlarmEnabledHub.RecallForTest(true);
+        }
+    }
+
     // ---------- 光栅门控条文案（V0.0.74：开关按钮自身显示状态 + 副文换口径） ----------
 
     [Fact]

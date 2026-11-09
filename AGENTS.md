@@ -498,6 +498,23 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   电平与状态机同口径，否则勾取反后演示永远不报警/一直报警）。注意主窗
   卡片的 `GrillText` 恒显示**原始电平**（L:ON R:OFF，排障看硬件真值），
   "挡/空"语义只在状态机日志里。
+  **⑦ 报警总开关（V0.0.90，用户拍板"关闭则不报警，默认开启"）**：
+  `grillAlarmEnabledProvider`（构造第 8 可选参 `Func<bool>?`，边沿/心跳
+  每拍现取，null=恒开启=既有行为、Core/测试缺省零改动）——false=整条
+  报警链静默：被挡边沿吞掉（零写灯零日志）、StartCuring 开计时复核与
+  RestoreFromRecord 续算复核跳过报警、Pump 兜底把已挂的报警当拍解除
+  （`SetGrillAlarm` 第三解除来源参数 offNote="报警总开关已关闭"——红灯
+  是开关压灭的不是让空的，日志带光栅读数说明人手可能还在架区；manual
+  优先）；**重开开关的补报兜底**=Pump 每拍"计时中被挡未报警→补报"
+  （关闭期间被挡漏掉的下一拍补上，不等下次光栅边沿）。**门控闸不受
+  开关影响**——`GrillGate`（托盘到位要光栅让空才开计时）是工艺防呆，
+  报警总开关只关红灯/蜂鸣/复位窗，勿顺带关掉门控。宿主接线=程序①
+  `GrillAlarmEnabledHub`（ini `[setting] GrillAlarmEnabled`，显式 "0"=
+  关、缺键/空值/非法值自愈回开——宁可多报不漏报）+ 策略窗光栅带
+  "光栅报警"滑块开关（ToggleButton 与门控开关同款 GrillSwitch，文字
+  "已开启/已关闭"；光栅条列 7→9 列）。双保险收敛：Hub.Changed 广播→
+  主窗 Task.Run 立即调状态机 `ApplyAlarmSwitch`（红灯当场灭/"报警复位"
+  窗清单即清）+ Pump 尾每拍兜底（漏广播最迟 1 秒；开启态快速路径零动作）。
 
   改流程先改 `SlotCuringMachine` 头注释与
   `SlotCuringMachineTests` 断言。

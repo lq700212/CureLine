@@ -44,6 +44,15 @@
 //   这是 Core 独立使用/测试的 API 缺省；程序①现场缺省由宿主 ini 决定=
 //   Manual），边沿/心跳每拍现取——宿主配置热切后下一拍即生效（勿缓存进字段）。
 //
+// 报警总开关（V0.0.90，用户拍板"关闭则不报警，默认开启"）：
+//   grillAlarmEnabledProvider（可空，每拍现取）= false 时整条报警链静默——
+//   计时中被挡不再亮红灯/蜂鸣/进报警复位窗，已挂着的报警当场解除（写
+//   "报警总开关已关闭"日志，红灯灭黄灯复亮）；重新开启后下一拍兜底补
+//   报警（关闭期间被挡的边缘不再漏报）。注意开关只关"报警"——门控闸
+//   （托盘到位要光栅让空才开计时）是工艺防呆，不受本开关影响。null=
+//   恒开启（Core 独立/测试缺省——既有行为零改动；程序①现场由
+//   GrillAlarmEnabledHub 的 ini 决定）。
+//
 // 线程模型（铁律 2）：灯写 WritePoint 是网络 IO，绝不能进 UI 线程——
 //   本类全部动作发生在后台：OnPointChanged 由宿主从总线后台事件转发进来，
 //   Pump 由内部 1s 心跳 Timer（后台线程）调；测试注入虚拟时钟手动 Pump
@@ -125,6 +134,12 @@ public sealed class SlotCuringMachine : IDisposable
     /// provider 须线程安全（后台线程逐拍调）。
     /// </summary>
     private readonly Func<GrillSignalPolarity>? _grillPolarityProvider;
+    /// <summary>
+    /// 报警总开关提供者（V0.0.90；null=恒开启——Core 独立/测试缺省，
+    /// 程序①现场由 Hub 的 ini 决定，策略窗光栅带开关热切）。边沿/心跳
+    /// 每拍现取；provider 须线程安全（后台线程逐拍调）。
+    /// </summary>
+    private readonly Func<bool>? _grillAlarmEnabledProvider;
     private readonly Dictionary<(int Rack, int Level), SlotRuntime> _slots = new();
     /// <summary>成功写过的灯态（IoPointKey→值）：去重 + 失败补写的比对基准。</summary>
     private readonly Dictionary<IoPointKey, bool> _writtenLamps = new();
@@ -170,12 +185,16 @@ public sealed class SlotCuringMachine : IDisposable
     /// grillPolarityProvider（V0.0.72，可空）=光栅信号极性每拍现取（null=恒
     /// BlockedOn 遮挡=ON——现场"被挡=OFF"由程序①策略窗勾选切换，宿主同样
     /// 传静态中枢读点，无需重建状态机）。
+    /// grillAlarmEnabledProvider（V0.0.90，可空）=报警总开关每拍现取（null=
+    /// 恒开启——Core 独立/测试缺省；程序①现场由策略窗开关切 GrillAlarmEnabledHub，
+    /// false=整条报警链静默，见类头"报警总开关"）。
     /// </summary>
     public SlotCuringMachine(IPointTableBus bus, Func<CuringPolicy?> policyProvider,
         Func<DateTimeOffset>? clock = null, Action<string>? log = null,
         Func<int, string>? durationText = null,
         Func<GrillAlarmResetMode>? resetModeProvider = null,
-        Func<GrillSignalPolarity>? grillPolarityProvider = null)
+        Func<GrillSignalPolarity>? grillPolarityProvider = null,
+        Func<bool>? grillAlarmEnabledProvider = null)
     {
         _bus = bus;
         _policyProvider = policyProvider;
@@ -184,6 +203,7 @@ public sealed class SlotCuringMachine : IDisposable
         _durationText = durationText;
         _resetModeProvider = resetModeProvider;
         _grillPolarityProvider = grillPolarityProvider;
+        _grillAlarmEnabledProvider = grillAlarmEnabledProvider;
         _pumpTimer = new Timer(_ => SafePump(), null,
             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
@@ -274,8 +294,11 @@ public sealed class SlotCuringMachine : IDisposable
                             $"{GrillSideText(key.Rack, key.Level)}），人工复位模式待确认，红灯保持");
                     }
                 }
-                else if (rt.Phase == SlotPhase.Curing && !rt.AlarmGrill)
+                else if (rt.Phase == SlotPhase.Curing && !rt.AlarmGrill && AlarmEnabled())
                 {
+                    // 【报警总开关 V0.0.90】关闭态：被挡边沿吞掉不报警（零写灯/
+                    // 零日志——稳态静默）；重开开关后由 Pump 兜底按快照补报
+                    // （见 Pump Curing 分支），不至于下一次光栅动作才想起来。
                     SetGrillAlarm(rt, key.Rack, key.Level, on: true);
                 }
             }
@@ -307,6 +330,16 @@ public sealed class SlotCuringMachine : IDisposable
                                 : $"架{slot.Rack}层{slot.Level} 固化到点放行（绿灯，共 {MinutesText(rt.TotalMinutes)}）");
                             PersistState(); // 状态变化落盘（开关开时）
                         }
+                        else if (rt.AlarmGrill && !AlarmEnabled())
+                        {
+                            // 【报警总开关 V0.0.90】关闭态兜底解除：挂在旧报警直接收场
+                            // （红灯灭黄灯复亮，日志注明缘由）。倒的第一道口在宿主
+                            // 广播链（GrillAlarmEnabledHub.Changed→ApplyAlarmSwitch），
+                            // 本兜底保证漏接广播（provider 异常/时序）最迟 1 秒也收敛
+                            // ——与复位兜底同款双保险。
+                            SetGrillAlarm(rt, slot.Rack, slot.Level, on: false,
+                                offNote: "报警总开关已关闭");
+                        }
                         else if (rt.AlarmGrill && ResetMode() == GrillAlarmResetMode.Auto &&
                             GrillClear(slot.Rack, slot.Level))
                         {
@@ -323,6 +356,14 @@ public sealed class SlotCuringMachine : IDisposable
                             EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampRed, true);
                             EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampYellow, false);
                             EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampGreen, false);
+                        }
+                        else if (!GrillClear(slot.Rack, slot.Level) && AlarmEnabled())
+                        {
+                            // 【报警总开关 V0.0.90】重开开关的补报兜底：关闭期间被挡的
+                            // 边沿被吞（没进报警态），开关重新打开后不再等下一次光栅
+                            // 动作——下一拍按快照补报（与 StartCuring 开计时复核同语义
+                            // ：计时中被挡=该报警）。关闭态走到这里=继续静默零网络写。
+                            SetGrillAlarm(rt, slot.Rack, slot.Level, on: true);
                         }
                         else
                         {
@@ -350,6 +391,7 @@ public sealed class SlotCuringMachine : IDisposable
             // （Curing→Done）与快照兜底复位都发生在这层循环内；同时兼每秒自愈补写
             // （与仓位灯补写同性质，EnsureLamp 去重后稳态零网络写）。
             RefreshMachineBeacon();
+            ApplyAlarmSwitch(); // 报警总开关每拍兜底（V0.0.90：关闭态现存报警最迟 1 秒收敛）
         }
     }
 
@@ -461,8 +503,8 @@ public sealed class SlotCuringMachine : IDisposable
         EnsureLamp(rack, level, IoPointRole.LampYellow, true);
         EnsureLamp(rack, level, IoPointRole.LampGreen, false);
         EnsureLamp(rack, level, IoPointRole.LampRed, false); // 防残留红灯（报警态不落盘，见下）
-        if (!GrillClear(rack, level))
-            SetGrillAlarm(rt, rack, level, on: true); // 续算恢复即复核：人手仍在架内 → 重新进报警态
+        if (!GrillClear(rack, level) && AlarmEnabled())
+            SetGrillAlarm(rt, rack, level, on: true); // 续算恢复即复核：人手仍在架内 → 重新进报警态（报警总开关关则静默，V0.0.90）
         int remain = Math.Max(0, rec.Minutes - (int)Math.Ceiling((_clock() - rec.StartedAt).TotalMinutes));
         _log($"架{rack}层{level} 重启恢复：续算断电前计时，剩 {MinutesText(remain)}（共 {MinutesText(rec.Minutes)}）");
     }
@@ -505,6 +547,16 @@ public sealed class SlotCuringMachine : IDisposable
         _grillPolarityProvider?.Invoke() ?? GrillSignalPolarity.BlockedOn;
 
     /// <summary>
+    /// 当前报警总开关（V0.0.90，每拍现取 provider，勿缓存）：null provider=
+    /// 恒开启（Core 独立/测试缺省；程序①现场由 Hub 的 ini 决定，策略窗
+    /// 光栅带开关热切）——false=整条报警链静默（被挡不报、已挂的立即解除），
+    /// 门控判定不受影响。后台线程（边沿/心跳）逐次调用——provider 必须
+    /// 线程安全纯读（宿主传静态中枢读点，见程序① GrillAlarmEnabledHub）。
+    /// </summary>
+    private bool AlarmEnabled() =>
+        _grillAlarmEnabledProvider?.Invoke() ?? true;
+
+    /// <summary>
     /// 人工复位确认（V0.0.69，宿主"报警复位"窗【解除报警】按钮的唯一解除口）：
     /// 报警态的仓位解除报警（红灯灭、黄灯复亮、机台蜂鸣停），计时不动。
     /// 不要求光栅已让空——操作员点按钮=人工确认现场已处理，按钮是权威；
@@ -540,6 +592,32 @@ public sealed class SlotCuringMachine : IDisposable
                 .Select(kv => (kv.Key.Rack, kv.Key.Level))
                 .OrderBy(a => a.Item2).ThenBy(a => a.Item1)
                 .ToList();
+        }
+    }
+
+    /// <summary>
+    /// 报警总开关收敛（V0.0.90）：当前开关关闭时把所有现存报警当场解除
+    /// （红灯灭、黄灯复亮、机台蜂鸣停、塔灯回正常聚合色，日志注明
+    /// "报警总开关已关闭"+ 当时光栅读数）；开启时零动作（免遍历快速路径）。
+    /// 调用时机：① 宿主广播链——策略窗切【关】后 GrillAlarmEnabledHub.Changed
+    /// 立即调（后台 Task.Run，写灯=网络 IO 铁律 2）——不等心跳，红灯当场灭；
+    /// ② Pump 每拍兜底（provider 只读、漏接广播也最迟 1 秒收敛）。
+    /// 线程：任意线程可调（锁内动作；内部 EnsureLamp 是网络 IO，勿在 UI
+    /// 线程直调）。
+    /// </summary>
+    public void ApplyAlarmSwitch()
+    {
+        if (AlarmEnabled())
+            return;
+        lock (_sync)
+        {
+            foreach (var (slot, rt) in _slots)
+            {
+                if (!rt.AlarmGrill)
+                    continue;
+                SetGrillAlarm(rt, slot.Rack, slot.Level, on: false,
+                    offNote: "报警总开关已关闭");
+            }
         }
     }
 
@@ -582,8 +660,8 @@ public sealed class SlotCuringMachine : IDisposable
         // 开计时即复核光栅：门控关（GrillGate=false）的现场人手也可能恰好在架内，
         // 计时一开始就"被挡"——按报警语义立即亮红（SetGrillAlarm 内有状态去重，
         // 正常门控放行路径此刻光栅已让空，走到这里必然零操作）。
-        if (!GrillClear(rack, level))
-            SetGrillAlarm(rt, rack, level, on: true);
+        if (!GrillClear(rack, level) && AlarmEnabled())
+            SetGrillAlarm(rt, rack, level, on: true); // 报警总开关关则静默（V0.0.90）
         PersistState(); // 状态变化落盘（开关开时）
         RefreshMachineBeacon(); // 机台塔灯同步：新仓位开计时，全机聚合即时跟随（黄/红）
     }
@@ -794,9 +872,12 @@ public sealed class SlotCuringMachine : IDisposable
     /// manual（V0.0.69）：解除来源口径——缺省 false=光栅自动复位链（原文案）；
     /// true=操作员在"报警复位"窗点【解除报警】（文案"人工复位确认"+当时
     /// 光栅读数），现场对账一眼分清自动/人工。
+    /// offNote（V0.0.90）：第三解除来源——"报警总开关已关闭"这类程序性解除
+    /// （光栅读数带着，说明此刻人手可能还在架区，红灯是开关压灭的不是让空的）；
+    /// manual 优先（同拍两来源都到时文案归人工口径）。
     /// </summary>
     private void SetGrillAlarm(SlotRuntime rt, int rack, int level, bool on,
-        bool manual = false)
+        bool manual = false, string? offNote = null)
     {
         if (rt.AlarmGrill == on)
             return; // 状态去重：冗余边沿不重复写灯、不重复记日志
@@ -814,7 +895,9 @@ public sealed class SlotCuringMachine : IDisposable
             EnsureLamp(rack, level, IoPointRole.LampYellow, true);
             _log(manual
                 ? $"架{rack}层{level} 人工复位确认（{GrillSideText(rack, level)}），报警解除，计时继续"
-                : $"架{rack}层{level} 光栅让空，报警复位（红灯灭），计时继续");
+                : offNote != null
+                    ? $"架{rack}层{level} {offNote}（{GrillSideText(rack, level)}），报警解除，计时继续"
+                    : $"架{rack}层{level} 光栅让空，报警复位（红灯灭），计时继续");
         }
         RefreshMachineBeacon(); // 机台塔灯同步：报警→红+蜂鸣，复位→黄（计时继续，蜂鸣即停）
     }

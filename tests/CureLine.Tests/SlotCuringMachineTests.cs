@@ -30,14 +30,16 @@ public class SlotCuringMachineTests
     private (ScriptedPointBus Bus, SlotCuringMachine Machine, List<string> Logs) Make(
         CuringPolicy? policy = null, Func<int, string>? durationText = null,
         Func<GrillAlarmResetMode>? resetModeProvider = null,
-        Func<GrillSignalPolarity>? polarityProvider = null)
+        Func<GrillSignalPolarity>? polarityProvider = null,
+        Func<bool>? alarmEnabledProvider = null)
     {
         var bus = new ScriptedPointBus();
         var logs = new List<string>();
         var machine = new SlotCuringMachine(bus, () => policy,
             clock: () => _now, log: logs.Add, durationText: durationText,
             resetModeProvider: resetModeProvider,
-            grillPolarityProvider: polarityProvider);
+            grillPolarityProvider: polarityProvider,
+            grillAlarmEnabledProvider: alarmEnabledProvider);
         // 宿主转发边沿（生产由 MainViewModel 做——machine 不直接订阅总线）
         bus.PointChanged += (_, e) => machine.OnPointChanged(e);
         return (bus, machine, logs);
@@ -433,6 +435,92 @@ public class SlotCuringMachineTests
             bus.SetInput(GrillL(1, 1), true);  // 取件伸入（Done 是正常取件动作，不报警）
             Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
             Assert.DoesNotContain(bus.Writes, w => w.Key == Lamp(IoPointRole.LampRed, 1, 1) && w.State);
+        }
+    }
+
+    // ---------- 报警总开关（V0.0.90 用户拍板"关闭则不报警，默认开启"）：
+    //            provider false=整条报警链静默（被挡吞掉/已挂的解除），
+    //            重开与关闭都以每拍兜底/宿主广播双保险收敛；测试不传
+    //            provider=null 恒开启=既有行为（既有用例即是回归）。 ----------
+
+    [Fact]
+    public void AlarmSwitchOff_BlockedDuringCuring_NoAlarmAtAll()
+    {
+        bool on = false;
+        var (bus, machine, logs) = Make(alarmEnabledProvider: () => on);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);            // 开计时（黄灯）
+            bus.Writes.Clear();
+            bus.SetInput(GrillL(1, 1), true);          // 被挡边沿 → 吞掉（零报警）
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+            Assert.False(machine.GetStatus(1, 1)!.AlarmGrill);
+            Assert.DoesNotContain(bus.Writes, w => w.Key == Lamp(IoPointRole.LampRed, 1, 1) && w.State);
+            Assert.DoesNotContain(bus.Writes, w => w.Key == Beacon(IoPointRole.BeaconRed) && w.State);
+            Assert.DoesNotContain(bus.Writes, w => w.Key == Beacon(IoPointRole.Buzzer) && w.State);
+            Assert.Empty(bus.Writes);                  // 完全静默=零网络写（滑块关闭即整链停）
+        }
+    }
+
+    [Fact]
+    public void AlarmSwitchOff_ExistingAlarm_ClearedImmediately()
+    {
+        bool on = true;
+        var (bus, machine, logs) = Make(alarmEnabledProvider: () => on);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            bus.SetInput(GrillL(1, 1), true);          // 报警进态（红灯+塔灯红+蜂鸣）
+            Assert.True(machine.GetStatus(1, 1)!.AlarmGrill);
+
+            on = false;                                // 用户在策略窗切【关】
+            machine.ApplyAlarmSwitch();                // 宿主广播链立即收敛（不等心跳）
+            Assert.False(machine.GetStatus(1, 1)!.AlarmGrill);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), false));
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconRed), false));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.Buzzer), false));
+            Assert.Contains(logs, m => m.Contains("报警总开关已关闭"));
+        }
+    }
+
+    [Fact]
+    public void AlarmSwitchOff_PumpFallbackClearsExistingAlarm()
+    {
+        bool on = true;
+        var (bus, machine, logs) = Make(alarmEnabledProvider: () => on);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            bus.SetInput(GrillL(1, 1), true);          // 报警进态
+            Assert.True(machine.GetStatus(1, 1)!.AlarmGrill);
+
+            on = false;
+            machine.Pump(_now);                        // 漏接广播也由每拍兜底当拍解除
+            Assert.False(machine.GetStatus(1, 1)!.AlarmGrill);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), false));
+            Assert.Contains(logs, m => m.Contains("报警总开关已关闭"));
+        }
+    }
+
+    [Fact]
+    public void AlarmSwitchReopen_BlockedWhileSilent_AlarmCatchesUpOnPump()
+    {
+        bool on = false;
+        var (bus, machine, logs) = Make(alarmEnabledProvider: () => on);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            bus.SetInput(GrillL(1, 1), true);          // 关闭期间被挡（吞掉，无报警）
+            Assert.False(machine.GetStatus(1, 1)!.AlarmGrill);
+
+            on = true;
+            machine.Pump(_now);                        // 重开 → 下一拍按快照补报（不等边沿）
+            Assert.True(machine.GetStatus(1, 1)!.AlarmGrill);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.BeaconRed), true));
+            Assert.True(Wrote(bus.Writes, Beacon(IoPointRole.Buzzer), true));
+            Assert.Contains(logs, m => m.Contains("光栅被挡"));
         }
     }
 
