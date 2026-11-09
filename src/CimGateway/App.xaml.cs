@@ -81,6 +81,8 @@ public partial class App : Application
         var win = new MainWindow();
         MainWindow = win;
         win.Show();
+        // 模态弹窗"切后台再切回自动找回"护栏（Core 共享，机制见 ModalForegroundGuard 头注释）
+        ModalForegroundGuard.Install(win);
 
         // 主窗已建好：恢复"最后一个窗口关闭即退出"的常规语义
         ShutdownMode = ShutdownMode.OnLastWindowClose;

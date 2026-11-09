@@ -2,6 +2,10 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- V0.0.88 起开 WPF：ModalForegroundGuard（模态弹窗回前台找回护栏）下沉共享，
+         用到 Window/HwndSource 等 WPF 类型——两宿主本就是 WPF 工程，测试工程直引
+         Core 只用纯逻辑（不建 Window），无跨平台包袱 -->
+    <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- net472 子模块程序集引用产生 NU1701（框架兼容性警告），Windows 上运行已验证，压制 -->
@@ -41,6 +45,14 @@
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>CureLine.Tests</_Parameter1>
     </AssemblyAttribute>
+  </ItemGroup>
+
+  <!-- UseWPF 开启后（V0.0.88，ModalForegroundGuard 下沉），WindowsDesktop SDK 会把
+       System.IO / System.Net.Http 从隐式 using 集移除（防与 WinForms 类型撞名）；
+       本工程全部源码一直按"这两个命名空间可用"编写——在工程层集中补回，源文件零改动 -->
+  <ItemGroup>
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
   </ItemGroup>
 
 </Project>

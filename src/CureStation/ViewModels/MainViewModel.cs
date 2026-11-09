@@ -79,7 +79,9 @@ public sealed class RackSlotViewModel : ViewModelBase
 
     // ---------- 扫码绑定（P3.3 扫码工序） ----------
     // 卡片库位码正下方显示产品码（V0.0.80 从卡片 foot 底部上移——底缘太不醒目）；
-    // 未绑定且在架时红色加粗"未绑定"；ToolTip 不给全码（V0.0.82 用户否决）。
+    // 未绑定且在架时红色加粗"未绑定"；完整码在卡片 ToolTip 给全（V0.0.86 用户
+    // 拍板，推翻 V0.0.82"ToolTip 不给全码"——卡上摘要可能头尾省略，悬停即看全，
+    // 12 秒 ShowDuration 够扫码核对）。
     // 绑定数据由会话（SlotBindingSession）维护，每拍随 Refresh 注入。
 
     private string _productCode = "";

@@ -164,6 +164,24 @@
                                     <StackPanel>
                                         <TextBlock Text="{Binding Title, FallbackValue=A01-上层}"
                                                    FontWeight="SemiBold"/>
+                                        <!-- 产品 SN 完整码（V0.0.86，用户拍板推翻 V0.0.82 否决）：
+                                             卡上显示摘要（可能头尾省略），悬停看全码——扫码核对
+                                             不用去翻绑定簿；未绑定（ProductCode=""）整行隐藏，
+                                             卡片红字"未绑定"已足够。触发器死区纪律：Visibility
+                                             缺省 Visible 写进 Style Setter，空码才收 Collapsed。 -->
+                                        <TextBlock Margin="0,2,0,0"
+                                                   Text="{Binding ProductCode, StringFormat=产品 SN：{0}}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding ProductCode}" Value="">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                         <TextBlock Text="{Binding SlotStateText, FallbackValue=空闲}"
                                                    Margin="0,2,0,0"/>
                                         <TextBlock Text="{Binding GrillText, FallbackValue=L:— R:—, StringFormat=光栅 {0}}"
