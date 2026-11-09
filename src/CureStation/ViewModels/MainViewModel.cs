@@ -106,14 +106,6 @@ public sealed class RackSlotViewModel : ViewModelBase
         private set => Set(ref _bindingMissing, value);
     }
 
-    private string _bindingTip = "未绑定产品";
-    /// <summary>库位码下方产品码的悬停全文（产品码可能被省略号截断，这里给完整内容）。</summary>
-    public string BindingTip
-    {
-        get => _bindingTip;
-        private set => Set(ref _bindingTip, value);
-    }
-
     private bool _hasBindingText;
     /// <summary>产品码行是否需要占位（无产品码且未报警=空位，直接隐藏不留空白）。</summary>
     public bool HasBindingText
@@ -289,16 +281,34 @@ public sealed class RackSlotViewModel : ViewModelBase
     /// P3.3：productCode=库位绑定的产品条码（空=未绑定）；bindingMissing=
     /// 托盘在架却没绑定（库位码下方显示红字"未绑定"，只提示不拦截固化流程）。
     /// </summary>
+    /// <summary>产品码行文案（V0.0.82 摘要口径）：未绑定返回"未绑定"（红字触发器吃
+    /// BindingMissing）；码短原样；超 22 字符 =「头 6 位 + … + 尾 10 位」（共 17 字符）。
+    /// 为什么掐中间：现场扫码对货以**尾号**对账、头部是型号/批次前缀，中间流水段
+    /// 剩余价值最低——17 字符在视图的字号下限容量（卡宽×1.2≈18 字符，见
+    /// SnMaxWidthConverter）以内，窄屏/宽屏都完整可见，省略号兜底不再触发。</summary>
+    private static string SnDisplayText(string productCode, bool bindingMissing)
+    {
+        if (bindingMissing)
+        {
+            return "未绑定";
+        }
+
+        var code = productCode ?? string.Empty;
+        const int summaryThreshold = 22;   // 超过此长度才摘要（11 号字窄屏容量 ≈15~18，22 保守取大）
+        const int keepHead = 6;            // 头部保留：型号/批次前缀
+        const int keepTail = 10;           // 尾部保留：对货核号的流水段
+        return code.Length <= summaryThreshold
+            ? code
+            : code.Substring(0, keepHead) + "…" + code.Substring(code.Length - keepTail, keepTail);
+    }
+
     public void Refresh(PointTableSnapshot snapshot, bool hasTable, SlotStatus? machineStatus = null,
         int planMinutes = 0, string productCode = "", bool bindingMissing = false)
     {
         // 绑定信息与流程状态无关，每拍先落（即使点表未配置也照常显示已存绑定）。
         ProductCode = productCode;
         BindingMissing = bindingMissing && string.IsNullOrWhiteSpace(productCode);
-        BindingText = BindingMissing ? "未绑定" : productCode;
-        BindingTip = string.IsNullOrWhiteSpace(productCode)
-            ? (bindingMissing ? "托盘在架但库位未绑定产品：先扫库位码、再扫产品码" : "未绑定产品")
-            : $"产品：{productCode}";
+        BindingText = SnDisplayText(productCode, BindingMissing);
         HasBindingText = !string.IsNullOrEmpty(BindingText);
 
         _planMinutes = planMinutes;   // 缓存本拍策略解析值（ApplyKind 落 Idle 字面 / 单位切换重拼用）

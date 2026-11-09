@@ -56,6 +56,8 @@
     -->
     <Window.Resources>
         <local:WoQtySplitConverter x:Key="WoQtySplit"/>
+        <!-- SN 行超长等比缩的字号下限：max-width=宿主卡宽×1.2（最小缩到 ≈9 号，V0.0.82） -->
+        <local:SnMaxWidthConverter x:Key="SnMaxWidth"/>
 
         <!-- 统计胶囊通用壳（HTML .g2-stat/.g1-stat 直译：白/玻璃底、18 圆角、4px 纵向）
              点色/文案/数字由五个具体胶囊各自给（点=State*、字=StatFg、数=StatNumFg） -->
@@ -158,7 +160,7 @@
                         <!-- top：库位码（大字号，空闲/未配置灰降权）+ 状态胶囊（六态彩底，设计图顶替灯点）
                              + 库位码正下方一行=产品码（SN，V0.0.80 从卡片 foot 底部迁上来——
                              底缘太不醒目；已绑=主题蓝 SemiBold 稍醒目，未绑定红字优先） -->
-                        <Grid Grid.Row="0" ToolTipService.ShowDuration="12000">
+                        <Grid Grid.Row="0" x:Name="SnCardCap" ToolTipService.ShowDuration="12000">
                             <Grid.ToolTip>
                                 <ToolTip>
                                     <StackPanel>
@@ -259,30 +261,46 @@
                             <!-- 产品码（SN，P3.3；V0.0.80 从卡片 foot 底部迁到库位码正下方——
                                  用户拍板：底缘太不醒目）：已绑产品=主题蓝（Brush.Accent 双主题
                                  同名：浅 #1E90FF / 深 #4FC3F7）11 号 SemiBold 稍醒目；未绑定
-                                 红字 + 加粗优先（同一行红色报警）。无绑定且无报警整行 Collapsed
-                                 （Auto 行自动塌缩不占高）；码过长省略号截断、悬停看全文。
+                                 红字 + 加粗优先（同一行红色报警）。无绑定整行 Collapsed
+                                 （Auto 行自动塌缩不占高）。
+                                  ★V0.0.82 超长口径（V2 定稿）：外等 Viewbox（Uniform+DownOnly）
+                                  里 TextBlock 挂 MaxWidth=宿主 ActualWidth×1.35（SnMaxWidthConverter
+                                  ——「卡宽×1.35」把最小字号锁在 ≈8 号（缩放 0.74 下限），码再长也
+                                  不会缩成小蚂蚁——第一版无下限整串缩小被现场否决：字太小；
+                                  装不下的尾段由省略号（TextTrimming）兜底，保尾位由 VM 摘要
+                                  （BindingText：>22 字符=头 6+…+尾 10，头尾双可见）负责，
+                                  摘要长度正落在下限容量内不再触发省略）。
                                  ★缺省色/可见性/字重全进 Style Setter（标签本地值会压死触发器——坑⑥）。 -->
-                            <TextBlock Grid.Row="1"
-                                       Text="{Binding BindingText, FallbackValue=未绑定产品}"
-                                       ToolTip="{Binding BindingTip, FallbackValue=未绑定产品}"
-                                       FontSize="11" Margin="0,3,0,0" HorizontalAlignment="Left"
-                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
+                            <Viewbox Grid.Row="1" Height="15" Margin="0,3,0,0"
+                                     Stretch="Uniform" StretchDirection="DownOnly">
+                                <Viewbox.Style>
+                                    <Style TargetType="Viewbox">
                                         <Setter Property="Visibility" Value="Collapsed"/>
-                                        <Setter Property="FontWeight" Value="SemiBold"/>
-                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding HasBindingText, FallbackValue=False}" Value="True">
                                                 <Setter Property="Visibility" Value="Visible"/>
                                             </DataTrigger>
-                                            <DataTrigger Binding="{Binding BindingMissing, FallbackValue=False}" Value="True">
-                                                <Setter Property="Foreground" Value="{DynamicResource Brush.StateRed}"/>
-                                            </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
+                                </Viewbox.Style>
+                                <TextBlock Text="{Binding BindingText, FallbackValue=未绑定产品}"
+                                           FontSize="11"
+                                           MaxWidth="{Binding ActualWidth, ElementName=SnCardCap, FallbackValue=200.0, Converter={StaticResource SnMaxWidth}}"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding BindingMissing, FallbackValue=False}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.StateRed}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Viewbox>
                         </Grid>
 
                         <!-- mid：状态词视图（idle/gate/done/alarm/notconfig/灯色反推计时，含副文案行）

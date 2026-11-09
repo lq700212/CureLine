@@ -324,6 +324,47 @@ public class CuringDisplayTests
         Assert.Equal("未配置", nc.SlotStateText);
     }
 
+    // ---------- 产品码（SN）展示文案（V0.0.82 超长摘要口径） ----------
+
+    [Fact(DisplayName = "SN：未绑定 → 文案'未绑定'（红字触发器吃 BindingMissing）")]
+    public void Sn_BindingMissing_ShowsMissingText()
+    {
+        var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
+        slot.Refresh(PointTableSnapshot.Empty, true, null, 0, "", bindingMissing: true);
+        Assert.Equal("未绑定", slot.BindingText);
+        Assert.True(slot.BindingMissing);
+        Assert.True(slot.HasBindingText);
+    }
+
+    [Fact(DisplayName = "SN：空码非缺失 → 空文案整行收起")]
+    public void Sn_EmptyCode_CollapsedRow()
+    {
+        var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
+        slot.Refresh(PointTableSnapshot.Empty, true, null, 0, "");
+        Assert.Equal("", slot.BindingText);
+        Assert.False(slot.HasBindingText);
+    }
+
+    [Fact(DisplayName = "SN：22 字符以内原样显示（不摘要）")]
+    public void Sn_AtOrUnderThreshold_KeptAsIs()
+    {
+        var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
+        var code = new string('A', 22);
+        slot.Refresh(PointTableSnapshot.Empty, true, null, 0, code);
+        Assert.Equal(code, slot.BindingText);
+    }
+
+    [Fact(DisplayName = "SN：>22 字符摘要=头6+…+尾10（头尾双可见，中段省略）")]
+    public void Sn_OverThreshold_SummaryKeepsHeadAndTail()
+    {
+        var slot = new RackSlotViewModel { Rack = 1, Level = 1 };
+        // 35 字符超长码：头 6 位"AAAA-2"（型号/批次前缀）+ 尾 10 位流水（对货核号）
+        var code = "AAAA-20260909-BK" + new string('X', 9) + "1234567890";
+        slot.Refresh(PointTableSnapshot.Empty, true, null, 0, code);
+        Assert.Equal("AAAA-2…1234567890", slot.BindingText);
+        Assert.Equal(17, slot.BindingText.Length); // 头6+"…"+尾10=17 字符，落在字号下限容量内
+    }
+
     [Fact(DisplayName = "Kind：状态机空闲快照全空 → Idle")]
     public void Kind_IdleWhenAllQuiet()
     {
