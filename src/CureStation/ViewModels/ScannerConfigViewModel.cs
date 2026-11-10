@@ -114,7 +114,7 @@ public sealed class ScannerConfigViewModel : ViewModelBase
     public bool ShowTcpSection => EditUseTcp;
 
     private string _editTcpIp = "";
-    /// <summary>TCP 目标 IP（枪侧 DTU/枪自身的地址，如 169.254.173.207）。</summary>
+    /// <summary>TCP 目标 IP（枪侧 DTU/枪自身的地址，如 192.168.1.220）。</summary>
     public string EditTcpIp
     {
         get => _editTcpIp;

@@ -1032,6 +1032,10 @@ public class CureStationViewModelTests
         var fake = new FakeCureDialogService();
         using var vm = new CureStation.ViewModels.MainViewModel(fake);
 
+        // V0.0.95 用户拍板：未登录=设置整钮禁用+悬停提示（下拉全是管理功能）
+        Assert.False(vm.IsSettingsEnabled);
+        Assert.Contains("未登录", vm.SettingsToolTip);
+
         vm.OpenWorkOrderCommand.Execute(null);   // 未登录 → 拦下
         Assert.Contains(fake.Calls, c => c.Contains("未登录"));
         Assert.DoesNotContain(fake.Calls, c => c.StartsWith("ShowWorkOrder"));
@@ -1055,6 +1059,7 @@ public class CureStationViewModelTests
         // 顶栏格式"操作员：operator"（角色名开头，不带 LEVEL 字样）
         Assert.Equal("操作员：operator", vm.OperatorText);
         Assert.False(vm.IsSettingsEnabled);     // operator → 设置按钮不可用（用户拍板）
+        Assert.Contains("操作员", vm.SettingsToolTip); // 悬停提示给出原因（V0.0.95）
 
         vm.OpenWorkOrderCommand.Execute(null);
         Assert.Contains(fake.Calls, c => c.StartsWith("ShowWorkOrder:Operator"));

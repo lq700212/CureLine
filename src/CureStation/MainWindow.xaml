@@ -610,7 +610,8 @@
              与顶栏按钮同池：窗高 44 的品牌标题条整条是 caption 拖动区，必须声明
              chrome 可命中否则点不到（对齐 App.xaml GhostButton 同款声明）。
              IsChecked 即开下拉；勾选态=持续底色（GhostPressedBg）提示"已展开"；
-             V0.0.49 起 operator 登录后整钮禁用（IsSettingsEnabled），禁用=半透明。 -->
+               V0.0.49 起 operator 登录后整钮禁用；V0.0.95 未登录同样禁用（IsSettingsEnabled），
+              禁用=半透明+悬停 SettingsToolTip 提示。 -->
         <Style x:Key="SettingsToggleBtn" TargetType="ToggleButton">
             <Setter Property="Background" Value="{DynamicResource Brush.GhostBg}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.GhostBorder}"/>
@@ -788,11 +789,14 @@
                          IsOpen 双向绑 IsChecked（点外 StaysOpen=False 自关）；菜单项点击在
                          code-behind OnMenuClick 把 IsChecked 收回 false，防止下拉挂住不关。
                          Content 为可见字符串（自动化 Name 由此生成，UIA/读屏可命中）。
-                         V0.0.49 门禁：operator 登录后整钮禁用（IsSettingsEnabled）；
-                         admin 登录后点表配置项直接隐藏（ShowPointTableItem），dev/未登录可见。 -->
+                         V0.0.49 门禁：operator 登录后整钮禁用；V0.0.95 未登录同样禁用
+                         （IsSettingsEnabled）——禁用态悬停走 SettingsToolTip（ShowOnDisabled），
+                         点击无响应；admin 登录后点表配置项直接隐藏（ShowPointTableItem），dev 可见。 -->
                     <ToggleButton x:Name="SettingsToggle" Style="{StaticResource SettingsToggleBtn}"
                                   Content="设置"
-                                  IsEnabled="{Binding IsSettingsEnabled, FallbackValue=True}"/>
+                                  IsEnabled="{Binding IsSettingsEnabled, FallbackValue=False}"
+                                  ToolTip="{Binding SettingsToolTip, FallbackValue=未登录——设置收拢的是管理功能，请先登录}"
+                                  ToolTipService.ShowOnDisabled="True"/>
                     <Popup x:Name="SettingsPopup" PlacementTarget="{Binding ElementName=SettingsToggle}"
                            Placement="Bottom" VerticalOffset="7"
                            AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade"

@@ -8,7 +8,7 @@
 //   ② Serial = 串口读码（System.IO.Ports，替代接线路径）。
 //
 // **缺省即现场预置（V0.0.79 建，V0.0.81 收口）**：无 [Scanner] 节的机器（ini 缺键自愈）直接得到
-//   现场口径——Mode=Tcp + 枪侧 DTU IP（FieldTcpIp=169.254.173.207）+ 端口 8899
+//   现场口径——Mode=Tcp + 枪侧 DTU IP（FieldTcpIp=192.168.1.220）+ 端口 8899
 //   + 触发指令留空（=不发）+ **Enabled=true（缺省即连——部署目录重建/新构建
 //   覆盖后不再掉回"未启用"，现场不用再手工点一次配置窗保存）。配置窗首次打开回显的就是
 //   这套预置值——现场不再手抄 IP（2026-11 现场曾把 DTU 死配置里的旧上位机
@@ -66,7 +66,7 @@ public sealed class ScannerOptions
     /// 现场枪侧 DTU 地址真源（TCP-SERVER 8899 所在）：缺省值/config.sample.ini/
     /// 配置窗预置共用此常量，换 DTU/换网段时只改这一处（+现场 ini）。
     /// </summary>
-    public const string FieldTcpIp = "169.254.173.207";
+    public const string FieldTcpIp = "192.168.1.220";
 
     /// <summary>
     /// 【TCP 模式】枪侧 IP（DTU/枪自身的地址）。**缺省 = <see cref="FieldTcpIp"/>

@@ -752,15 +752,29 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public IdleLogoutMonitor IdleMonitor => _idleMonitor;
 
     /// <summary>
-    /// "设置"按钮可用性（V0.0.49 用户拍板）：operator 登录后整钮禁用——
-    /// 该角色除工单外无任何管理功能，下拉可点无意义；未登录沿用现状
-    /// （可点开下拉，点项时 Gate 拦"请先登录"）。
+    /// "设置"按钮可用性（V0.0.49 用户拍板；V0.0.95 扩展未登录）：operator
+    /// 登录后整钮禁用、未登录同样禁用——下拉里全是管理功能，无权限的角色
+    /// 展开逐项被 Gate 拦不如直接置灰；悬停反馈走 SettingsToolTip（禁用态
+    /// 也显示，XAML ToolTipService.ShowOnDisabled=True；WPF 禁用钮不响应
+    /// 点击，无弹窗路径）。
     /// </summary>
-    public bool IsSettingsEnabled => _currentRole == null || _currentRole != OperatorRole.Operator;
+    public bool IsSettingsEnabled => _currentRole != null && _currentRole != OperatorRole.Operator;
+
+    /// <summary>
+    /// 设置钮悬停提示（XAML 已开 ToolTipService.ShowOnDisabled，禁用态也显示）：
+    /// 未登录/operator 各给一句去处说明；admin+/dev 可用态给下拉功能清单。
+    /// 登录/登出处与 IsSettingsEnabled 同拍失效刷新（两处 Raise 一并改）。
+    /// </summary>
+    public string SettingsToolTip => _currentRole switch
+    {
+        null => "未登录——设置收拢的是管理功能，请先登录",
+        OperatorRole.Operator => "操作员无管理权限（除工单外），设置不可用",
+        _ => "重新连接 / 演示 / 用户管理 / 工艺策略 / 过账配置 / IO 测试 / 点表 / 软件激活 / 主题",
+    };
 
     /// <summary>
     /// "点表配置"菜单项可见性：admin 隐藏此项（用户拍板"直接没有这个选项"）；
-    /// 未登录/操作员仍显示（未登录点项被 Gate 拦；operator 反正按钮整钮禁用）。
+    /// 未登录/操作员仍显示（未登录设置整钮禁用打不开下拉；operator 同）。
     /// 只有 dev（真开发者账号）能见到点表配置。
     /// </summary>
     public bool ShowPointTableItem => _currentRole != OperatorRole.Admin;
@@ -1696,6 +1710,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         LocalLogService.Write($"操作员登录：{_currentUserName}（{OperatorRoleInfo.ToText(_currentRole.Value)}）");
         // 设置按钮可用性/点表菜单项随角色刷新（operator 登录后设置按钮置灰、admin 点表项隐藏）。
         Raise(nameof(IsSettingsEnabled));
+        Raise(nameof(SettingsToolTip));
         Raise(nameof(ShowPointTableItem));
         Raise(nameof(ShowScannerConfigItem));
     }
@@ -1715,6 +1730,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         OperatorText = "未登录";
         // 与 Login() 对称的三件通知：设置按钮恢复可用、菜单项显隐回未登录口径。
         Raise(nameof(IsSettingsEnabled));
+        Raise(nameof(SettingsToolTip));
         Raise(nameof(ShowPointTableItem));
         Raise(nameof(ShowScannerConfigItem));
     }

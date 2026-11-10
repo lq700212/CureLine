@@ -112,7 +112,7 @@ public class IdleLogoutTests
         vm.IdleMonitor.Tick();
         Assert.Equal("未登录", vm.OperatorText);
         Assert.False(vm.IsLoggedIn);
-        Assert.True(vm.IsSettingsEnabled);   // 门禁收回：设置按钮恢复可用
+        Assert.False(vm.IsSettingsEnabled);  // 门禁收回：未登录=设置整钮禁用+悬停提示（V0.0.95 用户拍板）
     }
 
     [Fact]

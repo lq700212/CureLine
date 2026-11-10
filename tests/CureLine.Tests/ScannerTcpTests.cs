@@ -66,14 +66,14 @@ public class ScannerTcpTests
         EnsureConfigDir();
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "Enabled", "1");
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "Mode", "tcp");       // 大小写不敏感
-        IniFile.Write(AppPaths.ConfigIni, "Scanner", "TcpIp", "169.254.173.207");
+        IniFile.Write(AppPaths.ConfigIni, "Scanner", "TcpIp", "192.168.1.220");
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "TcpPort", "8899");
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "TriggerCommand", "LON");
 
         var o = ScannerOptions.Load();
         Assert.True(o.Enabled);
         Assert.Equal("Tcp", o.NormMode);
-        Assert.Equal("169.254.173.207", o.TcpIp);
+        Assert.Equal("192.168.1.220", o.TcpIp);
         Assert.Equal(8899, o.TcpPort);
         Assert.Equal(8899, o.NormTcpPort);
         Assert.Equal("LON", o.TriggerCommand);
@@ -83,7 +83,7 @@ public class ScannerTcpTests
         o.Save();   // 落盘回规范化值，再 Load 应等值
         var back = ScannerOptions.Load();
         Assert.Equal("Tcp", back.NormMode);
-        Assert.Equal("169.254.173.207", back.TcpIp);
+        Assert.Equal("192.168.1.220", back.TcpIp);
         Assert.Equal(8899, back.TcpPort);
         Assert.Equal("LON", back.TriggerCommand);
     }
@@ -159,7 +159,7 @@ public class ScannerTcpTests
     public void ScannerOptions_HasPortTarget_IsModeAware()
     {
         // Tcp 方式：TcpIp 算目标，串口键不算
-        var tcp = new ScannerOptions { Mode = "Tcp", TcpIp = "169.254.173.207" };
+        var tcp = new ScannerOptions { Mode = "Tcp", TcpIp = "192.168.1.220" };
         Assert.True(tcp.HasPortTarget);
         Assert.False(tcp.HasSerialTarget);
 
@@ -170,7 +170,7 @@ public class ScannerTcpTests
         var serial = new ScannerOptions { Mode = "Serial", PortName = "COM3" };
         Assert.True(serial.HasPortTarget);
 
-        var serialTcpOnly = new ScannerOptions { Mode = "Serial", TcpIp = "169.254.173.207" };
+        var serialTcpOnly = new ScannerOptions { Mode = "Serial", TcpIp = "192.168.1.220" };
         Assert.False(serialTcpOnly.HasPortTarget);  // 只配了 TcpIp 对串口无意义
     }
 
@@ -208,12 +208,12 @@ public class ScannerTcpTests
         ScanConfig? captured = null;
         var service = new ScannerBarcodeService(
             new ScannerOptions { Enabled = true, Mode = "Tcp",
-                TcpIp = "169.254.173.207", TcpPort = 8899 },
+                TcpIp = "192.168.1.220", TcpPort = 8899 },
             cfg => { captured = cfg; return fake; });
 
         Assert.True(service.Start());
         Assert.Equal("Tcp", captured!.Mode);
-        Assert.Equal("169.254.173.207", captured.IpAddress);
+        Assert.Equal("192.168.1.220", captured.IpAddress);
         Assert.Equal(8899, captured.Port);
         // 红线：现场枪自动连续读码——缺省必须不发触发指令（子模块 ScanConfig
         // 缺省 "LON" 是基恩士口径，接线层必须覆盖为空串）。
@@ -273,7 +273,7 @@ public class ScannerTcpTests
         EnsureConfigDir();
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "Enabled", "1");
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "Mode", "Tcp");
-        IniFile.Write(AppPaths.ConfigIni, "Scanner", "TcpIp", "169.254.173.207");
+        IniFile.Write(AppPaths.ConfigIni, "Scanner", "TcpIp", "192.168.1.220");
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "TcpPort", "8899");
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "TriggerCommand", "LON");
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "SessionTimeoutSeconds", "30");
@@ -284,7 +284,7 @@ public class ScannerTcpTests
         Assert.True(vm.EditUseTcp);
         Assert.True(vm.ShowTcpSection);
         Assert.False(vm.ShowSerialSection);   // 两区块互斥
-        Assert.Equal("169.254.173.207", vm.EditTcpIp);
+        Assert.Equal("192.168.1.220", vm.EditTcpIp);
         Assert.Equal("8899", vm.EditTcpPort);
         Assert.Equal("LON", vm.EditTriggerCommand);
         Assert.Equal("30", vm.EditSessionTimeout);
@@ -300,7 +300,7 @@ public class ScannerTcpTests
         {
             EditEnabled = true,
             EditUseTcp = true,
-            EditTcpIp = "169.254.173.207",
+            EditTcpIp = "192.168.1.220",
             EditTcpPort = "8899",
             EditTriggerCommand = "",           // 现场口径：留空不发
             EditSessionTimeout = "20",
@@ -316,7 +316,7 @@ public class ScannerTcpTests
 
         var saved = ScannerOptions.Load();
         Assert.Equal("Tcp", saved.NormMode);
-        Assert.Equal("169.254.173.207", saved.TcpIp);
+        Assert.Equal("192.168.1.220", saved.TcpIp);
         Assert.Equal(8899, saved.TcpPort);
         Assert.Equal("", saved.TriggerCommand);
         Assert.Equal(20, saved.SessionTimeoutSeconds);
@@ -352,7 +352,7 @@ public class ScannerTcpTests
         {
             EditEnabled = true,
             EditUseTcp = true,
-            EditTcpIp = "169.254.173.207",
+            EditTcpIp = "192.168.1.220",
             EditTcpPort = "70000",
         };
 
@@ -374,7 +374,7 @@ public class ScannerTcpTests
         {
             EditEnabled = true,
             EditUseTcp = true,
-            EditTcpIp = "169.254.173.207",
+            EditTcpIp = "192.168.1.220",
             EditTriggerCommand = "LO\rN",
         };
 
