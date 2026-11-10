@@ -7,7 +7,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:LicenseActivationViewModel, IsDesignTimeCreatable=False}"
-        Title="软件激活" Width="620" SizeToContent="Height"
+        Title="软件激活" Width="424" SizeToContent="Height"
         WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
         WindowStyle="None" Background="Transparent" AllowsTransparency="True" FontSize="13"
         Foreground="{DynamicResource Brush.Fresh.FgMid}">
@@ -18,76 +18,189 @@
                             UseAeroCaptionButtons="False"
                             ResizeBorderThickness="0"/>
     </shell:WindowChrome.WindowChrome>
-    <!--★★ 软件激活窗（程序①）：设备码展示 + 激活码粘贴 + 状态/错误提示。
+    <!--★★ 软件激活窗（程序①）：V0.0.94 参照 HuaJiVision SoftActivation 设计稿重做——
+         424 窄卡 + 品牌渐变标题条（盾牌图标）+ 状态胶囊（四档呼吸点：绿=永久/琥珀=试用/
+         红=过期·指纹不符/蓝=未激活·演示，VM StatusKind 派生）+ 两张"悬浮胶囊标题"圆角卡
+         （设备码/激活码）+ foot 条（适用范围 + 渐变主按钮）。
          业务编排全在 CureLine.Core 的 LicenseActivationViewModel（两程序共用），
          本文件只管布局与剪贴板/关窗转发（MVVM：VM 不碰 Clipboard/Window）。
+         色板纪律：参考稿的深色专属色值全部换成项目语义键（WinBg/CardBg/InputBg/Border/
+         FgMid/Accent/AlertOk*/AlertErr*/Warn*），Light/Dark 换肤自动跟随；
+         标题条半透明白小方块与白盾是品牌渐变条上的叠加色（与 Ghost 键同思路，非主题语义色）。
          设备码固定 Consolas 等宽字体：现场报码/抄码时 0/O、1/I 易混，等宽提高可读性。 -->
     <Grid Margin="14">
         <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
                 BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
                 Effect="{StaticResource Fx.WinShadow}">
             <DockPanel>
-                <!-- 品牌标题条：与主窗/登录窗同源渐变；右侧关闭钮 -->
+                <!-- foot 条：适用范围（左）+ 主按钮（右）；分隔线+亮底与弹窗骨架同款 -->
+                <Border DockPanel.Dock="Bottom" CornerRadius="0,0,10,10"
+                        Background="{DynamicResource Brush.Fresh.CardBg}"
+                        BorderBrush="{DynamicResource Brush.Fresh.Border}"
+                        BorderThickness="0,1,0,0" Padding="16,10">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource FreshPrimaryButton}"
+                                Content="激　活" Command="{Binding ActivateCommand}"
+                                Width="110" Height="32" ToolTip="校验并写入激活码（Ctrl+Enter）"/>
+                        <TextBlock Text="{Binding AppName, StringFormat=适用：{0}, FallbackValue=适用：固化程控}"
+                                   FontSize="11" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Brush.Fresh.FgMid}"
+                                   ToolTip="激活码只对本程序生效；两程序需各自激活"/>
+                    </DockPanel>
+                </Border>
+
+                <!-- 品牌标题条：与主窗/登录窗同源渐变 + 盾牌小方块；右侧关闭钮 -->
                 <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
                     <Grid>
-                        <TextBlock Text="软件激活" Style="{StaticResource WinTitleText}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <!-- 盾牌小方块（18×18 半透明白圆角块内 10px 白盾，来源 HuaJiVision
+                                 SoftActivation mockup .dlg-title .ic，Path 六点坐标直转 Geometry） -->
+                            <Border Width="18" Height="18" CornerRadius="5" Background="#38FFFFFF"
+                                    VerticalAlignment="Center" Margin="0,0,8,0">
+                                <Path Data="M5,0.6 L9.2,2.8 L9.2,6.6 L5,10 L0.8,6.6 L0.8,2.8 Z"
+                                      Width="10" Height="10" Stretch="Fill" Fill="#EBFFFFFF"/>
+                            </Border>
+                            <TextBlock Text="软件激活" Style="{StaticResource WinTitleText}"/>
+                        </StackPanel>
                         <Button Style="{StaticResource WinTitleClose}" Content="✕"
                                 HorizontalAlignment="Right"
                                 Click="OnCloseClick" ToolTip="关闭（Esc）"/>
                     </Grid>
                 </Border>
 
-                <StackPanel Margin="30,16,30,20">
-                    <!-- 标题 + 所属程序（活动窗口标题区） -->
-                    <TextBlock Text="软件激活" FontSize="20" FontWeight="Bold"
-                               Foreground="{DynamicResource Brush.Fresh.FgStrong}"
-                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="{Binding AppName, StringFormat=适用范围：{0}, FallbackValue=适用范围：固化程控}"
-                               HorizontalAlignment="Center" Margin="0,4,0,0" FontSize="12"
+                <StackPanel Margin="16,14,16,16">
+                    <!-- 状态行：档位词胶囊（StatusShort）随 StatusKind 四档变色；
+                         数值细节（剩余天数/到期日）走 StatusText=ToolTip 与 DetailText 正文 -->
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="激活状态：" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Brush.Fresh.FgStrong}"
+                                   ToolTip="{Binding StatusText, FallbackValue=激活状态：未激活}"/>
+                        <Border Height="21" CornerRadius="10.5" Padding="12,0" Margin="10,0,0,0"
+                                HorizontalAlignment="Left" VerticalAlignment="Center"
+                                ToolTip="{Binding StatusText, FallbackValue=激活状态：未激活}">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <!-- 缺省=中性蓝档（Info：未激活/演示模式），其余档 DataTrigger 切 -->
+                                    <Setter Property="Background" Value="{DynamicResource Brush.Fresh.HintBg}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding StatusKind}" Value="Ok">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Fresh.AlertOkBg}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding StatusKind}" Value="Warn">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Fresh.WarnBg}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding StatusKind}" Value="Err">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Fresh.AlertErrBg}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="7" Height="7" VerticalAlignment="Center">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{DynamicResource Brush.Fresh.Accent}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding StatusKind}" Value="Ok">
+                                                    <Setter Property="Fill" Value="{DynamicResource Brush.Fresh.AlertOkFg}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding StatusKind}" Value="Warn">
+                                                    <Setter Property="Fill" Value="{DynamicResource Brush.Fresh.WarnFg}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding StatusKind}" Value="Err">
+                                                    <Setter Property="Fill" Value="{DynamicResource Brush.Fresh.AlertErrFg}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock Margin="6,0,0,0" FontSize="11" FontWeight="SemiBold"
+                                           VerticalAlignment="Center"
+                                           Text="{Binding StatusShort, FallbackValue=未激活}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.Accent}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding StatusKind}" Value="Ok">
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.AlertOkFg}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding StatusKind}" Value="Warn">
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.WarnFg}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding StatusKind}" Value="Err">
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.AlertErrFg}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                    <!-- 状态补充说明（引导/失败原因） -->
+                    <TextBlock Text="{Binding DetailText, FallbackValue=请把设备码提供给厂商，收到激活码后粘贴到下方输入框。}"
+                               TextWrapping="Wrap" Margin="0,8,0,0" FontSize="12"
                                Foreground="{DynamicResource Brush.Fresh.FgMid}"/>
 
-                    <!-- 当前授权状态条（状态+补充说明） -->
-                    <Border Style="{StaticResource FreshHintBorder}" Margin="0,14,0,0">
-                        <StackPanel>
-                            <TextBlock Text="{Binding StatusText, FallbackValue=激活状态：未激活}"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource Brush.Fresh.FgStrong}"/>
-                            <TextBlock Text="{Binding DetailText, FallbackValue=请把设备码提供给厂商}"
-                                       TextWrapping="Wrap" Margin="0,4,0,0" FontSize="12"
-                                       Foreground="{DynamicResource Brush.Fresh.FgMid}"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- 设备码 -->
-                    <TextBlock Text="设备码（发给厂商换取激活码）" Margin="0,14,0,5"
-                               Foreground="{DynamicResource Brush.Fresh.FgStrong}"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBox x:Name="DeviceCodeBox" Grid.Column="0" Style="{StaticResource FreshInput}"
-                                 Height="58" Padding="8,6,8,6" IsReadOnly="True"
-                                 TextWrapping="Wrap" AcceptsReturn="True"
-                                 VerticalScrollBarVisibility="Auto"
-                                 FontFamily="Consolas" FontSize="12"
-                                 Text="{Binding DeviceCode, Mode=OneWay, FallbackValue=CURE-XXXXXXXX-XXXXXXXX-XXXX}"/>
-                        <Button Grid.Column="1" Style="{StaticResource FreshButton}" Content="复制"
-                                Command="{x:Null}" Click="OnCopyDeviceCode"
-                                VerticalAlignment="Top" Height="32" Margin="8,0,0,0"
-                                ToolTip="复制设备码到剪贴板"/>
+                    <!-- 设备码卡（悬浮胶囊标题跨卡顶线，WinBg 底遮卡框线） -->
+                    <Grid Margin="0,18,0,0">
+                        <Border CornerRadius="10"
+                                Background="{DynamicResource Brush.Fresh.CardBg}"
+                                BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+                                Padding="12">
+                            <StackPanel>
+                                <TextBox x:Name="DeviceCodeBox" Style="{StaticResource FreshInput}"
+                                         Height="40" Padding="8,6" IsReadOnly="True"
+                                         TextWrapping="NoWrap"
+                                         FontFamily="Consolas" FontSize="12"
+                                         ToolTip="激活绑定凭据。30 天档内恒定（重开窗/重启不变），跨档自动换新——跨档后请重新复制发给厂商"
+                                         Text="{Binding DeviceCode, Mode=OneWay, FallbackValue=CURE-XXXXXXXX-XXXXXXXX-XXXX}"/>
+                                <DockPanel Margin="0,8,0,0" LastChildFill="True">
+                                    <Button DockPanel.Dock="Right" Style="{StaticResource FreshButton}"
+                                            Content="复制" Click="OnCopyDeviceCode"
+                                            Width="72" Height="26" FontSize="12" Margin="10,0,0,0"
+                                            ToolTip="复制设备码到剪贴板"/>
+                                    <TextBlock Text="发给厂商换取激活码；30 天档内本码不变，跨档后重抄再发。"
+                                               FontSize="11" TextWrapping="Wrap" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Brush.Fresh.FgMid}"/>
+                                </DockPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14,-9,0,0"
+                                Background="{DynamicResource Brush.Fresh.WinBg}" CornerRadius="9"
+                                Padding="10,1">
+                            <TextBlock Text="设备码" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Brush.Fresh.Accent}"/>
+                        </Border>
                     </Grid>
 
-                    <!-- 激活码 -->
-                    <TextBlock Text="激活码（粘贴厂商返回的完整激活码）" Margin="0,14,0,5"
-                               Foreground="{DynamicResource Brush.Fresh.FgStrong}"/>
-                    <TextBox Style="{StaticResource FreshInput}" Height="86" Padding="8,6,8,6"
-                             TextWrapping="Wrap" AcceptsReturn="True"
-                             VerticalScrollBarVisibility="Auto"
-                             VerticalContentAlignment="Top"
-                             FontFamily="Consolas" FontSize="12"
-                             Text="{Binding LicenseCode, UpdateSourceTrigger=PropertyChanged,
-                                    FallbackValue=''}"/>
+                    <!-- 激活码卡（同款骨架，无复制钮） -->
+                    <Grid Margin="0,16,0,0">
+                        <Border CornerRadius="10"
+                                Background="{DynamicResource Brush.Fresh.CardBg}"
+                                BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+                                Padding="12">
+                            <StackPanel>
+                                <TextBox Style="{StaticResource FreshInput}" Height="66" Padding="8,6"
+                                         TextWrapping="Wrap" AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto"
+                                         VerticalContentAlignment="Top"
+                                         FontFamily="Consolas" FontSize="12"
+                                         ToolTip="粘贴厂商签发的激活码后点「激活」；永久码/限期码均可，档内输入有效，换码切换无需重启"
+                                         Text="{Binding LicenseCode, UpdateSourceTrigger=PropertyChanged,
+                                                FallbackValue=''}"/>
+                                <TextBlock Text="粘贴厂商返回的激活码，点右下「激活」；永久码与限期码均可。"
+                                           FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"
+                                           Foreground="{DynamicResource Brush.Fresh.FgMid}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14,-9,0,0"
+                                Background="{DynamicResource Brush.Fresh.WinBg}" CornerRadius="9"
+                                Padding="10,1">
+                            <TextBlock Text="激活码" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Brush.Fresh.Accent}"/>
+                        </Border>
+                    </Grid>
 
                     <!-- 提示条（错误/操作引导；Tip 为空整条收起）。
                          底/边/字全走 AlertErr* 键，Dark=低透明状态浸染。 -->
@@ -106,15 +219,6 @@
                         <TextBlock Text="{Binding Tip, FallbackValue=提示占位}" TextWrapping="Wrap"
                                    Foreground="{DynamicResource Brush.Fresh.AlertErrFg}"/>
                     </Border>
-
-                    <!-- 按钮行：主操作=激活，次操作=关闭 -->
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-                        <Button Style="{StaticResource FreshPrimaryButton}" Content="激 活"
-                                Command="{Binding ActivateCommand}" Width="120" Height="32"
-                                Margin="0,0,10,0"/>
-                        <Button Style="{StaticResource FreshButton}" Content="关 闭"
-                                Command="{Binding CloseCommand}" Width="96" Height="32"/>
-                    </StackPanel>
                 </StackPanel>
             </DockPanel>
         </Border>

@@ -108,6 +108,10 @@
     <SolidColorBrush x:Key="Brush.Fresh.AlertOkBg" Color="#E8F5E9"/>
     <SolidColorBrush x:Key="Brush.Fresh.AlertOkBorder" Color="#C8E6C9"/>
     <SolidColorBrush x:Key="Brush.Fresh.AlertOkFg" Color="#2E7D32"/>
+    <!-- 警示琥珀族（V0.0.94 激活窗状态胶囊"试用中"档引入，值与程序①字典一致） -->
+    <SolidColorBrush x:Key="Brush.Fresh.WarnBg" Color="#FFF8E1"/>
+    <SolidColorBrush x:Key="Brush.Fresh.WarnBorder" Color="#F0D48A"/>
+    <SolidColorBrush x:Key="Brush.Fresh.WarnFg" Color="#8A6D3B"/>
     <!-- 滚动条胶囊（常态/悬停） -->
     <SolidColorBrush x:Key="Brush.Fresh.ScrollThumb" Color="#BFD3E8"/>
     <SolidColorBrush x:Key="Brush.Fresh.ScrollThumbHover" Color="#8FC1EC"/>

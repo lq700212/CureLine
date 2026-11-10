@@ -430,4 +430,41 @@ public class LicenseTests : IDisposable
         Assert.Null(closed);   // 失败不关窗
         Assert.NotEqual("激活成功", vm.Tip);
     }
+
+    [Fact(DisplayName = "激活窗 VM：状态胶囊档位/短词解析（六档文案→四档色）")]
+    public void ActivationVm_StatusKindAndShort()
+    {
+        // 未激活态构造：胶囊=中性蓝档 + 短词"未激活"（构造读 LicenseHost 真实态）
+        Assert.Equal(LicenseState.NotActivated, RefreshState());
+        var vm = new LicenseActivationViewModel("固化程控");
+        Assert.Equal(ActivationStatusKind.Info, vm.StatusKind);
+        Assert.Equal("未激活", vm.StatusShort);
+
+        // 六档文案 → 档位/短词解析（纯函数直测，口径对齐 LicenseHost.StateText）
+        Assert.Equal(ActivationStatusKind.Ok,
+            LicenseActivationViewModel.ResolveStatusKind("激活状态：永久使用"));
+        Assert.Equal("永久使用",
+            LicenseActivationViewModel.ResolveStatusShort("激活状态：永久使用"));
+
+        Assert.Equal(ActivationStatusKind.Warn,
+            LicenseActivationViewModel.ResolveStatusKind("激活状态：试用中（剩余 28 天，到期 2026-12-08）"));
+        Assert.Equal("剩余 28 天",
+            LicenseActivationViewModel.ResolveStatusShort("激活状态：试用中（剩余 28 天，到期 2026-12-08）"));
+        Assert.Equal("试用中",   // 提取不到数字回短词兜底
+            LicenseActivationViewModel.ResolveStatusShort("激活状态：试用中"));
+
+        Assert.Equal(ActivationStatusKind.Err,
+            LicenseActivationViewModel.ResolveStatusKind("激活状态：软件已过期"));
+        Assert.Equal("已过期",
+            LicenseActivationViewModel.ResolveStatusShort("激活状态：软件已过期"));
+        Assert.Equal(ActivationStatusKind.Err,
+            LicenseActivationViewModel.ResolveStatusKind("激活状态：设备指纹不符，请联系厂商"));
+        Assert.Equal("指纹不符",
+            LicenseActivationViewModel.ResolveStatusShort("激活状态：设备指纹不符，请联系厂商"));
+
+        Assert.Equal(ActivationStatusKind.Info,
+            LicenseActivationViewModel.ResolveStatusKind("激活状态：演示模式（免激活）"));
+        Assert.Equal("演示模式",
+            LicenseActivationViewModel.ResolveStatusShort("激活状态：演示模式（免激活）"));
+    }
 }

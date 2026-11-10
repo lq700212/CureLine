@@ -2,6 +2,38 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.94（2026-11-10，两程序：激活窗参照 HJVision SoftActivation 设计稿重做——状态胶囊 + 悬浮胶囊标题卡 + 窄卡化）
+
+- **缘由**：用户反馈激活窗"太丑"，点名参考 HJVision 的
+  `SoftActivation` 窗（V4.4.327 一比一复刻设计稿的自绘激活卡：409 窄卡 +
+  渐变标题条盾牌 + 状态胶囊 + 悬浮胶囊标题三卡 + foot 渐变主按钮）。
+- **视觉重做（两程序同构，语义零变化）**：
+  - 窗形 620→424 窄卡（SizeToContent=Height 不变），无边框圆角+WinShadow
+    骨架沿用；标题条走既有 `WinTitleBar` 品牌渐变（全程序一条品牌线，不照抄
+    参考稿的独立渐变），左侧加 18×18 半透明白圆角块+白盾 Path（参考稿
+    `.dlg-title .ic` 六点盾形直转 Geometry，半透明白是品牌条叠加色非主题键）。
+  - **状态胶囊**（参考稿 `.stline`）：呼吸点 7px+档位短词，四档随
+    `StatusKind` 变色——绿=永久使用（AlertOk*）/琥珀=剩余 N 天（Warn*，程序②
+    字典本次补齐三键）/红=过期·指纹不符（AlertErr*）/蓝=未激活·演示（HintBg
+    +Accent）；全文 StatusText 移到标签与胶囊的 ToolTip。
+  - **两张悬浮胶囊标题卡**（参考稿 `.gbox`）：设备码/激活码各一张
+    CardBg 圆角卡，胶囊标题（Accent 字 11 号 SemiBold）跨卡顶线、WinBg 底
+    遮框线；卡内 hint 弱色一行（era 30 天档口径），复制钮收进设备码卡
+    hint 行右端；foot 条=CardBg 分隔线亮底，左侧"适用：×××"弱字 +
+    右侧既有 FreshPrimaryButton 主按钮（foot 的"关闭"钮删除——标题条 ✕
+    与 Esc 已覆盖，参考稿同款只留主钮）。
+  - 色板纪律：参考稿深色专属色值全部换项目语义键，Light/Dark 自动跟随
+    （DocShot 式独立 harness 四帧目检：两程序 × Light/Dark 胶囊骑线/
+    对齐/间距逐项核对）。
+- **VM（Core 共用）新增只读派生**：`StatusKind`（四档枚举）与
+  `StatusShort`（胶囊短词"永久使用/剩余 N 天/…"），随 StatusText setter
+  联动；解析口径 `ResolveStatusKind`/`ResolveStatusShort` 纯函数对齐
+  `LicenseHost.StateText` 六档文案（试用档正则提取"剩余 N 天"，取不到回
+  "试用中"），`LicenseTests` 补 1 例锁六档映射（总量 616）。
+- **语义零变化清单**：VM 属性集合/命令/关窗链/剪贴板逻辑/文案断言全不动；
+  程序② `Themes/Light|Dark.xaml` 各补 `Brush.Fresh.WarnBg/WarnBorder/
+  WarnFg` 三键（值=程序①字典，CimGatewayThemeTests 键集合全等自动校验）。
+
 ## V0.0.93（2026-11-10，固化程控：登录窗"修改密码"回归 + 空闲自动退出 + 四窗简化 + 界面标准沉淀为全局 skill）
 
 - **缘由（用户逐窗拍板）**：① 登录页在"登录"按钮左侧（原"记住密码"位置）加
