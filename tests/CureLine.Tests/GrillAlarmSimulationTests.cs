@@ -46,7 +46,10 @@ public class GrillAlarmSimulationTests
         var logs = new List<string>();
         var machine = new SlotCuringMachine(bus, () => policy,
             clock: () => _now, log: logs.Add, resetModeProvider: resetModeProvider,
-            grillPolarityProvider: polarityProvider);
+            // 极性缺省注入常开（BlockedOn）：本组剧本按"DI ON=挡"编排（与真机
+            // 接线无关，只是电平直观）；现场实测的常闭口径另有专测剧本
+            // （SimulatedCouplerDiFlow_BlockedOffSitePolarity_FullCycle）。
+            grillPolarityProvider: polarityProvider ?? (() => GrillSignalPolarity.BlockedOn));
         // 宿主转发边沿（生产由 MainViewModel 做——machine 不直接订阅总线）
         bus.PointChanged += (_, e) => machine.OnPointChanged(e);
         return (bus, machine, logs);

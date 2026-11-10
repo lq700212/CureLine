@@ -99,6 +99,20 @@ public interface IDialogService
     /// </summary>
     void ShowTraceReport(CureLine.Core.Data.SlotProductTraceStore store, Func<string?> askSavePath);
 
+    /// <summary>
+    /// 扫码拦截提示窗（V0.0.99，模态）：现场红线拦截时给操作员讲清"为什么没
+    /// 扫进去、下一步怎么做"（纯告知，一个"知道了"按钮）。
+    /// title=标题；message=主提示（一句话）；detail=操作指引（可空）。
+    /// </summary>
+    void ShowScanNotice(string title, string message, string detail);
+
+    /// <summary>
+    /// 放回再加工产品时的"固化时长口径"确认窗（V0.0.99，模态）：
+    /// 接着之前固化继续 / 完全重新开始 / 取消。返回操作员的选择
+    /// （关窗=取消）。这是唯一决定整盘固化时长的入口，VM 不自己拍板。
+    /// </summary>
+    SlotReloadChoice AskSlotReloadBasis(SlotReloadPrompt prompt);
+
     /// <summary>程序化关闭主进程（退出）。</summary>
     void Shutdown();
 }
@@ -284,6 +298,36 @@ public sealed class DialogService : IDialogService
     }
 
     public void Shutdown() => Application.Current?.Shutdown();
+
+    /// <summary>
+    /// 扫码拦截提示窗（V0.0.99）：模态——现场红线拦截必须让操作员停下来看清楚，
+    /// 不能像状态条浮层那样一闪而过。
+    /// </summary>
+    public void ShowScanNotice(string title, string message, string detail)
+    {
+        ScanNoticeWindow? win = null;
+        win = new ScanNoticeWindow
+        {
+            Owner = Application.Current?.MainWindow,
+        };
+        // VM 的关闭回调指向窗：按钮点【知道了】→ VM 命令 → 收窗 → ShowDialog 返回。
+        win.Present(new ScanNoticeViewModel(title, message, detail, () => win?.Close()));
+    }
+
+    /// <summary>
+    /// 放回产品的固化时长口径确认窗（V0.0.99）：模态，返回操作员的选择。
+    /// </summary>
+    public SlotReloadChoice AskSlotReloadBasis(SlotReloadPrompt prompt)
+    {
+        SlotReloadWindow? win = null;
+        win = new SlotReloadWindow
+        {
+            Owner = Application.Current?.MainWindow,
+        };
+        var vm = new SlotReloadViewModel(prompt, () => win?.Close());
+        win.Present(vm);
+        return vm.Choice;
+    }
 }
 
 /// <summary>

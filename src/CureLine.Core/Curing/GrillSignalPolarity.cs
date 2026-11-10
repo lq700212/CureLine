@@ -5,12 +5,12 @@
 //   （门控放行 / 计时中报警 / 自动复位判定 / 重启对齐复核 / 排障日志
 //   "L=挡 R=空"）都经本枚举解释，一处切换全局生效。
 //
-//   BlockedOn（缺省）= 遮挡=ON：光栅被挡时信号 ON、未被挡 OFF。
-//     V0.0.63~V0.0.71 的唯一口径，保持缺省以免既有部署/测试行为漂移；
-//     单测与 DocShot 演示都按此口径编排。
-//   BlockedOff      = 遮挡=OFF：光栅被挡时信号 OFF、未被挡 ON。
-//     现场实测口径（常闭安全光栅的正常输出 ON、遮挡断光 OFF），
-//     程序①现场需在策略窗光栅条选【常闭】切到本档。
+//   BlockedOn      = 遮挡=ON：光栅被挡时信号 ON、未被挡 OFF。
+//     常开型光栅口径（V0.0.63~V0.0.71 的老口径，现非缺省）。
+//   BlockedOff（缺省）= 遮挡=OFF：光栅被挡时信号 OFF、未被挡 ON。
+//     现场实测口径（V0.0.99 用户现场实测拍板：常闭安全光栅的正常输出 ON、
+//     遮挡断光 OFF）——全项目缺省一律按常闭解释；需要常开时在策略窗光栅条
+//     切【常开】，随策略保存/激活生效。
 //
 // 为什么放 Core：消费方是 SlotCuringMachine（门控/报警判定），属 Core
 //   语义；选择随工艺策略保存（CuringPolicy.GrillPolarity，策略窗光栅条
@@ -26,9 +26,12 @@ namespace CureLine.Core.Curing;
 
 public enum GrillSignalPolarity
 {
-    /// <summary>遮挡=ON（缺省）：光栅被挡时 DI 为 ON、未被挡为 OFF。</summary>
+    /// <summary>遮挡=ON（常开型光栅）：光栅被挡时 DI 为 ON、未被挡为 OFF。</summary>
     BlockedOn = 0,
 
-    /// <summary>遮挡=OFF：光栅被挡时 DI 为 OFF、未被挡为 ON（现场实测常闭安全光栅）。</summary>
+    /// <summary>
+    /// 遮挡=OFF（缺省；常闭安全光栅）：光栅被挡时 DI 为 OFF、未被挡为 ON。
+    /// V0.0.99 用户现场实测拍板：现场光栅为常闭，全项目缺省一律按本档解释。
+    /// </summary>
     BlockedOff = 1,
 }

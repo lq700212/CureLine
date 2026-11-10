@@ -184,7 +184,8 @@ public class CuringPolicyTests
         Assert.NotNull(loaded);
         var p = Assert.Single(loaded!.Policies);
         Assert.True(p.GrillAlarmEnabled);
-        Assert.Equal(GrillSignalPolarity.BlockedOn, p.GrillPolarity);
+        // 缺字段的旧策略文件 → 走属性缺省：光栅极性=常闭（V0.0.99 现场实测口径）
+        Assert.Equal(GrillSignalPolarity.BlockedOff, p.GrillPolarity);
         Assert.Equal(GrillAlarmResetMode.Manual, p.GrillResetMode);
     }
 

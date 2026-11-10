@@ -49,6 +49,90 @@ public class SlotProductTraceStoreTests : IDisposable
     private static string Stamp(int hour, int minute) =>
         DateTime.Today.AddHours(hour).AddMinutes(minute).ToString("yyyy-MM-dd HH:mm:ss");
 
+    // ---------- 续接固化（V0.0.99：前段时长 + 本轮 = 累计） ----------
+
+    [Fact(DisplayName = "追溯库：续接件的累计固化时长=前段+本轮（达标口径）")]
+    public void Store_ResumeProduct_AccumulatesPriorMinutes()
+    {
+        var store = MakeStore();
+
+        // 续接件：前段已固化 480 分钟（8 小时），本轮计划 1440（24 小时）
+        store.AddBound(1, 1, "SN-R", At(), priorMinutes: 480);
+        store.MarkCuringStarted(1, 1, At(8, 1), 1440);
+        store.MarkLeft(1, 1, At(8, 2), 960, SlotTraceEndReason.Released);
+
+        var row = Assert.Single(store.Query(new SlotTraceFilter(), 0, 10));
+        Assert.Equal(480, row.PriorCuredMinutes);
+        // 实际固化 = 本轮 960 + 前段 480 = 1440 = 计划时长（累计达标）
+        Assert.Equal(1440, row.CuredMinutes);
+        Assert.Equal(1440, row.PlannedMinutes);
+    }
+
+    [Fact(DisplayName = "追溯库：全新件的累计=本轮（前段为 0）")]
+    public void Store_FreshProduct_CuredEqualsCurrentRound()
+    {
+        var store = MakeStore();
+        store.AddBound(1, 1, "SN-N", At());
+        store.MarkLeft(1, 1, At(8, 2), 120, SlotTraceEndReason.Released);
+
+        var row = Assert.Single(store.Query(new SlotTraceFilter(), 0, 10));
+        Assert.Equal(0, row.PriorCuredMinutes);
+        Assert.Equal(120, row.CuredMinutes);
+    }
+
+    [Fact(DisplayName = "追溯库：中途取出登记待放回台账（放回时弹窗问口径的基准）")]
+    public void Store_TakenOut_RegistersTakeOutLedger()
+    {
+        var store = MakeStore();
+        store.AddBound(2, 1, "SN-R", At());
+        store.MarkCuringStarted(2, 1, At(8, 1), 1440);
+
+        int total = store.MarkTakenOut(2, 1, "SN-R", At(8, 2), 480, alarmFlag: true,
+            note: "报警确认取出（补扫）");
+
+        Assert.Equal(480, total);              // 累计已固化分钟
+        var info = store.TryGetTakeOut("SN-R");
+        Assert.NotNull(info);
+        Assert.Equal(2, info!.Rack);
+        Assert.Equal(1, info.Level);
+        Assert.Equal(480, info.CuredMinutes);
+        Assert.Equal("B02", info.LocationCode);
+        Assert.Single(store.GetTakeOutLedger());
+    }
+
+    [Fact(DisplayName = "追溯库：重新上料=出台账（不再算待放回件）")]
+    public void Store_Rebound_RemovesFromTakeOutLedger()
+    {
+        var store = MakeStore();
+        store.AddBound(2, 1, "SN-R", At());
+        store.MarkTakenOut(2, 1, "SN-R", At(8, 2), 480);
+        Assert.NotNull(store.TryGetTakeOut("SN-R"));
+
+        // 放回新库位重新上料 → 待放回台账移除
+        store.AddBound(3, 1, "SN-R", At(9, 0));
+        Assert.Null(store.TryGetTakeOut("SN-R"));
+        Assert.Empty(store.GetTakeOutLedger());
+    }
+
+    [Fact(DisplayName = "追溯库：重启后台账从库里装载（待放回件不丢）")]
+    public void Store_LoadTakeOutIndex_RestoresLedger()
+    {
+        var store = MakeStore();
+        store.AddBound(2, 1, "SN-R", At());
+        store.MarkTakenOut(2, 1, "SN-R", At(8, 2), 480);
+        store.AddBound(2, 2, "SN-N", At());
+        store.MarkTakenOut(2, 2, "SN-N", At(8, 3), 60);
+
+        // 模拟重启：新实例从同一个库装载台账
+        var db = new SqliteHelper(Path.Combine(_tmp, "trace.db3"));
+        var reopened = new SlotProductTraceStore(db);
+        int n = reopened.LoadTakeOutIndex();
+
+        Assert.Equal(2, n);
+        Assert.Equal(480, reopened.TryGetTakeOut("SN-R")!.CuredMinutes);
+        Assert.Equal(60, reopened.TryGetTakeOut("SN-N")!.CuredMinutes);
+    }
+
     [Fact(DisplayName = "追溯库：一件产品一行（同库位多产品=多行）+ 逐段盖章")]
     public void Store_BoundAndStamped_PerProductRows()
     {

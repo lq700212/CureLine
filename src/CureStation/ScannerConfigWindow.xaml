@@ -216,19 +216,6 @@
                                 </Grid>
                             </Expander>
                         </StackPanel>
-
-                        <!-- 两方式共用：会话超时 -->
-                        <Grid Margin="0,12,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="110"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="会话超时（秒）：" VerticalAlignment="Center" Margin="0,0,8,0"
-                                       ToolTip="扫了库位码后等产品码的最长间隔，超时自动回到『请扫库位码』；5~600，缺省 15"/>
-                            <TextBox Grid.Column="1" Style="{StaticResource FreshInput}"
-                                     Text="{Binding EditSessionTimeout, UpdateSourceTrigger=PropertyChanged}"
-                                     ToolTip="扫了库位码后等产品码的最长间隔，超时自动回到『请扫库位码』；5~600，缺省 15"/>
-                        </Grid>
                     </StackPanel>
                 </ScrollViewer>
 

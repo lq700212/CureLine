@@ -231,8 +231,10 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     // V0.0.74 起 UI 从"光栅信号取反"勾选框改为【常开｜常闭】分段按钮：
     // "取反"是工程师思维，现场看着要换算一次；常开/常闭是接线口径本身，
     // 两项并排+当前档高亮，一眼可读（用户拍板）。
+    // V0.0.99 用户现场实测拍板：现场光栅为**常闭**，故草稿缺省=常闭
+    // （新建策略/复位默认态都是常闭，与 CuringPolicy.GrillPolarity 缺省同源）。
 
-    private bool _editGrillSignalInverted;
+    private bool _editGrillSignalInverted = true;
 
     /// <summary>
     /// 光栅信号极性查询门面（true=遮挡=OFF / 常闭；false=遮挡=ON / 常开）。
@@ -242,14 +244,17 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     /// </summary>
     public bool GrillSignalInverted => _editGrillSignalInverted;
 
-    /// <summary>常开选项（分段按钮左项）：被挡 = ON，缺省口径（V0.0.71 及以前）。</summary>
+    /// <summary>常开选项（分段按钮左项）：被挡 = ON（常开型光栅口径）。</summary>
     public bool IsGrillNormallyOpen
     {
         get => !_editGrillSignalInverted;
         set { if (value) SetGrillSignalInverted(false); }
     }
 
-    /// <summary>常闭选项（分段按钮右项）：被挡 = OFF，现场常闭安全光栅口径。</summary>
+    /// <summary>
+    /// 常闭选项（分段按钮右项）：被挡 = OFF——现场实测常闭安全光栅口径，
+    /// 全项目缺省（V0.0.99 用户现场实测拍板）。
+    /// </summary>
     public bool IsGrillNormallyClosed
     {
         get => _editGrillSignalInverted;
@@ -271,8 +276,8 @@ public sealed class CuringPolicyViewModel : ViewModelBase
 
     /// <summary>信号类型组 ToolTip（一句话接线口径；随切换刷新）。</summary>
     public string GrillSignalToolTip => _editGrillSignalInverted
-        ? "常闭：遮挡=OFF（被挡 OFF / 让空 ON）。随策略保存，激活后生效。"
-        : "常开：遮挡=ON（被挡 ON / 让空 OFF，缺省）。随策略保存，激活后生效。";
+        ? "常闭：遮挡=OFF（被挡 OFF / 让空 ON）——现场实测口径，缺省。随策略保存，激活后生效。"
+        : "常开：遮挡=ON（被挡 ON / 让空 OFF）。随策略保存，激活后生效。";
 
     // ---------- 报警总开关（策略字段，随保存/激活） ----------
     //
@@ -868,7 +873,7 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         EditGrillGate = false;
         EditPersistMinutes = false;
         SetGrillResetMode(GrillAlarmResetMode.Manual);
-        SetGrillSignalInverted(false);
+        SetGrillSignalInverted(true);   // 光栅极性缺省=常闭（现场实测口径）
         SetGrillAlarmEnabled(true);
         EditLevel1Min = EditLevel2Min = EditLevel3Min = EditLevel4Min = "";
         SlotRows.Clear();

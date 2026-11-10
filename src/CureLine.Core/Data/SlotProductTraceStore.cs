@@ -124,8 +124,21 @@ public sealed class SlotTraceRow
     /// <summary>结束原因（枚举）。</summary>
     public SlotTraceEndReason EndReason { get; set; } = SlotTraceEndReason.None;
 
-    /// <summary>是否经历过光栅报警（1=是）。</summary>
+    /// <summary>
+    /// 是否经历过光栅报警（1=是）。
+    /// </summary>
     public bool AlarmFlag { get; set; }
+
+    /// <summary>
+    /// 该产品"进入本轮前"已累计固化的分钟（V0.0.99 续接固化）。
+    ///
+    /// 干什么：中途取出再加工的产品放回时选【接着之前固化继续】——它之前
+    ///   已固化过 N 分钟，本轮只需再固化（计划 − N）即累计达标。这 N 落在
+    ///   本列，追溯库盖章时"实际固化(分)"= 本轮时长 + N = **累计**时长，
+    ///   正好等于计划时长（达标口径）。
+    /// 口径：全新件 = 0；选【完全重新开始固化】的放回件也 = 0（前段作废）。
+    /// </summary>
+    public int PriorCuredMinutes { get; set; }
 
     /// <summary>操作员备注（如"中途取出2件"）。</summary>
     public string OperatorNote { get; set; } = "";
@@ -223,6 +236,11 @@ public sealed class SlotProductTraceStore
     /// <summary>
     /// 建表 + 建视图（幂等；启动时装配调一次即可，删表重建也安全）。
     /// 列名用英文 snake_case（中文列名是老 VB 项目遗留，新表不复制）。
+    ///
+    /// 迁移：老库（V0.0.98 建的那张）缺 prior_cured_minutes 列——SQLite 不
+    /// 支持 "ADD COLUMN IF NOT EXISTS"，故先查 pragma table_info 确认列在不在，
+    /// 不在再 ALTER TABLE ADD COLUMN（幂等：第二次启动列已存在就不动）。
+    /// 列缺省 0 = 全新件（前段无固化），历史行不需要回填。
     /// </summary>
     public void EnsureSchema()
     {
@@ -243,7 +261,16 @@ public sealed class SlotProductTraceStore
                 "cured_minutes INTEGER NOT NULL DEFAULT -1, " +
                 "end_reason INTEGER NOT NULL DEFAULT 0, " +
                 "alarm_flag INTEGER NOT NULL DEFAULT 0, " +
+                "prior_cured_minutes INTEGER NOT NULL DEFAULT 0, " +
                 "operator_note TEXT NOT NULL DEFAULT '')", null);
+
+            // 老库补列（幂等：列已在则跳过）。
+            if (!ColumnExists("slot_product_trace", "prior_cured_minutes"))
+            {
+                _db.ExecuteNonQuery(
+                    "ALTER TABLE slot_product_trace " +
+                    "ADD COLUMN prior_cured_minutes INTEGER NOT NULL DEFAULT 0", null);
+            }
 
             // 库位汇总视图：一个库位一行（现场看"这个库位放过几个、几个正常"）。
             // 用 COUNT/SUM 聚合，异常件 = 结束原因非 0 且非"正常放行"。
@@ -261,33 +288,62 @@ public sealed class SlotProductTraceStore
         }
     }
 
+    /// <summary>
+    /// 列是否存在（pragma table_info；SQLite 无 ADD COLUMN IF NOT EXISTS，
+    /// 迁移前必须先问一句）。
+    /// 用表值函数 pragma_table_info(@t) 而非 PRAGMA 语句——PRAGMA 不支持
+    /// 绑定参数（只能拼字符串，违反"SQL 一律参数化"红线），表值函数可以。
+    /// </summary>
+    private bool ColumnExists(string table, string column)
+    {
+        var tableData = _db.ExecuteDataTable(
+            "SELECT name FROM pragma_table_info(@t)", new Dictionary<string, object?> { ["@t"] = table });
+        foreach (System.Data.DataRow r in tableData.Rows)
+        {
+            if (string.Equals(r["name"]?.ToString(), column, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
     // ---------------- 写入（调用方必须放后台线程） ----------------
 
     /// <summary>
     /// 扫码绑定：新增一件产品（该库位可能有多件，逐件一行）。
+    ///
+    /// priorMinutes=续接件"进入本轮前累计已固化分钟"（0=全新件）——落库后
+    /// 追溯库盖章时"实际固化(分)"= 本轮时长 + 本值 = **累计**时长（达标口径）。
+    ///
     /// 返回新记录的自增 id（0=写失败）。
     /// </summary>
-    public long AddBound(int rack, int level, string productSn, DateTimeOffset at)
+    public long AddBound(int rack, int level, string productSn, DateTimeOffset at, int priorMinutes = 0)
     {
         if (string.IsNullOrWhiteSpace(productSn))
             return 0;
+        string sn = productSn.Trim();
+        long id;
         lock (_writeGate)
         {
             _db.ExecuteNonQuery(
                 "INSERT INTO slot_product_trace " +
-                "(rack, level, location_code, product_sn, bound_at) " +
-                "VALUES (@rack, @level, @loc, @sn, @bound)", new Dictionary<string, object?>
+                "(rack, level, location_code, product_sn, bound_at, prior_cured_minutes) " +
+                "VALUES (@rack, @level, @loc, @sn, @bound, @prior)", new Dictionary<string, object?>
                 {
                     ["@rack"] = rack,
                     ["@level"] = level,
                     ["@loc"] = SlotLocationCode.EncodeInRack(rack, level),
-                    ["@sn"] = productSn.Trim(),
+                    ["@sn"] = sn,
                     ["@bound"] = FormatTime(at),
+                    ["@prior"] = priorMinutes < 0 ? 0 : priorMinutes,
                 });
-            object? id = _db.ExecuteScalar(
+            object? idObj = _db.ExecuteScalar(
                 "SELECT last_insert_rowid()", null);
-            return id == null ? 0 : Convert.ToInt64(id);
+            id = idObj == null ? 0 : Convert.ToInt64(idObj);
         }
+        // 重新上料 → 该产品不再是"待放回"件（出台账）。
+        // 放在写锁之外：字典操作有自己的锁，嵌套无必要。
+        RemoveTakeOut(sn);
+        return id;
     }
 
     /// <summary>
@@ -334,6 +390,10 @@ public sealed class SlotProductTraceStore
     /// <summary>
     /// 离架（托盘离开 / 报警终止）：给该库位所有未结束记录盖离架时刻、
     /// 实际固化时长与结束原因。curedMinutes=-1 表示没开过计时。
+    ///
+    /// 累计口径（V0.0.99）：实际固化时长 = 本轮时长 + 该件的"前段已固化
+    /// 分钟"（prior_cured_minutes）——续接件放回后累计正好达计划时长；
+    /// 全新件 prior=0，累计=本轮，两者同一口径可比。
     /// </summary>
     public void MarkLeft(int rack, int level, DateTimeOffset at, int curedMinutes,
         SlotTraceEndReason reason, bool alarmFlag = false, string? note = null)
@@ -341,7 +401,9 @@ public sealed class SlotProductTraceStore
         lock (_writeGate)
         {
             _db.ExecuteNonQuery(
-                "UPDATE slot_product_trace SET left_at = @at, cured_minutes = @cm, end_reason = @er, " +
+                "UPDATE slot_product_trace SET left_at = @at, " +
+                "cured_minutes = CASE WHEN @cm < 0 THEN -1 ELSE @cm + prior_cured_minutes END, " +
+                "end_reason = @er, " +
                 "alarm_flag = CASE WHEN @af = 1 THEN 1 ELSE alarm_flag END, " +
                 "operator_note = CASE WHEN @note IS NULL OR @note = '' THEN operator_note ELSE @note END " +
                 "WHERE rack = @rack AND level = @level AND end_reason = 0",
@@ -362,16 +424,26 @@ public sealed class SlotProductTraceStore
     /// 中途取出（单件）：只给这一件 SN 盖离架时刻与"中途取出"原因——
     /// 同一库位里其他产品继续固化，不受影响（这正是报警确认里
     /// 【继续计时】分支要表达的语义）。
+    ///
+    /// 累计口径同 MarkLeft：本轮时长 + 前段时长 = 累计（续接件再被取出时
+    /// 累计要接着算，否则"接着之前固化继续"的基准会算少）。
+    ///
+    /// 返回该件的**累计**已固化分钟（-1=没开过计时）；调用方据此登记
+    /// "待放回"台账（放回时弹窗问口径要用这个数）。
     /// </summary>
-    public void MarkTakenOut(int rack, int level, string productSn, DateTimeOffset at,
+    public int MarkTakenOut(int rack, int level, string productSn, DateTimeOffset at,
         int curedMinutes, bool alarmFlag = true, string? note = null)
     {
         if (string.IsNullOrWhiteSpace(productSn))
-            return;
+            return -1;
+        string sn = productSn.Trim();
+        int total = -1;
         lock (_writeGate)
         {
             _db.ExecuteNonQuery(
-                "UPDATE slot_product_trace SET left_at = @at, cured_minutes = @cm, end_reason = @er, " +
+                "UPDATE slot_product_trace SET left_at = @at, " +
+                "cured_minutes = CASE WHEN @cm < 0 THEN -1 ELSE @cm + prior_cured_minutes END, " +
+                "end_reason = @er, " +
                 "alarm_flag = 1, " +
                 "operator_note = CASE WHEN @note IS NULL OR @note = '' THEN operator_note ELSE @note END " +
                 "WHERE rack = @rack AND level = @level AND product_sn = @sn AND end_reason = 0",
@@ -383,9 +455,35 @@ public sealed class SlotProductTraceStore
                     ["@note"] = note,
                     ["@rack"] = rack,
                     ["@level"] = level,
-                    ["@sn"] = productSn.Trim(),
+                    ["@sn"] = sn,
                 });
+            // 回读累计值（写完再读一次，保证台账登记的数与库里一致）。
+            object? v = _db.ExecuteScalar(
+                "SELECT cured_minutes FROM slot_product_trace " +
+                "WHERE rack = @rack AND level = @level AND product_sn = @sn AND end_reason = @er " +
+                "ORDER BY id DESC LIMIT 1",
+                new Dictionary<string, object?>
+                {
+                    ["@rack"] = rack,
+                    ["@level"] = level,
+                    ["@sn"] = sn,
+                    ["@er"] = (int)SlotTraceEndReason.TakenOut,
+                });
+            total = v == null || v == DBNull.Value ? -1 : Convert.ToInt32(v);
         }
+        // 登记"待放回"台账：这件产品被中途取出过，再放回来时要问固化口径。
+        if (total >= 0)
+        {
+            RegisterTakeOut(new SlotTakeOutInfo
+            {
+                ProductSn = sn,
+                Rack = rack,
+                Level = level,
+                CuredMinutes = total,
+                At = at,
+            });
+        }
+        return total;
     }
 
     /// <summary>
@@ -418,7 +516,7 @@ public sealed class SlotProductTraceStore
             "COALESCE(load_confirmed_at,'') AS load_confirmed_at, " +
             "COALESCE(curing_started_at,'') AS curing_started_at, " +
             "planned_minutes, COALESCE(left_at,'') AS left_at, cured_minutes, " +
-            "end_reason, alarm_flag, operator_note " +
+            "end_reason, alarm_flag, prior_cured_minutes, operator_note " +
             "FROM slot_product_trace" + where + " ORDER BY id DESC LIMIT @take OFFSET @skip";
         ps["@take"] = take;
         ps["@skip"] = skip;
@@ -442,6 +540,7 @@ public sealed class SlotProductTraceStore
                 CuredMinutes = Convert.ToInt32(r["cured_minutes"]),
                 EndReason = (SlotTraceEndReason)Convert.ToInt32(r["end_reason"]),
                 AlarmFlag = Convert.ToInt32(r["alarm_flag"]) != 0,
+                PriorCuredMinutes = Convert.ToInt32(r["prior_cured_minutes"]),
                 OperatorNote = r["operator_note"]?.ToString() ?? "",
             });
         }
@@ -529,11 +628,125 @@ public sealed class SlotProductTraceStore
         return v == null ? 0 : Convert.ToInt32(v);
     }
 
+    // ---------------- 待放回台账（V0.0.99：中途取出后再放回） ----------------
+
+    /// <summary>
+    /// 待放回台账锁（字典读写；UI 线程读、后台线程写）。
+    /// </summary>
+    private readonly object _takeOutGate = new();
+
+    /// <summary>
+    /// 待放回台账（SN → 取出履历）：内存索引，扫码判定时**同步纯内存查**
+    /// （铁律 2：UI 线程不做 DB IO，所以库里查出来的结果缓存在这里）。
+    /// 真源仍是 SQLite（slot_product_trace 里 end_reason=中途取出 的行）——
+    /// 本索引是它的运行期投影，启动时后台装载一次，之后随事件增量维护。
+    /// </summary>
+    private readonly Dictionary<string, SlotTakeOutInfo> _takeOutIndex = new();
+
+    /// <summary>
+    /// 查某产品当前是不是"待放回"件（中途取出过、尚未重新上料）。
+    /// 返回 null=没有取出履历（全新产品，按正常上料处理）。
+    /// 线程安全（UI 线程读 / 后台线程写都可以）。
+    /// </summary>
+    public SlotTakeOutInfo? TryGetTakeOut(string? productSn)
+    {
+        if (string.IsNullOrWhiteSpace(productSn))
+            return null;
+        lock (_takeOutGate)
+        {
+            return _takeOutIndex.TryGetValue(productSn.Trim(), out var info) ? info : null;
+        }
+    }
+
+    /// <summary>
+    /// 登记一件"待放回"产品（中途取出时调；同 SN 覆盖=又取出了一次）。
+    /// </summary>
+    private void RegisterTakeOut(SlotTakeOutInfo info)
+    {
+        if (string.IsNullOrWhiteSpace(info.ProductSn))
+            return;
+        lock (_takeOutGate)
+            _takeOutIndex[info.ProductSn.Trim()] = info;
+    }
+
+    /// <summary>
+    /// 移出待放回台账（产品重新上料时调——它已经回到产线上了）。
+    /// </summary>
+    private void RemoveTakeOut(string? productSn)
+    {
+        if (string.IsNullOrWhiteSpace(productSn))
+            return;
+        lock (_takeOutGate)
+            _takeOutIndex.Remove(productSn.Trim());
+    }
+
+    /// <summary>
+    /// 装载待放回台账（启动时后台调一次，DB IO——铁律 2）。
+    ///
+    /// 判定口径：某个 SN 的**最新一条**记录是"中途取出"（end_reason=2）
+    /// → 该产品当前是待放回件。若它后来重新上料过，会有更新的一条记录
+    /// （end_reason=0 或放行），自然就不在结果里了——不需要额外的状态位。
+    /// </summary>
+    public int LoadTakeOutIndex()
+    {
+        var table = _db.ExecuteDataTable(
+            "SELECT t.rack, t.level, t.product_sn, t.cured_minutes, t.left_at " +
+            "FROM slot_product_trace t " +
+            "WHERE t.end_reason = @er " +
+            "  AND t.id = (SELECT MAX(t2.id) FROM slot_product_trace t2 " +
+            "               WHERE t2.product_sn = t.product_sn)",
+            new Dictionary<string, object?> { ["@er"] = (int)SlotTraceEndReason.TakenOut });
+
+        var items = new List<SlotTakeOutInfo>();
+        foreach (System.Data.DataRow r in table.Rows)
+        {
+            string sn = r["product_sn"]?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(sn))
+                continue;
+            items.Add(new SlotTakeOutInfo
+            {
+                ProductSn = sn,
+                Rack = Convert.ToInt32(r["rack"]),
+                Level = Convert.ToInt32(r["level"]),
+                CuredMinutes = Convert.ToInt32(r["cured_minutes"]),
+                At = ParseTime(r["left_at"]?.ToString()),
+            });
+        }
+
+        lock (_takeOutGate)
+        {
+            _takeOutIndex.Clear();
+            foreach (var info in items)
+                _takeOutIndex[info.ProductSn] = info;
+        }
+        return items.Count;
+    }
+
+    /// <summary>
+    /// 待放回清单（报表/弹窗用；台账是内存投影，直接拷出去即可）。
+    /// </summary>
+    public List<SlotTakeOutInfo> GetTakeOutLedger()
+    {
+        lock (_takeOutGate)
+            return _takeOutIndex.Values.OrderBy(i => i.At).ToList();
+    }
+
     // ---------------- 内部 ----------------
 
     /// <summary>时间统一格式（与 cure_record 一致：yyyy-MM-dd HH:mm:ss，字典序=时间序）。</summary>
     private static string FormatTime(DateTimeOffset at) =>
         at.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+
+    /// <summary>
+    /// 时间文本 → 时间点（台账装载时还原取出时刻；解析不了回纪元——
+    /// 台账只用来排序与展示时刻，解析失败不影响判定）。
+    /// </summary>
+    private static DateTimeOffset ParseTime(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return DateTimeOffset.MinValue;
+        return DateTimeOffset.TryParse(text, out var t) ? t : DateTimeOffset.MinValue;
+    }
 
     /// <summary>流水筛选条件 → WHERE 子句 + 参数字典（一律参数化，禁止拼接）。</summary>
     private static (string Where, Dictionary<string, object?> Params) BuildWhere(SlotTraceFilter filter)

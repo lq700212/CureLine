@@ -74,13 +74,13 @@ def check_md(name):
         fail(name, f"缺必含截图: {missing}")
 
     # 内部版全量断言（对应程序全部截图都要在场；切片边界=check_config 的
-    # IMG_WHITE 程序①/程序②分界，V0.0.98 程序① 13→16 张）
+    # IMG_WHITE 程序①/程序②分界，V0.0.99 程序① 16→18 张）
     if name == "固化程控_内部手册.md":
-        need = [i for i in cfg.IMG_WHITE[:16] if i not in refs]
+        need = [i for i in cfg.IMG_WHITE[:18] if i not in refs]
         if need:
             fail(name, f"内部版应含程序①全部截图，缺: {need}")
     if name == "整线网关_内部手册.md":
-        need = [i for i in cfg.IMG_WHITE[16:] if i not in refs]
+        need = [i for i in cfg.IMG_WHITE[18:] if i not in refs]
         if need:
             fail(name, f"内部版应含程序②全部截图，缺: {need}")
     return text

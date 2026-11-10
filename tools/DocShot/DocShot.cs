@@ -54,6 +54,8 @@ using CwMesPost = CureStation.MesPostConfigWindow;
 using CwScannerConfig = CureStation.ScannerConfigWindow;
 using CwAlarm = CureStation.GrillAlarmResetWindow;
 using CwTraceReport = CureStation.TraceReportWindow;
+using CwScanNotice = CureStation.ScanNoticeWindow;
+using CwSlotReload = CureStation.SlotReloadWindow;
 using CureDialogs = CureStation.ViewModels.IDialogService;
 using CureMainVm = CureStation.ViewModels.MainViewModel;
 using CureLoginVm = CureStation.ViewModels.LoginViewModel;
@@ -66,6 +68,8 @@ using CureMesPostVm = CureStation.ViewModels.MesPostConfigViewModel;
 using CureScannerVm = CureStation.ViewModels.ScannerConfigViewModel;
 using CureAlarmVm = CureStation.ViewModels.GrillAlarmResetCoordinator;
 using CureTraceReportVm = CureStation.ViewModels.TraceReportViewModel;
+using CureScanNoticeVm = CureStation.ViewModels.ScanNoticeViewModel;
+using CureSlotReloadVm = CureStation.ViewModels.SlotReloadViewModel;
 using CureLogSnap = CureStation.ViewModels.LogSystemSnapshot;
 
 using GwMain = CimGateway.MainWindow;
@@ -359,6 +363,47 @@ public static class Program
             try { tr.Close(); } catch { }
         }
         catch (Exception ex) { Log($"WARN 追溯报表镜头失败：{ex.Message}"); }
+
+        // ---------- 扫码拦截提示窗（V0.0.99：红线拦截的告知窗） ----------
+        // 现场红线拦截必须让操作员停下来看清楚为什么没扫进去——状态条闪一行不够。
+        try
+        {
+            var noticeWin = new CwScanNotice
+            {
+                DataContext = new CureScanNoticeVm(
+                    "扫码被拦截：上一个绑定流程未结束",
+                    "A01 绑定未结束，请再扫一次 A01 结束绑定",
+                    "请再扫一次上面的库位码，结束上一次的绑定流程，然后再扫其他库位。",
+                    () => { }),
+            };
+            ShotFrame(noticeWin, "cs-scan-notice.png", 620);
+            noticeWin.Hide();
+            try { noticeWin.Close(); } catch { }
+        }
+        catch (Exception ex) { Log($"WARN 扫码提示镜头失败：{ex.Message}"); }
+
+        // ---------- 放回产品固化时长口径确认窗（V0.0.99） ----------
+        // 之前 8 小时 + 计划 24 小时 → 本盘再固化 16 小时即累计达标。
+        try
+        {
+            var reloadWin = new CwSlotReload
+            {
+                DataContext = new CureSlotReloadVm(new SlotReloadPrompt
+                {
+                    ProductSn = "SN-2026-000123",
+                    LocationCode = "C04",
+                    Rack = 3,
+                    Level = 1,
+                    PreviousLocationCode = "B02",
+                    PriorMinutes = 480,
+                    PlanMinutes = 1440,
+                }, () => { }),
+            };
+            ShotFrame(reloadWin, "cs-slot-reload.png", 760);
+            reloadWin.Hide();
+            try { reloadWin.Close(); } catch { }
+        }
+        catch (Exception ex) { Log($"WARN 放回口径镜头失败：{ex.Message}"); }
 
         // ---------- 主窗流转后期（更多仓位走过一轮；避开 Mock 演示掉线窗口） ----------
         Pump(6000);
@@ -847,6 +892,11 @@ public static class Program
         public void CloseGrillAlarmReset() { }
         // 追溯报表窗桩（V0.0.97 接口补齐）：镜头段显式构造真实窗拍（同日志窗口径）。
         public void ShowTraceReport(SlotProductTraceStore store, Func<string?>? askSavePath) { }
+        // 扫码拦截提示窗桩（V0.0.99 接口补齐）：镜头段显式构造真实窗拍。
+        public void ShowScanNotice(string title, string message, string detail) { }
+        // 放回口径确认窗桩（V0.0.99 接口补齐）：镜头段显式构造真实窗拍。
+        public CureLine.Core.Curing.SlotReloadChoice AskSlotReloadBasis(
+            CureLine.Core.Curing.SlotReloadPrompt prompt) => CureLine.Core.Curing.SlotReloadChoice.Cancel;
     }
 
     private sealed class SilentGatewayDialogs : GwDialogs

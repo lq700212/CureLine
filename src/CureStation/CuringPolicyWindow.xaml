@@ -431,7 +431,7 @@
                                  外框浅底圆角胶囊，选中一枚蓝底反白；触摸目标高≈35px -->
                             <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Text="信号类型" VerticalAlignment="Center"
-                                           ToolTip="{Binding GrillSignalToolTip, FallbackValue='常开：遮挡=ON（缺省）。随策略保存，激活后生效。'}"/>
+                                           ToolTip="{Binding GrillSignalToolTip, FallbackValue='常闭：遮挡=OFF（缺省）。随策略保存，激活后生效。'}"/>
                                 <Border CornerRadius="5" BorderThickness="1" Padding="3" Margin="8,0,0,0"
                                         VerticalAlignment="Center"
                                         Background="{DynamicResource Brush.Fresh.CanvasBg}"
@@ -439,12 +439,12 @@
                                     <StackPanel Orientation="Horizontal">
                                         <RadioButton Style="{StaticResource GrillSegment}" Content="常开"
                                                      GroupName="GrillPolarity"
-                                                     IsChecked="{Binding IsGrillNormallyOpen, FallbackValue=True}"
-                                                     ToolTip="常开：被挡=ON、让空=OFF（缺省）。随策略保存。"/>
+                                                     IsChecked="{Binding IsGrillNormallyOpen, FallbackValue=False}"
+                                                     ToolTip="常开：被挡=ON、让空=OFF。随策略保存。"/>
                                         <RadioButton Style="{StaticResource GrillSegment}" Content="常闭" Margin="2,0,0,0"
                                                      GroupName="GrillPolarity"
-                                                     IsChecked="{Binding IsGrillNormallyClosed, FallbackValue=False}"
-                                                     ToolTip="常闭：被挡=OFF、让空=ON（常闭安全光栅）。随策略保存。"/>
+                                                     IsChecked="{Binding IsGrillNormallyClosed, FallbackValue=True}"
+                                                     ToolTip="常闭：被挡=OFF、让空=ON（常闭安全光栅，缺省）。随策略保存。"/>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>

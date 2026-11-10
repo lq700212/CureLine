@@ -3,7 +3,7 @@
 //
 // 干什么：把 [Scanner] 节的全部可调参数收进一个弹窗——启用开关、连接方式
 //   （Serial 串口 / Tcp 以太网）、串口定位（固定 COM 口 / 设备名关键字自动
-//   找口）与串口参数、TCP 目标（IP / 端口 / 触发指令）、扫码会话超时。保存
+//   找口）与串口参数、TCP 目标（IP / 端口 / 触发指令）。保存
 //   落 config.ini（ScannerOptions.Save），主窗收到 true 后按新参数重建扫码枪
 //   （保存即生效，不重启程序）。
 // 为什么界面化：现场扫码枪接入方式会演进（V0.0.77=串口「网口输出+网口转
@@ -184,14 +184,6 @@ public sealed class ScannerConfigViewModel : ViewModelBase
         set => Set(ref _editParity, value ?? "None");
     }
 
-    private string _editSessionTimeout = "15";
-    /// <summary>扫码会话超时秒数（5~600；扫了库位码后等产品码的最长间隔）。</summary>
-    public string EditSessionTimeout
-    {
-        get => _editSessionTimeout;
-        set => Set(ref _editSessionTimeout, value ?? "");
-    }
-
     private bool _editDebugLog;
     /// <summary>心跳调试日志（排障用：WMI 找口过程写操作日志；正常生产保持不勾）。</summary>
     public bool EditDebugLog
@@ -255,7 +247,6 @@ public sealed class ScannerConfigViewModel : ViewModelBase
         EditDataBits = o.NormDataBits;
         EditStopBits = o.NormStopBits == "15" ? "1.5" : o.NormStopBits;
         EditParity = o.NormParity;
-        EditSessionTimeout = o.NormSessionTimeoutSeconds.ToString();
         EditDebugLog = o.DebugLog;
     }
 
@@ -263,18 +254,13 @@ public sealed class ScannerConfigViewModel : ViewModelBase
     /// 校验 + 落盘（保存唯一入口）。**按连接方式分桶校验**：Tcp 方式只校验 TCP
     /// 三件（目标 IP / 端口 / 触发指令），Serial 方式只校验串口五件——非当前
     /// 方式的参数原样落 ini 不拦错（切回方式时保留各自上次配的值，数值坏也有
-    /// Norm* 兜底）；扫码会话超时两方式共用。勾了启用却没有当前方式
-    /// 的接入目标=无效配置，拦下。校验口径与 ScannerOptions 的 Norm* 一致。
+    /// Norm* 兜底）。勾了启用却没有当前方式的接入目标=无效配置，拦下。
+    /// 校验口径与 ScannerOptions 的 Norm* 一致。
     /// </summary>
     private void Save()
     {
         var errors = new List<string>();
         bool useTcp = EditUseTcp;
-
-        // ---- 两方式共用：扫码会话超时 ----
-        if (!int.TryParse(EditSessionTimeout.Trim(), out int timeoutSeconds) ||
-            timeoutSeconds is < 5 or > 600)
-            errors.Add("扫码会话超时须为 5~600 秒（缺省 15，扫库位后等产品码的最长间隔）");
 
         // TCP 三件先取值（两种方式都落盘；非法端口按缺省 8899 兜底同 NormTcpPort）。
         string tcpIp = EditTcpIp.Trim();
@@ -357,7 +343,6 @@ public sealed class ScannerConfigViewModel : ViewModelBase
             DataBits = EditDataBits,
             StopBits = stopBitsValue,
             Parity = ParityOptions.Contains(EditParity) ? EditParity : "None", // 坏值兜底
-            SessionTimeoutSeconds = timeoutSeconds,
             DebugLog = EditDebugLog,
         };
 

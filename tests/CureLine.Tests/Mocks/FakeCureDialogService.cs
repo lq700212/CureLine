@@ -124,5 +124,33 @@ public class FakeCureDialogService : CureStation.ViewModels.IDialogService
         TraceStore = store;
     }
 
+    /// <summary>
+    /// 扫码拦截提示窗的桩：记录标题+正文+指引（断言主窗把拦截原因传对了）。
+    /// </summary>
+    public List<(string Title, string Message, string Detail)> ScanNotices { get; } = new();
+
+    public void ShowScanNotice(string title, string message, string detail)
+    {
+        Calls.Add($"ShowScanNotice:{title}");
+        ScanNotices.Add((title, message, detail));
+    }
+
+    /// <summary>
+    /// 放回口径确认窗的桩：返回 ReloadChoiceResult（缺省 Cancel=不放这个产品）。
+    /// </summary>
+    public CureLine.Core.Curing.SlotReloadChoice ReloadChoiceResult { get; set; }
+        = CureLine.Core.Curing.SlotReloadChoice.Cancel;
+
+    /// <summary>AskSlotReloadBasis 收到的 prompt（断言弹窗文案带对了数）。</summary>
+    public CureLine.Core.Curing.SlotReloadPrompt? ReloadPrompt { get; private set; }
+
+    public CureLine.Core.Curing.SlotReloadChoice AskSlotReloadBasis(
+        CureLine.Core.Curing.SlotReloadPrompt prompt)
+    {
+        Calls.Add("AskSlotReloadBasis");
+        ReloadPrompt = prompt;
+        return ReloadChoiceResult;
+    }
+
     public void Shutdown() => Calls.Add("Shutdown");
 }

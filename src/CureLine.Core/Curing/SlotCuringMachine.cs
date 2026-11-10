@@ -24,13 +24,15 @@
 //      拍会刷屏）。
 //
 // 光栅信号极性（V0.0.72，见 GrillSignalPolarity）：
-//   BlockedOn（缺省）= 遮挡=ON：ON=被挡、OFF=让空——V0.0.63~V0.0.71 口径；
-//   BlockedOff      = 遮挡=OFF：OFF=被挡、ON=让空——现场实测常闭安全光栅。
+//   BlockedOn      = 遮挡=ON：ON=被挡、OFF=让空——常开型光栅口径；
+//   BlockedOff（缺省）= 遮挡=OFF：OFF=被挡、ON=让空——现场实测常闭安全光栅
+//     （V0.0.99 用户现场实测拍板：现场为常闭，全项目缺省一律按本档解释；
+//     需要常开时在策略窗光栅条切【常开】，随策略激活生效）。
 //   本类只认"被挡/让空"语义（IsBlocked 一处解释原始电平），门控/报警/复位/
 //   排障日志全部经它判定——加新光栅品牌先看枚举注释，别在调用点散写
 //   "== true"（极性切换即全部反相）。provider 与复位模式同款：边沿/心跳
-//   每拍现取，换策略/激活后下一拍生效；缺省 null=恒 BlockedOn（Core 独立/
-//   测试 API 缺省——程序①现场由激活策略的 GrillPolarity 决定）。
+//   每拍现取，换策略/激活后下一拍生效；缺省 null=恒 BlockedOff（Core 独立/
+//   测试 API 缺省同口径——程序①现场由激活策略的 GrillPolarity 决定）。
 //
 // 复位模式（V0.0.69，用户拍板二选一，见 GrillAlarmResetMode）：
 //   Auto = 自动复位：光栅让空（边沿+Pump 兜底双保险）即自动复位；
@@ -54,15 +56,21 @@
 //   恒开启（Core 独立/测试缺省——既有行为零改动；程序①现场由激活策略的
 //   GrillAlarmEnabled 决定）。
 //
-// 上料抑制（V0.0.97，用户拍板"上料时不该报警"）：
-//   loadPendingProvider（可空，每拍现取）= true 时**该库位正在上料**
-//   （操作员已扫库位码、货还没上完——手和产品会挡住光栅，那是正常动作，
-//   报警是误报）。此期间该库位的光栅报警整条链静默：不亮红灯、不记
-//   报警日志、不进报警复位窗；上料确认（二次扫同库位码）后下一拍恢复
-//   正常报警——被挡边沿若发生在抑制期间会被吞掉，Pump 的补报兜底会在
-//   抑制解除后的下一拍按快照补报（与报警总开关同款双保险）。
+// 上料抑制（V0.0.97，用户拍板"上料时不该报警"；V0.0.99 扩到"完全没扫码"）：
+//   loadPendingProvider（可空，每拍现取）= true 时**该库位的上料流程还没
+//   做完**（操作员已扫库位码、货还没上完——手和产品会挡住光栅，那是正常动作，
+//   报警是误报；连库位码都还没扫的托盘也算——手还没离开就挡了光栅）。
+//   此期间该库位的光栅报警整条链静默：不亮红灯、不记报警日志、不进报警
+//   复位窗；上料确认（二次扫同库位码）后下一拍恢复正常报警——被挡边沿若
+//   发生在抑制期间会被吞掉，Pump 的补报兜底会在抑制解除后的下一拍按快照
+//   补报（与报警总开关同款双保险）。
 //   null=恒不抑制（Core 独立/测试缺省——既有行为零改动；程序①现场由
 //   扫码会话的上料确认状态决定）。
+//
+// 库位占用（V0.0.99，扫码防呆用）：IsSlotOccupied 查"该库位托盘在架且已
+//   进入固化流程（等门控/计时中/已放行待取/已终止）"——往这样的库位再
+//   添新产品会让同库位产品的固化起点不同、时间不统一（现场红线）→ 扫码
+//   时直接拦截。托盘刚放上还没扫码（绑定记录为空）不算占用。
 //
 // 报警终止（V0.0.97）：报警弹窗里操作员确认"确实取出了产品"后，可选择
 //   **终止计时**——该库位整个产品的固化计时就此停表（不再等到点放行），
@@ -154,9 +162,9 @@ public sealed class SlotCuringMachine : IDisposable
     /// </summary>
     private readonly Func<GrillAlarmResetMode>? _resetModeProvider;
     /// <summary>
-    /// 光栅信号极性提供者（V0.0.72；null=恒 BlockedOn——Core 独立/测试缺省，
-    /// 程序①现场由激活策略的 GrillPolarity 决定）。边沿/心跳每拍现取；
-    /// provider 须线程安全（后台线程逐拍调）。
+    /// 光栅信号极性提供者（V0.0.72；null=恒 BlockedOff（常闭）——Core 独立/
+    /// 测试缺省同口径，程序①现场由激活策略的 GrillPolarity 决定）。边沿/心跳
+    /// 每拍现取；provider 须线程安全（后台线程逐拍调）。
     /// </summary>
     private readonly Func<GrillSignalPolarity>? _grillPolarityProvider;
     /// <summary>
@@ -173,6 +181,17 @@ public sealed class SlotCuringMachine : IDisposable
     /// provider 须线程安全（后台线程逐拍调）。
     /// </summary>
     private readonly Func<int, int, bool>? _loadPendingProvider;
+    /// <summary>
+    /// 续接基线提供者（V0.0.99，可空，每拍现取）= 该库位本轮"进入前累计已固化
+    /// 分钟"的最小值（扫码会话登记的续接件前段时长）；null=恒 0=不缩短。
+    /// 干什么用：中途取出再加工的产品放回来时选【接着之前固化继续】——
+    /// 之前已固化 8 小时、计划 24 小时，本盘只需再固化 16 小时即累计达标
+    /// （累计达标口径）。基线取各续接件的**最小值**——保证库里每件产品的
+    /// 累计固化都 ≥ 计划时长（宁多勿少：固化不足是质量事故）。
+    /// 托盘到位那一刻现读（绑了续接件就缩短本盘时长）；后台线程调用，
+    /// provider 须线程安全纯读。
+    /// </summary>
+    private readonly Func<int, int, int>? _resumeBaselineProvider;
     private readonly Dictionary<(int Rack, int Level), SlotRuntime> _slots = new();
     /// <summary>成功写过的灯态（IoPointKey→值）：去重 + 失败补写的比对基准。</summary>
     private readonly Dictionary<IoPointKey, bool> _writtenLamps = new();
@@ -224,14 +243,18 @@ public sealed class SlotCuringMachine : IDisposable
     /// 复位——Core 独立/测试缺省；程序①现场由激活策略的 GrillResetMode 决定，
     /// 宿主传"读激活策略"的 lambda，换策略/激活无需重建状态机）。
     /// grillPolarityProvider（V0.0.72，可空）=光栅信号极性每拍现取（null=恒
-    /// BlockedOn 遮挡=ON——现场"被挡=OFF"由策略窗常开/常闭编辑并随策略激活，
-    /// 宿主同样传"读激活策略"的 lambda，无需重建状态机）。
+    /// BlockedOff 遮挡=OFF——常闭安全光栅，V0.0.99 用户现场实测拍板为全项目
+    /// 缺省；"常开/常闭"由策略窗光栅条编辑并随策略激活，宿主同样传"读激活
+    /// 策略"的 lambda，无需重建状态机）。
     /// grillAlarmEnabledProvider（V0.0.90，可空）=报警总开关每拍现取（null=
     /// 恒开启——Core 独立/测试缺省；程序①现场由激活策略的 GrillAlarmEnabled
     /// 决定，false=整条报警链静默，见类头"报警总开关"）。
     /// loadPendingProvider（V0.0.97，可空）=上料未确认每拍现取（null=恒不
     /// 抑制——Core 独立/测试缺省；程序①现场=扫码会话的上料确认状态，
     /// true=该库位正在上料，此期间不报光栅报警，见类头"上料抑制"）。
+    /// resumeBaselineProvider（V0.0.99，可空）=续接基线每拍现取（null=恒 0
+    /// =不缩短；程序①现场=扫码会话登记的续接件前段时长，本盘时长 =
+    /// 计划 − 基线，累计达标口径）。
     /// </summary>
     public SlotCuringMachine(IPointTableBus bus, Func<CuringPolicy?> policyProvider,
         Func<DateTimeOffset>? clock = null, Action<string>? log = null,
@@ -239,7 +262,8 @@ public sealed class SlotCuringMachine : IDisposable
         Func<GrillAlarmResetMode>? resetModeProvider = null,
         Func<GrillSignalPolarity>? grillPolarityProvider = null,
         Func<bool>? grillAlarmEnabledProvider = null,
-        Func<int, int, bool>? loadPendingProvider = null)
+        Func<int, int, bool>? loadPendingProvider = null,
+        Func<int, int, int>? resumeBaselineProvider = null)
     {
         _bus = bus;
         _policyProvider = policyProvider;
@@ -250,6 +274,7 @@ public sealed class SlotCuringMachine : IDisposable
         _grillPolarityProvider = grillPolarityProvider;
         _grillAlarmEnabledProvider = grillAlarmEnabledProvider;
         _loadPendingProvider = loadPendingProvider;
+        _resumeBaselineProvider = resumeBaselineProvider;
         _pumpTimer = new Timer(_ => SafePump(), null,
             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
@@ -617,12 +642,13 @@ public sealed class SlotCuringMachine : IDisposable
 
     /// <summary>
     /// 当前光栅信号极性（V0.0.72，每拍现取 provider，勿缓存）：null provider=
-    /// 恒 BlockedOn（遮挡=ON——Core 独立/测试缺省；程序①现场由激活策略的
-    /// GrillPolarity 决定）。后台线程（边沿/心跳）逐次调用——provider 必须
-    /// 线程安全纯读（宿主传"读激活策略"的 lambda）。
+    /// 恒 BlockedOff（遮挡=OFF——常闭安全光栅，V0.0.99 用户现场实测拍板为
+    /// 全项目缺省；Core 独立/测试缺省同口径）。程序①现场由激活策略的
+    /// GrillPolarity 决定。
+    /// 后台线程（边沿/心跳）逐次调用——provider 必须线程安全纯读。
     /// </summary>
     private GrillSignalPolarity Polarity() =>
-        _grillPolarityProvider?.Invoke() ?? GrillSignalPolarity.BlockedOn;
+        _grillPolarityProvider?.Invoke() ?? GrillSignalPolarity.BlockedOff;
 
     /// <summary>
     /// 当前报警总开关（V0.0.90，每拍现取 provider，勿缓存）：null provider=
@@ -635,15 +661,37 @@ public sealed class SlotCuringMachine : IDisposable
         _grillAlarmEnabledProvider?.Invoke() ?? true;
 
     /// <summary>
-    /// 该库位是否正在上料（V0.0.97，每拍现取 provider，勿缓存）：true=操作员
-    /// 已扫库位码、货还没上完——手和产品会挡住光栅，那是上料正常动作，
-    /// 报警是误报。此期间该库位不报光栅报警（整条报警链静默）。
+    /// 该库位是否正在上料（V0.0.97，每拍现取 provider，勿缓存）：true=该库位的
+    /// 上料流程还没做完（已扫库位码货还没上完，或连库位码都没扫）——手和产品
+    /// 会挡住光栅，那是上料正常动作，报警是误报。此期间该库位不报光栅报警
+    /// （整条报警链静默）。
     /// null provider=恒不抑制（Core 独立/测试缺省——既有行为零改动；
     /// 程序①现场由扫码会话的上料确认状态决定）。
     /// 后台线程（边沿/心跳）逐次调用——provider 必须线程安全纯读。
     /// </summary>
     private bool LoadPending(int rack, int level) =>
         _loadPendingProvider?.Invoke(rack, level) ?? false;
+
+    /// <summary>
+    /// 该库位是否"托盘在架且已进入固化流程"（V0.0.99，扫码防呆用）：
+    /// 相位为等门控 / 计时中 / 已放行待取 / 已终止都算——这四种都意味着
+    /// "这一盘已经定型了"，往里再添新产品会让同库位产品的固化起点不同、
+    /// 固化时间不统一（现场红线）→ 扫码时必须拦截。
+    /// 空闲（托盘不在架或托盘刚放上未过门控）不算占用——那是正常上料流程。
+    /// 线程：任意线程可调（锁内读，与 GetStatus 同款）。
+    /// </summary>
+    public bool IsSlotOccupied(int rack, int level)
+    {
+        lock (_sync)
+        {
+            if (!_slots.TryGetValue((rack, level), out var rt))
+                return false;
+            return rt.Phase == SlotPhase.WaitingGate
+                || rt.Phase == SlotPhase.Curing
+                || rt.Phase == SlotPhase.Done
+                || rt.Phase == SlotPhase.Terminated;
+        }
+    }
 
     /// <summary>
     /// 人工复位确认（V0.0.69，宿主"报警复位"窗【解除报警】按钮的唯一解除口）：
@@ -762,7 +810,10 @@ public sealed class SlotCuringMachine : IDisposable
         if (realEdge)
             TrayArrived?.Invoke(rack, level);
         var policy = _policyProvider();
-        int minutes = policy?.ResolveMinutes(rack, level) ?? FallbackMinutes;
+        // 本次实际要固化的时长 = 计划时长 − 续接基线（V0.0.99 累计达标口径：
+        // 之前已固化 N 分钟的续接件，本盘只需再固化 计划 − N 即累计达标）。
+        int planMinutes = policy?.ResolveMinutes(rack, level) ?? FallbackMinutes;
+        int minutes = ApplyResumeBaseline(planMinutes, rack, level);
         if (policy is { GrillGate: true } && !GrillClear(rack, level))
         {
             rt.Phase = SlotPhase.WaitingGate;
@@ -775,15 +826,42 @@ public sealed class SlotCuringMachine : IDisposable
         StartCuring(rt, rack, level, minutes, realEdge);
     }
 
+    /// <summary>
+    /// 续接基线（分钟）：该库位本轮"进入前累计已固化时长"的最小值——由宿主
+    /// 注入（扫码会话的库位续接登记；null=恒 0=不缩短）。
+    /// 每拍现取（托盘到位那一刻现读——绑了续接件就缩短本盘时长）。
+    /// </summary>
+    private int ResumeBaseline(int rack, int level) =>
+        _resumeBaselineProvider?.Invoke(rack, level) ?? 0;
+
+    /// <summary>
+    /// 计划时长 → 本次实际固化时长（V0.0.99 累计达标口径）：
+    /// 本次 = 计划 − 续接基线（各续接件前段时长的最小值，保证库里每件产品的
+    /// 累计固化都 ≥ 计划时长——宁多勿少：固化不足是质量事故）。
+    /// 下限 1 分钟（0 分钟=秒放行，等于没固化）。
+    /// </summary>
+    private int ApplyResumeBaseline(int plannedMinutes, int rack, int level)
+    {
+        int baseline = ResumeBaseline(rack, level);
+        if (baseline <= 0)
+            return plannedMinutes;
+        return Math.Max(1, plannedMinutes - baseline);
+    }
+
     private void StartCuring(SlotRuntime rt, int rack, int level, int? minutes = null, bool realEdge = true)
     {
         var policy = _policyProvider();
-        rt.TotalMinutes = minutes ?? policy?.ResolveMinutes(rack, level) ?? FallbackMinutes;
+        rt.TotalMinutes = minutes ?? ApplyResumeBaseline(
+            policy?.ResolveMinutes(rack, level) ?? FallbackMinutes, rack, level);
         rt.Phase = SlotPhase.Curing;
         rt.StartedAt = _clock();
         EnsureLamp(rack, level, IoPointRole.LampYellow, true);
         EnsureLamp(rack, level, IoPointRole.LampGreen, false); // 防残留绿灯
-        _log($"架{rack}层{level} 开始固化计时 {MinutesText(rt.TotalMinutes)}（黄灯）");
+        int baseline = ResumeBaseline(rack, level);
+        _log($"架{rack}层{level} 开始固化计时 {MinutesText(rt.TotalMinutes)}（黄灯）" +
+            (baseline > 0
+                ? $"（续接：前段已固化 {MinutesText(baseline)}，本次累计 {MinutesText(rt.TotalMinutes + baseline)}）"
+                : ""));
         if (realEdge)
             CuringStarted?.Invoke(rack, level); // 过账进站挂点（Start 口径，Poster 内按配置取舍）
         // 开计时即复核光栅：门控关（GrillGate=false）的现场人手也可能恰好在架内，

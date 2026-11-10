@@ -9,8 +9,10 @@
 //       · 【有产品取出】：确实取走了产品 → 进入步骤二。
 //     步骤二（补扫）：要求操作员把**取出的那些产品的 SN 扫回来**——
 //       这个机台是放产品进去固化的，被提前取出的产品固化时间不足，
-//       后续质量追溯要靠这个 SN 找到实物。每扫一个 SN 立即落一条
-//       "中途取出"记录（带当时的实际固化时长），扫完点【扫完了】。
+//       后续质量追溯要靠这个 SN 找到实物。补扫阶段**只登记不写库**：
+//       扫到的 SN 进弹窗清单，等操作员在步骤三点下【继续计时】/【终止计时】
+//       （=现场确认）才一次性入库（V0.0.99 用户现场实测纠正："只扫了码没点
+//       确认按钮就不要入数据库"——库里是质量追溯的事实，不留半成品）。
 //     步骤三（计时处置）：确实取出了产品，还要决定这个库位的计时怎么办——
 //       · 【继续计时】：库位上**没取出的产品继续固化**（部分取出场景，
 //         主流情况——不能因为拿了一件就把整盘货的计时停掉）；
@@ -123,18 +125,9 @@ public sealed class GrillAlarmResetCoordinator : ViewModelBase
 {
     private readonly Func<GrillAlarmResetMode> _modeProvider;
 
-    /// <summary>
-    /// 取某库位当前已固化分钟数（宿主注入：状态机 GetStatus 的 Total-Remain）。
-    /// 用于"中途取出"记录的固化时长——取出的产品固化不足多少分钟，是追溯
-    /// 最关键的数。拿不到返回 0（记录里留 0，报表照常显示）。
-    /// </summary>
-    private readonly Func<int, int, int> _curedMinutesProvider;
-
-    public GrillAlarmResetCoordinator(Func<GrillAlarmResetMode> modeProvider,
-        Func<int, int, int>? curedMinutesProvider = null)
+    public GrillAlarmResetCoordinator(Func<GrillAlarmResetMode> modeProvider)
     {
         _modeProvider = modeProvider;
-        _curedMinutesProvider = curedMinutesProvider ?? ((_, _) => 0);
         ResetAllCommand = new RelayCommand(
             () => ResetAllRequested?.Invoke(),
             () => Items.Count > 0);
@@ -237,17 +230,24 @@ public sealed class GrillAlarmResetCoordinator : ViewModelBase
     public event Action<int, int>? TakeOutConfirmed;
 
     /// <summary>
-    /// 补扫到一件被取出的产品（参数=架、层、SN、当时已固化分钟数）：
-    /// 宿主据此写追溯库"中途取出"记录（该 SN 固化不足，时长=当时已固化）。
+    /// 补扫到一件被取出的产品（参数=架、层、SN）：**只进弹窗清单，不写库**。
+    ///
+    /// 为什么不能"扫到就写库"（V0.0.99 用户现场实测纠正）：操作员补扫 SN
+    /// 只是登记事实，可能只是顺手扫了/扫错了/最后点了【返回】放弃——那就不该
+    /// 在追溯库里留下"中途取出"的记录（库里是质量追溯的事实，不能有半成品）。
+    /// 入库的时点是**操作员在步骤三点【继续计时】或【终止计时】**（=确认）
+    /// 那一刻，一次性把这批 SN 落库。
     /// </summary>
-    public event Action<int, int, string, int>? OutScanRecorded;
+    // （本类不再有逐件写库事件——写库统一走 TakeOutDecisionConfirmed。）
 
     /// <summary>
-    /// 计时处置决定（参数=架、层、是否终止计时）：true=终止整个库位的计时，
-    /// false=未取出的产品继续固化。宿主据此调状态机 TerminateCuring
-    /// （终止时写灯是网络 IO，必须后台调——铁律 2）。
+    /// 现场处置确认（参数=架、层、取出的 SN 清单、是否终止计时）：
+    /// 操作员在步骤三点下按钮时触发——**这是唯一入库时点**。
+    /// 宿主据此一次性落库：先逐件写"中途取出"（该 SN 固化不足多少分钟），
+    /// 再按 terminate 决定是否给整个库位盖"报警终止"。
+    /// 顺序收口在一处（先单件后整库位）——反了会让单件记录被整库位覆盖掉。
     /// </summary>
-    public event Action<int, int, bool>? TimingDecisionRequested;
+    public event Action<int, int, IReadOnlyList<string>, bool>? TakeOutDecisionConfirmed;
 
     /// <summary>
     /// 每拍刷新（500ms 拍 / 复位即时回刷 / 模式切换广播，共用唯一入口）：
@@ -354,6 +354,9 @@ public sealed class GrillAlarmResetCoordinator : ViewModelBase
     /// （防止操作员补扫的产品码被当成新绑定写进在架清单）。
     /// 返回 true=本次扫码已被补扫通道消费（宿主不要再走普通绑定）。
     /// 非步骤二、或空码 → 返回 false（交回普通通道处理）。
+    ///
+    /// 注意：本方法**只登记不写库**（V0.0.99 用户现场实测纠正）——写库时点
+    /// 是操作员在步骤三点下确认按钮那一刻（见 TakeOutDecisionConfirmed）。
     /// </summary>
     public bool TryHandleOutScan(string? rawCode)
     {
@@ -368,7 +371,6 @@ public sealed class GrillAlarmResetCoordinator : ViewModelBase
         if (OutScans.Any(o => o.Sn == sn))
             return true;   // 重复扫同一件：忽略但仍算"已被本通道消费"
         OutScans.Add(new GrillOutScanItem(CurrentRack, CurrentLevel, sn, DateTimeOffset.Now));
-        OutScanRecorded?.Invoke(CurrentRack, CurrentLevel, sn, _curedMinutesProvider(CurrentRack, CurrentLevel));
         RaiseStepTexts();
         return true;
     }
@@ -381,13 +383,18 @@ public sealed class GrillAlarmResetCoordinator : ViewModelBase
     }
 
     /// <summary>
-    /// 步骤三 → 步骤一：计时处置完成，回到清单继续处理其它报警库位。
+    /// 步骤三 → 步骤一：操作员点了【继续计时】或【终止计时】= **现场确认**。
+    ///
+    /// 这一刻才把补扫的 SN 清单交出去入库（V0.0.99 用户现场实测纠正：
+    /// "只扫了码没点确认按钮就不要入数据库"）。点【返回】/✕ 关窗则清单作废，
+    /// 库里不留任何痕迹。
     /// </summary>
     private void ApplyTimingDecision(bool terminate)
     {
         int rack = CurrentRack;
         int level = CurrentLevel;
-        TimingDecisionRequested?.Invoke(rack, level, terminate);
+        var sns = OutScans.Select(o => o.Sn).ToList();
+        TakeOutDecisionConfirmed?.Invoke(rack, level, sns, terminate);
         GoToList();
     }
 

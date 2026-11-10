@@ -45,8 +45,16 @@
                         BorderBrush="{DynamicResource Brush.TopbarBorder}" BorderThickness="0,0,0,1"
                         CornerRadius="10,10,0,0"
                         Height="36" Padding="12,0">
-                    <DockPanel>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- 标题条用 Grid 两列（左标题* / 右关闭钮Auto）：
+                         不用 DockPanel——它的最后一个子元素会被 LastChildFill
+                         拉伸填充剩余空间，✕（Width=44）被拉宽后内容居中，
+                         关闭钮就飘到标题栏中间（现场目检发现）。 -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="固化追溯报表" FontSize="14" FontWeight="Bold"
                                        Foreground="{DynamicResource Brush.LfHeadFg}" VerticalAlignment="Center"/>
                             <TextBlock Text="库位 ↔ 产品 SN ↔ 固化时长"
@@ -54,10 +62,10 @@
                                        Foreground="{DynamicResource Brush.LfHeadSubFg}"
                                        VerticalAlignment="Center"/>
                         </StackPanel>
-                        <Button DockPanel.Dock="Right" Style="{StaticResource WinTitleClose}"
+                        <Button Grid.Column="1" Style="{StaticResource WinTitleClose}"
                                 Height="36" Foreground="{DynamicResource Brush.LfHeadFg}"
                                 Content="✕" Click="OnCloseClick" ToolTip="关闭报表"/>
-                    </DockPanel>
+                    </Grid>
                 </Border>
 
                 <!-- 底栏：状态摘要 + 页码 + 翻页 + 导出 -->

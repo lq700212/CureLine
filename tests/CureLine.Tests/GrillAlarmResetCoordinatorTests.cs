@@ -207,20 +207,17 @@ public class GrillAlarmResetCoordinatorTests
         Assert.Empty(c.OutScans);
     }
 
-    [Fact(DisplayName = "报警确认：补扫的每个 SN 逐件抛事件（含当时已固化分钟数）")]
-    public void OutScan_RecordsEachSnWithCuredMinutes()
+    [Fact(DisplayName = "报警确认：补扫只登记不写库（未点确认不入库）")]
+    public void OutScan_RecordsOnlyInList_NoDbWrite()
     {
-        var c = new GrillAlarmResetCoordinator(() => GrillAlarmResetMode.Manual,
-            (rack, level) => 25);      // 已固化 25 分钟
-        var recorded = new List<(int Rack, int Level, string Sn, int Cured)>();
-        c.OutScanRecorded += (r, l, sn, cm) => recorded.Add((r, l, sn, cm));
+        var c = MakeManual();
         c.Refresh([(1, 1)]);
         c.Items[0].TakeOut.Execute(null);
 
+        // V0.0.99 用户现场实测纠正：扫了码没点确认按钮就不许入数据库——
+        // 补扫阶段只进弹窗清单，不抛任何写库事件。
         Assert.True(c.TryHandleOutScan("SN-1"));
         Assert.True(c.TryHandleOutScan("SN-2"));
-
-        Assert.Equal([(1, 1, "SN-1", 25), (1, 1, "SN-2", 25)], recorded);
         Assert.Equal(2, c.OutScans.Count);
         Assert.Contains("已扫 2 件", c.ScanOutHintText);
     }
@@ -229,16 +226,14 @@ public class GrillAlarmResetCoordinatorTests
     public void OutScan_IgnoresLocationCodeAndDuplicates()
     {
         var c = MakeManual();
-        var recorded = new List<string>();
-        c.OutScanRecorded += (r, l, sn, cm) => recorded.Add(sn);
         c.Refresh([(1, 1)]);
         c.Items[0].TakeOut.Execute(null);
 
         Assert.True(c.TryHandleOutScan("A01"));      // 库位码：被通道消费但不算产品
         Assert.True(c.TryHandleOutScan("SN-1"));
         Assert.True(c.TryHandleOutScan("SN-1"));      // 重复：不算新件
-        Assert.Equal(["SN-1"], recorded);
         Assert.Single(c.OutScans);
+        Assert.Equal("SN-1", c.OutScans[0].Sn);
     }
 
     [Fact(DisplayName = "报警确认：非补扫阶段不消费扫码（普通绑定通道不受影响）")]
@@ -254,8 +249,8 @@ public class GrillAlarmResetCoordinatorTests
     public void TimingDecision_KeepTiming_KeepsCuring()
     {
         var c = MakeManual();
-        var decisions = new List<(int Rack, int Level, bool Terminate)>();
-        c.TimingDecisionRequested += (r, l, t) => decisions.Add((r, l, t));
+        var decisions = new List<(int Rack, int Level, IReadOnlyList<string> Sns, bool Terminate)>();
+        c.TakeOutDecisionConfirmed += (r, l, sns, t) => decisions.Add((r, l, sns, t));
         c.Refresh([(1, 1)]);
         c.Items[0].TakeOut.Execute(null);
         c.TryHandleOutScan("SN-1");
@@ -264,7 +259,11 @@ public class GrillAlarmResetCoordinatorTests
         Assert.Equal(GrillAlarmDialogStep.TimingDecision, c.Step);
 
         c.CommandKeepTiming.Execute(null);
-        Assert.Equal([(1, 1, false)], decisions);
+        // 点确认按钮这一刻才把补扫清单交出去入库
+        Assert.Single(decisions);
+        Assert.Equal((1, 1), (decisions[0].Rack, decisions[0].Level));
+        Assert.Equal(["SN-1"], decisions[0].Sns.ToArray());
+        Assert.False(decisions[0].Terminate);
         Assert.Equal(GrillAlarmDialogStep.List, c.Step);   // 处置完回清单
         Assert.Equal(0, c.CurrentRack);
     }
@@ -273,30 +272,34 @@ public class GrillAlarmResetCoordinatorTests
     public void TimingDecision_StopTiming_DispatchesTerminate()
     {
         var c = MakeManual();
-        var decisions = new List<(int Rack, int Level, bool Terminate)>();
-        c.TimingDecisionRequested += (r, l, t) => decisions.Add((r, l, t));
+        var decisions = new List<(int Rack, int Level, IReadOnlyList<string> Sns, bool Terminate)>();
+        c.TakeOutDecisionConfirmed += (r, l, sns, t) => decisions.Add((r, l, sns, t));
         c.Refresh([(4, 2)]);
         c.Items[0].TakeOut.Execute(null);
         c.CommandFinishScan.Execute(null);
 
         c.CommandStopTiming.Execute(null);
-        Assert.Equal([(4, 2, true)], decisions);
+        Assert.Single(decisions);
+        Assert.Equal(4, decisions[0].Rack);
+        Assert.Equal(2, decisions[0].Level);
+        Assert.True(decisions[0].Terminate);
+        Assert.Empty(decisions[0].Sns);
         Assert.Equal(GrillAlarmDialogStep.List, c.Step);
     }
 
-    [Fact(DisplayName = "报警确认：【返回】放弃补扫回清单（不派发任何处置）")]
+    [Fact(DisplayName = "报警确认：【返回】放弃补扫回清单（不入库、不派发任何处置）")]
     public void BackToList_AbandonsScanWithoutDecision()
     {
         var c = MakeManual();
-        var decisions = new List<(int Rack, int Level, bool Terminate)>();
-        c.TimingDecisionRequested += (r, l, t) => decisions.Add((r, l, t));
+        var decisions = new List<(int Rack, int Level, IReadOnlyList<string> Sns, bool Terminate)>();
+        c.TakeOutDecisionConfirmed += (r, l, sns, t) => decisions.Add((r, l, sns, t));
         c.Refresh([(1, 1)]);
         c.Items[0].TakeOut.Execute(null);
         c.TryHandleOutScan("SN-1");
 
         c.CommandBackToList.Execute(null);
         Assert.Equal(GrillAlarmDialogStep.List, c.Step);
-        Assert.Empty(decisions);
+        Assert.Empty(decisions);      // 放弃 = 库里不留任何痕迹
         Assert.Empty(c.OutScans);
     }
 }

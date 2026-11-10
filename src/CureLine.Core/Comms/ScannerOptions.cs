@@ -118,14 +118,6 @@ public sealed class ScannerOptions
     public string Parity { get; set; } = "None";
 
     /// <summary>
-    /// 扫码会话超时秒数（扫了库位码后等产品码的最长间隔，缺省 15）：
-    /// 超时自动回到"请扫库位码"，防止界面挂在旧库位误导下一名操作员。
-    /// 现场扫码节奏慢可调大，范围 5~600（过小会在慢慢找产品码时被打断）。
-    /// 串口/TCP 两种方式共用。
-    /// </summary>
-    public int SessionTimeoutSeconds { get; set; } = 15;
-
-    /// <summary>
     /// 串口心跳调试日志开关（排障用，缺省 false）：true 时子模块每个心跳周期
     /// 把 WMI 串口搜索结果打进操作日志，用于排查"插着枪却识别不到"。
     /// TCP 方式不使用（子模块 TCP 服务自带连接失败 30s 节流日志）。
@@ -201,10 +193,6 @@ public sealed class ScannerOptions
     /// <summary>规范化后的数据位（5~8，越界回 8）。</summary>
     public int NormDataBits => DataBits is >= 5 and <= 8 ? DataBits : 8;
 
-    /// <summary>规范化后的超时秒数（5~600，越界回 15）。</summary>
-    public int NormSessionTimeoutSeconds =>
-        SessionTimeoutSeconds is >= 5 and <= 600 ? SessionTimeoutSeconds : 15;
-
     /// <summary>停止位规范化：只认 "1"/"15"/"2"，其它回 "1"（与子模块约定同口径）。</summary>
     public string NormStopBits => StopBits.Trim() switch
     {
@@ -245,7 +233,6 @@ public sealed class ScannerOptions
             DataBits = IniFile.ReadInt(ini, Section, "DataBits", 8),
             StopBits = IniFile.ReadStr(ini, Section, "StopBits", "1").Trim(),
             Parity = IniFile.ReadStr(ini, Section, "Parity", "None").Trim(),
-            SessionTimeoutSeconds = IniFile.ReadInt(ini, Section, "SessionTimeoutSeconds", 15),
             DebugLog = IniFile.ReadStr(ini, Section, "DebugLog", "0") == "1",
         };
     }
@@ -269,7 +256,6 @@ public sealed class ScannerOptions
         IniFile.Write(ini, Section, "DataBits", NormDataBits.ToString());
         IniFile.Write(ini, Section, "StopBits", NormStopBits);
         IniFile.Write(ini, Section, "Parity", NormParity);
-        IniFile.Write(ini, Section, "SessionTimeoutSeconds", NormSessionTimeoutSeconds.ToString());
         IniFile.Write(ini, Section, "DebugLog", DebugLog ? "1" : "0");
     }
 
@@ -312,7 +298,6 @@ public sealed class ScannerOptions
         Heal("DataBits", defaults.NormDataBits.ToString());
         Heal("StopBits", defaults.NormStopBits);
         Heal("Parity", defaults.NormParity);
-        Heal("SessionTimeoutSeconds", defaults.NormSessionTimeoutSeconds.ToString());
         Heal("DebugLog", "0");
     }
 }

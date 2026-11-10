@@ -400,9 +400,10 @@ public sealed class MockPointTableBus : IPointTableBus
     /// <summary>
     /// 演示光栅信号极性（V0.0.72，可空）：Mock 内部按"被挡"语义生成信号，
     /// 输出电平再按本 provider 反相——现场配置"被挡=OFF"时演示剧本与状态机
-    /// 判定保持同口径（否则演示里永远不报警/一直报警）。null=BlockedOn 缺省
-    /// （既有演示行为零变化）。provider 在演示线程逐拍调用，须线程安全纯读
-    ///（程序①传"读激活策略 GrillPolarity"的 lambda）。
+    /// 判定保持同口径（否则演示里永远不报警/一直报警）。null=BlockedOff 缺省
+    /// （常闭安全光栅，V0.0.99 用户现场实测拍板为全项目缺省）。provider 在
+    /// 演示线程逐拍调用，须线程安全纯读（程序①传"读激活策略 GrillPolarity"
+    /// 的 lambda）。
     /// </summary>
     public Func<CureLine.Core.Curing.GrillSignalPolarity>? GrillPolarityProvider { get; set; }
 
@@ -570,9 +571,11 @@ public sealed class MockPointTableBus : IPointTableBus
             {
                 int stage = _stageByRack.TryGetValue(b.Rack, out var s) ? s : 0;
                 // 光栅演示语义="stage 2~3 被挡"；输出电平按宿主配置的极性反相
-                //（V0.0.72：现场"被挡=OFF"时 Mock 也要发 OFF 才与状态机同口径）。
+                //（V0.0.72：现场"被挡=OFF"时 Mock 也要发 OFF 才与状态机同口径；
+                //  缺省 BlockedOff=常闭，与全项目缺省同源）。
                 bool grillBlocked = stage is >= 2 and <= 3;
-                bool grillInvert = GrillPolarityProvider?.Invoke()
+                bool grillInvert = (GrillPolarityProvider?.Invoke()
+                    ?? CureLine.Core.Curing.GrillSignalPolarity.BlockedOff)
                     == CureLine.Core.Curing.GrillSignalPolarity.BlockedOff;
                 value = key.Role switch
                 {

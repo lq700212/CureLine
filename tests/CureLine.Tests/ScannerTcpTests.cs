@@ -46,7 +46,6 @@ public class ScannerTcpTests
         Assert.Equal("", healed.TriggerCommand);
         Assert.Equal(9600, healed.NormBaudRate);
         Assert.Equal("None", healed.NormParity);
-        Assert.Equal(15, healed.NormSessionTimeoutSeconds);
         Assert.Equal("0", IniFile.ReadStr(ini, "Scanner", "DebugLog", "?"));
 
         // 显式值保护：已写的键一律不碰（现场手工改过的 IP/显式关闭都原样保留）
@@ -276,7 +275,6 @@ public class ScannerTcpTests
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "TcpIp", "192.168.1.220");
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "TcpPort", "8899");
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "TriggerCommand", "LON");
-        IniFile.Write(AppPaths.ConfigIni, "Scanner", "SessionTimeoutSeconds", "30");
 
         var vm = new ScannerConfigViewModel(new FakeCureDialogService());
 
@@ -287,7 +285,6 @@ public class ScannerTcpTests
         Assert.Equal("192.168.1.220", vm.EditTcpIp);
         Assert.Equal("8899", vm.EditTcpPort);
         Assert.Equal("LON", vm.EditTriggerCommand);
-        Assert.Equal("30", vm.EditSessionTimeout);
     }
 
     [Fact(DisplayName = "扫码枪配置_TCP 方式保存往返（Mode=Tcp + 三件落盘）")]
@@ -303,7 +300,6 @@ public class ScannerTcpTests
             EditTcpIp = "192.168.1.220",
             EditTcpPort = "8899",
             EditTriggerCommand = "",           // 现场口径：留空不发
-            EditSessionTimeout = "20",
         };
         bool? requestClose = null;
         vm.RequestClose += ok => requestClose = ok;
@@ -319,7 +315,6 @@ public class ScannerTcpTests
         Assert.Equal("192.168.1.220", saved.TcpIp);
         Assert.Equal(8899, saved.TcpPort);
         Assert.Equal("", saved.TriggerCommand);
-        Assert.Equal(20, saved.SessionTimeoutSeconds);
     }
 
     [Fact(DisplayName = "扫码枪配置_TCP 方式空 IP 拦下（提示去 DTU 配置台确认）")]

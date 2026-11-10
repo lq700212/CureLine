@@ -61,11 +61,13 @@ public sealed class CuringPolicy
     public bool GrillAlarmEnabled { get; set; } = true;
 
     /// <summary>
-    /// 光栅信号极性（随策略保存/激活）：BlockedOn=遮挡 ON（缺省，被挡 ON/让空 OFF）
-    /// / BlockedOff=遮挡 OFF（现场常闭安全光栅，被挡 OFF/让空 ON）。
+    /// 光栅信号极性（随策略保存/激活）：BlockedOff=遮挡 OFF（**缺省**，现场
+    /// 实测常闭安全光栅：被挡 OFF / 让空 ON）/ BlockedOn=遮挡 ON（常开型光栅）。
     /// 状态机门控/报警/复位/排障日志全部按本口径解释（IsBlocked 唯一出口）。
+    /// V0.0.99 用户现场实测拍板：现场为常闭，全项目缺省一律按常闭解释；
+    /// 需要常开时在策略窗光栅条切【常开】，随策略保存/激活生效。
     /// </summary>
-    public GrillSignalPolarity GrillPolarity { get; set; } = GrillSignalPolarity.BlockedOn;
+    public GrillSignalPolarity GrillPolarity { get; set; } = GrillSignalPolarity.BlockedOff;
 
     /// <summary>
     /// 光栅报警解除模式（随策略保存/激活）：Manual（缺省）=人工复位——让空不

@@ -2644,8 +2644,9 @@ public class CureStationViewModelTests
         Assert.Equal("已关闭", vm.GrillAlarmSwitchText);
     }
 
-    // ---------- 光栅信号极性（V0.0.72：BlockedOn=遮挡 ON（缺省）/
-    //            BlockedOff=遮挡 OFF（现场实测）——V0.0.96 起是策略字段） ----------
+    // ---------- 光栅信号极性（V0.0.72：BlockedOn=遮挡 ON / BlockedOff=遮挡 OFF；
+    //            V0.0.96 起是策略字段；V0.0.99 用户现场实测"常闭"→ 全项目
+    //            缺省=常闭） ----------
 
     [Fact]
     public void PolicyVm_GrillSignalInverted_TogglesDraftAndSavesToPolicy()
@@ -2655,16 +2656,17 @@ public class CureStationViewModelTests
         var fake = new FakeCureDialogService();
         var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
 
-        // 策略字段缺省 = 常开（遮挡=ON，V0.0.71 及以前口径）
+        // 策略字段缺省 = 常闭（遮挡=OFF，V0.0.99 用户现场实测口径）
+        Assert.True(vm.GrillSignalInverted);
+        Assert.True(vm.IsGrillNormallyClosed);
+        Assert.False(vm.IsGrillNormallyOpen);
+        Assert.Contains("遮挡=OFF", vm.GrillSignalToolTip);
+
+        // 选常开：只改草稿，不写任何全局 ini 键（旧键已删）
+        vm.IsGrillNormallyOpen = true;
         Assert.False(vm.GrillSignalInverted);
         Assert.True(vm.IsGrillNormallyOpen);
         Assert.Contains("遮挡=ON", vm.GrillSignalToolTip);
-
-        // 选常闭：只改草稿，不写任何全局 ini 键（旧键已删）
-        vm.IsGrillNormallyClosed = true;
-        Assert.True(vm.GrillSignalInverted);
-        Assert.False(vm.IsGrillNormallyOpen);
-        Assert.Contains("遮挡=OFF", vm.GrillSignalToolTip);
         Assert.Equal("", IniFile.ReadStr(
             AppPaths.ConfigIni, "setting", "GrillSignalPolarity", ""));
 
@@ -2672,12 +2674,12 @@ public class CureStationViewModelTests
         vm.SaveCommand.Execute(null);
         var loaded = CuringPolicyStore.Load();
         Assert.NotNull(loaded);
-        Assert.Equal(GrillSignalPolarity.BlockedOff, loaded!.Policies[0].GrillPolarity);
+        Assert.Equal(GrillSignalPolarity.BlockedOn, loaded!.Policies[0].GrillPolarity);
 
-        // 重开回显激活策略的常闭档
+        // 重开回显激活策略的常开档
         var reopened = new CureStation.ViewModels.CuringPolicyViewModel(fake);
-        Assert.True(reopened.IsGrillNormallyClosed);
-        Assert.False(reopened.IsGrillNormallyOpen);
+        Assert.True(reopened.IsGrillNormallyOpen);
+        Assert.False(reopened.IsGrillNormallyClosed);
     }
 
     // ---------- 报警总开关（V0.0.90：策略窗光栅带"光栅报警"滑块——开=报警

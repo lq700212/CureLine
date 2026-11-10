@@ -33,7 +33,6 @@ public class ScannerConfigTests
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "DataBits", "7");
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "StopBits", "15");
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "Parity", "Even");
-        IniFile.Write(AppPaths.ConfigIni, "Scanner", "SessionTimeoutSeconds", "30");
         IniFile.Write(AppPaths.ConfigIni, "Scanner", "DebugLog", "1");
 
         var vm = new ScannerConfigViewModel(new FakeCureDialogService());
@@ -45,7 +44,6 @@ public class ScannerConfigTests
         Assert.Equal(7, vm.EditDataBits);
         Assert.Equal("1.5", vm.EditStopBits);   // 项目存 "15"，界面显示 1.5
         Assert.Equal("Even", vm.EditParity);
-        Assert.Equal("30", vm.EditSessionTimeout);
         Assert.True(vm.EditDebugLog);
     }
 
@@ -85,7 +83,6 @@ public class ScannerConfigTests
             EditDataBits = 7,
             EditStopBits = "2",
             EditParity = "Odd",
-            EditSessionTimeout = "30",
             EditDebugLog = true,
         };
         bool? requestClose = null;
@@ -105,7 +102,6 @@ public class ScannerConfigTests
         Assert.Equal(7, saved.DataBits);
         Assert.Equal("2", saved.StopBits);
         Assert.Equal("Odd", saved.Parity);
-        Assert.Equal(30, saved.SessionTimeoutSeconds);
         Assert.True(saved.DebugLog);
     }
 
@@ -130,7 +126,7 @@ public class ScannerConfigTests
         Assert.False(ScannerOptions.Load().Enabled);   // 未写盘
     }
 
-    [Fact(DisplayName = "扫码枪配置_坏值一次列全并拦下（COM 号/波特率/超时）")]
+    [Fact(DisplayName = "扫码枪配置_坏值一次列全并拦下（COM 号/波特率）")]
     public void ScannerConfigVm_InvalidValues_Block()
     {
         using var scope = new TestScope();
@@ -143,7 +139,6 @@ public class ScannerConfigTests
             EditPortName = "COMX",
             EditDeviceKeyword = "",
             EditBaudRate = "100",
-            EditSessionTimeout = "3",
         };
 
         vm.SaveCommand.Execute(null);
@@ -152,7 +147,6 @@ public class ScannerConfigTests
         string message = fake.Calls.Single(c => c.StartsWith("Msg:"));
         Assert.Contains("格式无效", message);
         Assert.Contains("波特率", message);
-        Assert.Contains("超时", message);
         Assert.False(ScannerOptions.Load().Enabled);
     }
 

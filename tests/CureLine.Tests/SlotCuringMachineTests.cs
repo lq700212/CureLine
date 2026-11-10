@@ -1,6 +1,11 @@
 // =========================================================================
 // SlotCuringMachineTests：仓位状态机全流程（虚拟时钟手动 Pump，确定性验证）
 // 流程口径：托盘到位→（门控开则等光栅让空）→黄灯计时→到点绿灯→托盘离开灭灯。
+//
+// 光栅电平口径说明（V0.0.99 用户现场实测"常闭"后）：本组剧本一律按
+// "ON=挡 / OFF=让空"（常开口径）写 SetInput，故 Make() 默认注入
+// BlockedOn 极性——**与现场缺省（常闭）无关**，只是让剧本电平保持直观。
+// 缺省口径（不注入 provider = 常闭）另有用例单独锁定。
 // =========================================================================
 
 using CureLine.Core.Comms;
@@ -32,16 +37,20 @@ public class SlotCuringMachineTests
         Func<GrillAlarmResetMode>? resetModeProvider = null,
         Func<GrillSignalPolarity>? polarityProvider = null,
         Func<bool>? alarmEnabledProvider = null,
-        Func<int, int, bool>? loadPendingProvider = null)
+        Func<int, int, bool>? loadPendingProvider = null,
+        Func<int, int, int>? resumeBaselineProvider = null)
     {
         var bus = new ScriptedPointBus();
         var logs = new List<string>();
         var machine = new SlotCuringMachine(bus, () => policy,
             clock: () => _now, log: logs.Add, durationText: durationText,
             resetModeProvider: resetModeProvider,
-            grillPolarityProvider: polarityProvider,
+            // 极性缺省注入常开（BlockedOn）：本组剧本按"ON=挡"写电平，
+            // 与现场缺省（常闭）无关——见文件头口径说明。
+            grillPolarityProvider: polarityProvider ?? (() => GrillSignalPolarity.BlockedOn),
             grillAlarmEnabledProvider: alarmEnabledProvider,
-            loadPendingProvider: loadPendingProvider);
+            loadPendingProvider: loadPendingProvider,
+            resumeBaselineProvider: resumeBaselineProvider);
         // 宿主转发边沿（生产由 MainViewModel 做——machine 不直接订阅总线）
         bus.PointChanged += (_, e) => machine.OnPointChanged(e);
         return (bus, machine, logs);
@@ -50,6 +59,65 @@ public class SlotCuringMachineTests
     private static bool Wrote(List<(IoPointKey Key, bool State)> writes,
         IoPointKey key, bool state) =>
         writes.Any(w => w.Key == key && w.State == state);
+
+    // ---------- 光栅极性缺省（V0.0.99 用户现场实测"常闭"） ----------
+
+    [Fact]
+    public void DefaultPolarity_IsBlockedOff_SiteNormallyClosed()
+    {
+        // 不注入极性 provider → 走状态机缺省：**常闭**（被挡=OFF、让空=ON）。
+        // 现场实测口径（V0.0.99 用户拍板），门控/报警/复位全部按此解释。
+        var bus = new ScriptedPointBus();
+        var machine = new SlotCuringMachine(bus,
+            () => new CuringPolicy { Name = "T", GlobalMinutes = 60 },
+            clock: () => _now, log: _ => { });
+        bus.PointChanged += (_, e) => machine.OnPointChanged(e);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+            bus.Writes.Clear();
+
+            // 常闭：ON=让空、OFF=被挡 → 拉低即"人手伸入" → 红灯报警
+            bus.SetInput(GrillL(1, 1), true);    // 先给"让空"电平（制造一次真实边沿）
+            bus.Writes.Clear();
+            bus.SetInput(GrillL(1, 1), false);   // OFF=被挡 → 报警边沿
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), true));
+        }
+    }
+
+    // ---------- 续接固化（V0.0.99 累计达标口径） ----------
+
+    [Fact]
+    public void ResumeBaseline_ShortensThisRound_CumulativeReachesPlan()
+    {
+        // 之前已固化 480 分钟（8h）+ 计划 1440 分钟（24h）→ 本盘只固化
+        // 960 分钟（16h），累计正好 1440 = 计划时长（达标放行）。
+        var (bus, machine, logs) = Make(
+            new CuringPolicy { Name = "T", GlobalMinutes = 1440 },
+            resumeBaselineProvider: (rack, level) => rack == 1 && level == 1 ? 480 : 0);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+
+            var st = machine.GetStatus(1, 1)!;
+            Assert.Equal(SlotPhase.Curing, st.Phase);
+            Assert.Equal(960, st.TotalMinutes);      // 本次时长 = 计划 − 前段
+            Assert.Contains(logs, m => m.Contains("续接"));
+        }
+    }
+
+    [Fact]
+    public void ResumeBaseline_None_KeepsFullPlan()
+    {
+        // 无续接件（全新库位）：本次时长 = 计划（不缩短）
+        var (bus, machine, _) = Make(new CuringPolicy { Name = "T", GlobalMinutes = 1440 });
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            Assert.Equal(1440, machine.GetStatus(1, 1)!.TotalMinutes);
+        }
+    }
 
     // ---------- 基本流程 ----------
 
@@ -760,7 +828,9 @@ public class SlotCuringMachineTests
         var machine2 = new SlotCuringMachine(bus, () => policy, clock: () => _now, log: logs2.Add);
         using (machine2)
         {
-            bus.SetSnapshotSilently(GrillL(1, 1), true); // 重启时人手还在架内
+            // 常闭口径（V0.0.99 用户现场实测为缺省）：OFF=被挡 —— 本例不注入
+            // 极性 provider，走状态机缺省，故用电平 false 表示"人手还在架内"。
+            bus.SetSnapshotSilently(GrillL(1, 1), false); // 重启时人手还在架内
             machine2.AlignFromSnapshot();
 
             Assert.Equal(SlotPhase.Curing, machine2.GetStatus(1, 1)!.Phase);
@@ -1014,7 +1084,8 @@ public class SlotCuringMachineTests
             Assert.Equal(SlotPhase.Done, machine.GetStatus(1, 1)!.Phase);
 
             provider.Value = new CuringPolicy { Name = "B", GlobalMinutes = 60, GrillGate = true };
-            bus.SetInput(GrillL(3, 1), true);        // 3-1：先亮光栅（托盘边沿时才会进门控等待）
+            // 常闭口径（不注入极性 provider → 状态机缺省）：OFF=被挡。
+            bus.SetInput(GrillL(3, 1), false);       // 3-1：先挡光栅（托盘边沿时才会进门控等待）
             bus.SetInput(Tray(3, 1), true);
             Assert.Equal(SlotPhase.WaitingGate, machine.GetStatus(3, 1)!.Phase);
 
@@ -1022,7 +1093,7 @@ public class SlotCuringMachineTests
             machine.ApplyPolicyHotChange();          // Done/Gate 都不动
             Assert.Equal(60, machine.GetStatus(1, 1)!.TotalMinutes);  // Done 保持旧锁定
 
-            bus.SetInput(GrillL(3, 1), false);       // 光栅让空 → 开计时现取新策略 1440
+            bus.SetInput(GrillL(3, 1), true);        // 光栅让空（常闭：ON=让空）→ 开计时现取新策略 1440
             machine.Pump(_now);
             var opened = machine.GetStatus(3, 1)!;
             Assert.Equal(SlotPhase.Curing, opened.Phase);

@@ -123,7 +123,7 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 620/620（V0.0.98 全量；V0.0.34~96 各轮增量明细见各版本
+   `dotnet test` 635/635（V0.0.99 全量；V0.0.34~96 各轮增量明细见各版本
    CHANGELOG——基线此后只增不减，V0.0.62 授权真源收口 kaleidoscope：删
    宿主授权注入类语义用例 −21，重写编解码/era/门禁接线 +13，补真私钥
    激活链 +3，净减 5；V0.0.63 光栅报警链 +8，V0.0.64 总线时序契约+光栅
@@ -133,7 +133,9 @@
    V0.0.90 光栅报警总开关 +11，V0.0.92 判据放宽补 1 例；V0.0.97 光栅
    四项收编为策略字段：删全局键解析/回显 21 例、补策略序列化/整组回显
    3 例；V0.0.98 扫码三段式+报警现场确认+追溯库净增 24（删 12 例 SN 显示相关、
-   新增 36 例），全量基线按实测 620 记）；禁止交付编译不过/测试不过的代码。
+   新增 36 例），全量基线按实测 620 记；V0.0.99 放回续接+防呆+常闭缺省
+   净增 15（删超时用例 1、改写报警确认 3、新增会话/追溯/状态机 13），
+   全量基线按实测 635 记）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
    **`LicenseSignKey.dat`（软件激活签名私钥）** 只留厂商签发工具目录，已
@@ -262,7 +264,7 @@
 | `src/CureLine.Core/Curing/WorkOrderStore.cs` | 工单信息 `config/workorder.json`（R/L 双工位+EMP/BC/PT×2，字段名对齐 MES 16 字段）+ 自愈空工单 |
 | `src/CureLine.Core/Security/OperatorStore.cs` | 程序①三级操作员账号（V0.0.49 重做：`OperatorRole` Operator/Admin/Dev + 预置三账号 `SeedUser` 播种 + PBKDF2 复用；增删/改密全带 **actor 兜底**，VM 置灰之外的第二道防线）；**防锁死红线**：dev 账号永不可删、密码仅本人可改、Dev 角色不开放创建（预置唯一） |
 | `src/CureLine.Core/Curing/SlotCuringMachine.cs` | **仓位状态机**：托盘到位→（门控）→黄灯计时→绿灯放行→离开灭灯；边沿后台直转+1s 心跳 Pump；灯写去重补写/断连恢复对齐/策略热切换三自愈；过账挂点三事件（TrayArrived/CuringStarted/TrayLeft，只发真实边沿）；机台总监塔灯聚合 `RefreshMachineBeacon`（V0.0.65 接入，V0.0.67 口径红>绿>黄"待料=黄"）+ `SlotStatus.AlarmGrill` 报警标志供卡牌显报（V0.0.67） |
-| `src/CureLine.Core/Curing/GrillSignalPolarity.cs` | 光栅信号极性（V0.0.72）：`BlockedOn`=遮挡 ON（缺省，V0.0.71 及以前口径）/ `BlockedOff`=遮挡 OFF（现场实测常闭安全光栅）；V0.0.96 起由策略字段 `CuringPolicy.GrillPolarity` 承载（旧 ini 键/解析器已删）；状态机唯一解释口 `IsBlocked(raw, polarity)` 消费（门控/报警/复位/日志全同源） |
+| `src/CureLine.Core/Curing/GrillSignalPolarity.cs` | 光栅信号极性（V0.0.72；**V0.0.99 缺省翻转为常闭**）：`BlockedOff`=遮挡 OFF（**缺省**，现场实测常闭安全光栅：被挡 OFF/让空 ON）/ `BlockedOn`=遮挡 ON（常开型光栅）；V0.0.96 起由策略字段 `CuringPolicy.GrillPolarity` 承载（旧 ini 键/解析器已删）；状态机唯一解释口 `IsBlocked(raw, polarity)` 消费（门控/报警/复位/日志全同源）；**全项目缺省一律常闭**（属性缺省/状态机 provider 缺省/Mock 归一缺省/策略窗分段按钮缺省选中常闭） |
 | `src/CureLine.Core/Curing/SlotLocationCode.cs` | 客户库位编码换算（Date Matrix，10 站×3 层）：架×层↔编码互转（`Encode`/`TryDecode` 客户约定锚点）+ 双架口径（`RackGroupOf`/`StationInRack`/`EncodeInRack` 按架内站号换算，每台架独立一套 A01~J12），主窗卡片标题与后续扫码绑定的同源入口 |
 | **Core 共享（单线过账家族，P3.2 后半新增）** | |
 | `src/CureLine.Core/Curing/CuringMesOptions.cs` | 过账配置模型（ini `[CuringMes]` 节）：开关/工位/时间单位/进站时机/中途取件/静态参数五件；`NormSide` 规范化（非 L 按 R 兜底） |
@@ -272,10 +274,14 @@
 | `src/CureStation/DialogService.cs` | 生产 `IDialogService` + `CuringMesPosterHolder`（工单窗上传动作的静态桥接点，收在程序①内） |
 | **Core 共享（扫码绑定家族，P3.3 新增）** | |
 | `src/CureLine.Core/Curing/SlotBinding.cs` | 库位绑定记录 + 绑定簿（`SlotBindingBook`）+ `SlotBindingStore` 存取 `config/slotbindings.json`（缺/坏文件回 null 自愈；脏记录剔除；全量重写） |
-| `src/CureLine.Core/Curing/SlotBindingSession.cs` | **三段式扫码会话（V0.0.98）**：扫库位码=开始该库位上料（清上一轮产品绑定）→ 逐个扫产品码（**追加**进该库位产品清单，一库位多产品）→ **再扫一次同库位码=上料结束**（`LoadConfirmed`）；`IsLoadPending` 是"上料未确认"唯一查询口（状态机报警抑制据此）；超时只清待绑目标不清上料状态；`Remove` 取件作废；全部 UI 线程调用（无锁无后台线程），`Changed` 驱动主窗刷新 |
-| `src/CureLine.Core/Data/SlotProductTraceStore.cs` | **固化追溯库（V0.0.98）**：SQLite 表 `slot_product_trace`（一件产品一行：绑定/上料确认/开计时/计划时长/离架/实际固化分钟/结束原因/报警标志/备注）+ 视图 `slot_trace_summary`（一库位一行汇总）；写入点=扫码绑定/上料确认/开计时/离架/报警产生/中途取出/报警终止，**全后台线程**（UI 线程禁 DB IO），写操作加锁串行 |
-| `src/CureStation/TraceReportWindow.*` + `ViewModels/TraceReportViewModel.cs` | **固化追溯报表窗（V0.0.98）**：主窗顶栏【追溯】入口（登录即可见）；筛选行（时间/库位码/SN/结束原因）+ 5 张统计卡 + 两页签（产品明细/库位汇总）+ 分页 + 导出 CSV（当前筛选全量，UTF-8 BOM）；布局参考 HJVision 视觉数据报表，配色走本项目主题键板 |
-| `src/CureLine.Core/Comms/ScannerOptions.cs` | 扫码枪配置 `[Scanner]` 节（**Serial/Tcp 双模式，V0.0.78；V0.0.79 起缺省=现场 TCP 预置**）：`Mode` 缺省 Tcp（显式 Serial 才走串口）+ TCP 三键（`TcpIp` 缺省=`FieldTcpIp` 现场常量、空值 ini 自愈回预置/`TcpPort` 缺省 8899/`TriggerCommand` 缺省空=不发）+ 串口五键（Enabled 缺省 0=不自启连接/PortName/DeviceKeyword/串口参数）+ `SessionTimeoutSeconds`/DebugLog + `Norm*` 规范化（非法值回缺省，坏值不喂驱动） |
+| `src/CureLine.Core/Curing/SlotBindingSession.cs` | **三段式扫码会话（V0.0.98；V0.0.99 去超时+防呆+放回三道闸）**：扫库位码=开始该库位上料（清上一轮产品绑定）→ 逐个扫产品码（**追加**进该库位产品清单，一库位多产品）→ **再扫一次同库位码=上料结束**（`LoadConfirmed`）；**无超时**（V0.0.99 用户拍板：上料结束只认二次扫库位码）；未结束就扫新库位码 → `LocationFlowNotFinished` 拦截（弹窗提示先结束上一个）；`IsLoadUnconfirmed` 是"上料未完成确认"唯一查询口（状态机报警抑制据此，含**完全没扫码**的库位）；放回件三道闸（`ReturnToOriginBlocked` 禁放回原库位 / `SlotOccupiedBlocked` 禁往在制库位加新产品 / `CureBasisConflict` 禁混装）+ `resumeDecider` 弹窗问固化口径（续接/全新/取消）；`Remove` 取件作废；全部 UI 线程调用（`_map` 访问有锁——状态机后台线程读抑制闸），`Changed` 驱动主窗刷新 |
+| `src/CureLine.Core/Curing/SlotTakeOutInfo.cs` | 中途取出履历（SN + 取出库位架层 + **累计**已固化分钟 + 时刻）；"放回原库位拦截"与"续接口径确认"的判据来源 |
+| `src/CureLine.Core/Curing/SlotReloadPrompt.cs` | 放回再加工产品时的"固化时长口径"确认（`SlotReloadChoice` 枚举 + Prompt 组装：产品/目标库位架层/原库位/前段分钟/计划分钟）；宿主弹窗问操作员，Core 不碰 UI |
+| `src/CureLine.Core/Data/SlotProductTraceStore.cs` | **固化追溯库（V0.0.98；V0.0.99 增前段累计列 + 待放回台账）**：SQLite 表 `slot_product_trace`（一件产品一行：绑定/上料确认/开计时/计划时长/离架/**实际固化分钟=本轮+前段累计**/前段分钟 `prior_cured_minutes`/结束原因/报警标志/备注）+ 视图 `slot_trace_summary`（一库位一行汇总）；写入点=扫码绑定/上料确认/开计时/离架/报警产生/中途取出/报警终止，**全后台线程**（UI 线程禁 DB IO），写操作加锁串行；**待放回台账**（`TryGetTakeOut` 内存索引 + 启动时 `LoadTakeOutIndex` 后台装载）= 放回判定与续接基准的真源 |
+| `src/CureStation/TraceReportWindow.*` + `ViewModels/TraceReportViewModel.cs` | **固化追溯报表窗（V0.0.98；V0.0.99 关闭钮移右上角）**：主窗顶栏【追溯】入口（登录即可见）；筛选行（时间/库位码/SN/结束原因）+ 5 张统计卡 + 两页签（产品明细/库位汇总）+ 分页 + 导出 CSV（当前筛选全量，UTF-8 BOM）；布局参考 HJVision 视觉数据报表，配色走本项目主题键板；**标题条用 Grid 两列**（标题 `*` + ✕ `Auto`——`DockPanel.LastChildFill` 会把 ✕ 拉伸飘到标题栏中间） |
+| `src/CureStation/ScanNoticeWindow.*` + `ViewModels/ScanNoticeViewModel.cs` | **扫码拦截提示窗（V0.0.99）**：红线拦截（防呆/禁放回原库位/禁混装/禁往在制库位加新产品）时讲清"为什么没扫进去、下一步怎么做"，纯告知一个"知道了"按钮；经 `IDialogService.ShowScanNotice` |
+| `src/CureStation/SlotReloadWindow.*` + `ViewModels/SlotReloadViewModel.cs` | **放回产品固化口径确认窗（V0.0.99）**：接着之前固化继续（累计达标）/ 完全重新开始 / 取消，三决策；两个数字（已固化多久、还要固化多久）由 VM 算好摆出；经 `IDialogService.AskSlotReloadBasis` |
+| `src/CureLine.Core/Comms/ScannerOptions.cs` | 扫码枪配置 `[Scanner]` 节（**Serial/Tcp 双模式，V0.0.78；V0.0.79 起缺省=现场 TCP 预置**）：`Mode` 缺省 Tcp（显式 Serial 才走串口）+ TCP 三键（`TcpIp` 缺省=`FieldTcpIp` 现场常量、空值 ini 自愈回预置/`TcpPort` 缺省 8899/`TriggerCommand` 缺省空=不发）+ 串口五键（Enabled 缺省 0=不自启连接/PortName/DeviceKeyword/串口参数）+ DebugLog + `Norm*` 规范化（非法值回缺省，坏值不喂驱动）；**V0.0.99 起无会话超时键**（上料结束只认二次扫库位码，`SessionTimeoutSeconds` 全落点已删） |
 | `src/CureLine.Core/Comms/ScannerBarcodeService.cs` | 子模块 `IScanner` 宿主封装（Serial/Tcp 双模式，V0.0.78 起 TCP=经枪侧 DTU 透传 `ScannerTcpService`，Serial=`ScannerService`）；TCP **触发指令红线=必须显式取 NormTriggerCommand 缺省空串，绝不落子模块缺省 "LON"**（透传枪自动连续读码）；Start/Dispose 后台调用，日志桥接 `LocalLogService`，事件转发 |
 | **Core 共享（IO 家族，P1 新增）** | |
 | `src/CureLine.Core/ViewModels/` | 下沉的 VM 基建（`ViewModelBase`/`RelayCommand`，namespace 不变） |
@@ -301,7 +307,7 @@
 | `src/CureLine.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段）+ `MockMesServer`（内置模拟 MES 桩，仅 Simulate=1 且 URL 空/占位时接管，自配 URL 透传） |
 | `src/CureLine.Core/Data/CureRecordStore.cs` | `cure_record` 表 CRUD（V0.0.32 由 PLCtable 改名，项目未上线无兼容包袱）+ `ComputeStats` 纯统计 |
 | `src/CureLine.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/机台连接配置（`StationConfig.cs`：StationConfigStore/Validator） |
-| `tests/CureLine.Tests/` | 620 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用；`LicenseTests` 16 例锁 kaleidoscope 接线与双产品授权——有厂商私钥环境自动加跑真码激活链 3 例，无钥自动跳过；`SlotBindingTests` 25 例锁扫码上料三段式；`SlotProductTraceStoreTests` 8 例 +
+| `tests/CureLine.Tests/` | 635 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用；`LicenseTests` 16 例锁 kaleidoscope 接线与双产品授权——有厂商私钥环境自动加跑真码激活链 3 例，无钥自动跳过；`SlotBindingTests` 30 例锁扫码上料三段式 + 防呆 + 放回三道闸；`SlotProductTraceStoreTests` 13 例 +
    `TraceReportViewModelTests` 5 例锁追溯库与报表窗；`ScannerConfigTests` 8 例锁扫码枪配置窗校验/预置/落盘） |
 | `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
 | `tools/DocShot/` | **文档截图 harness（V0.0.50 重作）**：`run_docshot.ps1` 一键 build 两程序→build harness→组装 runner→起 exe 全自动；**完全后台静默纪律（用户拍板）**——所有窗（含两主窗）`ShowActivated=false`+`ShowInTaskbar=false`+Left/Top=-20000 离屏，绝不抢焦点/不进任务栏/不落用户屏幕；**成品口径=RTB 优先**（`ShotRtb` 按 DPI 缩放渲染视觉树——无 DWM 阴影黑边、与窗口位置无关），PrintWindow 降为兜底（离屏下拍出黑边已被用户目检否决）；镜头名与文档引用全对齐（`cs-workorder-operator/admin.png` 三级视角、`cs-main-idle/flow/dark.png` 三帧），万象清单校验走 `check_config.py`（IMG_WHITE/REQUIRED_IMGS 两张表）+`check_docs.py`；**深色帧换装坑**：斜杠 URI `"/Themes/Dark.xaml"` 相对 Application 根（harness=DocShot 组件 404 FATAL）——必须手 Build `pack://…/CureStation;component/Themes/Dark.xaml` 并**按 Source 认出主题槽替换**（盲替 merged[0] 会把主样式字典换没，半坏视觉），`ThemeManager.Current` 私有 setter 反射同步防顶栏按钮文案不符；工单镜头演示数据用种子 `WorkOrderBook` 不落盘（R1 纪律） |
@@ -311,7 +317,7 @@
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build CureLine.slnx --nologo
-# 全量测试（620/620 全绿，串行，约 30s；含本地 HttpListener 桩 MES 端到端
+# 全量测试（635/635 全绿，串行，约 30s；含本地 HttpListener 桩 MES 端到端
 #   + 模拟链路 VM 全链路用例：按钮→注入→扫触发→POST 内置桩→回写→观测
 #   + 授权 16 例——其中真私钥激活链 3 例依赖 tools/LicenseIssuer 私钥，
 #   无钥环境自动跳过）
@@ -528,22 +534,23 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   程序化收窗 `SilentClose` 不记）；复位请求事件必须 `Task.Run` 后台调
   状态机（写灯=网络 IO，铁律 2）；`IDialogService` 新增
   ShowGrillAlarmReset/CloseGrillAlarmReset 两方法+FakeCureDialogService 桩。
-  **⑥ 光栅信号极性（V0.0.72，用户现场实测：未挡=ON、被挡=OFF）**：
-  `GrillSignalPolarity{BlockedOn=遮挡ON（缺省）/ BlockedOff=遮挡OFF}` +
-  解析器（只认 "BlockedOff"，其余回缺省 BlockedOn——方向勿翻转，缺省必须
-  保住 V0.0.71 及以前现场口径）；状态机**唯一解释口 `IsBlocked(raw, polarity)`**
-  （null=不让），门控 `GrillClear`、计时中报警边沿、自动/人工复位、重启
-  对齐复核、`GrillSideText` 日志全部经它——**禁止在调用点直判 `== true`**
-  （换光栅品牌/反接只改配置，散写会漏改一处就反一半）。构造第 7 可选参
-  `Func<GrillSignalPolarity>? grillPolarityProvider` 每拍现取（null=恒
-  BlockedOn，Core/测试缺省）；宿主接线=策略字段 `CuringPolicy.GrillPolarity`
-  （V0.0.96 起随策略保存/激活，旧 `GrillSignalPolarityHub` 与 ini 键已删）+
-  策略窗画布下方光栅条【常开｜常闭】分段按钮（常开=BlockedOn 缺省 /
-  常闭=BlockedOff，随策略保存、激活后生效；V0.0.74 从参数条勾选框下移改档）；
-  演示 `MockPointTableBus.GrillPolarityProvider` 跟随同一激活策略（演示剧本
-  电平与状态机同口径，否则勾取反后演示永远不报警/一直报警）。注意主窗
+  **⑥ 光栅信号极性（V0.0.72；V0.0.99 用户现场实测拍板：光栅为常闭）**：
+  `GrillSignalPolarity{BlockedOff=遮挡OFF（**缺省**，被挡 OFF/让空 ON）/
+  BlockedOn=遮挡ON（常开型光栅）}`；状态机**唯一解释口
+  `IsBlocked(raw, polarity)`**（null=不让），门控 `GrillClear`、计时中报警边沿、
+  自动/人工复位、重启对齐复核、`GrillSideText` 日志全部经它——**禁止在调用点
+  直判 `== true`**（换光栅品牌/反接只改配置，散写会漏改一处就反一半）。
+  构造第 7 可选参 `Func<GrillSignalPolarity>? grillPolarityProvider` 每拍现取
+  （**null=恒 BlockedOff**，Core/测试缺省同口径）；宿主接线=策略字段
+  `CuringPolicy.GrillPolarity`（V0.0.96 起随策略保存/激活，旧
+  `GrillSignalPolarityHub` 与 ini 键已删）+ 策略窗画布下方光栅条
+  【常开｜常闭】分段按钮（**常闭=BlockedOff 缺省** / 常开=BlockedOn，随策略
+  保存、激活后生效；V0.0.74 从参数条勾选框下移改档）；演示
+  `MockPointTableBus.GrillPolarityProvider` 跟随同一激活策略（null 缺省=常闭，
+  演示剧本电平与状态机同口径，否则勾取反后演示永远不报警/一直报警）。注意主窗
   卡片的 `GrillText` 恒显示**原始电平**（L:ON R:OFF，排障看硬件真值），
-  "挡/空"语义只在状态机日志里。
+  "挡/空"语义只在状态机日志里。**换极性只改策略窗那一处**（或改属性缺省），
+  勿在别处散写 `BlockedOn`。
   **⑦ 报警总开关（V0.0.90，用户拍板"关闭则不报警，默认开启"）**：
   `grillAlarmEnabledProvider`（构造第 8 可选参 `Func<bool>?`，边沿/心跳
   每拍现取，null=恒开启=既有行为、Core/测试缺省零改动）——false=整条
@@ -562,21 +569,28 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   `MainViewModel.LoadPolicyBook` 后台 Task.Run 立即调状态机
   `ApplyAlarmSwitch`（红灯当场灭/"报警复位"窗清单即清）+ Pump 尾每拍兜底
   （最迟 1 秒生效；开启态快速路径零动作）。
-  **⑧ 上料抑制（V0.0.98，用户拍板"上料时也报警"要改）**：
+  **⑧ 上料抑制（V0.0.98；V0.0.99 扩到"完全没扫码"的库位）**：
   `loadPendingProvider`（构造第 9 可选参 `Func<int,int,bool>?`，边沿/心跳每拍
-  现取，null=恒不抑制=Core/测试缺省）——true=该库位**正在上料**（操作员已扫
-  库位码、货还没上完——手和产品会挡住光栅，报了是误报）→ 该库位报警链**整条
-  静默**（被挡边沿吞掉：零写灯/零日志；StartCuring 开计时复核与
+  现取，null=恒不抑制=Core/测试缺省）——true=该库位的**上料流程还没做完**
+  （操作员已扫库位码、货还没上完——手和产品会挡住光栅，报了是误报；**连库位码
+  都还没扫的托盘也算**——托盘刚放上、手还没离开就挡了光栅）→ 该库位报警链
+  **整条静默**（被挡边沿吞掉：零写灯/零日志；StartCuring 开计时复核与
   RestoreFromRecord 续算复核跳过报警；Pump 补报兜底同样跳过）；抑制解除（上料
   确认=二次扫同库位码）后**下一拍按快照补报**（不漏报）。**门控闸不受影响**
   ——`GrillGate`（托盘到位要光栅让空才计时）是工艺防呆，勿顺带关掉。宿主接线=
   `MainViewModel` 的 `loadPendingProvider: (rack,level) =>
-  _bindings.IsLoadPending(rack,level)`（会话侧真源见扫码绑定语义②）。
+  _bindings.IsLoadUnconfirmed(rack,level)`（会话侧真源见扫码绑定语义②）。
   **⑨ 报警终止（V0.0.98）**：`TerminateCuring(rack,level,out curedSeconds)`
   ——报警现场确认后选【终止计时】时把该库位计时停表：Phase 转新增的
   `SlotPhase.Terminated`（黄灯灭、不放绿灯、不再等到点），实际已固化秒数随出参
   返回入库追溯；托盘离开按**实际已固化时长**记账（非计划时长）；终止时刻随
   `CuringSlotRecord.TerminatedAt` 落盘（断电恢复仍是终止态，不续算）。
+  **⑩ 续接基线（V0.0.99）**：`resumeBaselineProvider`（构造第 10 可选参
+  `Func<int,int,int>?`，托盘到位那一刻现读，null=恒 0=不缩短）=该库位本轮
+  "进入前累计已固化分钟"的**最小值**（续接件前段时长）→ 本盘时长 =
+  计划 − 基线（下限 1 分钟，累计达标口径：之前 8h + 计划 24h → 本次 16h 即
+  放行，累计正好 24h）。宿主接线=扫码会话 `GetResumeBaselineMinutes`（见扫码
+  绑定语义②⑨）；开计时日志带"续接：前段已固化 X，本次累计 Y"。
 
   **光栅四项统一跟随策略（V0.0.96 用户拍板"不要出现某一个不跟随策略"）**：
   门控 `GrillGate` / 报警总开关 `GrillAlarmEnabled` / 信号极性 `GrillPolarity`
@@ -843,15 +857,20 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   严格 A01~J12）= **开始该库位上料**（清该库位上一轮产品绑定并落盘）→ 逐个
   扫产品码 = **追加**进该库位产品清单（**一个库位可放多个产品**；同库位重复
   扫同一 SN 不重复入库，只提示）→ **再扫一次同一个库位码 = 上料结束**
-  （`LoadConfirmed=true`，抛 `LoadConfirmed` 边沿）；扫到另一个库位码 = 切换
-  待绑目标（旧目标保持"上料未确认"不变）；`SlotBindingRecord.ProductCodes` 是
-  产品清单（旧版单值 `productCode` 落盘件读时**一次性迁进**清单，迁移后盘上
-  即新格式——不是并存的第二套口径）；**上料未确认 = 该库位不报光栅报警**
-  （见状态机语义⑥"上料抑制"，`IsLoadPending` 是唯一查询口）；
-  ③ 超时（`[Scanner] SessionTimeoutSeconds` 缺省 15 秒）自动回"请扫库位码"，
-  【取消】同效；扫错码 3 秒浮层提示且**不改变会话阶段**；**超时只清"当前待绑
-  目标"，不清该库位的上料未确认状态**（托盘还架着、货还没上完，报警仍应抑制
-  ——宁可漏报不误报）；
+   （`LoadConfirmed=true`，抛 `LoadConfirmed` 边沿）；
+   `SlotBindingRecord.ProductCodes` 是产品清单（旧版单值 `productCode` 落盘件
+   读时**一次性迁进**清单，迁移后盘上即新格式——不是并存的第二套口径）；
+   **上料未完成确认 = 该库位不报光栅报警**（见状态机语义⑧"上料抑制"，
+   `IsLoadUnconfirmed` 是唯一查询口——V0.0.99 起**连库位码都没扫**的托盘也算：
+   现场刚放托盘、手还没离开就挡了光栅，属正常动作，不是异常）；
+   ③ **没有超时**（V0.0.99 用户拍板："二次扫库位码就代表绑定结束，按这个逻辑
+   判断就好"）——`[Scanner] SessionTimeoutSeconds` 键/配置窗字段/样例 ini/
+   文档/测试**全落点已删**，勿再加回；【取消】按钮仍在（放弃本次待绑）；
+   扫错码 3 秒浮层提示且**不改变会话阶段**；
+   ③a **防呆（V0.0.99）**：上个库位的绑定流程还没结束就扫了**别的库位码** →
+   **拦截**（`LocationFlowNotFinished`，不再自动切换）——两个库位的上料流程同时
+   悬着，操作员自己也说不清刚才那盘扫码算不算数；宿主弹窗提示"A01 绑定未结束，
+   请再扫一次 A01 结束绑定"（`ScanNoticeWindow`，纯告知一个"知道了"按钮）；
   ④ **取件作废**：状态机 `TrayLeft` 边沿调 `Remove` 清该库位绑定，落盘/刷新
   一律 `UiInvoke` 回 UI（状态机锁内禁 IO；重启对齐 `AlignFromSnapshot` 不发
   `TrayLeft`，故重启不会清在架绑定）；⑤ **未绑定只提示不拦截**（客户口径）：
@@ -862,6 +881,19 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
    主窗卡高实测钩子）全部删除，只剩单行固定高 16 的"已绑 N 件"行，mid 补偿两档
    （行可见=20 / 隐藏=0，属性 `BindingRowMargin`）——完整 SN 与固化时长去【追溯】
    报表查）**；日志只记新出现的边沿，固化/过账流程零依赖绑定簿；
+   ⑤b **放回再加工产品（V0.0.99）三道闸 + 口径确认**：中途取出的产品再加工完
+   放回时——① **禁放回原库位**（`ReturnToOriginBlocked`：原库位的固化口径已按
+   整盘统一计时，塞回去与同库位其他产品的固化起点/时长对不上）；② **禁往在制
+   库位加新产品**（`SlotOccupiedBlocked`：`SlotCuringMachine.IsSlotOccupied`
+   判"托盘在架且已进入固化流程"——同一库位产品的固化时间必须统一）；③ **禁混装**
+   （`CureBasisConflict`：口径由**第一个**产品定档，后来者口径不同即拦截）；
+   放到新库位时 `resumeDecider` 弹窗问固化时长口径——【接着之前固化继续】
+   （累计达标：之前已固化 8h + 计划 24h → 本盘再固化 16h 即放行，累计 = 计划）
+   /【完全重新开始】（前段作废）/【取消】（不绑定）；库位本轮时长取各续接件
+   前段时长的**最小值**（宁多勿少：库里每件产品的累计固化都 ≥ 计划时长），由
+   `SlotCuringMachine.resumeBaselineProvider` 在托盘到位那一刻现读；取出台账
+   真源=追溯库内存索引（`SlotProductTraceStore.TryGetTakeOut`，启动时后台装载，
+   UI 线程零 DB IO）。
   ⑥ 线程：`ScannerBarcodeService.Start/Dispose`
   必须后台调（Dispose 最坏等心跳线程 3 秒），两个事件在子模块后台线程触发、
   订阅方必须封送；⑦ 配置两桶按方式生效（V0.0.78）：Tcp 方式=`TcpIp` 非空即

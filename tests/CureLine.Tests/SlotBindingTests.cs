@@ -1,8 +1,9 @@
 // =========================================================================
-// SlotBindingTests：扫码绑定工序（P3.3）
+// SlotBindingTests：扫码绑定工序（P3.3；V0.0.99 三道拦截 + 防呆 + 去超时）
 //   ① SlotBindingStore：绑定簿 JSON 存取 / 缺文件 / 坏文件自愈；
-//   ② SlotBindingSession：两段式扫码状态机（扫库位 → 扫产品 → 绑定），
-//      覆盖清零 / 换库位 / 超时 / 取消 / 取件清除；
+//   ② SlotBindingSession：三段式扫码状态机（扫库位 → 扫产品（多个）→ 再扫
+//      库位=上料结束），覆盖清零 / 防呆拦截 / 在制库位拦截 / 放回件三道闸
+//      （禁放回原库位、禁混装、续接口径确认）/ 取件清除；
 //   ③ ScannerOptions：ini 缺省自愈与参数规范化；
 //   ④ ScannerBarcodeService：事件转发（假 IScanner，不碰真实串口）。
 // 全部用 TestScope 隔离临时目录，不污染仓库/本机配置。
@@ -21,17 +22,23 @@ public class SlotBindingTests
 {
     /// <summary>
     /// 建一个可注入假时钟的会话（persist 收集每次落盘快照，不碰磁盘）。
+    /// takeOut/resume/occupied 三个注入点默认不给（=Core 独立可用口径）。
     /// </summary>
     private static (SlotBindingSession Session, List<SlotBindingBook> Saved, Func<DateTimeOffset, DateTimeOffset> SetNow)
-        MakeSession(int timeoutSeconds = 15)
+        MakeSession(
+            Func<string, SlotTakeOutInfo?>? takeOutLookup = null,
+            Func<SlotReloadPrompt, SlotReloadChoice>? resumeDecider = null,
+            Func<int, int, bool>? slotOccupiedProvider = null)
     {
         var now = new DateTimeOffset(2026, 11, 7, 8, 0, 0, TimeSpan.FromHours(8));
         var saved = new List<SlotBindingBook>();
         var session = new SlotBindingSession(
             new SlotBindingBook(),
             clock: () => now,
-            timeoutSeconds: timeoutSeconds,
-            persist: book => saved.Add(book));
+            persist: book => saved.Add(book),
+            takeOutLookup: takeOutLookup,
+            resumeDecider: resumeDecider,
+            slotOccupiedProvider: slotOccupiedProvider);
         // 返回"改写当前时间"的委托（闭包捕获同一个 now 变量）。
         return (session, saved, value => now = value);
     }
@@ -50,7 +57,7 @@ public class SlotBindingTests
         Assert.Equal(1, session.PendingLevel);
         Assert.Contains("A01 待扫产品码", session.Prompt);
         Assert.Empty(saved);   // 还没绑产品，不落盘
-        Assert.True(session.IsLoadPending(1, 1));   // 上料未确认 → 该库位抑制光栅报警
+        Assert.True(session.IsLoadUnconfirmed(1, 1));   // 上料未确认 → 该库位抑制光栅报警
 
         var second = session.Handle("  SN-2026-000123  ");
         Assert.Equal(ScanOutcomeKind.ProductBound, second.Kind);
@@ -69,7 +76,7 @@ public class SlotBindingTests
         Assert.Equal(SlotBindingPhase.WaitingLocation, session.Phase);
         Assert.Equal("请扫库位码", session.Prompt);
         Assert.True(session.IsLoadConfirmed(1, 1));
-        Assert.False(session.IsLoadPending(1, 1));   // 上料已确认 → 恢复光栅报警
+        Assert.False(session.IsLoadUnconfirmed(1, 1));   // 上料已确认 → 恢复光栅报警
     }
 
     [Fact(DisplayName = "扫码绑定_一个库位可绑多个产品（逐个追加不清旧）")]
@@ -86,7 +93,7 @@ public class SlotBindingTests
         Assert.Equal(3, session.ProductCount(1, 1));
         Assert.Equal(3, session.TotalProductCount);
         // 上料未确认（还没二次扫库位码）
-        Assert.True(session.IsLoadPending(1, 1));
+        Assert.True(session.IsLoadUnconfirmed(1, 1));
     }
 
     [Fact(DisplayName = "扫码绑定_同库位重复扫同一SN不重复入库")]
@@ -106,15 +113,15 @@ public class SlotBindingTests
     {
         var (session, _, _) = MakeSession();
         var confirmed = new List<(int Rack, int Level)>();
-        var bound = new List<(int Rack, int Level, string Sn)>();
+        var bound = new List<(int Rack, int Level, string Sn, int Prior)>();
         session.LoadConfirmed += (rack, level) => confirmed.Add((rack, level));
-        session.ProductBound += (rack, level, sn) => bound.Add((rack, level, sn));
+        session.ProductBound += (rack, level, sn, prior) => bound.Add((rack, level, sn, prior));
 
         session.Handle("A01");
         session.Handle("SN-1");
         session.Handle("A01");
 
-        Assert.Equal(new[] { (1, 1, "SN-1") }, bound.ToArray());
+        Assert.Equal(new[] { (1, 1, "SN-1", 0) }, bound.ToArray());
         Assert.Equal(new[] { (1, 1) }, confirmed.ToArray());
     }
 
@@ -136,17 +143,174 @@ public class SlotBindingTests
         Assert.DoesNotContain(saved[^1].Bindings, b => b.ProductCodes.Count > 0);
     }
 
-    [Fact(DisplayName = "扫码绑定_等产品码时扫另一个库位自动切换")]
-    public void Session_OtherLocationWhileWaitingProduct_Switches()
+    [Fact(DisplayName = "扫码绑定_上一个绑定未结束时扫别的库位码=拦截（防呆）")]
+    public void Session_OtherLocationWhileWaitingProduct_Blocked()
     {
         var (session, _, _) = MakeSession();
         session.Handle("A01");
         var outcome = session.Handle("C03");
 
-        Assert.Equal(ScanOutcomeKind.LocationSwitched, outcome.Kind);
+        // V0.0.99 防呆：不再自动切换——上一个绑定流程还没结束，必须先二次扫它。
+        Assert.Equal(ScanOutcomeKind.LocationFlowNotFinished, outcome.Kind);
+        Assert.Contains("绑定未结束", outcome.Message);
+        // 会话仍停在原库位（A01），提示操作员先结束它
+        Assert.Equal(SlotBindingPhase.WaitingProduct, session.Phase);
+        Assert.Equal(1, session.PendingRack);
+        Assert.Equal(1, session.PendingLevel);
+        Assert.Contains("A01 待扫产品码", session.Prompt);
+        // 拦截不产生新库位记录
+        Assert.Null(session.Get(3, 1));
+    }
+
+    [Fact(DisplayName = "扫码绑定_二次扫原库位码后可再扫新库位码")]
+    public void Session_AfterConfirming_CanScanNextLocation()
+    {
+        var (session, _, _) = MakeSession();
+        session.Handle("A01");
+        session.Handle("SN-1");
+        Assert.Equal(ScanOutcomeKind.LoadConfirmed, session.Handle("A01").Kind);
+
+        var next = session.Handle("C03");
+        Assert.Equal(ScanOutcomeKind.LocationAccepted, next.Kind);
         Assert.Equal(3, session.PendingRack);
         Assert.Equal(1, session.PendingLevel);   // C03 = 架 3 层 1（level = 3-3+1）
         Assert.Contains("C03 待扫产品码", session.Prompt);
+    }
+
+    [Fact(DisplayName = "扫码绑定_在制库位不许再添新产品（固化时间必须统一）")]
+    public void Session_CuringSlot_BlocksNewProduct()
+    {
+        // 状态机口径：托盘在架且已进入固化流程 → 该库位占用
+        var (session, _, _) = MakeSession(slotOccupiedProvider: (rack, level) => rack == 1 && level == 1);
+        // 先绑一件产品（占用判定要求"库里已有产品"才拦——没绑过的不拦）
+        session.Handle("A01");
+        session.Handle("SN-1");
+        session.Handle("A01");   // 上料结束
+
+        var outcome = session.Handle("A01");   // 再扫同一库位 = 往在制库位加货
+        Assert.Equal(ScanOutcomeKind.SlotOccupiedBlocked, outcome.Kind);
+        Assert.Contains("正在固化", outcome.Message);
+        // 原绑定没被动过
+        Assert.Equal(new[] { "SN-1" }, session.Get(1, 1)!.ProductCodes.ToArray());
+    }
+
+    [Fact(DisplayName = "扫码绑定_放回件不许放回原库位")]
+    public void Session_ReturnToOrigin_Blocked()
+    {
+        var (session, _, _) = MakeSession(
+            takeOutLookup: sn => sn == "SN-R" ? new SlotTakeOutInfo
+            {
+                ProductSn = "SN-R", Rack = 2, Level = 1, CuredMinutes = 480,
+            } : null);
+
+        session.Handle("B02");   // B02 = 架 2 层 1（=取出的原库位）
+        var outcome = session.Handle("SN-R");
+
+        Assert.Equal(ScanOutcomeKind.ReturnToOriginBlocked, outcome.Kind);
+        Assert.Contains("不能放回本库位", outcome.Message);
+        Assert.Equal(0, session.ProductCount(2, 1));
+    }
+
+    [Fact(DisplayName = "扫码绑定_放回新库位时弹窗问口径（续接=累计达标）")]
+    public void Session_ReturnToNewSlot_AsksBasis_ResumeKeepsPriorMinutes()
+    {
+        SlotReloadPrompt? seen = null;
+        var (session, _, _) = MakeSession(
+            takeOutLookup: sn => sn == "SN-R" ? new SlotTakeOutInfo
+            {
+                ProductSn = "SN-R", Rack = 2, Level = 1, CuredMinutes = 480,
+            } : null,
+            resumeDecider: prompt => { seen = prompt; return SlotReloadChoice.Resume; });
+
+        session.Handle("C03");   // 换到新库位
+        var outcome = session.Handle("SN-R");
+
+        Assert.Equal(ScanOutcomeKind.ProductBound, outcome.Kind);
+        Assert.NotNull(seen);
+        Assert.Equal("SN-R", seen!.ProductSn);
+        Assert.Equal("C03", seen.LocationCode);
+        Assert.Equal("B02", seen.PreviousLocationCode);
+        Assert.Equal(480, seen.PriorMinutes);       // 之前已固化 8 小时
+        // 续接口径：登记前段时长 → 库位本次计时 = 计划 − 480
+        Assert.Equal(480, session.GetProductPriorMinutes(3, 1, "SN-R"));
+        Assert.Equal(480, session.GetResumeBaselineMinutes(3, 1));
+        Assert.Equal(SlotCureBasis.Resume, session.Get(3, 1)!.CureBasis);
+    }
+
+    [Fact(DisplayName = "扫码绑定_放回件选完全重新开始=当全新件（不进续接字典）")]
+    public void Session_ReturnFresh_TreatedAsNew()
+    {
+        var (session, _, _) = MakeSession(
+            takeOutLookup: sn => sn == "SN-R" ? new SlotTakeOutInfo
+            {
+                ProductSn = "SN-R", Rack = 2, Level = 1, CuredMinutes = 480,
+            } : null,
+            resumeDecider: _ => SlotReloadChoice.Fresh);
+
+        session.Handle("C03");
+        var outcome = session.Handle("SN-R");
+
+        Assert.Equal(ScanOutcomeKind.ProductBound, outcome.Kind);
+        Assert.Equal(0, session.GetProductPriorMinutes(3, 1, "SN-R"));
+        Assert.Equal(0, session.GetResumeBaselineMinutes(3, 1));
+        Assert.Equal(SlotCureBasis.Fresh, session.Get(3, 1)!.CureBasis);
+    }
+
+    [Fact(DisplayName = "扫码绑定_禁混装：续接口径的库位放不进全新产品")]
+    public void Session_ResumeSlot_RejectsFreshProduct()
+    {
+        var (session, _, _) = MakeSession(
+            takeOutLookup: sn => sn == "SN-R" ? new SlotTakeOutInfo
+            {
+                ProductSn = "SN-R", Rack = 2, Level = 1, CuredMinutes = 480,
+            } : null,
+            resumeDecider: _ => SlotReloadChoice.Resume);
+
+        session.Handle("C03");
+        session.Handle("SN-R");    // 续接件定档=Resume
+
+        var outcome = session.Handle("SN-NEW");   // 再放一个全新件 → 混装拦截
+        Assert.Equal(ScanOutcomeKind.CureBasisConflict, outcome.Kind);
+        Assert.Contains("不能放入全新产品", outcome.Message);
+        Assert.Equal(1, session.ProductCount(3, 1));
+    }
+
+    [Fact(DisplayName = "扫码绑定_禁混装：全新件先定档的库位放不进续接件")]
+    public void Session_FreshSlot_RejectsResumeProduct()
+    {
+        var (session, _, _) = MakeSession(
+            takeOutLookup: sn => sn == "SN-R" ? new SlotTakeOutInfo
+            {
+                ProductSn = "SN-R", Rack = 2, Level = 1, CuredMinutes = 480,
+            } : null,
+            // 操作员选"接着之前固化继续"→ 与库位已定档的"全新计时"冲突 → 拦截
+            resumeDecider: _ => SlotReloadChoice.Resume);
+
+        session.Handle("C03");
+        session.Handle("SN-NEW");   // 全新件先定档=Fresh
+
+        var outcome = session.Handle("SN-R");   // 续接件 → 混装拦截
+        Assert.Equal(ScanOutcomeKind.CureBasisConflict, outcome.Kind);
+        Assert.Contains("不能按续接累计放入", outcome.Message);
+        Assert.Equal(1, session.ProductCount(3, 1));
+    }
+
+    [Fact(DisplayName = "扫码绑定_放回流程取消=不绑定")]
+    public void Session_ReturnCancelled_NotBound()
+    {
+        var (session, _, _) = MakeSession(
+            takeOutLookup: sn => sn == "SN-R" ? new SlotTakeOutInfo
+            {
+                ProductSn = "SN-R", Rack = 2, Level = 1, CuredMinutes = 480,
+            } : null,
+            resumeDecider: _ => SlotReloadChoice.Cancel);
+
+        session.Handle("C03");
+        var outcome = session.Handle("SN-R");
+
+        Assert.Equal(ScanOutcomeKind.CureBasisConflict, outcome.Kind);
+        Assert.Contains("已取消放入", outcome.Message);
+        Assert.Equal(0, session.ProductCount(3, 1));
     }
 
     [Fact(DisplayName = "扫码绑定_非库位码在等库位阶段被拒并保持原状态")]
@@ -179,25 +343,6 @@ public class SlotBindingTests
         Assert.Equal(SlotBindingPhase.WaitingLocation, session.Phase);
         Assert.Equal(0, session.PendingRack);              // 已回空闲（待绑目标清零）
         Assert.True(session.IsLoadConfirmed(4, 2));           // D05 = 架 4 层 2
-    }
-
-    [Fact(DisplayName = "扫码绑定_等产品码超时自动回请扫库位码")]
-    public void Session_Timeout_ResetsToWaitingLocation()
-    {
-        var (session, _, setNow) = MakeSession(timeoutSeconds: 15);
-        session.Handle("E06");
-        Assert.Equal(SlotBindingPhase.WaitingProduct, session.Phase);
-
-        // 未到阈值：不重置
-        setNow(new DateTimeOffset(2026, 11, 7, 8, 0, 14, TimeSpan.FromHours(8)));
-        Assert.False(session.Tick());
-        Assert.Equal(SlotBindingPhase.WaitingProduct, session.Phase);
-
-        // 到阈值：回空闲，提示语给回"请扫库位码"
-        setNow(new DateTimeOffset(2026, 11, 7, 8, 0, 15, TimeSpan.FromHours(8)));
-        Assert.True(session.Tick());
-        Assert.Equal(SlotBindingPhase.WaitingLocation, session.Phase);
-        Assert.Equal("请扫库位码", session.Prompt);
     }
 
     [Fact(DisplayName = "扫码绑定_取消回到请扫库位码")]
@@ -356,7 +501,6 @@ public class SlotBindingTests
         Assert.Equal(8, options.NormDataBits);
         Assert.Equal("1", options.NormStopBits);
         Assert.Equal("None", options.NormParity);
-        Assert.Equal(15, options.NormSessionTimeoutSeconds);
         Assert.True(File.Exists(ini));   // IniFile 读不到即回填（自愈语义）
     }
 
@@ -374,7 +518,6 @@ public class SlotBindingTests
             DataBits = 7,
             StopBits = "2",
             Parity = "Even",
-            SessionTimeoutSeconds = 30,
             DebugLog = true,
         }.Save(ini);
 
@@ -386,7 +529,6 @@ public class SlotBindingTests
         Assert.Equal(7, loaded.NormDataBits);
         Assert.Equal("2", loaded.NormStopBits);
         Assert.Equal("Even", loaded.NormParity);
-        Assert.Equal(30, loaded.NormSessionTimeoutSeconds);
         Assert.True(loaded.DebugLog);
         Assert.True(loaded.HasPortTarget);
     }
@@ -400,13 +542,11 @@ public class SlotBindingTests
             DataBits = 99,
             StopBits = "9",
             Parity = "banana",
-            SessionTimeoutSeconds = 1,
         };
         Assert.Equal(9600, options.NormBaudRate);
         Assert.Equal(8, options.NormDataBits);
         Assert.Equal("1", options.NormStopBits);
         Assert.Equal("None", options.NormParity);
-        Assert.Equal(15, options.NormSessionTimeoutSeconds);
     }
 
     // ---------------- 扫码枪服务（假实现，不碰串口） ----------------

@@ -35,10 +35,10 @@ DOC_TITLES = {
 }
 
 # ---- 截图白名单（docs/images 实际落盘；V0.0.77 增 cs-scanner；
-#      V0.0.98 增报警确认两帧 + 追溯报表）----
-# 程序① 16 张（cs-*，主窗三帧 idle/flow/dark + 工单两视角 operator/admin，
+#      V0.0.98 增报警确认两帧 + 追溯报表；V0.0.99 增扫码拦截 + 放回口径两帧）----
+# 程序① 18 张（cs-*，主窗三帧 idle/flow/dark + 工单两视角 operator/admin，
 #   cs-main/ -light/ -pwd/ workorder 旧名已随重拍一并删除）+ 程序② 6 张（gw-*）；
-# 顺序约定：前 16 张属程序①，其后属程序②（check_docs.py 内部版"全量"断言
+# 顺序约定：前 18 张属程序①，其后属程序②（check_docs.py 内部版"全量"断言
 # 按此切片，改动须同步）。
 IMG_WHITE = [
     "cs-main-idle.png", "cs-main-flow.png", "cs-main-dark.png",
@@ -46,6 +46,7 @@ IMG_WHITE = [
     "cs-pointtable.png", "cs-policy.png", "cs-iotest.png",
     "cs-operators.png", "cs-mespost.png", "cs-scanner.png", "cs-log.png",
     "cs-alarm-confirm.png", "cs-alarm-scanout.png", "cs-trace-report.png",
+    "cs-scan-notice.png", "cs-slot-reload.png",
     "gw-main.png", "gw-login.png", "gw-log.png",
     "gw-debug.png", "gw-changepwd.png", "gw-config.png",
 ]
@@ -76,7 +77,7 @@ REQUIRED_IMGS = {
         "cs-mespost.png", "cs-iotest.png", "cs-workorder-admin.png",
         "cs-trace-report.png",
     ],
-    "固化程控_内部手册.md": IMG_WHITE[:16],
+    "固化程控_内部手册.md": IMG_WHITE[:18],
     "整线网关_操作员手册.md": [
         "gw-main.png", "gw-login.png", "gw-log.png", "gw-debug.png",
         "gw-changepwd.png",
@@ -85,7 +86,7 @@ REQUIRED_IMGS = {
         "gw-main.png", "gw-login.png", "gw-log.png", "gw-debug.png",
         "gw-changepwd.png",
     ],
-    "整线网关_内部手册.md": IMG_WHITE[16:],
+    "整线网关_内部手册.md": IMG_WHITE[18:],
 }
 
 # 客户面向份（禁词 + DEV_ONLY 图两道闸都跑）

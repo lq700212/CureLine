@@ -890,15 +890,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         // 光栅报警复位编排器（V0.0.96）：复位模式读激活策略，构造时才有
         // GetActivePolicy 可调（属性初始化器不能引用实例成员）。
+        // 注：补扫 SN 的"已固化分钟数"不再由编排器取——写库时点改到步骤三
+        // 确认之后（V0.0.99 用户现场实测纠正），由宿主在落库那一刻现取。
         AlarmPresenter = new GrillAlarmResetCoordinator(
-            () => GetActivePolicy()?.GrillResetMode ?? GrillAlarmResetMode.Manual,
-            // 已固化分钟数（Total-Remain）：给"中途取出"记录填当时固化不足多久——
-            // 质量追溯最关键的数。状态机锁内读，UI 线程调无碍。
-            (rack, level) =>
-            {
-                var st = _machine?.GetStatus(rack, level);
-                return st == null ? 0 : Math.Max(0, st.TotalMinutes - st.RemainMinutes);
-            });
+            () => GetActivePolicy()?.GrillResetMode ?? GrillAlarmResetMode.Manual);
 
         // 登录空闲自动退出（V0.0.93）：上限分钟读 [setting] AutoLogoutMinutes
         // （缺省 15，0/负/非法=不启用；ctor 读一次缓存，改 ini 重启生效，同
@@ -962,6 +957,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         AlarmPresenter.CloseRequested += OnAlarmCloseRequested;
         AlarmPresenter.ResetRequested += OnAlarmResetRequested;
         AlarmPresenter.ResetAllRequested += OnAlarmResetAllRequested;
+        // 报警现场确认链（V0.0.99）：补扫登记 → 步骤三点确认按钮 = 入库时点。
+        AlarmPresenter.TakeOutConfirmed += OnAlarmTakeOutConfirmed;
+        AlarmPresenter.TakeOutDecisionConfirmed += OnAlarmTakeOutDecisionConfirmed;
         // 光栅四项随策略（V0.0.96）：不再有模式/开关广播订阅——策略激活后
         // LoadPolicyBook 统一刷一次报警清单与收敛链（见 LoadPolicyBook）。
 
@@ -985,6 +983,22 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         try
         {
             _trace.EnsureSchema();
+            // 装载"待放回"台账（V0.0.99）：中途取出过、还没重新上料的产品——
+            // 放回时要问固化时长口径。DB IO 放后台线程（铁律 2），扫码判定
+            // 走内存索引（UI 线程零 IO）。
+            Task.Run(() =>
+            {
+                try
+                {
+                    int n = _trace.LoadTakeOutIndex();
+                    if (n > 0)
+                        LocalLogService.Write($"待放回产品台账：装载 {n} 件（中途取出过、尚未重新上料）");
+                }
+                catch (Exception ex)
+                {
+                    LocalLogService.Write($"待放回台账装载失败（{ex.Message}）");
+                }
+            });
         }
         catch (Exception ex)
         {
@@ -1023,8 +1037,14 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         _bindings = new SlotBindingSession(
             book,
-            timeoutSeconds: _scannerOptions.NormSessionTimeoutSeconds,
-            log: m => LocalLogService.Write(m));
+            log: m => LocalLogService.Write(m),
+            // 放回件台账（V0.0.99）：查追溯库的内存索引（纯内存查，UI 线程不碰 DB）；
+            // 有履历 = 这件产品中途取出过 → 放回时要问固化时长口径。
+            takeOutLookup: sn => _trace.TryGetTakeOut(sn),
+            // 口径确认弹窗（宿主唯一出口；VM 不自己 new Window）。
+            resumeDecider: AskReloadBasis,
+            // 库位占用判定：托盘在架且已进入固化流程的库位不许再添新产品。
+            slotOccupiedProvider: (rack, level) => _machine?.IsSlotOccupied(rack, level) == true);
         WireBindingEvents(_bindings);
 
         _scanner = new ScannerBarcodeService(_scannerOptions);
@@ -1090,8 +1110,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         UnwireBindingEvents(_bindings);
         _bindings = new SlotBindingSession(
             book,
-            timeoutSeconds: options.NormSessionTimeoutSeconds,
-            log: m => LocalLogService.Write(m));
+            log: m => LocalLogService.Write(m),
+            takeOutLookup: sn => _trace.TryGetTakeOut(sn),
+            resumeDecider: AskReloadBasis,
+            slotOccupiedProvider: (rack, level) => _machine?.IsSlotOccupied(rack, level) == true);
         WireBindingEvents(_bindings);
 
         var fresh = new ScannerBarcodeService(options);
@@ -1122,6 +1144,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// 【V0.0.97】报警补扫通道优先：报警确认流程正在补扫取出的产品时，
     /// 扫到的码进补扫通道，**不进普通绑定通道**（否则操作员补扫的产品码
     /// 会被当成新绑定写进在架清单）。
+    /// 【V0.0.99】被拦截的扫码（红线四道闸）弹窗讲清原因与下一步——现场
+    /// 红线不能只闪一行状态条，操作员看不清就会反复扫、反复不通。
     /// </summary>
     private void OnBarcodeScanned(object? sender, string code) => UiInvoke(() =>
     {
@@ -1131,13 +1155,53 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             return;
         }
         var outcome = _bindings.Handle(code);
-        if (outcome.Kind == ScanOutcomeKind.InvalidLocation)
+        switch (outcome.Kind)
         {
-            _scanHintText = outcome.Message;
-            _scanHintUntil = DateTime.Now.AddSeconds(3);
+            case ScanOutcomeKind.InvalidLocation:
+                _scanHintText = outcome.Message;
+                _scanHintUntil = DateTime.Now.AddSeconds(3);
+                break;
+            case ScanOutcomeKind.LocationFlowNotFinished:
+                _dialogs.ShowScanNotice(
+                    "扫码被拦截：上一个绑定流程未结束",
+                    outcome.Message,
+                    "请再扫一次上面的库位码，结束上一次的绑定流程，然后再扫其他库位。");
+                break;
+            case ScanOutcomeKind.SlotOccupiedBlocked:
+                _dialogs.ShowScanNotice(
+                    "扫码被拦截：库位已在固化中",
+                    outcome.Message,
+                    "这一盘已经在固化了，不能再往里加产品。请把产品放到其它空库位。");
+                break;
+            case ScanOutcomeKind.ReturnToOriginBlocked:
+                _dialogs.ShowScanNotice(
+                    "扫码被拦截：不能放回原库位",
+                    outcome.Message,
+                    "放回原库位会让同库位产品的固化时间对不上。请把产品放到其它空库位，" +
+                    "放过去时系统会问您这次怎么算固化时长。");
+                break;
+            case ScanOutcomeKind.CureBasisConflict:
+                _dialogs.ShowScanNotice(
+                    "扫码被拦截：同一库位固化口径必须统一",
+                    outcome.Message,
+                    "请把产品放到其它空库位；若确实要放同一盘，请先与现场主管确认口径。");
+                break;
         }
         RefreshScanState();
     });
+
+    /// <summary>
+    /// 放回再加工产品时的"固化时长口径"确认（V0.0.99）：宿主唯一出口——
+    /// 补计划时长（Core 不知道策略）→ 弹窗问操作员 → 拿答复。
+    /// 返回 Cancel=不放这个产品（会话不绑定，流程不变）。
+    /// </summary>
+    private SlotReloadChoice AskReloadBasis(SlotReloadPrompt prompt)
+    {
+        var policy = GetActivePolicy();
+        if (policy != null)
+            prompt.PlanMinutes = policy.ResolveMinutes(prompt.Rack, prompt.Level);
+        return _dialogs.AskSlotReloadBasis(prompt);
+    }
 
     /// <summary>连接边沿（后台线程 → 封送）：只刷状态条；连接/断开的日志由子模块统一出。</summary>
     private void OnScannerConnectionChanged(object? sender, bool connected) =>
@@ -1174,15 +1238,18 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// <summary>
     /// 扫到一件新产品 → 追溯库落一行（一个 SN 一行）。写库放后台线程
     /// （UI 线程禁 DB IO——铁律 2）；失败只记日志，不影响扫码流程。
+    ///
+    /// priorMinutes=续接件"进入本轮前累计已固化分钟"（0=全新件）——落库后
+    /// 追溯库的"实际固化(分)"= 本轮时长 + 本值 = **累计**时长（达标口径）。
     /// </summary>
-    private void OnProductBound(int rack, int level, string productSn)
+    private void OnProductBound(int rack, int level, string productSn, int priorMinutes)
     {
         var at = DateTimeOffset.Now;
         Task.Run(() =>
         {
             try
             {
-                _trace.AddBound(rack, level, productSn, at);
+                _trace.AddBound(rack, level, productSn, at, priorMinutes);
             }
             catch (Exception ex)
             {
@@ -1247,8 +1314,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             ScanWarning = false;
             ScanText = _bindings.Prompt;   // "A01 待扫产品码（扫完再扫一次库位码结束上料）"
             ScanTip = "已扫库位码，请逐个扫产品二维码（一个库位可放多个产品）；" +
-                      "全部扫完后再扫一次同一个库位码=上料结束。扫错库位可直接扫另一个库位码切换，" +
-                      "或点【取消】回到请扫库位码";
+                      "全部扫完后再扫一次同一个库位码=上料结束。若要换库位，" +
+                      "请先再扫一次当前库位码结束绑定，再扫新库位码。";
         }
         else if (_unboundTrayCount > 0)
         {
@@ -1265,7 +1332,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             bool tcpMode = _scannerOptions.NormMode == "Tcp";
             ScanTip = ScanConnected
                 ? $"扫码枪已连接（{_scanner?.Name ?? "扫码枪"}）：先扫库位码 A01~J12，再逐个扫产品码，" +
-                  $"扫完再扫一次库位码结束上料；{_scannerOptions.NormSessionTimeoutSeconds} 秒无操作自动回到请扫库位码"
+                  "扫完再扫一次库位码结束上料（不设等待超时，以二次扫库位码为准）"
                 : tcpMode
                     ? "扫码枪未连接：检查网线与枪侧 DTU（TCP 目标 IP:端口，枪/DTU 断电重启后确认 " +
                       "TCP-SERVER 配置还在）；服务每 3 秒后台自动重连，网络恢复即接通"
@@ -1418,7 +1485,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                     // （常开/常闭）后演示剧本与状态机判定同口径，否则演示里
                     // 永远不报警/一直报警。
                     GrillPolarityProvider = () => GetActivePolicy()?.GrillPolarity
-                        ?? GrillSignalPolarity.BlockedOn,
+                        ?? GrillSignalPolarity.BlockedOff,
                 }
                 : new ModbusPointTableBus();
             bus.Start(config);
@@ -1464,14 +1531,22 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                     resetModeProvider: () => GetActivePolicy()?.GrillResetMode
                         ?? GrillAlarmResetMode.Manual,
                     grillPolarityProvider: () => GetActivePolicy()?.GrillPolarity
-                        ?? GrillSignalPolarity.BlockedOn,
+                        ?? GrillSignalPolarity.BlockedOff,
                     grillAlarmEnabledProvider: () => GetActivePolicy()?.GrillAlarmEnabled
                         ?? true,
-                    // 【上料抑制 V0.0.97】该库位正在上料（已扫库位码、货还没上完）
-                    // → 不报光栅报警（手挡光栅是上料正常动作，报了是误报）。
-                    // 判定口径：托盘在架 且 该库位尚未二次确认上料。托盘不在架
-                    // 时仓位本就不在计时相位（天然不报），所以只需看会话状态。
-                    loadPendingProvider: (rack, level) => _bindings.IsLoadPending(rack, level));
+                    // 【上料抑制 V0.0.97 / V0.0.99 扩到"完全没扫码"】
+                    // 该库位的上料流程还没做完（已扫库位码货还没上完，或连库位码
+                    // 都还没扫——托盘刚放上、手还没离开就挡了光栅）→ 不报光栅
+                    // 报警（手挡光栅是上料正常动作，报了是误报）。
+                    // 判定口径：托盘不在架时仓位本就不在计时相位（天然不报），
+                    // 所以只需看会话的上料确认状态。
+                    loadPendingProvider: (rack, level) => _bindings.IsLoadUnconfirmed(rack, level),
+                    // 【续接固化 V0.0.99】该库位若绑了"接着之前固化继续"的放回件
+                    // → 本盘时长 = 计划 − 前段已固化分钟（累计达标口径：之前 8h
+                    // + 计划 24h → 本次 16h 即放行，累计正好 24h）。
+                    // 基线取各续接件的最小值（宁多勿少：固化不足是质量事故）。
+                    resumeBaselineProvider: (rack, level) =>
+                        _bindings.GetResumeBaselineMinutes(rack, level));
                 // 过账挂点（P3.2 后半）：状态机三事件 → 过账服务（只在创建时订阅
                 // 一次——重连 Attach 换通道不重复订阅）。事件在状态机锁内触发，
                 // Poster 方法内部 Task.Run 立即返回，不重入不阻塞。
@@ -1546,9 +1621,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // 空闲卡"计划 X"预览（V0.0.58）：激活策略每拍现取 + 仓位三级解析
         // （仓位>层>全局）——策略窗热更后下一拍（≤500ms）空闲卡立见新时长。
         var planPolicy = GetActivePolicy();
-
-        // 扫码会话超时（P3.3）：扫了库位码走开 → 超时自动回"请扫库位码"，不让界面挂着旧库位误导。
-        _bindings.Tick();
 
         int unboundTray = 0;   // 托盘在架但未绑定产品的库位数（扫码胶囊报警依据）
         foreach (var slot in Slots)
@@ -1631,50 +1703,38 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             "请补扫取出的产品码（固化可能不足，后续需追溯）");
 
     /// <summary>
-    /// 补扫到一件被取出的产品：写追溯库"中途取出"记录——该 SN 的固化
-    /// 在此刻终止，时长=当时已固化分钟数（不足计划时长，质量追溯用）。
-    /// 写库放后台线程（UI 线程禁 DB IO——铁律 2）。
+    /// 现场处置确认（操作员在步骤三点了【继续计时】/【终止计时】）：
+    /// **这是补扫 SN 入库的唯一时点**（V0.0.99 用户现场实测纠正：只扫了码
+    /// 没点确认按钮就不要入数据库——库里是质量追溯的事实，不留半成品）。
+    ///
+    /// 落库顺序收口在一处（先单件后整库位）：反了会让逐件的"中途取出"记录
+    /// 被整库位的结束原因覆盖掉（MarkLeft 只改 end_reason=0 的行）。
+    /// 写库 + 终止计时（写灯=网络 IO）都在后台线程（铁律 2）。
     /// </summary>
-    private void OnAlarmOutScanRecorded(int rack, int level, string productSn, int curedMinutes)
+    private void OnAlarmTakeOutDecisionConfirmed(int rack, int level,
+        IReadOnlyList<string> outSns, bool terminate)
     {
         var at = DateTimeOffset.Now;
-        Task.Run(() =>
-        {
-            try
-            {
-                _trace.MarkTakenOut(rack, level, productSn, at, curedMinutes, alarmFlag: true,
-                    note: "报警确认取出（补扫）");
-            }
-            catch (Exception ex)
-            {
-                LocalLogService.Write($"追溯库写入失败（{ex.Message}），中途取出记录未入库");
-            }
-        });
-        LocalLogService.Write(
-            $"库位 {SlotLocationCode.EncodeInRack(rack, level)} 补扫取出产品 {productSn}" +
-            $"（当时已固化 {curedMinutes} 分钟）");
-    }
+        // 已固化分钟数（Total-Remain）：取出的产品固化不足多少分钟，是追溯
+        // 最关键的数（状态机锁内读，UI 线程调无碍）。
+        int curedMinutes = 0;
+        var st = _machine?.GetStatus(rack, level);
+        if (st != null)
+            curedMinutes = Math.Max(0, st.TotalMinutes - st.RemainMinutes);
 
-    /// <summary>
-    /// 计时处置决定：terminate=true=整个库位的产品终止计时（不再等到点
-    /// 放行，实际已固化时长入库）；false=未取出的产品继续固化（状态机不动）。
-    /// 终止走状态机 TerminateCuring（写灯=网络 IO，必须后台——铁律 2）。
-    /// </summary>
-    private void OnAlarmTimingDecision(int rack, int level, bool terminate)
-    {
-        if (!terminate)
-        {
-            LocalLogService.Write(
-                $"库位 {SlotLocationCode.EncodeInRack(rack, level)} 未取出的产品继续固化计时");
-            return;
-        }
         Task.Run(() =>
         {
             try
             {
-                if (_machine?.TerminateCuring(rack, level, out int curedSeconds) == true)
+                // ① 逐件写"中途取出"（该 SN 固化不足，时长=当时已固化分钟数）
+                foreach (var sn in outSns)
                 {
-                    var at = DateTimeOffset.Now;
+                    _trace.MarkTakenOut(rack, level, sn, at, curedMinutes, alarmFlag: true,
+                        note: "报警确认取出（补扫）");
+                }
+                // ② 终止计时分支：整个库位的产品停表（实际已固化时长入库）
+                if (terminate && _machine?.TerminateCuring(rack, level, out int curedSeconds) == true)
+                {
                     _trace.MarkLeft(rack, level, at, curedSeconds / 60,
                         SlotTraceEndReason.AlarmStopped, alarmFlag: true,
                         note: "报警确认后终止计时");
@@ -1682,9 +1742,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             }
             catch (Exception ex)
             {
-                LocalLogService.Write($"终止计时失败（{ex.Message}）");
+                LocalLogService.Write($"追溯库写入失败（{ex.Message}）");
             }
         }).ContinueWith(_ => UiInvoke(RefreshAlarmList));
+
+        string location = SlotLocationCode.EncodeInRack(rack, level);
+        if (outSns.Count > 0)
+            LocalLogService.Write(
+                $"库位 {location} 报警确认取出 {outSns.Count} 件产品" +
+                $"（当时已固化 {curedMinutes} 分钟），已入追溯库");
+        if (!terminate)
+            LocalLogService.Write($"库位 {location} 未取出的产品继续固化计时");
     }
 
     /// <summary>
@@ -1955,8 +2023,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         AlarmPresenter.ResetRequested -= OnAlarmResetRequested;
         AlarmPresenter.ResetAllRequested -= OnAlarmResetAllRequested;
         AlarmPresenter.TakeOutConfirmed -= OnAlarmTakeOutConfirmed;
-        AlarmPresenter.OutScanRecorded -= OnAlarmOutScanRecorded;
-        AlarmPresenter.TimingDecisionRequested -= OnAlarmTimingDecision;
+        AlarmPresenter.TakeOutDecisionConfirmed -= OnAlarmTakeOutDecisionConfirmed;
         _dialogs.CloseGrillAlarmReset();
         _refreshTimer.Stop();
         lock (_busLock)

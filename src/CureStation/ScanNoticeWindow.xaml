@@ -1,0 +1,83 @@
+<Window x:Class="CureStation.ScanNoticeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:CureStation.ViewModels"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:ScanNoticeViewModel, IsDesignTimeCreatable=False}"
+        Title="扫码提示" Width="460" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None" ResizeMode="NoResize"
+        Background="Transparent" AllowsTransparency="True"
+        Foreground="{DynamicResource Brush.Fresh.FgStrong}"
+        FontSize="13" ShowInTaskbar="False">
+    <shell:WindowChrome.WindowChrome>
+        <!-- 无边框自绘（与其它弹窗同族）：头条即拖动区，系统按钮全关 -->
+        <shell:WindowChrome CaptionHeight="36" GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False" ResizeBorderThickness="0"/>
+    </shell:WindowChrome.WindowChrome>
+    <!--
+      扫码提示弹窗（V0.0.99）：
+      纯告知型——现场红线拦截时给操作员看清楚"为什么没扫进去、下一步怎么做"。
+      单按钮（知道了），无决策项——决策型走 SlotReloadWindow。
+    -->
+    <Grid Margin="12">
+        <Border CornerRadius="10" Background="{DynamicResource Brush.WindowBg}"
+                BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1"
+                Effect="{StaticResource Fx.WinShadow}">
+            <!-- 三行 Grid（标题 Auto / 正文 * / 底栏 Auto）：
+                 不用 DockPanel——它的"最后一个子元素填充剩余空间"规则会让
+                 正文把底栏按钮挤出可视区（SizeToContent 高度按内容算，
+                 底栏被吃掉）。 -->
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- 标题条：Grid 两列（左标题* / 右关闭钮Auto，
+                     避免 DockPanel.LastChildFill 把 ✕ 拉伸飘到中间） -->
+                <Border Grid.Row="0" Background="{DynamicResource Brush.LfHeadGrad}"
+                        BorderBrush="{DynamicResource Brush.TopbarBorder}" BorderThickness="0,0,0,1"
+                        CornerRadius="10,10,0,0" Height="36" Padding="12,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding Title, FallbackValue=扫码提示}"
+                                   FontSize="14" FontWeight="Bold"
+                                   Foreground="{DynamicResource Brush.LfHeadFg}"
+                                   VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Style="{StaticResource WinTitleClose}"
+                                Height="36" Foreground="{DynamicResource Brush.LfHeadFg}"
+                                Content="✕" Click="OnCloseClick" ToolTip="关闭"/>
+                    </Grid>
+                </Border>
+
+                <!-- 正文：主提示（醒目）+ 操作指引（次级） -->
+                <StackPanel Grid.Row="1" Margin="18,16,18,14">
+                    <TextBlock Text="{Binding Message, FallbackValue='扫码被拦截：原因见下方说明'}"
+                               FontSize="14" FontWeight="Bold" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush.Fresh.FgStrong}"
+                               LineHeight="22"/>
+                    <TextBlock Text="{Binding Detail, FallbackValue='请按提示处理后重新扫码'}"
+                               Margin="0,10,0,0" FontSize="12" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush.Fresh.FgMuted}"
+                               LineHeight="19"/>
+                </StackPanel>
+
+                <!-- 底栏：单按钮 -->
+                <Border Grid.Row="2" BorderBrush="{DynamicResource Brush.DimLine}"
+                        BorderThickness="0,1,0,0" Padding="14,10">
+                    <Button Style="{StaticResource FreshPrimaryButton}"
+                            Command="{Binding CloseCommand}" Content="知道了"
+                            MinWidth="96" HorizontalAlignment="Right"/>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
