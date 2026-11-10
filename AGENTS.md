@@ -122,14 +122,16 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 602/602（V0.0.92 全量；V0.0.34~91 各轮增量明细见各版本
+   `dotnet test` 596/596（V0.0.97 全量；V0.0.34~96 各轮增量明细见各版本
    CHANGELOG——基线此后只增不减，V0.0.62 授权真源收口 kaleidoscope：删
    宿主授权注入类语义用例 −21，重写编解码/era/门禁接线 +13，补真私钥
    激活链 +3，净减 5；V0.0.63 光栅报警链 +8，V0.0.64 总线时序契约+光栅
    兜底复位 +3，V0.0.69 人工复位 +13，V0.0.71 复位缺省解析/回显 +7，
    V0.0.72 光栅极性 +14，V0.0.73~75 日志窗/策略窗 UI +4，V0.0.76 扫码
    绑定 +19，V0.0.77 扫码枪配置窗 +9，V0.0.88 幽灵模态护栏 7 例，
-   V0.0.90 光栅报警总开关 +11，V0.0.92 判据放宽补 1 例）；禁止交付编译不过/测试不过的代码。
+   V0.0.90 光栅报警总开关 +11，V0.0.92 判据放宽补 1 例；V0.0.97 光栅
+   四项收编为策略字段：删全局键解析/回显 21 例、补策略序列化/整组回显
+   3 例，全量基线按实测 596 记）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
    **`LicenseSignKey.dat`（软件激活签名私钥）** 只留厂商签发工具目录，已
@@ -258,7 +260,7 @@
 | `src/CureLine.Core/Curing/WorkOrderStore.cs` | 工单信息 `config/workorder.json`（R/L 双工位+EMP/BC/PT×2，字段名对齐 MES 16 字段）+ 自愈空工单 |
 | `src/CureLine.Core/Security/OperatorStore.cs` | 程序①三级操作员账号（V0.0.49 重做：`OperatorRole` Operator/Admin/Dev + 预置三账号 `SeedUser` 播种 + PBKDF2 复用；增删/改密全带 **actor 兜底**，VM 置灰之外的第二道防线）；**防锁死红线**：dev 账号永不可删、密码仅本人可改、Dev 角色不开放创建（预置唯一） |
 | `src/CureLine.Core/Curing/SlotCuringMachine.cs` | **仓位状态机**：托盘到位→（门控）→黄灯计时→绿灯放行→离开灭灯；边沿后台直转+1s 心跳 Pump；灯写去重补写/断连恢复对齐/策略热切换三自愈；过账挂点三事件（TrayArrived/CuringStarted/TrayLeft，只发真实边沿）；机台总监塔灯聚合 `RefreshMachineBeacon`（V0.0.65 接入，V0.0.67 口径红>绿>黄"待料=黄"）+ `SlotStatus.AlarmGrill` 报警标志供卡牌显报（V0.0.67） |
-| `src/CureLine.Core/Curing/GrillSignalPolarity.cs` | 光栅信号极性（V0.0.72）：`BlockedOn`=遮挡 ON（缺省，V0.0.71 及以前口径）/ `BlockedOff`=遮挡 OFF（现场实测常闭安全光栅）+ 解析器（只认 BlockedOff，其余回缺省）；状态机唯一解释口 `IsBlocked(raw, polarity)` 消费（门控/报警/复位/日志全同源） |
+| `src/CureLine.Core/Curing/GrillSignalPolarity.cs` | 光栅信号极性（V0.0.72）：`BlockedOn`=遮挡 ON（缺省，V0.0.71 及以前口径）/ `BlockedOff`=遮挡 OFF（现场实测常闭安全光栅）；V0.0.96 起由策略字段 `CuringPolicy.GrillPolarity` 承载（旧 ini 键/解析器已删）；状态机唯一解释口 `IsBlocked(raw, polarity)` 消费（门控/报警/复位/日志全同源） |
 | `src/CureLine.Core/Curing/SlotLocationCode.cs` | 客户库位编码换算（Date Matrix，10 站×3 层）：架×层↔编码互转（`Encode`/`TryDecode` 客户约定锚点）+ 双架口径（`RackGroupOf`/`StationInRack`/`EncodeInRack` 按架内站号换算，每台架独立一套 A01~J12），主窗卡片标题与后续扫码绑定的同源入口 |
 | **Core 共享（单线过账家族，P3.2 后半新增）** | |
 | `src/CureLine.Core/Curing/CuringMesOptions.cs` | 过账配置模型（ini `[CuringMes]` 节）：开关/工位/时间单位/进站时机/中途取件/静态参数五件；`NormSide` 规范化（非 L 按 R 兜底） |
@@ -295,7 +297,7 @@
 | `src/CureLine.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段）+ `MockMesServer`（内置模拟 MES 桩，仅 Simulate=1 且 URL 空/占位时接管，自配 URL 透传） |
 | `src/CureLine.Core/Data/CureRecordStore.cs` | `cure_record` 表 CRUD（V0.0.32 由 PLCtable 改名，项目未上线无兼容包袱）+ `ComputeStats` 纯统计 |
 | `src/CureLine.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/机台连接配置（`StationConfig.cs`：StationConfigStore/Validator） |
-| `tests/CureLine.Tests/` | 552 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用；`LicenseTests` 16 例锁 kaleidoscope 接线与双产品授权——有厂商私钥环境自动加跑真码激活链 3 例，无钥自动跳过；`SlotBindingTests` 19 例锁扫码绑定工序；`ScannerConfigTests` 8 例锁扫码枪配置窗校验/预置/落盘） |
+| `tests/CureLine.Tests/` | 596 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用；`LicenseTests` 16 例锁 kaleidoscope 接线与双产品授权——有厂商私钥环境自动加跑真码激活链 3 例，无钥自动跳过；`SlotBindingTests` 19 例锁扫码绑定工序；`ScannerConfigTests` 8 例锁扫码枪配置窗校验/预置/落盘） |
 | `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
 | `tools/DocShot/` | **文档截图 harness（V0.0.50 重作）**：`run_docshot.ps1` 一键 build 两程序→build harness→组装 runner→起 exe 全自动；**完全后台静默纪律（用户拍板）**——所有窗（含两主窗）`ShowActivated=false`+`ShowInTaskbar=false`+Left/Top=-20000 离屏，绝不抢焦点/不进任务栏/不落用户屏幕；**成品口径=RTB 优先**（`ShotRtb` 按 DPI 缩放渲染视觉树——无 DWM 阴影黑边、与窗口位置无关），PrintWindow 降为兜底（离屏下拍出黑边已被用户目检否决）；镜头名与文档引用全对齐（`cs-workorder-operator/admin.png` 三级视角、`cs-main-idle/flow/dark.png` 三帧），万象清单校验走 `check_config.py`（IMG_WHITE/REQUIRED_IMGS 两张表）+`check_docs.py`；**深色帧换装坑**：斜杠 URI `"/Themes/Dark.xaml"` 相对 Application 根（harness=DocShot 组件 404 FATAL）——必须手 Build `pack://…/CureStation;component/Themes/Dark.xaml` 并**按 Source 认出主题槽替换**（盲替 merged[0] 会把主样式字典换没，半坏视觉），`ThemeManager.Current` 私有 setter 反射同步防顶栏按钮文案不符；工单镜头演示数据用种子 `WorkOrderBook` 不落盘（R1 纪律） |
 
@@ -304,7 +306,7 @@
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build CureLine.slnx --nologo
-# 全量测试（552/552 全绿，串行，约 30s；含本地 HttpListener 桩 MES 端到端
+# 全量测试（596/596 全绿，串行，约 30s；含本地 HttpListener 桩 MES 端到端
 #   + 模拟链路 VM 全链路用例：按钮→注入→扫触发→POST 内置桩→回写→观测
 #   + 授权 16 例——其中真私钥激活链 3 例依赖 tools/LicenseIssuer 私钥，
 #   无钥环境自动跳过）
@@ -511,10 +513,10 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   `GetAlarmSlots()` 是弹窗清单取数唯一口（层→架升序）；Auto=自动复位（上述
   全部现行为）；模式=构造第 5
   可选参 `Func<GrillAlarmResetMode>? resetModeProvider` **每拍现取**
-  （null=恒 Auto，勿缓存——宿主热切下一拍生效；程序①现场缺省由 Hub 的 ini
-  缺省决定=Manual）；到点放行/取件离开
-  路径人工档保留。宿主接线=`GrillAlarmResetModeHub`（ini `[setting]
-  GrillAlarmResetMode` 缺省 Manual、非法自愈回 Manual）+ 弹窗编排
+  （null=恒 Auto，勿缓存——策略切换下一拍生效）；到点放行/取件离开
+  路径人工档保留。宿主接线=`MainViewModel.GetActivePolicy()?.GrillResetMode
+  ?? Manual`（V0.0.96 起随策略保存/激活，旧 `GrillAlarmResetModeHub` 与 ini
+  键已删）+ 弹窗编排
   `GrillAlarmResetCoordinator`（清单差分热更=用户拍板"报警期间新库位
   进窗就见、解除即删行"+弹窗开关小账本，纯 VM 可测）+
   `GrillAlarmResetWindow`（右下角非模态单例；用户 ✕ 记"用户表态"、
@@ -529,11 +531,11 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   对齐复核、`GrillSideText` 日志全部经它——**禁止在调用点直判 `== true`**
   （换光栅品牌/反接只改配置，散写会漏改一处就反一半）。构造第 7 可选参
   `Func<GrillSignalPolarity>? grillPolarityProvider` 每拍现取（null=恒
-  BlockedOn，Core/测试缺省）；宿主接线=`GrillSignalPolarityHub`（ini
-  `[setting] GrillSignalPolarity` 缺省 BlockedOn、非法自愈回 BlockedOn）+
+  BlockedOn，Core/测试缺省）；宿主接线=策略字段 `CuringPolicy.GrillPolarity`
+  （V0.0.96 起随策略保存/激活，旧 `GrillSignalPolarityHub` 与 ini 键已删）+
   策略窗画布下方光栅条【常开｜常闭】分段按钮（常开=BlockedOn 缺省 /
-  常闭=BlockedOff，落盘+广播即生效；V0.0.74 从参数条勾选框下移改档）；
-  演示 `MockPointTableBus.GrillPolarityProvider` 跟随同一中枢（演示剧本
+  常闭=BlockedOff，随策略保存、激活后生效；V0.0.74 从参数条勾选框下移改档）；
+  演示 `MockPointTableBus.GrillPolarityProvider` 跟随同一激活策略（演示剧本
   电平与状态机同口径，否则勾取反后演示永远不报警/一直报警）。注意主窗
   卡片的 `GrillText` 恒显示**原始电平**（L:ON R:OFF，排障看硬件真值），
   "挡/空"语义只在状态机日志里。
@@ -547,13 +549,23 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   优先）；**重开开关的补报兜底**=Pump 每拍"计时中被挡未报警→补报"
   （关闭期间被挡漏掉的下一拍补上，不等下次光栅边沿）。**门控闸不受
   开关影响**——`GrillGate`（托盘到位要光栅让空才开计时）是工艺防呆，
-  报警总开关只关红灯/蜂鸣/复位窗，勿顺带关掉门控。宿主接线=程序①
-  `GrillAlarmEnabledHub`（ini `[setting] GrillAlarmEnabled`，显式 "0"=
-  关、缺键/空值/非法值自愈回开——宁可多报不漏报）+ 策略窗光栅带
+  报警总开关只关红灯/蜂鸣/复位窗，勿顺带关掉门控。宿主接线=策略字段
+  `CuringPolicy.GrillAlarmEnabled`（V0.0.96 起随策略保存/激活，缺省 true；
+  旧 `GrillAlarmEnabledHub` 与 ini 键已删）+ 策略窗光栅带
   "光栅报警"滑块开关（ToggleButton 与门控开关同款 GrillSwitch，文字
-  "已开启/已关闭"；光栅条列 7→9 列）。双保险收敛：Hub.Changed 广播→
-  主窗 Task.Run 立即调状态机 `ApplyAlarmSwitch`（红灯当场灭/"报警复位"
-  窗清单即清）+ Pump 尾每拍兜底（漏广播最迟 1 秒；开启态快速路径零动作）。
+  "已开启/已关闭"；光栅条列 7→9 列）。双保险收敛：策略激活→
+  `MainViewModel.LoadPolicyBook` 后台 Task.Run 立即调状态机
+  `ApplyAlarmSwitch`（红灯当场灭/"报警复位"窗清单即清）+ Pump 尾每拍兜底
+  （最迟 1 秒生效；开启态快速路径零动作）。
+
+  **光栅四项统一跟随策略（V0.0.96 用户拍板"不要出现某一个不跟随策略"）**：
+  门控 `GrillGate` / 报警总开关 `GrillAlarmEnabled` / 信号极性 `GrillPolarity`
+  / 报警解除 `GrillResetMode` 全部是 `CuringPolicy` 字段，随策略保存/激活/
+  套用整组切换；策略窗只编辑草稿（保存/激活才落库），运行期状态机与主窗
+  编排器读激活策略（`MainViewModel.GetActivePolicy`），策略窗 XAML 文案
+  统一"随策略保存，激活后生效"。**不再有任何光栅全局 ini 键**——旧
+  `[setting] GrillAlarmResetMode` / `GrillSignalPolarity` / `GrillAlarmEnabled`
+  三键与其静态中枢类均已删除，勿再加回。
 
   改流程先改 `SlotCuringMachine` 头注释与
   `SlotCuringMachineTests` 断言。

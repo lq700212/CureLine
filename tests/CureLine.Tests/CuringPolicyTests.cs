@@ -142,6 +142,9 @@ public class CuringPolicyTests
                     LevelMinutes = { [1] = 90 },
                     SlotMinutes = { ["3-2"] = 45 },
                     GrillGate = true,
+                    GrillAlarmEnabled = false,
+                    GrillPolarity = GrillSignalPolarity.BlockedOff,
+                    GrillResetMode = GrillAlarmResetMode.Auto,
                 },
                 new CuringPolicy { Name = "快固", GlobalMinutes = 30 },
             },
@@ -158,6 +161,31 @@ public class CuringPolicyTests
         Assert.Equal(90, p.LevelMinutes[1]);
         Assert.Equal(45, p.SlotMinutes["3-2"]);
         Assert.True(p.GrillGate);
+        Assert.False(p.GrillAlarmEnabled);
+        Assert.Equal(GrillSignalPolarity.BlockedOff, p.GrillPolarity);
+        Assert.Equal(GrillAlarmResetMode.Auto, p.GrillResetMode);
+    }
+
+    [Fact]
+    public void Store_LegacyJsonMissingGrillFields_UsesSafeDefaults()
+    {
+        // V0.0.96 前的老策略文件没有光栅四项字段：反序列化必须保留
+        // 属性初始化器的安全缺省（报警开/常开/人工），不能落成 false/0。
+        using var scope = new TestScope();
+        Directory.CreateDirectory(AppPaths.ConfigDir);
+        File.WriteAllText(CuringPolicyStore.DefaultPath, """
+            {
+              "Policies": [ { "Name": "旧策略", "GlobalMinutes": 90 } ],
+              "ActiveName": "旧策略"
+            }
+            """);
+
+        var loaded = CuringPolicyStore.Load();
+        Assert.NotNull(loaded);
+        var p = Assert.Single(loaded!.Policies);
+        Assert.True(p.GrillAlarmEnabled);
+        Assert.Equal(GrillSignalPolarity.BlockedOn, p.GrillPolarity);
+        Assert.Equal(GrillAlarmResetMode.Manual, p.GrillResetMode);
     }
 
     [Fact]

@@ -13,11 +13,12 @@
 //     程序①现场需在策略窗光栅条选【常闭】切到本档。
 //
 // 为什么放 Core：消费方是 SlotCuringMachine（门控/报警判定），属 Core
-//   语义；配置读取/落盘在程序①的 GrillSignalPolarityHub（Core 不读 ini，
-//   与 GrillAlarmResetMode 同口径），状态机经构造注入 Func<枚举> 现取。
+//   语义；选择随工艺策略保存（CuringPolicy.GrillPolarity，策略窗光栅条
+//   【常开｜常闭】分段按钮编辑，激活策略生效），状态机经构造注入
+//   Func<枚举> 现取——不再有全局 ini 键（V0.0.96 用户拍板"统一跟随策略"）。
 //
 // 怎么改：其它品牌光栅（如遮挡输出干接点闭合/断开反接）只在本枚举
-//   加档位 + Hub 解析核对 + 状态机 IsBlocked 判定即可，界面分段按钮无需动
+//   加档位 + 状态机 IsBlocked 判定即可，界面分段按钮无需动
 //   （程序① UI 只区分【常开/常闭】两态；真要三态再扩 UI）。
 // =========================================================================
 
@@ -30,19 +31,4 @@ public enum GrillSignalPolarity
 
     /// <summary>遮挡=OFF：光栅被挡时 DI 为 OFF、未被挡为 ON（现场实测常闭安全光栅）。</summary>
     BlockedOff = 1,
-}
-
-/// <summary>
-/// ini 值 → 枚举解析（纯函数，任意线程可调）：忽略大小写只认
-/// "BlockedOff"，其余（"BlockedOn"/null/空/拼错/他语言别名）一律回
-/// BlockedOn（缺省档）。方向勿翻转——缺省必须保持 V0.0.71 及以前的
-/// "遮挡=ON"口径，否则既有部署的光栅判定会整体反相（安全事故级）。
-/// </summary>
-public static class GrillSignalPolarityParser
-{
-    public static GrillSignalPolarity Parse(string? raw) =>
-        string.Equals(raw?.Trim(), nameof(GrillSignalPolarity.BlockedOff),
-            StringComparison.OrdinalIgnoreCase)
-            ? GrillSignalPolarity.BlockedOff
-            : GrillSignalPolarity.BlockedOn;
 }

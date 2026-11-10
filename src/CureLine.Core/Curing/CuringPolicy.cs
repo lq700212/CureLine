@@ -1,10 +1,15 @@
 // =========================================================================
 // CuringPolicy：固化工艺策略（仓位状态机的"参数表"）
 //
-// 干什么：定义"托盘到位后计多久、光栅要不要参与判定"的工艺参数。
+// 干什么：定义"托盘到位后计多久、光栅怎么用"的工艺参数。
 //   时长支持三级覆盖粒度（三种情况都能配、可混用）：
 //     全局 GlobalMinutes 打底 → 每层 LevelMinutes 覆盖 → 每仓位 SlotMinutes 覆盖，
 //     解析优先级 仓位 > 层 > 全局（ResolveMinutes 一处收敛，禁止各写一份）。
+//   光栅四项（门控/报警总开关/信号极性/报警解除）全部**随策略保存**——
+//   V0.0.96 起用户拍板"统一跟随策略"，不再有全局 ini 口径：换策略即整套
+//   光栅口径跟着换（激活策略是运行期唯一真源，见 SlotCuringMachine）。
+//   旧版的分项目 global ini 键（GrillSignalPolarity/GrillAlarmEnabled/
+//   GrillAlarmResetMode）已删除，勿再加回。
 // 为什么不用"三选一模式"枚举：三级覆盖天然兼容三种粒度——只配全局=
 //   全架一个时长，精细到单仓位也行，现场按工艺自由度自选；还避免
 //   "选了每仓位模式但只配了 3 个仓位、其余仓位无值可用"的坑。
@@ -46,6 +51,28 @@ public sealed class CuringPolicy
     /// 开关跟激活策略走：热切换策略即切换持久化行为，无需重启。
     /// </summary>
     public bool PersistMinutes { get; set; }
+
+    /// <summary>
+    /// 光栅报警总开关（随策略保存/激活）。true=缺省：计时中被挡即报警
+    /// （红灯+蜂鸣+塔灯红+复位窗）；false=整条报警链静默——被挡不报警、
+    /// 已挂着的报警当场解除（红灯灭黄灯复亮），门控闸不受影响。
+    /// 缺省 true：宁可多报不可漏报；缺字段的旧策略文件反序列化保留本缺省。
+    /// </summary>
+    public bool GrillAlarmEnabled { get; set; } = true;
+
+    /// <summary>
+    /// 光栅信号极性（随策略保存/激活）：BlockedOn=遮挡 ON（缺省，被挡 ON/让空 OFF）
+    /// / BlockedOff=遮挡 OFF（现场常闭安全光栅，被挡 OFF/让空 ON）。
+    /// 状态机门控/报警/复位/排障日志全部按本口径解释（IsBlocked 唯一出口）。
+    /// </summary>
+    public GrillSignalPolarity GrillPolarity { get; set; } = GrillSignalPolarity.BlockedOn;
+
+    /// <summary>
+    /// 光栅报警解除模式（随策略保存/激活）：Manual（缺省）=人工复位——让空不
+    /// 自动解除，操作员在"报警复位"窗逐项确认；Auto=双侧让空即自动解除。
+    /// 缺省 Manual：报警必须由人确认才消失（安全侧）。
+    /// </summary>
+    public GrillAlarmResetMode GrillResetMode { get; set; } = GrillAlarmResetMode.Manual;
 
     /// <summary>
     /// 是否预置策略（出厂模板）。true=预置：策略窗可查看/编辑参数、可"套用为

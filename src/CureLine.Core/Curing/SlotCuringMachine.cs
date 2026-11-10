@@ -29,20 +29,21 @@
 //   本类只认"被挡/让空"语义（IsBlocked 一处解释原始电平），门控/报警/复位/
 //   排障日志全部经它判定——加新光栅品牌先看枚举注释，别在调用点散写
 //   "== true"（极性切换即全部反相）。provider 与复位模式同款：边沿/心跳
-//   每拍现取，宿主勾选后下一拍生效；缺省 null=恒 BlockedOn（Core 独立/
-//   测试 API 缺省——程序①现场由 Hub 的 ini 决定）。
+//   每拍现取，换策略/激活后下一拍生效；缺省 null=恒 BlockedOn（Core 独立/
+//   测试 API 缺省——程序①现场由激活策略的 GrillPolarity 决定）。
 //
 // 复位模式（V0.0.69，用户拍板二选一，见 GrillAlarmResetMode）：
 //   Auto = 自动复位：光栅让空（边沿+Pump 兜底双保险）即自动复位；
-//   Manual（程序①现场缺省，V0.0.71 用户拍板）= 人工复位：让空不复位——
+//   Manual（现场缺省，V0.0.71 用户拍板）= 人工复位：让空不复位——
 //     红灯与机台蜂鸣保持，边沿与 Pump 兜底都不再自动解除（日志改说"等人工
 //     确认"），唯一解除口=宿主按钮链调 ManualResetGrillAlarm（程序①"报警
 //     复位"窗逐项/全部确认）；到点放行（绿灯接替）与取件离开（自然回空闲）
 //     路径人工档也保留——报警只管"人能不能靠近"，固化计时/放行独立运作
 //     （客户口径"计时不变"）。
 //   模式经构造注入 Func<GrillAlarmResetMode> provider（缺省 null=恒 Auto，
-//   这是 Core 独立使用/测试的 API 缺省；程序①现场缺省由宿主 ini 决定=
-//   Manual），边沿/心跳每拍现取——宿主配置热切后下一拍即生效（勿缓存进字段）。
+//   这是 Core 独立使用/测试的 API 缺省；程序①现场由激活策略的
+//   GrillResetMode 决定=Manual），边沿/心跳每拍现取——换策略/激活后下一拍
+//   即生效（勿缓存进字段）。
 //
 // 报警总开关（V0.0.90，用户拍板"关闭则不报警，默认开启"）：
 //   grillAlarmEnabledProvider（可空，每拍现取）= false 时整条报警链静默——
@@ -50,8 +51,8 @@
 //   "报警总开关已关闭"日志，红灯灭黄灯复亮）；重新开启后下一拍兜底补
 //   报警（关闭期间被挡的边缘不再漏报）。注意开关只关"报警"——门控闸
 //   （托盘到位要光栅让空才开计时）是工艺防呆，不受本开关影响。null=
-//   恒开启（Core 独立/测试缺省——既有行为零改动；程序①现场由
-//   GrillAlarmEnabledHub 的 ini 决定）。
+//   恒开启（Core 独立/测试缺省——既有行为零改动；程序①现场由激活策略的
+//   GrillAlarmEnabled 决定）。
 //
 // 线程模型（铁律 2）：灯写 WritePoint 是网络 IO，绝不能进 UI 线程——
 //   本类全部动作发生在后台：OnPointChanged 由宿主从总线后台事件转发进来，
@@ -124,19 +125,19 @@ public sealed class SlotCuringMachine : IDisposable
     private readonly Func<int, string>? _durationText;
     /// <summary>
     /// 报警复位模式提供者（V0.0.69；null=恒 Auto——Core 独立/测试缺省，
-    /// 程序①现场缺省由 Hub 的 ini 决定=Manual）。边沿/心跳每拍现取，
-    /// 宿主热切模式（策略窗按钮）下一拍即生效；provider 须线程安全（后台线程逐拍调）。
+    /// 程序①现场由激活策略的 GrillResetMode 决定=Manual）。边沿/心跳每拍
+    /// 现取，策略激活/切换后下一拍即生效；provider 须线程安全（后台线程逐拍调）。
     /// </summary>
     private readonly Func<GrillAlarmResetMode>? _resetModeProvider;
     /// <summary>
     /// 光栅信号极性提供者（V0.0.72；null=恒 BlockedOn——Core 独立/测试缺省，
-    /// 程序①现场由 Hub 的 ini 决定，策略窗勾选框热切）。边沿/心跳每拍现取；
+    /// 程序①现场由激活策略的 GrillPolarity 决定）。边沿/心跳每拍现取；
     /// provider 须线程安全（后台线程逐拍调）。
     /// </summary>
     private readonly Func<GrillSignalPolarity>? _grillPolarityProvider;
     /// <summary>
     /// 报警总开关提供者（V0.0.90；null=恒开启——Core 独立/测试缺省，
-    /// 程序①现场由 Hub 的 ini 决定，策略窗光栅带开关热切）。边沿/心跳
+    /// 程序①现场由激活策略的 GrillAlarmEnabled 决定）。边沿/心跳
     /// 每拍现取；provider 须线程安全（后台线程逐拍调）。
     /// </summary>
     private readonly Func<bool>? _grillAlarmEnabledProvider;
@@ -180,14 +181,14 @@ public sealed class SlotCuringMachine : IDisposable
     /// 可注入（测试：clock/log；显示单位：durationText——缺省 null 走"X 分钟"）。
     /// durationText 在后台线程逐条调用，须线程安全（纯函数即可）。
     /// resetModeProvider（V0.0.69，可空）=报警复位模式每拍现取（null=恒自动
-    /// 复位——Core 独立/测试缺省；程序①现场缺省 Manual 由 Hub 决定；宿主传
-    /// 静态中枢读点，热切模式无需重建状态机）。
+    /// 复位——Core 独立/测试缺省；程序①现场由激活策略的 GrillResetMode 决定，
+    /// 宿主传"读激活策略"的 lambda，换策略/激活无需重建状态机）。
     /// grillPolarityProvider（V0.0.72，可空）=光栅信号极性每拍现取（null=恒
-    /// BlockedOn 遮挡=ON——现场"被挡=OFF"由程序①策略窗勾选切换，宿主同样
-    /// 传静态中枢读点，无需重建状态机）。
+    /// BlockedOn 遮挡=ON——现场"被挡=OFF"由策略窗常开/常闭编辑并随策略激活，
+    /// 宿主同样传"读激活策略"的 lambda，无需重建状态机）。
     /// grillAlarmEnabledProvider（V0.0.90，可空）=报警总开关每拍现取（null=
-    /// 恒开启——Core 独立/测试缺省；程序①现场由策略窗开关切 GrillAlarmEnabledHub，
-    /// false=整条报警链静默，见类头"报警总开关"）。
+    /// 恒开启——Core 独立/测试缺省；程序①现场由激活策略的 GrillAlarmEnabled
+    /// 决定，false=整条报警链静默，见类头"报警总开关"）。
     /// </summary>
     public SlotCuringMachine(IPointTableBus bus, Func<CuringPolicy?> policyProvider,
         Func<DateTimeOffset>? clock = null, Action<string>? log = null,
@@ -333,9 +334,9 @@ public sealed class SlotCuringMachine : IDisposable
                         else if (rt.AlarmGrill && !AlarmEnabled())
                         {
                             // 【报警总开关 V0.0.90】关闭态兜底解除：挂在旧报警直接收场
-                            // （红灯灭黄灯复亮，日志注明缘由）。倒的第一道口在宿主
-                            // 广播链（GrillAlarmEnabledHub.Changed→ApplyAlarmSwitch），
-                            // 本兜底保证漏接广播（provider 异常/时序）最迟 1 秒也收敛
+                            // （红灯灭黄灯复亮，日志注明缘由）。倒的第一道口是宿主在
+                            // 策略激活/切换后立即调 ApplyAlarmSwitch（不等拍），
+                            // 本兜底保证漏接（provider 异常/时序）最迟 1 秒也收敛
                             // ——与复位兜底同款双保险。
                             SetGrillAlarm(rt, slot.Rack, slot.Level, on: false,
                                 offNote: "报警总开关已关闭");
@@ -530,28 +531,28 @@ public sealed class SlotCuringMachine : IDisposable
 
     /// <summary>
     /// 当前报警复位模式（每拍现取 provider，勿缓存）：null provider=恒 Auto
-    /// （Core 独立/测试缺省；程序①现场缺省 Manual 由 Hub 决定）。
+    /// （Core 独立/测试缺省；程序①现场由激活策略的 GrillResetMode 决定）。
     /// 后台线程（边沿/心跳）逐次调用——provider 必须线程安全纯读（宿主传
-    /// 静态中枢读点，见程序① GrillAlarmResetModeHub）。
+    /// "读激活策略"的 lambda，见 MainViewModel.GetActivePolicy）。
     /// </summary>
     private GrillAlarmResetMode ResetMode() =>
         _resetModeProvider?.Invoke() ?? GrillAlarmResetMode.Auto;
 
     /// <summary>
     /// 当前光栅信号极性（V0.0.72，每拍现取 provider，勿缓存）：null provider=
-    /// 恒 BlockedOn（遮挡=ON——Core 独立/测试缺省；程序①现场由 Hub 的 ini 决定，
-    /// 策略窗勾选切换）。后台线程（边沿/心跳）逐次调用——provider 必须线程安全
-    /// 纯读（宿主传静态中枢读点，见程序① GrillSignalPolarityHub）。
+    /// 恒 BlockedOn（遮挡=ON——Core 独立/测试缺省；程序①现场由激活策略的
+    /// GrillPolarity 决定）。后台线程（边沿/心跳）逐次调用——provider 必须
+    /// 线程安全纯读（宿主传"读激活策略"的 lambda）。
     /// </summary>
     private GrillSignalPolarity Polarity() =>
         _grillPolarityProvider?.Invoke() ?? GrillSignalPolarity.BlockedOn;
 
     /// <summary>
     /// 当前报警总开关（V0.0.90，每拍现取 provider，勿缓存）：null provider=
-    /// 恒开启（Core 独立/测试缺省；程序①现场由 Hub 的 ini 决定，策略窗
-    /// 光栅带开关热切）——false=整条报警链静默（被挡不报、已挂的立即解除），
+    /// 恒开启（Core 独立/测试缺省；程序①现场由激活策略的 GrillAlarmEnabled
+    /// 决定）——false=整条报警链静默（被挡不报、已挂的立即解除），
     /// 门控判定不受影响。后台线程（边沿/心跳）逐次调用——provider 必须
-    /// 线程安全纯读（宿主传静态中枢读点，见程序① GrillAlarmEnabledHub）。
+    /// 线程安全纯读（宿主传"读激活策略"的 lambda）。
     /// </summary>
     private bool AlarmEnabled() =>
         _grillAlarmEnabledProvider?.Invoke() ?? true;
@@ -599,8 +600,8 @@ public sealed class SlotCuringMachine : IDisposable
     /// 报警总开关收敛（V0.0.90）：当前开关关闭时把所有现存报警当场解除
     /// （红灯灭、黄灯复亮、机台蜂鸣停、塔灯回正常聚合色，日志注明
     /// "报警总开关已关闭"+ 当时光栅读数）；开启时零动作（免遍历快速路径）。
-    /// 调用时机：① 宿主广播链——策略窗切【关】后 GrillAlarmEnabledHub.Changed
-    /// 立即调（后台 Task.Run，写灯=网络 IO 铁律 2）——不等心跳，红灯当场灭；
+    /// 调用时机：① 宿主策略激活/切换后立即调一次（MainViewModel.LoadPolicyBook，
+    /// 后台 Task.Run——写灯=网络 IO 铁律 2）——不等心跳，红灯当场灭；
     /// ② Pump 每拍兜底（provider 只读、漏接广播也最迟 1 秒收敛）。
     /// 线程：任意线程可调（锁内动作；内部 EnsureLamp 是网络 IO，勿在 UI
     /// 线程直调）。

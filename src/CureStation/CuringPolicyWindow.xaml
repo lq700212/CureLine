@@ -110,8 +110,8 @@
          左：策略库（预置策略带【预置】标记，激活一个生效）+ 每层覆盖折叠（高级）；
          右上：参数条（策略名/全局时长+时间单位 时·分/断电续算，
          长说明收 ToolTip；单位只换显示口径，存储恒为分钟，V0.0.56 秒档删除）；
-         画布下方：光栅控制带（V0.0.74 从参数条下移）——标志物 + 门控开关 +
-          信号类型（常开/常闭）+ 报警解除（人工/自动），光栅配置一处可改；
+         画布下方：光栅控制带（V0.0.74 从参数条下移；V0.0.96 统一跟随策略）——标志物 + 门控开关 +
+          信号类型（常开/常闭）+ 报警解除（人工/自动）四项全部随选中策略保存/激活；
           右主：仓位时长画布（全宽，主编辑区，傻瓜式）——左键单击选格直接浮层输
          时长、左键拖框批量选（橡皮筋透明只描边，Ctrl 叠加）、Ctrl+单击加选/减选、
          中键平移、滚轮缩放、双击空白复位、右键适应图像、Esc 清选择；普通格=
@@ -333,10 +333,10 @@
                     </StackPanel>
 
                     <!-- ===== 光栅控制带（V0.0.74 用户拍板：从参数条下移到库位画布下方）=====
-                         一条横带收拢全部光栅配置，左→右：标志物｜门控开关｜报警总开关（V0.0.90）｜信号类型｜报警解除。
-                         语义分区写在副文/提示里：
-                           · 门控 = 策略级（随策略保存/激活，换策略会回显该策略的开关）；
-                           · 报警总开关（V0.0.90"关闭则不报警"）+ 信号类型 + 报警解除 = 全局功能开关/接线/规程（不进策略，点了立刻落盘广播）。
+                         一条横带收拢全部光栅配置，左→右：标志物｜门控开关｜光栅报警｜信号类型｜报警解除。
+                         语义：V0.0.96 用户拍板"统一跟随策略"——门控/报警/信号类型/报警解除
+                         四项全部是选中策略的字段，随【仅保存】/【激活并生效】/【套用所选
+                         模板】落库，激活策略即运行期唯一真源（不再有全局 ini 键）。
                          标志物=两根立柱+三道光束，门控开=蓝光束常亮、关=整体压暗——
                          不读文字也能一眼看出光栅用没在用。DockPanel 顺序：声明在底部
                          按钮之后 → 停在按钮上方、画布正下方。 -->
@@ -385,7 +385,7 @@
                                 </StackPanel>
                             </Grid>
 
-                            <!-- 1 标题+状态副文（开关按钮本身显示已启用/已关闭，标题旁标"随策略保存"区分全局项） -->
+                            <!-- 1 标题+状态副文（开关按钮本身显示已启用/已关闭；整条光栅带四项都随策略保存） -->
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="光栅门控" FontWeight="SemiBold"
@@ -410,28 +410,28 @@
                             <Border Grid.Column="3" Width="1" Margin="8,3"
                                     Background="{DynamicResource Brush.Fresh.PanelBorder}"/>
 
-                            <!-- 4 报警总开关（V0.0.90 全局功能开关）：开=被挡即报警（缺省），
-                                 关=整条报警链静默（已挂的当场解除；门控放行不受影响），
+                            <!-- 4 报警总开关（策略字段，V0.0.96 起随策略保存/激活）：开=被挡即报警（缺省），
+                                 关=整条报警链静默（激活该策略时已挂的当场解除；门控放行不受影响），
                                  滑块开关与门控同款按钮样式=一眼"这是个总闸" -->
                             <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Text="光栅报警" VerticalAlignment="Center"
-                                           ToolTip="{Binding GrillAlarmSwitchToolTip, FallbackValue='开：计时中光栅被挡即报警（仓位红灯+机台蜂鸣）。全局设置，立即生效。'}"/>
+                                           ToolTip="{Binding GrillAlarmSwitchToolTip, FallbackValue='开：计时中光栅被挡即报警（仓位红灯+机台蜂鸣）。随策略保存，激活后生效。'}"/>
                                 <ToggleButton Style="{StaticResource GrillSwitch}"
                                               VerticalAlignment="Center" Margin="8,0,0,0"
                                               IsChecked="{Binding IsGrillAlarmEnabled, FallbackValue=True}"
                                               Content="{Binding GrillAlarmSwitchText, FallbackValue=已开启}"
-                                              ToolTip="关=不报警（门控不受影响）；开=被挡即报警。立即生效。"/>
+                                              ToolTip="关=不报警（门控不受影响）；开=被挡即报警。随策略保存，激活后生效。"/>
                             </StackPanel>
 
                             <!-- 5 竖分隔 -->
                             <Border Grid.Column="5" Width="1" Margin="8,3"
                                     Background="{DynamicResource Brush.Fresh.PanelBorder}"/>
 
-                            <!-- 6 信号类型（全局接线口径）：常开/常闭一体式分段控件——
+                            <!-- 6 信号类型（策略字段，随策略保存/激活）：常开/常闭一体式分段控件——
                                  外框浅底圆角胶囊，选中一枚蓝底反白；触摸目标高≈35px -->
                             <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Text="信号类型" VerticalAlignment="Center"
-                                           ToolTip="{Binding GrillSignalToolTip, FallbackValue='常开：遮挡=ON（缺省）。全局设置，立即生效。'}"/>
+                                           ToolTip="{Binding GrillSignalToolTip, FallbackValue='常开：遮挡=ON（缺省）。随策略保存，激活后生效。'}"/>
                                 <Border CornerRadius="5" BorderThickness="1" Padding="3" Margin="8,0,0,0"
                                         VerticalAlignment="Center"
                                         Background="{DynamicResource Brush.Fresh.CanvasBg}"
@@ -440,11 +440,11 @@
                                         <RadioButton Style="{StaticResource GrillSegment}" Content="常开"
                                                      GroupName="GrillPolarity"
                                                      IsChecked="{Binding IsGrillNormallyOpen, FallbackValue=True}"
-                                                     ToolTip="常开：被挡=ON、让空=OFF（缺省）。"/>
+                                                     ToolTip="常开：被挡=ON、让空=OFF（缺省）。随策略保存。"/>
                                         <RadioButton Style="{StaticResource GrillSegment}" Content="常闭" Margin="2,0,0,0"
                                                      GroupName="GrillPolarity"
                                                      IsChecked="{Binding IsGrillNormallyClosed, FallbackValue=False}"
-                                                     ToolTip="常闭：被挡=OFF、让空=ON（常闭安全光栅）。"/>
+                                                     ToolTip="常闭：被挡=OFF、让空=ON（常闭安全光栅）。随策略保存。"/>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
@@ -453,10 +453,10 @@
                             <Border Grid.Column="7" Width="1" Margin="8,3"
                                     Background="{DynamicResource Brush.Fresh.PanelBorder}"/>
 
-                            <!-- 8 报警解除（全局操作规程）：人工/自动一体式分段控件，同信号类型 -->
+                            <!-- 8 报警解除（策略字段，随策略保存/激活）：人工/自动一体式分段控件，同信号类型 -->
                             <StackPanel Grid.Column="8" Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Text="报警解除" VerticalAlignment="Center"
-                                           ToolTip="{Binding GrillResetModeToolTip, FallbackValue='人工：报警后不自动解除，在报警复位窗确认。全局设置，立即生效。'}"/>
+                                           ToolTip="{Binding GrillResetModeToolTip, FallbackValue='人工：报警后不自动解除，在报警复位窗确认。随策略保存，激活后生效。'}"/>
                                 <Border CornerRadius="5" BorderThickness="1" Padding="3" Margin="8,0,0,0"
                                         VerticalAlignment="Center"
                                         Background="{DynamicResource Brush.Fresh.CanvasBg}"
@@ -465,11 +465,11 @@
                                         <RadioButton Style="{StaticResource GrillSegment}" Content="人工"
                                                      GroupName="GrillReset"
                                                      IsChecked="{Binding IsGrillManualReset, FallbackValue=True}"
-                                                     ToolTip="人工：报警后不自动解除，在报警复位窗确认。"/>
+                                                     ToolTip="人工：报警后不自动解除，在报警复位窗确认。随策略保存。"/>
                                         <RadioButton Style="{StaticResource GrillSegment}" Content="自动" Margin="2,0,0,0"
                                                      GroupName="GrillReset"
                                                      IsChecked="{Binding IsGrillAutoReset, FallbackValue=False}"
-                                                     ToolTip="自动：两侧光栅让空即解除报警。"/>
+                                                     ToolTip="自动：两侧光栅让空即解除报警。随策略保存。"/>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>

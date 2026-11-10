@@ -402,7 +402,7 @@ public sealed class MockPointTableBus : IPointTableBus
     /// 输出电平再按本 provider 反相——现场配置"被挡=OFF"时演示剧本与状态机
     /// 判定保持同口径（否则演示里永远不报警/一直报警）。null=BlockedOn 缺省
     /// （既有演示行为零变化）。provider 在演示线程逐拍调用，须线程安全纯读
-    ///（程序①传 GrillSignalPolarityHub.Current 读点）。
+    ///（程序①传"读激活策略 GrillPolarity"的 lambda）。
     /// </summary>
     public Func<CureLine.Core.Curing.GrillSignalPolarity>? GrillPolarityProvider { get; set; }
 

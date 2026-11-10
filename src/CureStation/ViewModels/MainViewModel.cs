@@ -602,10 +602,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// 光栅报警"人工复位"弹窗编排器（V0.0.69，详情见 GrillAlarmResetCoordinator）。
     /// MainViewModel 持有唯一实例：500ms 拍/复位回刷喂报警清单 → 差分热更 + 弹窗
     /// 开关决策 → 复位请求经事件派回本类（Task.Run 后台调状态机，铁律 2）。
+    /// 复位模式取自**激活策略**（V0.0.96：随策略保存/激活，不再读全局 ini）——
+    /// provider 在 UI 线程 Refresh 时现取，策略切换即整套换口径。
     /// public 供测试直驱（xUnit 无 InternalsVisibleTo，主窗 500ms 拍私有不便测）。
+    /// 在构造函数装配（providers 要调实例方法 GetActivePolicy，属性初始化器不行）。
     /// </summary>
-    public GrillAlarmResetCoordinator AlarmPresenter { get; } = new(
-        () => GrillAlarmResetModeHub.Current);
+    public GrillAlarmResetCoordinator AlarmPresenter { get; }
 
     public ObservableCollection<RackSlotViewModel> Slots { get; } = new();
 
@@ -1028,6 +1030,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         _dialogs = dialogs;
 
+        // 光栅报警复位编排器（V0.0.96）：复位模式读激活策略，构造时才有
+        // GetActivePolicy 可调（属性初始化器不能引用实例成员）。
+        AlarmPresenter = new GrillAlarmResetCoordinator(
+            () => GetActivePolicy()?.GrillResetMode ?? GrillAlarmResetMode.Manual);
+
         // 登录空闲自动退出（V0.0.93）：上限分钟读 [setting] AutoLogoutMinutes
         // （缺省 15，0/负/非法=不启用；ctor 读一次缓存，改 ini 重启生效，同
         // ScanIntervalMs 口径——非热调参数，不做每拍 ini IO）。监视器可注入
@@ -1081,7 +1088,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // UI 线程触发（策略窗 ComboBox 绑定链），订阅方同 RefreshSlots 线程口径。
         DurationUnit.Changed += OnDisplayUnitChanged;
 
-        // 光栅报警人工复位接线（V0.0.69）：四事件链 + 模式切换广播。
+        // 光栅报警人工复位接线（V0.0.69）：四事件链。
         // 复位/全部复位走 Task.Run 后台（写灯=网络 IO，铁律 2），完成后回 UI
         // 立即刷清单（不等 500ms 拍，点掉哪行哪行即走）；弹窗开关直接转发
         // DialogService（非模态单例窗）。方法组订阅——Dispose 对称退订。
@@ -1089,12 +1096,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         AlarmPresenter.CloseRequested += OnAlarmCloseRequested;
         AlarmPresenter.ResetRequested += OnAlarmResetRequested;
         AlarmPresenter.ResetAllRequested += OnAlarmResetAllRequested;
-        // 策略窗切"人工复位/自动复位"（GrillAlarmResetModeHub.Change）立即重新
-        // 决策：人工档有挂着的报警当场弹窗、切回自动收窗——不等 500ms 拍。
-        GrillAlarmResetModeHub.Changed += OnGrillResetModeChanged;
-        // 报警总开关切换广播（V0.0.90）：切【关】立即收敛现存报警（红灯当场
-        // 灭/复位窗即清），不等心跳拍；切【开】零动作（补报由状态机兜底）。
-        GrillAlarmEnabledHub.Changed += OnGrillAlarmSwitchChanged;
+        // 光栅四项随策略（V0.0.96）：不再有模式/开关广播订阅——策略激活后
+        // LoadPolicyBook 统一刷一次报警清单与收敛链（见 LoadPolicyBook）。
 
         // 单线过账装配（P3.2 后半）：读 [CuringMes] 配置 → 建过账服务 →
         // 顶栏状态随 PostingChanged 刷新（后台线程回调，UiInvoke 封送）。
@@ -1354,6 +1357,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// 激活名同步到顶栏 PolicyText；随后做一次"在制固化时长单向上调"热更收口
     /// （V0.0.58，见 SlotCuringMachine.ApplyPolicyHotChange）——策略窗保存返回
     /// 即把新时长应用到进行中的仓位（只延不缩），不等每个仓位自然结续到点。
+    /// 光栅四项（V0.0.96 "统一跟随策略"）：状态机的三个 provider 每拍现读
+    /// 激活策略，这里再做两件即时收口——① 报警复位窗按新解除模式立即重决策
+    /// （人工档有报警当场弹/自动档收窗）；② 报警总开关若为关，现存报警立即
+    /// 解除（写灯=网络 IO，后台 Task.Run；不等 1 秒心跳兜底）。
     /// </summary>
     private void LoadPolicyBook()
     {
@@ -1369,6 +1376,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _policyBook = book;
         RefreshPolicyText();
         _machine?.ApplyPolicyHotChange();   // 在制单向热更收口（启动时无在制，幂等）
+        RefreshAlarmList();                 // 复位模式即时重决策（换策略即换弹窗口径）
+        if (_machine != null)
+            _ = Task.Run(() => _machine.ApplyAlarmSwitch())
+                .ContinueWith(_ => UiInvoke(RefreshAlarmList));
     }
 
     /// <summary>顶栏策略段：激活名 + 全局时长（随显示单位时/分换口径；
@@ -1457,9 +1468,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             IPointTableBus bus = simulate
                 ? new MockPointTableBus
                 {
-                    // 演示光栅电平跟随现场极性配置（V0.0.72）：勾"信号取反"后
-                    // 演示剧本发"被挡=OFF"，与状态机判定同口径。
-                    GrillPolarityProvider = () => GrillSignalPolarityHub.Current,
+                    // 演示光栅电平跟随**激活策略**的极性（V0.0.96）：换策略
+                    // （常开/常闭）后演示剧本与状态机判定同口径，否则演示里
+                    // 永远不报警/一直报警。
+                    GrillPolarityProvider = () => GetActivePolicy()?.GrillPolarity
+                        ?? GrillSignalPolarity.BlockedOn,
                 }
                 : new ModbusPointTableBus();
             bus.Start(config);
@@ -1499,15 +1512,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                     // 日志时长文本随显示单位（策略窗切小时 → 日志"开始固化计时 2小时"；
                     // 分钟口径保持"X 分钟"老字样）——LogText 是纯函数，后台线程安全。
                     durationText: DurationUnit.LogText,
-                    // 报警复位模式每拍现取（V0.0.69）：策略窗光栅条切人工/自动，
-                    // 下一边沿/心跳即生效（Hub 只读静态枚举字段，后台线程读安全）。
-                    resetModeProvider: () => GrillAlarmResetModeHub.Current,
-                    // 光栅信号极性每拍现取（V0.0.72）：策略窗光栅条选常开/常闭
-                    // 下一边沿/心跳即生效（现场被挡=OFF 时选常闭，同上后台读安全）。
-                    grillPolarityProvider: () => GrillSignalPolarityHub.Current,
-                    // 报警总开关每拍现取（V0.0.90）：策略窗"光栅报警"开关，
-                    // false=整条报警链静默（被挡不报/已挂的立即解除），门控不受影响。
-                    grillAlarmEnabledProvider: () => GrillAlarmEnabledHub.Current);
+                    // 光栅四项随激活策略（V0.0.96 用户拍板"统一跟随策略"）：
+                    // 状态机每拍现读激活策略的字段（换策略/激活后下一拍生效，
+                    // 无需重建状态机）——复位模式 / 信号极性 / 报警总开关同源。
+                    resetModeProvider: () => GetActivePolicy()?.GrillResetMode
+                        ?? GrillAlarmResetMode.Manual,
+                    grillPolarityProvider: () => GetActivePolicy()?.GrillPolarity
+                        ?? GrillSignalPolarity.BlockedOn,
+                    grillAlarmEnabledProvider: () => GetActivePolicy()?.GrillAlarmEnabled
+                        ?? true);
                 // 过账挂点（P3.2 后半）：状态机三事件 → 过账服务（只在创建时订阅
                 // 一次——重连 Attach 换通道不重复订阅）。事件在状态机锁内触发，
                 // Poster 方法内部 Task.Run 立即返回，不重入不阻塞。
@@ -1616,20 +1629,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             foreach (var (rack, level) in _machine?.GetAlarmSlots() ?? [])
                 _machine?.ManualResetGrillAlarm(rack, level);
         }).ContinueWith(_ => UiInvoke(RefreshAlarmList));
-
-    /// <summary>复位模式切换广播（策略窗按钮）：立即重新决策弹窗/收窗，不等下拍。</summary>
-    private void OnGrillResetModeChanged() => RefreshAlarmList();
-
-    /// <summary>
-    /// 报警总开关切换广播（V0.0.90，策略窗"光栅报警"开关）：后台调状态机
-    /// ApplyAlarmSwitch 收敛报警态——切【关】现存报警当场解除（写灯=网络 IO，
-    /// 必须抛后台），完成后回 UI 立即刷报警复位清单（挂着的解除即收窗）；
-    /// 切【开】零动作（重开后的被挡补报警由状态机 Pump 兜底，下一拍生效）。
-    /// 事件在 UI 线程触发（Hub 线程纪律），网络动作一律 Task.Run。
-    /// </summary>
-    private void OnGrillAlarmSwitchChanged() =>
-        Task.Run(() => _machine?.ApplyAlarmSwitch())
-            .ContinueWith(_ => UiInvoke(RefreshAlarmList));
 
     /// <summary>
     /// 策略窗切显示单位（时↔分）的同步刷：卡片时长文本立即按新单位重写 +
@@ -1876,8 +1875,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         AlarmPresenter.CloseRequested -= OnAlarmCloseRequested;
         AlarmPresenter.ResetRequested -= OnAlarmResetRequested;
         AlarmPresenter.ResetAllRequested -= OnAlarmResetAllRequested;
-        GrillAlarmResetModeHub.Changed -= OnGrillResetModeChanged;
-        GrillAlarmEnabledHub.Changed -= OnGrillAlarmSwitchChanged;   // 报警总开关退订（V0.0.90）
         _dialogs.CloseGrillAlarmReset();
         _refreshTimer.Stop();
         lock (_busLock)

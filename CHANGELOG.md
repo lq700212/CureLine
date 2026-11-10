@@ -2,6 +2,36 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.97（2026-11-10，程序①：光栅四项统一跟随工艺策略）
+
+- **缘由**：用户拍板"不要出现某一个不跟随策略、全局的情况，统一跟随策略"——
+  工艺策略窗光栅条原来只有门控随策略，信号类型/报警总开关/报警解除三项是
+  全局 ini 立即生效，混用口径容易让人以为换了策略就整套换了。
+- **模型（`CuringPolicy`）**：新增 `GrillAlarmEnabled`（缺省 true）/
+  `GrillPolarity`（缺省 `BlockedOn`）/ `GrillResetMode`（缺省 `Manual`）
+  三字段，与既有 `GrillGate` 一起构成光栅四项；旧 JSON 缺字段靠属性初始化器
+  保留安全缺省（没有迁移动作、不会落成 false）。
+- **策略窗**：光栅条三组控件改为**草稿编辑**（`_editGrillResetMode` /
+  `_editGrillSignalInverted` / `_editGrillAlarmEnabled`），setter 只刷新派生
+  文案，不写盘不广播；随【保存】/【激活】/【套用】整组写入策略库，重开或
+  换选策略时整套回显。XAML ToolTip 统一"随策略保存，激活后生效"。
+- **运行期**：`MainViewModel` 的状态机三个 provider、报警复位编排器
+  `GrillAlarmResetCoordinator` 的 provider、演示
+  `MockPointTableBus.GrillPolarityProvider` 全部改读 `GetActivePolicy()`
+  对应字段；策略激活后 `LoadPolicyBook` 立即后台 `ApplyAlarmSwitch` 收敛
+  报警（红灯当场灭/复位窗清单即清）并重建报警清单，Pump 每拍兜底。
+- **删除（铁律 9，无兼容包袱）**：三个全局中枢
+  `GrillAlarmResetModeHub` / `GrillSignalPolarityHub` / `GrillAlarmEnabledHub`
+  与两个 ini 解析器 `GrillAlarmResetModeParser` / `GrillSignalPolarityParser`
+  整文件删除；`config.sample.ini` 与工作区运行 ini 的
+  `[setting] GrillAlarmResetMode` / `GrillSignalPolarity` / `GrillAlarmEnabled`
+  三键删除。**现场手改这三个 ini 键自此不再有任何效果**，光栅口径只认激活
+  策略。
+- **测试**：`CuringPolicyTests` 加三字段 JSON 往返断言 + 旧 JSON 缺字段安全
+  缺省 1 例；`CureStationViewModelTests` 把原全局键用例改写为"改草稿→保存
+  →重开回显"语义，`MainVm_AlarmPresenter_*` 改用激活策略铺数据；删旧的
+  全局键解析/回显 21 例，全量 596/596 全绿。
+
 ## V0.0.96（2026-11-10，程序①：扫码枪现场 IP 换段）
 
 - **缘由**：现场网络规划落地，扫码枪侧 DTU 从 169.254 临时段迁至正式网段

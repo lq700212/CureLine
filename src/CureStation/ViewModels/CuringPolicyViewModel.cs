@@ -3,10 +3,11 @@
 //
 // 干什么：策略列表（增删选）+ 参数条（名称/全局时长/断电续算，V0.0.44 起
 //   "每仓位覆盖行表"已删——画布取代其全部职能）+ 仓位时长画布（主编辑区：
-//   点格子/框选直接设时长，见下）+ 画布下方光栅控制带（V0.0.74：门控开关/
-//   信号类型常开常闭/报警解除，见对应属性段）+ 「激活并生效」/「仅保存」/
-//   「套用所选模板」（套用目标可选）。三级覆盖口径见 CuringPolicy 顶注释
-//   （仓位 > 层 > 全局）。
+//   点格子/框选直接设时长，见下）+ 画布下方光栅控制带（门控开关/报警开关/
+//   信号类型/报警解除——V0.0.96 用户拍板"统一跟随策略"：四项全部是策略
+//   字段，随保存/激活整组切换，不再有全局 ini 口径）+ 「激活并生效」/
+//   「仅保存」/「套用所选模板」（套用目标可选）。三级覆盖口径见 CuringPolicy
+//   顶注释（仓位 > 层 > 全局）。
 // 预置/自定义口径（V0.0.20 对齐 AgingTestSystem 配方管理"模板+即改即落"；
 //   V0.0.57 用户拍板三条：自定义恒显 + 套用目标可选 + 开窗即显生效策略）：
 //   预置策略（IsPreset=true，出厂模板）——可选中查看/编辑参数、可【套用所选
@@ -178,14 +179,16 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         Raise(nameof(ApplyTargetName));
     }
 
-    // ---------- 报警复位模式（V0.0.69，全局操作规程、不入单条策略） ----------
+    // ---------- 光栅四项 = 策略字段（V0.0.96 用户拍板"统一跟随策略"） ----------
     //
-    // V0.0.74 起 UI 从"单按钮点击切换"改为光栅条上的【人工｜自动】分段按钮：
-    // 两项同时可见，当前档蓝底反白——不用点一下才知道现在是什么档。
-    // 真源仍是 GrillAlarmResetModeHub（人工/自动是"报警怎么解除"的操作规程，
-    // 与工艺时长无关——换策略不该换处置流程，故不入单条策略）。
+    // 光栅门控（EditGrillGate，见下）、报警总开关、信号类型、报警解除四项
+    // **全部随策略保存/激活**：本窗只编辑"选中策略的草稿"，点【仅保存】/
+    // 【激活并生效】/【套用所选模板】才落库；换策略选中即整套回显（
+    // SyncEditorFromPolicy），运行期状态机读激活策略（MainViewModel.
+    // GetActivePolicy）下一拍生效。不再有全局 ini 键/静态中枢——旧版把后
+    // 三项做成"全局设置、立即生效"，用户明确否掉（换策略时口径不该分叉）。
 
-    private GrillAlarmResetMode _grillResetMode = GrillAlarmResetMode.Manual;
+    private GrillAlarmResetMode _editGrillResetMode = GrillAlarmResetMode.Manual;
 
     /// <summary>
     /// 人工复位选项（分段按钮左项，true=人工/缺省）：光栅让空后报警不自动解除，
@@ -194,78 +197,72 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     /// </summary>
     public bool IsGrillManualReset
     {
-        get => _grillResetMode == GrillAlarmResetMode.Manual;
+        get => _editGrillResetMode == GrillAlarmResetMode.Manual;
         set { if (value) SetGrillResetMode(GrillAlarmResetMode.Manual); }
     }
 
     /// <summary>自动复位选项（分段按钮右项，true=自动）：光栅双侧让空即自动解除报警。</summary>
     public bool IsGrillAutoReset
     {
-        get => _grillResetMode == GrillAlarmResetMode.Auto;
+        get => _editGrillResetMode == GrillAlarmResetMode.Auto;
         set { if (value) SetGrillResetMode(GrillAlarmResetMode.Auto); }
     }
 
-    /// <summary>复位模式组 ToolTip（一句话口径；随切换刷新）。</summary>
+    /// <summary>复位模式组 ToolTip（一句话口径；随切换/回显刷新）。</summary>
     public string GrillResetModeToolTip =>
-        _grillResetMode == GrillAlarmResetMode.Manual
-            ? "人工：报警后不自动解除，在报警复位窗确认。全局设置，立即生效。"
-            : "自动：两侧光栅让空即解除报警。全局设置，立即生效。";
+        _editGrillResetMode == GrillAlarmResetMode.Manual
+            ? "人工：报警后不自动解除，在报警复位窗确认。随策略保存，激活后生效。"
+            : "自动：两侧光栅让空即解除报警。随策略保存，激活后生效。";
 
-    /// <summary>切换复位模式唯一写点（V0.0.74 分段按钮入口）：中枢 Change
-    /// 落盘+广播——状态机下一拍按新模式复位判定，主窗立即重跑弹窗决策
-    /// （有挂报警当场弹/收窗）。</summary>
+    /// <summary>切换复位模式唯一写点（分段按钮入口）：只改编辑区草稿——
+    /// 随保存/激活落库，不再即时写盘。</summary>
     private void SetGrillResetMode(GrillAlarmResetMode to)
     {
-        if (to == _grillResetMode)
+        if (to == _editGrillResetMode)
             return;
-        GrillAlarmResetModeHub.Change(to);   // 落盘 + 广播（Changed→主窗立即刷新）
-        _grillResetMode = to;
+        _editGrillResetMode = to;
         Raise(nameof(IsGrillManualReset));
         Raise(nameof(IsGrillAutoReset));
         Raise(nameof(GrillResetModeToolTip));
     }
 
-    // ---------- 光栅信号极性（V0.0.72，全局现场接线口径、不入单条策略） ----------
+    // ---------- 光栅信号极性（策略字段，随保存/激活） ----------
     //
     // V0.0.74 起 UI 从"光栅信号取反"勾选框改为【常开｜常闭】分段按钮：
     // "取反"是工程师思维，现场看着要换算一次；常开/常闭是接线口径本身，
     // 两项并排+当前档高亮，一眼可读（用户拍板）。
 
-    private bool _grillSignalInverted;
+    private bool _editGrillSignalInverted;
 
     /// <summary>
     /// 光栅信号极性查询门面（true=遮挡=OFF / 常闭；false=遮挡=ON / 常开）。
     /// 只读：写入统一走光栅条【常开｜常闭】分段按钮（SetGrillSignalInverted
-    /// 唯一写点）——外部绕过它写字段会漏发派生属性通知，按钮状态不刷新。
-    /// 真源在 GrillSignalPolarityHub 静态中枢：状态机门控/报警/复位判定整体
-    /// 按本口径解释，Change 落盘 + 广播，下一拍现取生效。
+    /// 唯一写点）。草稿值随保存/激活写成 CuringPolicy.GrillPolarity，运行期
+    /// 状态机按激活策略解释门控/报警/复位。
     /// </summary>
-    public bool GrillSignalInverted => _grillSignalInverted;
+    public bool GrillSignalInverted => _editGrillSignalInverted;
 
     /// <summary>常开选项（分段按钮左项）：被挡 = ON，缺省口径（V0.0.71 及以前）。</summary>
     public bool IsGrillNormallyOpen
     {
-        get => !_grillSignalInverted;
+        get => !_editGrillSignalInverted;
         set { if (value) SetGrillSignalInverted(false); }
     }
 
     /// <summary>常闭选项（分段按钮右项）：被挡 = OFF，现场常闭安全光栅口径。</summary>
     public bool IsGrillNormallyClosed
     {
-        get => _grillSignalInverted;
+        get => _editGrillSignalInverted;
         set { if (value) SetGrillSignalInverted(true); }
     }
 
-    /// <summary>光栅极性唯一写点：中枢 Change 落盘 + 广播，状态机下一拍
-    /// 按新口径判门控/报警/复位；同时刷新两枚分段按钮与 ToolTip。</summary>
+    /// <summary>光栅极性唯一写点：只改编辑区草稿（随保存/激活落库），同时
+    /// 刷新两枚分段按钮与 ToolTip。</summary>
     private void SetGrillSignalInverted(bool inverted)
     {
-        if (inverted == _grillSignalInverted)
+        if (inverted == _editGrillSignalInverted)
             return;
-        _grillSignalInverted = inverted;
-        GrillSignalPolarityHub.Change(inverted
-            ? GrillSignalPolarity.BlockedOff
-            : GrillSignalPolarity.BlockedOn);
+        _editGrillSignalInverted = inverted;
         Raise(nameof(GrillSignalInverted));
         Raise(nameof(IsGrillNormallyOpen));
         Raise(nameof(IsGrillNormallyClosed));
@@ -273,46 +270,43 @@ public sealed class CuringPolicyViewModel : ViewModelBase
     }
 
     /// <summary>信号类型组 ToolTip（一句话接线口径；随切换刷新）。</summary>
-    public string GrillSignalToolTip => _grillSignalInverted
-        ? "常闭：遮挡=OFF（被挡 OFF / 让空 ON）。全局设置，立即生效。"
-        : "常开：遮挡=ON（被挡 ON / 让空 OFF，缺省）。全局设置，立即生效。";
+    public string GrillSignalToolTip => _editGrillSignalInverted
+        ? "常闭：遮挡=OFF（被挡 OFF / 让空 ON）。随策略保存，激活后生效。"
+        : "常开：遮挡=ON（被挡 ON / 让空 OFF，缺省）。随策略保存，激活后生效。";
 
-    // ---------- 报警总开关（V0.0.90 用户拍板"关闭则不报警，默认开启"，全局功能开关、不入单条策略） ----------
+    // ---------- 报警总开关（策略字段，随保存/激活） ----------
     //
     // 光栅带"光栅报警"滑块开关（ToggleButton，与门控开关同款样式）：开=计时中
     // 被挡即报警（既有行为）；关=整条报警链静默——被挡不再报警、已挂着的报警
-    // 当场解除（红灯灭黄灯复亮/蜂鸣停/报警复位窗清单即清），门控闸不受影响。
-    // 真源在 GrillAlarmEnabledHub 静态中枢：Change 落盘 + 广播，主窗立即收敛
-    // 报警态，状态机每拍现取下一拍生效（详见两侧类头注释）。
+    // 在激活该策略时当场解除（红灯灭黄灯复亮/蜂鸣停/报警复位窗清单即清），
+    // 门控闸不受影响。
 
-    private bool _grillAlarmEnabled = true;   // 缺省=开启（Hub 同款缺省口径，构造即被覆盖）
+    private bool _editGrillAlarmEnabled = true;   // 缺省=开启（策略字段缺省口径）
 
     /// <summary>
     /// 光栅报警总开关（滑块开关双向绑定：开=报警，关=静默）。写入统一走
-    /// SetGrillAlarmEnabled 唯一写点——Hub.Change 落盘+广播，防绕过漏通知。
+    /// SetGrillAlarmEnabled 唯一写点——只改编辑区草稿，随保存/激活落库。
     /// </summary>
     public bool IsGrillAlarmEnabled
     {
-        get => _grillAlarmEnabled;
+        get => _editGrillAlarmEnabled;
         set => SetGrillAlarmEnabled(value);
     }
 
     /// <summary>开关按钮自身显示"已开启/已关闭"（与门控开关按钮同款口径，随切换刷新）。</summary>
-    public string GrillAlarmSwitchText => _grillAlarmEnabled ? "已开启" : "已关闭";
+    public string GrillAlarmSwitchText => _editGrillAlarmEnabled ? "已开启" : "已关闭";
 
     /// <summary>开关组 ToolTip（一句话口径；随切换刷新）。</summary>
-    public string GrillAlarmSwitchToolTip => _grillAlarmEnabled
-        ? "开：计时中光栅被挡即报警（仓位红灯+机台蜂鸣）。全局设置，立即生效。"
-        : "关：不产生任何报警（门控放行判定不受影响）。全局设置，立即生效。";
+    public string GrillAlarmSwitchToolTip => _editGrillAlarmEnabled
+        ? "开：计时中光栅被挡即报警（仓位红灯+机台蜂鸣）。随策略保存，激活后生效。"
+        : "关：不产生任何报警（门控放行判定不受影响）。随策略保存，激活后生效。";
 
-    /// <summary>报警总开关唯一写点：中枢 Change 落盘 + 广播（主窗收敛现存报警），
-    /// 同时刷新开关文字与 ToolTip。</summary>
+    /// <summary>报警总开关唯一写点：只改编辑区草稿，同时刷新开关文字与 ToolTip。</summary>
     private void SetGrillAlarmEnabled(bool enabled)
     {
-        if (enabled == _grillAlarmEnabled)
+        if (enabled == _editGrillAlarmEnabled)
             return;
-        _grillAlarmEnabled = enabled;
-        GrillAlarmEnabledHub.Change(enabled);   // 落盘 + 广播（Changed→主窗立即收敛报警）
+        _editGrillAlarmEnabled = enabled;
         Raise(nameof(IsGrillAlarmEnabled));
         Raise(nameof(GrillAlarmSwitchText));
         Raise(nameof(GrillAlarmSwitchToolTip));
@@ -715,16 +709,8 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         RackCount = Math.Max(CureLine.Core.Curing.SlotLocationCode.RacksPerRow, rackCount);
         LevelCount = Math.Max(CureLine.Core.Curing.SlotLocationCode.Levels, levelCount);
         LoadTimeUnit();   // 单位真源在 DurationUnit 中枢（含 ini 记忆自愈）；加载策略前定好口径
-        // 复位模式（V0.0.69）同款：开窗重读 ini（盘上为准）——别的窗/上一进程
-        // 切过模式，这里回显现值。
-        GrillAlarmResetModeHub.LoadFromIni();
-        _grillResetMode = GrillAlarmResetModeHub.Current;
-        // 光栅极性（V0.0.72）同款：分段按钮回显上一进程/现场配置的挡/空口径。
-        GrillSignalPolarityHub.LoadFromIni();
-        _grillSignalInverted = GrillSignalPolarityHub.Current == GrillSignalPolarity.BlockedOff;
-        // 报警总开关（V0.0.90）同款：滑块开关回显上一进程/现场配置（缺省开启）。
-        GrillAlarmEnabledHub.LoadFromIni();
-        _grillAlarmEnabled = GrillAlarmEnabledHub.Current;
+        // 光栅四项（门控/报警/极性/解除）不再读 ini：全部随选中策略回显
+        // （SyncEditorFromPolicy，V0.0.96 "统一跟随策略"）。
         AddPolicyCommand = new RelayCommand(AddPolicy);
         RemovePolicyCommand = new RelayCommand(RemovePolicy, () => SelectedPolicy != null);
         SaveCommand = new RelayCommand(Save);
@@ -846,6 +832,14 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         EditGlobalMinutes = FormatMinutes(p.GlobalMinutes);
         EditGrillGate = p.GrillGate;
         EditPersistMinutes = p.PersistMinutes;
+        // 光栅四项整套随策略回显（V0.0.96）：换选中策略即换整套光栅口径，
+        // 不存在"某一项还是全局/上一策略"的分叉。
+        _editGrillResetMode = p.GrillResetMode;
+        Raise(nameof(IsGrillManualReset));
+        Raise(nameof(IsGrillAutoReset));
+        Raise(nameof(GrillResetModeToolTip));
+        SetGrillSignalInverted(p.GrillPolarity == GrillSignalPolarity.BlockedOff);
+        SetGrillAlarmEnabled(p.GrillAlarmEnabled);
         EditLevel1Min = LevelText(p, 1);
         EditLevel2Min = LevelText(p, 2);
         EditLevel3Min = LevelText(p, 3);
@@ -873,6 +867,9 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         EditGlobalMinutes = "";
         EditGrillGate = false;
         EditPersistMinutes = false;
+        SetGrillResetMode(GrillAlarmResetMode.Manual);
+        SetGrillSignalInverted(false);
+        SetGrillAlarmEnabled(true);
         EditLevel1Min = EditLevel2Min = EditLevel3Min = EditLevel4Min = "";
         SlotRows.Clear();
     }
@@ -891,6 +888,12 @@ public sealed class CuringPolicyViewModel : ViewModelBase
             IsPreset = src?.IsPreset ?? false,
             GrillGate = EditGrillGate,
             PersistMinutes = EditPersistMinutes,
+            // 光栅四项整套随草稿走（V0.0.96）：保存/激活/套用一条链落库。
+            GrillAlarmEnabled = _editGrillAlarmEnabled,
+            GrillPolarity = _editGrillSignalInverted
+                ? GrillSignalPolarity.BlockedOff
+                : GrillSignalPolarity.BlockedOn,
+            GrillResetMode = _editGrillResetMode,
         };
         draft.GlobalMinutes = ParseOrError(EditGlobalMinutes, src?.GlobalMinutes ?? 120,
             "全局时长", draft.Name, errors);
@@ -955,6 +958,9 @@ public sealed class CuringPolicyViewModel : ViewModelBase
         p.GlobalMinutes = draft.GlobalMinutes;
         p.GrillGate = draft.GrillGate;
         p.PersistMinutes = draft.PersistMinutes;
+        p.GrillAlarmEnabled = draft.GrillAlarmEnabled;
+        p.GrillPolarity = draft.GrillPolarity;
+        p.GrillResetMode = draft.GrillResetMode;
         p.LevelMinutes = draft.LevelMinutes;
         p.SlotMinutes = draft.SlotMinutes;
     }
@@ -1063,6 +1069,9 @@ public sealed class CuringPolicyViewModel : ViewModelBase
             existing.GlobalMinutes = draft.GlobalMinutes;
             existing.GrillGate = draft.GrillGate;
             existing.PersistMinutes = draft.PersistMinutes;
+            existing.GrillAlarmEnabled = draft.GrillAlarmEnabled;
+            existing.GrillPolarity = draft.GrillPolarity;
+            existing.GrillResetMode = draft.GrillResetMode;
             existing.LevelMinutes = draft.LevelMinutes;
             existing.SlotMinutes = draft.SlotMinutes;
         }

@@ -2562,252 +2562,174 @@ public class CureStationViewModelTests
         Assert.False(vm.CloseDialog);
     }
 
-    // ---------- 报警复位模式（V0.0.69：人工复位/自动复位，全局操作规程；
-    //            V0.0.71 缺省翻转为人工复位） ----------
+    // ---------- 光栅四项统一跟随策略（V0.0.96 用户拍板） ----------
+    // 门控/报警总开关/信号类型/报警解除全部是策略字段：策略窗只编辑草稿，
+    // 保存/激活/套用才落库；运行期状态机读激活策略（MainViewModel.GetActivePolicy）。
+    // 旧版三个全局 ini 键（GrillAlarmResetMode/GrillSignalPolarity/
+    // GrillAlarmEnabled）已删除，勿再加回。
 
-    [Theory]
-    [InlineData(null, GrillAlarmResetMode.Manual)]
-    [InlineData("", GrillAlarmResetMode.Manual)]
-    [InlineData("Manual", GrillAlarmResetMode.Manual)]
-    [InlineData("manual", GrillAlarmResetMode.Manual)]
-    [InlineData("Auto", GrillAlarmResetMode.Auto)]
-    [InlineData("auto", GrillAlarmResetMode.Auto)]
-    [InlineData("垃圾值", GrillAlarmResetMode.Manual)]
-    public void GrillAlarmResetModeParser_DefaultsToManual(string? raw, GrillAlarmResetMode expected)
-        => Assert.Equal(expected, GrillAlarmResetModeParser.Parse(raw));
-
-    [Fact]
-    public void PolicyVm_GrillResetModeSegments_PersistAndBroadcast()
+    /// <summary>铺一份只含激活「自定义」策略的库（光栅字段按 configure 注入）。</summary>
+    private static void SaveActivePolicy(Action<CuringPolicy> configure)
     {
-        using var scope = new TestScope();
         EnsureConfigDir();
-        GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Auto); // 测试安全快照
-        try
+        var p = new CuringPolicy { Name = CureStation.ViewModels.CuringPolicyViewModel.CustomName };
+        configure(p);
+        CuringPolicyStore.Save(new CuringPolicyBook
         {
-            IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
-            var fake = new FakeCureDialogService();
-            var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
-
-            // 缺省（ini 无该键）= Manual（V0.0.71 用户拍板：现场默认人工确认）
-            Assert.True(vm.IsGrillManualReset);
-            Assert.False(vm.IsGrillAutoReset);
-
-            // 选自动（V0.0.74 光栅条分段按钮）：中枢换值 + 落盘 + 两枚按钮状态互换
-            vm.IsGrillAutoReset = true;
-            Assert.True(vm.IsGrillAutoReset);
-            Assert.False(vm.IsGrillManualReset);
-            Assert.Equal(GrillAlarmResetMode.Auto, GrillAlarmResetModeHub.Current);
-            Assert.Equal("Auto", IniFile.ReadStr(
-                AppPaths.ConfigIni, "setting", "GrillAlarmResetMode", ""));
-
-            // 再选回人工（双向），状态/中枢/落盘同步
-            vm.IsGrillManualReset = true;
-            Assert.True(vm.IsGrillManualReset);
-            Assert.False(vm.IsGrillAutoReset);
-            Assert.Equal(GrillAlarmResetMode.Manual, GrillAlarmResetModeHub.Current);
-            Assert.Equal("Manual", IniFile.ReadStr(
-                AppPaths.ConfigIni, "setting", "GrillAlarmResetMode", ""));
-        }
-        finally
-        {
-            GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Auto);
-        }
+            Policies = { p },
+            ActiveName = p.Name,
+        });
     }
 
     [Fact]
-    public void PolicyVm_GrillResetMode_RestoresFromIniOnOpen()
+    public void PolicyVm_GrillResetModeSegments_FollowSelectedPolicyAndSave()
     {
         using var scope = new TestScope();
         EnsureConfigDir();
-        GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Manual);
-        try
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+
+        // 激活「自定义」的字段缺省 = Manual（V0.0.71 用户拍板：现场默认人工确认）
+        Assert.True(vm.IsGrillManualReset);
+        Assert.False(vm.IsGrillAutoReset);
+
+        // 切自动：只改草稿，不写全局 ini
+        vm.IsGrillAutoReset = true;
+        Assert.True(vm.IsGrillAutoReset);
+        Assert.False(vm.IsGrillManualReset);
+        Assert.Equal("", IniFile.ReadStr(
+            AppPaths.ConfigIni, "setting", "GrillAlarmResetMode", ""));
+
+        // 【仅保存】才落策略库（字段随策略走）
+        vm.SaveCommand.Execute(null);
+        var loaded = CuringPolicyStore.Load();
+        Assert.NotNull(loaded);
+        Assert.Equal(GrillAlarmResetMode.Auto, loaded!.Policies[0].GrillResetMode);
+
+        // 重开回显所选（激活）策略的自动档
+        var reopened = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        Assert.True(reopened.IsGrillAutoReset);
+        Assert.False(reopened.IsGrillManualReset);
+    }
+
+    [Fact]
+    public void PolicyVm_GrillSettings_SwitchPolicy_RestoresWholeSet()
+    {
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        var book = new CuringPolicyBook
         {
-            // 盘上已切过自动（上一进程/别的窗）→ 开窗回显自动档（LoadFromIni 为准，
-            // 不能被"缺省人工"覆盖）
-            IniFile.Write(AppPaths.ConfigIni, "setting", "GrillAlarmResetMode", "Auto");
-            var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
-            Assert.True(vm.IsGrillAutoReset);
-            Assert.False(vm.IsGrillManualReset);
-        }
-        finally
-        {
-            GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Auto);
-        }
+            Policies =
+            {
+                new CuringPolicy
+                {
+                    Name = "自定义",
+                    GrillResetMode = GrillAlarmResetMode.Manual,
+                    GrillPolarity = GrillSignalPolarity.BlockedOn,
+                    GrillAlarmEnabled = true,
+                },
+                new CuringPolicy
+                {
+                    Name = "快固",
+                    GrillResetMode = GrillAlarmResetMode.Auto,
+                    GrillPolarity = GrillSignalPolarity.BlockedOff,
+                    GrillAlarmEnabled = false,
+                },
+            },
+            ActiveName = "自定义",
+        };
+        CuringPolicyStore.Save(book);
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
+
+        // 激活策略「自定义」整套回显
+        Assert.True(vm.IsGrillManualReset);
+        Assert.True(vm.IsGrillNormallyOpen);
+        Assert.True(vm.IsGrillAlarmEnabled);
+
+        // 换选「快固」→ 三项一起换，不存在某一项停留在上一策略/全局
+        vm.SelectedPolicy = vm.Policies.First(p => p.Name == "快固");
+        Assert.True(vm.IsGrillAutoReset);
+        Assert.False(vm.IsGrillManualReset);
+        Assert.True(vm.IsGrillNormallyClosed);
+        Assert.False(vm.IsGrillAlarmEnabled);
+        Assert.Contains("遮挡=OFF", vm.GrillSignalToolTip);
+        Assert.Equal("已关闭", vm.GrillAlarmSwitchText);
     }
 
     // ---------- 光栅信号极性（V0.0.72：BlockedOn=遮挡 ON（缺省）/
-    //            BlockedOff=遮挡 OFF（现场实测）——策略窗勾选框全局开关） ----------
-
-    [Theory]
-    [InlineData(null, GrillSignalPolarity.BlockedOn)]
-    [InlineData("", GrillSignalPolarity.BlockedOn)]
-    [InlineData("BlockedOn", GrillSignalPolarity.BlockedOn)]
-    [InlineData("blockedon", GrillSignalPolarity.BlockedOn)]
-    [InlineData("BlockedOff", GrillSignalPolarity.BlockedOff)]
-    [InlineData("blockedoff", GrillSignalPolarity.BlockedOff)]
-    [InlineData("垃圾值", GrillSignalPolarity.BlockedOn)]
-    public void GrillSignalPolarityParser_DefaultsToBlockedOn(string? raw, GrillSignalPolarity expected)
-        => Assert.Equal(expected, GrillSignalPolarityParser.Parse(raw));
+    //            BlockedOff=遮挡 OFF（现场实测）——V0.0.96 起是策略字段） ----------
 
     [Fact]
-    public void PolicyVm_GrillSignalInverted_TogglesPersistsAndBroadcasts()
+    public void PolicyVm_GrillSignalInverted_TogglesDraftAndSavesToPolicy()
     {
         using var scope = new TestScope();
         EnsureConfigDir();
-        GrillSignalPolarityHub.RecallForTest(GrillSignalPolarity.BlockedOn);
-        int broadcasts = 0;
-        void OnChanged() => broadcasts++;
-        GrillSignalPolarityHub.Changed += OnChanged;
-        try
-        {
-            IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
-            var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
 
-            // 缺省（ini 无该键）= 常开（遮挡=ON，V0.0.71 及以前口径）
-            Assert.False(vm.GrillSignalInverted);
-            Assert.True(vm.IsGrillNormallyOpen);
-            Assert.False(vm.IsGrillNormallyClosed);
-            Assert.Contains("遮挡=ON", vm.GrillSignalToolTip);
+        // 策略字段缺省 = 常开（遮挡=ON，V0.0.71 及以前口径）
+        Assert.False(vm.GrillSignalInverted);
+        Assert.True(vm.IsGrillNormallyOpen);
+        Assert.Contains("遮挡=ON", vm.GrillSignalToolTip);
 
-            // 选常闭（V0.0.74 光栅条分段按钮）：中枢换 BlockedOff + 落盘 + 广播；
-            // 两枚按钮状态互换、ToolTip 换口径
-            vm.IsGrillNormallyClosed = true;
-            Assert.True(vm.GrillSignalInverted);
-            Assert.True(vm.IsGrillNormallyClosed);
-            Assert.False(vm.IsGrillNormallyOpen);
-            Assert.Equal(GrillSignalPolarity.BlockedOff, GrillSignalPolarityHub.Current);
-            Assert.Equal("BlockedOff", IniFile.ReadStr(
-                AppPaths.ConfigIni, "setting", "GrillSignalPolarity", ""));
-            Assert.Contains("遮挡=OFF", vm.GrillSignalToolTip);
-            Assert.Equal(1, broadcasts);
+        // 选常闭：只改草稿，不写任何全局 ini 键（旧键已删）
+        vm.IsGrillNormallyClosed = true;
+        Assert.True(vm.GrillSignalInverted);
+        Assert.False(vm.IsGrillNormallyOpen);
+        Assert.Contains("遮挡=OFF", vm.GrillSignalToolTip);
+        Assert.Equal("", IniFile.ReadStr(
+            AppPaths.ConfigIni, "setting", "GrillSignalPolarity", ""));
 
-            // 再选常开：双向，回到缺省档（再广播一次）
-            vm.IsGrillNormallyOpen = true;
-            Assert.False(vm.GrillSignalInverted);
-            Assert.True(vm.IsGrillNormallyOpen);
-            Assert.False(vm.IsGrillNormallyClosed);
-            Assert.Equal(GrillSignalPolarity.BlockedOn, GrillSignalPolarityHub.Current);
-            Assert.Equal("BlockedOn", IniFile.ReadStr(
-                AppPaths.ConfigIni, "setting", "GrillSignalPolarity", ""));
-            Assert.Equal(2, broadcasts);
-        }
-        finally
-        {
-            GrillSignalPolarityHub.Changed -= OnChanged;
-            GrillSignalPolarityHub.RecallForTest(GrillSignalPolarity.BlockedOn);
-        }
-    }
+        // 【仅保存】才落策略库字段，随策略走
+        vm.SaveCommand.Execute(null);
+        var loaded = CuringPolicyStore.Load();
+        Assert.NotNull(loaded);
+        Assert.Equal(GrillSignalPolarity.BlockedOff, loaded!.Policies[0].GrillPolarity);
 
-    [Fact]
-    public void PolicyVm_GrillSignalInverted_RestoresFromIniOnOpen()
-    {
-        using var scope = new TestScope();
-        EnsureConfigDir();
-        GrillSignalPolarityHub.RecallForTest(GrillSignalPolarity.BlockedOn);
-        try
-        {
-            // 盘上已切过常闭（上一进程/现场配置）→ 开窗回显常闭档
-            IniFile.Write(AppPaths.ConfigIni, "setting", "GrillSignalPolarity", "BlockedOff");
-            var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
-            Assert.True(vm.GrillSignalInverted);
-            Assert.True(vm.IsGrillNormallyClosed);
-            Assert.False(vm.IsGrillNormallyOpen);
-        }
-        finally
-        {
-            GrillSignalPolarityHub.RecallForTest(GrillSignalPolarity.BlockedOn);
-        }
+        // 重开回显激活策略的常闭档
+        var reopened = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        Assert.True(reopened.IsGrillNormallyClosed);
+        Assert.False(reopened.IsGrillNormallyOpen);
     }
 
     // ---------- 报警总开关（V0.0.90：策略窗光栅带"光栅报警"滑块——开=报警
-    //            （缺省），关=整条报警链静默（门控不受影响）；真源
-    //            GrillAlarmEnabledHub，[setting] GrillAlarmEnabled "1"/"0"） ----------
+    //            （缺省），关=整条报警链静默（门控不受影响）；
+    //            V0.0.96 起是策略字段，随策略保存/激活） ----------
 
     [Fact]
-    public void PolicyVm_GrillAlarmEnabled_TogglesPersistsAndBroadcasts()
+    public void PolicyVm_GrillAlarmEnabled_TogglesDraftAndSavesToPolicy()
     {
         using var scope = new TestScope();
         EnsureConfigDir();
-        GrillAlarmEnabledHub.RecallForTest(true);
-        int broadcasts = 0;
-        void OnChanged() => broadcasts++;
-        GrillAlarmEnabledHub.Changed += OnChanged;
-        try
-        {
-            IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
-            var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
+        var fake = new FakeCureDialogService();
+        var vm = new CureStation.ViewModels.CuringPolicyViewModel(fake);
 
-            // 缺省（ini 无该键）=开启（用户拍板"默认开启报警"）
-            Assert.True(vm.IsGrillAlarmEnabled);
-            Assert.Equal("已开启", vm.GrillAlarmSwitchText);
+        // 策略字段缺省 = 开启（用户拍板"默认开启报警"）
+        Assert.True(vm.IsGrillAlarmEnabled);
+        Assert.Equal("已开启", vm.GrillAlarmSwitchText);
 
-            // 切【关】：中枢换值 + 落盘 + 广播，开关文字/ToolTip 换口径
-            vm.IsGrillAlarmEnabled = false;
-            Assert.False(vm.IsGrillAlarmEnabled);
-            Assert.Equal("已关闭", vm.GrillAlarmSwitchText);
-            Assert.False(GrillAlarmEnabledHub.Current);
-            Assert.Equal("0", IniFile.ReadStr(
-                AppPaths.ConfigIni, "setting", "GrillAlarmEnabled", ""));
-            Assert.Equal(1, broadcasts);
+        // 切【关】：只改草稿 + 文字换口径，不写全局 ini（旧键已删）
+        vm.IsGrillAlarmEnabled = false;
+        Assert.False(vm.IsGrillAlarmEnabled);
+        Assert.Equal("已关闭", vm.GrillAlarmSwitchText);
+        Assert.Equal("", IniFile.ReadStr(
+            AppPaths.ConfigIni, "setting", "GrillAlarmEnabled", ""));
 
-            // 再切回【开】：双向（ToggleButton 两侧绑定都能写）
-            vm.IsGrillAlarmEnabled = true;
-            Assert.True(vm.IsGrillAlarmEnabled);
-            Assert.True(GrillAlarmEnabledHub.Current);
-            Assert.Equal("1", IniFile.ReadStr(
-                AppPaths.ConfigIni, "setting", "GrillAlarmEnabled", ""));
-            Assert.Equal(2, broadcasts);
-        }
-        finally
-        {
-            GrillAlarmEnabledHub.Changed -= OnChanged;
-            GrillAlarmEnabledHub.RecallForTest(true);
-        }
+        // 保存 → 策略库字段随策略落盘
+        vm.SaveCommand.Execute(null);
+        var loaded = CuringPolicyStore.Load();
+        Assert.NotNull(loaded);
+        Assert.False(loaded!.Policies[0].GrillAlarmEnabled);
+
+        // 重开回显关态
+        var reopened = new CureStation.ViewModels.CuringPolicyViewModel(fake);
+        Assert.False(reopened.IsGrillAlarmEnabled);
+        Assert.Equal("已关闭", reopened.GrillAlarmSwitchText);
     }
 
-    [Fact]
-    public void PolicyVm_GrillAlarmEnabled_RestoresFromIniOnOpen()
-    {
-        using var scope = new TestScope();
-        EnsureConfigDir();
-        GrillAlarmEnabledHub.RecallForTest(true);
-        try
-        {
-            // 盘上已切过关（上一进程/现场配置）→ 开窗回显关态（LoadFromIni 为准）
-            IniFile.Write(AppPaths.ConfigIni, "setting", "GrillAlarmEnabled", "0");
-            var vm = new CureStation.ViewModels.CuringPolicyViewModel(new FakeCureDialogService());
-            Assert.False(vm.IsGrillAlarmEnabled);
-            Assert.Equal("已关闭", vm.GrillAlarmSwitchText);
-        }
-        finally
-        {
-            GrillAlarmEnabledHub.RecallForTest(true);
-        }
-    }
-
-    [Theory]
-    [InlineData(null, true)]
-    [InlineData("", true)]
-    [InlineData("1", true)]
-    [InlineData("0", false)]
-    [InlineData("garbage", true)]   // 非法值回缺省开（宁可多报不漏报）
-    public void GrillAlarmEnabledIni_OnlyExplicitZeroMeansOff(string? raw, bool expected)
-    {
-        using var scope = new TestScope();
-        EnsureConfigDir();
-        GrillAlarmEnabledHub.RecallForTest(true);
-        try
-        {
-            if (raw != null)
-                IniFile.Write(AppPaths.ConfigIni, "setting", "GrillAlarmEnabled", raw);
-            GrillAlarmEnabledHub.LoadFromIni();   // 仿生产启动/回归读点
-            Assert.Equal(expected, GrillAlarmEnabledHub.Current);
-        }
-        finally
-        {
-            GrillAlarmEnabledHub.RecallForTest(true);
-        }
-    }
+    // 注：旧 ini 键 GrillAlarmEnabled"只有显式 0 才算关"的解析语义已随全局键删除，
+    //     安全缺省改由【策略反序列化】保证（旧 JSON 缺字段 = 开），见
+    //     CuringPolicyTests.Store_LegacyJsonMissingGrillFields_UsesSafeDefaults。
 
     // ---------- 光栅门控条文案（V0.0.74：开关按钮自身显示状态 + 副文换口径） ----------
 
@@ -2837,59 +2759,45 @@ public class CureStationViewModelTests
     public void MainVm_AlarmPresenter_ManualMode_ShowsWindowAndClearsFeed()
     {
         using var scope = new TestScope();
-        EnsureConfigDir();
-        GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Manual);
-        try
-        {
-            IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
-            var fake = new FakeCureDialogService();
-            using var vm = new CureStation.ViewModels.MainViewModel(fake);
+        // 复位模式是策略字段（V0.0.96）：铺一条激活策略指定人工档
+        SaveActivePolicy(p => p.GrillResetMode = GrillAlarmResetMode.Manual);
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+        var fake = new FakeCureDialogService();
+        using var vm = new CureStation.ViewModels.MainViewModel(fake);
 
-            // 人工档首帧报警（测试直驱 presenter，绕过 500ms 定时器）：
-            // → Fake 收到 ShowGrillAlarmReset 且编排器就是主窗那份（单源）
-            vm.AlarmPresenter.Refresh([(1, 1)]);
-            Assert.Contains(fake.Calls, c => c == "ShowGrillAlarmReset");
-            Assert.Same(vm.AlarmPresenter, fake.AlarmPresenter);
+        // 人工档首帧报警（测试直驱 presenter，绕过 500ms 定时器）：
+        // → Fake 收到 ShowGrillAlarmReset 且编排器就是主窗那份（单源）
+        vm.AlarmPresenter.Refresh([(1, 1)]);
+        Assert.Contains(fake.Calls, c => c == "ShowGrillAlarmReset");
+        Assert.Same(vm.AlarmPresenter, fake.AlarmPresenter);
 
-            // 用户 ✕ 关窗（弹窗 Closed 回调）→ 旧报警不连环重弹
-            fake.AlarmPresenter!.NotifyWindowClosed();
-            fake.AlarmPresenter.Refresh([(1, 1)]);
-            Assert.Single(fake.Calls.Where(c => c == "ShowGrillAlarmReset").ToList());
+        // 用户 ✕ 关窗（弹窗 Closed 回调）→ 旧报警不连环重弹
+        fake.AlarmPresenter!.NotifyWindowClosed();
+        fake.AlarmPresenter.Refresh([(1, 1)]);
+        Assert.Single(fake.Calls.Where(c => c == "ShowGrillAlarmReset").ToList());
 
-            // 新库位报警 → 再弹一枪（热更决策）
-            vm.AlarmPresenter.Refresh([(1, 1), (2, 2)]);
-            Assert.Equal(2, fake.Calls.Count(c => c == "ShowGrillAlarmReset"));
+        // 新库位报警 → 再弹一枪（热更决策）
+        vm.AlarmPresenter.Refresh([(1, 1), (2, 2)]);
+        Assert.Equal(2, fake.Calls.Count(c => c == "ShowGrillAlarmReset"));
 
-            // 全解除 → 自动收窗（CloseGrillAlarmReset）
-            vm.AlarmPresenter.Refresh([]);
-            Assert.Contains(fake.Calls, c => c == "CloseGrillAlarmReset");
-        }
-        finally
-        {
-            GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Auto);
-        }
+        // 全解除 → 自动收窗（CloseGrillAlarmReset）
+        vm.AlarmPresenter.Refresh([]);
+        Assert.Contains(fake.Calls, c => c == "CloseGrillAlarmReset");
     }
 
     [Fact]
     public void MainVm_AlarmPresenter_AutoMode_NeverShowsWindow()
     {
         using var scope = new TestScope();
-        EnsureConfigDir();
-        GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Auto); // 缺省=现行为
-        try
-        {
-            IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
-            var fake = new FakeCureDialogService();
-            using var vm = new CureStation.ViewModels.MainViewModel(fake);
+        // 自动档策略（随策略保存/激活，不再读全局 ini）
+        SaveActivePolicy(p => p.GrillResetMode = GrillAlarmResetMode.Auto);
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+        var fake = new FakeCureDialogService();
+        using var vm = new CureStation.ViewModels.MainViewModel(fake);
 
-            vm.AlarmPresenter.Refresh([(1, 1)]);
-            vm.AlarmPresenter.Refresh([(1, 1), (3, 3)]);
-            Assert.DoesNotContain(fake.Calls, c => c == "ShowGrillAlarmReset");
-            Assert.Empty(vm.AlarmPresenter.Items);   // 自动档清单恒空（不接管复位）
-        }
-        finally
-        {
-            GrillAlarmResetModeHub.RecallForTest(GrillAlarmResetMode.Auto);
-        }
+        vm.AlarmPresenter.Refresh([(1, 1)]);
+        vm.AlarmPresenter.Refresh([(1, 1), (3, 3)]);
+        Assert.DoesNotContain(fake.Calls, c => c == "ShowGrillAlarmReset");
+        Assert.Empty(vm.AlarmPresenter.Items);   // 自动档清单恒空（不接管复位）
     }
 }
