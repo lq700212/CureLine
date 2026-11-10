@@ -4,25 +4,33 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:CureStation.ViewModels"
+        xmlns:local="clr-namespace:CureStation"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:ScannerConfigViewModel, IsDesignTimeCreatable=False}"
-        Title="扫码枪配置" Height="720" Width="860"
-        WindowStartupLocation="CenterOwner"
+        Title="扫码枪配置" Width="560" SizeToContent="Height" MaxHeight="720"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         WindowStyle="None" Background="Transparent" AllowsTransparency="True"
         Foreground="{DynamicResource Brush.Fresh.FgMid}"
         Icon="Assets/app.ico" FontSize="12">
+    <Window.Resources>
+        <!-- 串口钮反向显示（TCP 钮双向绑定 EditUseTcp——回写链唯一防互踢，见转换器注释） -->
+        <local:InverseBoolConverter x:Key="InverseBool"/>
+    </Window.Resources>
     <shell:WindowChrome.WindowChrome>
-        <!-- 无边框自绘（全弹窗统一）：标题条命中拖动 + 边沿 6px 缩放 -->
+        <!-- 无边框自绘（全弹窗统一）；V0.0.93 起定高自适应（SizeToContent=Height），
+             缩放边沿不再需要 -->
         <shell:WindowChrome CaptionHeight="34" GlassFrameThickness="0"
                             UseAeroCaptionButtons="False"
-                            ResizeBorderThickness="6"/>
+                            ResizeBorderThickness="0"/>
     </shell:WindowChrome.WindowChrome>
-    <!--★★ 扫码枪配置窗（dev 开发者专属，V0.0.77 建 / V0.0.78 双模式化）：
-         现场 SH-5000-GHD 枪侧接 Eport E10 型 DTU（串口转以太网），走 TCP 收码——
-         也可退回串口（网口转 USB 转接线→虚拟 COM）。左列=连接方式 + 对应参数区
-         （勾 TCP 显 TCP 区块 / 不勾显串口区块，会话超时两方式共用）；右列=随方式
-         切换的接线/操作指引与配置文件路径；保存即热重启扫码枪，不重启程序。 -->
+    <!--★★ 扫码枪配置窗（dev 开发者专属，V0.0.77 建 / V0.0.78 双模式化；
+         V0.0.93 简化重排——配置项与保存校验口径零变化，只降文字密度）：
+         单列。说明性长文（接线步骤/生效口径/现场现状段落）全部撤下，关键口径
+         收进"保存即生效"提示条与各字段 ToolTip；串口低频参数（波特率等四件+
+         调试日志）收进折叠 Expander。连接方式改双 Radio（TCP 钮双向绑定，
+         串口钮 OneWay 反向显示）。字段标签去键名括号（PortName 等原文进
+         ToolTip）。保存即热重启扫码枪，不重启程序。 -->
     <Grid Margin="14">
     <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
             BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
@@ -36,233 +44,196 @@
                             Click="OnCloseClick" ToolTip="关闭（不保存）"/>
                 </Grid>
             </Border>
-            <Grid Margin="8">
+            <Grid Margin="10">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <Grid Grid.Row="0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1.12*"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
 
-                    <!-- 左列：启用 + 连接方式 +（串口/TCP）参数区块 -->
-                    <Border Grid.Column="0" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="扫码枪"/>
-                                <CheckBox IsChecked="{Binding EditEnabled, FallbackValue=False}"
-                                          Content="启用扫码枪（保存后按所选连接方式建立连接收码）"
-                                          Margin="0,6,0,0"/>
+                <!-- 顶：保存即生效（原右列"生效口径"五条浓缩成一行，细节进 ToolTip） -->
+                <Border Grid.Row="0" Style="{StaticResource FreshHintBorder}" Margin="0,0,0,8" Padding="8,4"
+                        ToolTip="保存后程序按新参数后台重建连接（串口断线/换 USB 口每 3 秒自动重连；TCP 断网自动重连 + KeepAlive 兜底）。未启用或没配出目标时不启动，程序其余功能零影响；扫码只做库位/产品绑定提示，不拦截固化流程。">
+                    <TextBlock Text="保存即生效，不需要重启程序。"
+                               Foreground="{DynamicResource Brush.Fresh.FgStrong}"/>
+                </Border>
 
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="连接方式（二选一）" Margin="0,14,0,0"/>
-                                <CheckBox IsChecked="{Binding EditUseTcp, FallbackValue=False}"
-                                          Content="以太网 TCP（缺省勾选 = 现场现行；不勾 = 串口：网口转 USB 转接线 → 虚拟 COM 口）"
-                                          ToolTip="现场现行=TCP：枪接 Eport E10 型 DTU 串口转网口，DTU 已配 TCP-SERVER 8899；程序出厂缺省即勾选，并预置好下面的 IP/端口"/>
+                <!-- 中：单列参数（小屏超高时滚动兜底） -->
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <!-- 启用 -->
+                        <CheckBox IsChecked="{Binding EditEnabled, FallbackValue=False}"
+                                  Content="启用扫码枪" Cursor="Hand"
+                                  ToolTip="保存后按所选连接方式建立连接收码；不勾则不启动，程序其余功能零影响"/>
 
-                                <!-- 串口区块（未勾 TCP 时显示——Visibility 缺省值必须写在 Setter，触发器才能切） -->
-                                <StackPanel>
-                                    <StackPanel.Style>
-                                        <Style TargetType="StackPanel">
+                        <!-- 连接方式（双 Radio 互斥：TCP 钮双向、串口钮只显示） -->
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="连接方式" Margin="0,12,0,0"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <RadioButton GroupName="ConnMode" Content="TCP 网络" Cursor="Hand"
+                                         IsChecked="{Binding EditUseTcp, Mode=TwoWay}"
+                                         ToolTip="现场现行：枪串口线接 Eport E10 型 DTU（串口转以太网），DTU 已配 TCP-SERVER 8899；程序出厂缺省即此方式并预置好 IP/端口"/>
+                            <RadioButton GroupName="ConnMode" Content="串口" Margin="24,0,0,0" Cursor="Hand"
+                                         IsChecked="{Binding EditUseTcp, Mode=OneWay, Converter={StaticResource InverseBool}}"
+                                         ToolTip="替代路径：枪经网口转 USB 转接线插工控机，成虚拟 COM 口"/>
+                        </StackPanel>
+
+                        <!-- TCP 区块（TCP 方式显示；Visibility 缺省值写在 Setter，触发器才能切） -->
+                        <StackPanel>
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ShowTcpSection, FallbackValue=False}" Value="True">
                                             <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="扫码枪 IP：" VerticalAlignment="Center" Margin="0,0,8,6"
+                                           ToolTip="枪侧 DTU 的 IP（DTU Web 配置台可查）；程序已预置现场值。勿把 DTU 死配置里指向旧上位机的『远端主机』地址当枪侧 IP 填进来——填错连入恒超时"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource FreshInput}" Margin="0,0,0,6"
+                                         Text="{Binding EditTcpIp, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="枪侧 DTU 的 IP（DTU Web 配置台可查）；程序已预置现场值。勿把 DTU 死配置里指向旧上位机的『远端主机』地址当枪侧 IP 填进来——填错连入恒超时"/>
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="端口：" VerticalAlignment="Center" Margin="0,0,8,0"
+                                           ToolTip="DTU TCP-SERVER 的本地端口（现场现值 8899，改 DTU 配置后同步改这里）"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource FreshInput}" Margin="0,0,12,0"
+                                         Text="{Binding EditTcpPort, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="DTU TCP-SERVER 的本地端口（现场现值 8899，改 DTU 配置后同步改这里）"/>
+                                <TextBlock Grid.Row="1" Grid.Column="2" Text="触发指令：" VerticalAlignment="Center" Margin="0,0,8,0"
+                                           ToolTip="连上后自动发送的开枪指令（自动补回车换行）。一般留空：SH-5000-GHD 经 DTU 是自动连续读码，发任何指令都会被 DTU 当串口数据写进枪、可能干扰读码；只有基恩士 SR 这类『连上要发 LON 开激光』的枪才需要填"/>
+                                <TextBox Grid.Row="1" Grid.Column="3" Style="{StaticResource FreshInput}"
+                                         Text="{Binding EditTriggerCommand, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="连上后自动发送的开枪指令（自动补回车换行）。一般留空：SH-5000-GHD 经 DTU 是自动连续读码，发任何指令都会被 DTU 当串口数据写进枪、可能干扰读码；只有基恩士 SR 这类『连上要发 LON 开激光』的枪才需要填"/>
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- 串口区块（串口方式显示；低频参数折叠） -->
+                        <StackPanel>
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ShowSerialSection, FallbackValue=True}" Value="False">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="COM 口：" VerticalAlignment="Center" Margin="0,0,8,6"
+                                           ToolTip="设备管理器『端口(COM 和 LPT)』里的 COM 号（如 COM3）；填了就固定用它（换 USB 口要改），留空则按下面的设备名关键字自动找口"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Style="{StaticResource FreshInput}" Margin="0,0,0,6"
+                                         Text="{Binding EditPortName, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="设备管理器『端口(COM 和 LPT)』里的 COM 号（如 COM3）；填了就固定用它（换 USB 口要改），留空则按下面的设备名关键字自动找口"/>
+                                <Button Grid.Row="0" Grid.Column="2" Style="{StaticResource FreshButton}"
+                                        Content="检测串口" Command="{Binding DetectPortsCommand}"
+                                        Height="30" Margin="8,0,0,6"
+                                        ToolTip="枚举本机现有 COM 口（拔插转接线看哪个号变化，就是扫码枪）"/>
+                                <!-- 检测结果：选择即回填上面的 COM 口；未检测时收起（避免像第二个空输入框） -->
+                                <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,0,0,6"
+                                          ItemsSource="{Binding DetectedPorts, FallbackValue={x:Null}}"
+                                          SelectedItem="{Binding SelectedDetectedPort, Mode=TwoWay}"
+                                          ToolTip="点『检测串口』后在这里选：选中即回填上面的 COM 口">
+                                    <ComboBox.Style>
+                                        <Style TargetType="ComboBox" BasedOn="{StaticResource FreshCombo}">
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding ShowSerialSection, FallbackValue=True}" Value="False">
+                                                <DataTrigger Binding="{Binding DetectedPorts.Count, FallbackValue=0}" Value="0">
                                                     <Setter Property="Visibility" Value="Collapsed"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
-                                    </StackPanel.Style>
+                                    </ComboBox.Style>
+                                </ComboBox>
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="设备名关键字：" VerticalAlignment="Center" Margin="0,0,8,0"
+                                           ToolTip="COM 口留空时按设备名关键字自动找口（如 USB / CH340 / Prolific）——推荐填 USB：转接线设备名一般含 USB，换 USB 口免改配置；本机有多个 USB 串口设备时改用上面的固定 COM 口"/>
+                                <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource FreshInput}"
+                                         Text="{Binding EditDeviceKeyword, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="COM 口留空时按设备名关键字自动找口（如 USB / CH340 / Prolific）——推荐填 USB：转接线设备名一般含 USB，换 USB 口免改配置；本机有多个 USB 串口设备时改用上面的固定 COM 口"/>
+                            </Grid>
 
-                                    <TextBlock Style="{StaticResource SectionTitle}" Text="串口定位（二选一，固定 COM 口优先）" Margin="0,14,0,0"/>
-                                    <TextBlock Text="固定 COM 口（PortName）：" Margin="0,6,0,0"/>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBox Grid.Column="0" Style="{StaticResource FreshInput}"
-                                                 Text="{Binding EditPortName, UpdateSourceTrigger=PropertyChanged}"
-                                                 ToolTip="设备管理器『端口(COM 和 LPT)』里的 COM 号，如 COM3；填了就用它（换 USB 口要改）"/>
-                                        <Button Grid.Column="1" Style="{StaticResource FreshButton}"
-                                                Content="检测串口" Command="{Binding DetectPortsCommand}"
-                                                Height="32" Margin="8,0,0,0"
-                                                ToolTip="枚举本机现有 COM 口（拔插转接线看哪个号变化，就是扫码枪）"/>
-                                    </Grid>
-                                    <!-- 检测结果：选择即回填上面的 PortName；未检测时收起（避免像第二个空输入框） -->
-                                    <ComboBox Margin="0,6,0,0"
-                                              ItemsSource="{Binding DetectedPorts, FallbackValue={x:Null}}"
-                                              SelectedItem="{Binding SelectedDetectedPort, Mode=TwoWay}"
-                                              ToolTip="点『检测串口』后在这里选：选中即回填上面的固定 COM 口">
-                                        <ComboBox.Style>
-                                            <Style TargetType="ComboBox" BasedOn="{StaticResource FreshCombo}">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding DetectedPorts.Count, FallbackValue=0}" Value="0">
-                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </ComboBox.Style>
-                                    </ComboBox>
-
-                                    <TextBlock Text="或 设备名关键字（DeviceKeyword，PortName 留空时自动找口）："
-                                               Margin="0,10,0,0"/>
-                                    <TextBox Style="{StaticResource FreshInput}"
-                                             Text="{Binding EditDeviceKeyword, UpdateSourceTrigger=PropertyChanged}"
-                                             ToolTip="设备管理器设备名称里的关键字，如 USB / CH340 / Prolific；换 USB 口免改配置"/>
-                                    <TextBlock Text="推荐填『USB』：SH-5000-GHD 经 USB 转接线后设备名一般含 USB（如 USB-SERIAL CH340 (COM3)）；切到串口方式时按现场接线自行填写，程序不代填。本机有多个 USB 串口设备时，请改用上面的固定 COM 口。"
-                                               Foreground="{DynamicResource Brush.Fresh.FgDim}" FontSize="11"
-                                               TextWrapping="Wrap" Margin="0,3,0,0"/>
-
-                                    <TextBlock Style="{StaticResource SectionTitle}" Text="串口参数（按扫码枪手册核对）" Margin="0,14,0,0"/>
-                                    <TextBlock Text="波特率（常见 9600 / 115200，可直接输入）：" Margin="0,6,0,0"/>
-                                    <ComboBox Style="{StaticResource FreshCombo}" IsEditable="True"
-                                              ItemsSource="{Binding BaudRateOptions, FallbackValue={x:Null}}"
-                                              Text="{Binding EditBaudRate, UpdateSourceTrigger=PropertyChanged}"
-                                              ToolTip="SH-5000-GHD 出厂常见 9600；扫不出码时按手册核对"/>
-                                    <Grid Margin="0,8,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" Margin="0,0,6,0">
-                                            <TextBlock Text="数据位："/>
-                                            <ComboBox Style="{StaticResource FreshCombo}" Margin="0,3,0,0"
-                                                      ItemsSource="{Binding DataBitsOptions, FallbackValue={x:Null}}"
-                                                      SelectedItem="{Binding EditDataBits, FallbackValue=8}"/>
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" Margin="3,0">
-                                            <TextBlock Text="停止位："/>
-                                            <ComboBox Style="{StaticResource FreshCombo}" Margin="0,3,0,0"
-                                                      ItemsSource="{Binding StopBitsOptions, FallbackValue={x:Null}}"
-                                                      SelectedItem="{Binding EditStopBits, FallbackValue=1}"/>
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="2" Margin="6,0,0,0">
-                                            <TextBlock Text="校验位："/>
-                                            <ComboBox Style="{StaticResource FreshCombo}" Margin="0,3,0,0"
-                                                      ItemsSource="{Binding ParityOptions, FallbackValue={x:Null}}"
-                                                      SelectedItem="{Binding EditParity, FallbackValue=None}"/>
-                                        </StackPanel>
-                                    </Grid>
-
+                            <!-- 低频参数折叠（波特效验等按枪手册核对；展开才占位） -->
+                            <Expander Header="串口参数（一般用默认，按枪手册核对）" Margin="0,10,0,0" IsExpanded="False">
+                                <Grid Margin="14,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,6,6">
+                                        <TextBlock Text="波特率：" ToolTip="SH-5000-GHD 出厂常见 9600；扫不出码时按手册核对"/>
+                                        <ComboBox Style="{StaticResource FreshCombo}" Margin="0,3,0,0" IsEditable="True"
+                                                  ItemsSource="{Binding BaudRateOptions, FallbackValue={x:Null}}"
+                                                  Text="{Binding EditBaudRate, UpdateSourceTrigger=PropertyChanged}"
+                                                  ToolTip="SH-5000-GHD 出厂常见 9600；扫不出码时按手册核对"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="0" Grid.Column="1" Margin="6,0,0,6">
+                                        <TextBlock Text="数据位："/>
+                                        <ComboBox Style="{StaticResource FreshCombo}" Margin="0,3,0,0"
+                                                  ItemsSource="{Binding DataBitsOptions, FallbackValue={x:Null}}"
+                                                  SelectedItem="{Binding EditDataBits, FallbackValue=8}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,6,6">
+                                        <TextBlock Text="停止位："/>
+                                        <ComboBox Style="{StaticResource FreshCombo}" Margin="0,3,0,0"
+                                                  ItemsSource="{Binding StopBitsOptions, FallbackValue={x:Null}}"
+                                                  SelectedItem="{Binding EditStopBits, FallbackValue=1}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="6,0,0,6">
+                                        <TextBlock Text="校验位："/>
+                                        <ComboBox Style="{StaticResource FreshCombo}" Margin="0,3,0,0"
+                                                  ItemsSource="{Binding ParityOptions, FallbackValue={x:Null}}"
+                                                  SelectedItem="{Binding EditParity, FallbackValue=None}"/>
+                                    </StackPanel>
                                     <!-- DebugLog 只在串口方式生效（WMI 找口过程日志；TCP 方式无此机制） -->
-                                    <CheckBox IsChecked="{Binding EditDebugLog, FallbackValue=False}"
-                                              Content="心跳调试日志（排障用：WMI 找口过程写操作日志，正常不勾）"
-                                              Margin="0,10,0,0"/>
-                                </StackPanel>
+                                    <CheckBox Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" IsChecked="{Binding EditDebugLog, FallbackValue=False}"
+                                              Content="心跳调试日志（排障用）" Cursor="Hand" Margin="0,4,0,0"
+                                              ToolTip="WMI 找口过程写操作日志，正常生产保持不勾"/>
+                                </Grid>
+                            </Expander>
+                        </StackPanel>
 
-                                <!-- TCP 区块（勾 TCP 时显示；缺省收起，触发器置 Visible） -->
-                                <StackPanel>
-                                    <StackPanel.Style>
-                                        <Style TargetType="StackPanel">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding ShowTcpSection, FallbackValue=False}" Value="True">
-                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </StackPanel.Style>
-
-                                    <TextBlock Style="{StaticResource SectionTitle}" Text="TCP 目标（枪侧 DTU / 枪的 TCP 服务口）" Margin="0,14,0,0"/>
-                                    <TextBlock Text="现场现状：SH-5000-GHD 枪本身串口输出，串口线上接一台 Eport E10 型 DTU（串口转以太网）；DTU 已在 Web 配置台配成 TCP-SERVER、本地端口 8899、串口透传——上位机只管按下面的 IP:端口连入，扫到码即按行推过来（毫秒级，条码文本+CR 结尾）。"
-                                               Foreground="{DynamicResource Brush.Fresh.FgDim}" FontSize="11"
-                                               TextWrapping="Wrap" Margin="0,6,0,0"/>
-
-                                    <TextBlock Text="目标 IP（TcpIp，枪侧 DTU 的地址）：" Margin="0,8,0,0"/>
-                                    <TextBox Style="{StaticResource FreshInput}"
-                                             Text="{Binding EditTcpIp, UpdateSourceTrigger=PropertyChanged}"
-                                             ToolTip="DTU/枪自身的 IP——程序缺省已预置现场值（见 DTU Web 配置台顶部）；别把 DTU 死配置里指向旧上位机的『远端主机』地址当成枪侧 IP 填进来（填错连入恒超时）"/>
-                                    <Grid Margin="0,8,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" Margin="0,0,6,0">
-                                            <TextBlock Text="TCP 端口："/>
-                                            <TextBox Style="{StaticResource FreshInput}" Margin="0,3,0,0"
-                                                     Text="{Binding EditTcpPort, UpdateSourceTrigger=PropertyChanged}"
-                                                     ToolTip="DTU TCP-SERVER 的本地端口（现场现值 8899，改 DTU 配置后同步改这里）"/>
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" Margin="6,0,0,0">
-                                            <TextBlock Text="触发指令（一般留空）："/>
-                                            <TextBox Style="{StaticResource FreshInput}" Margin="0,3,0,0"
-                                                     Text="{Binding EditTriggerCommand, UpdateSourceTrigger=PropertyChanged}"
-                                                     ToolTip="连上后自动发送的开枪指令（发送时自动补回车换行）；留空=连接后不发任何指令"/>
-                                        </StackPanel>
-                                    </Grid>
-                                    <TextBlock Text="触发指令红线：SH-5000-GHD 经 DTU 是自动连续读码（扫到即推），留空即可——连上后发任何指令都会被 DTU 当成串口数据写进枪，可能干扰读码；只有接基恩士 SR 这类『连上要发 LON 开激光』的枪才需要填。"
-                                               Foreground="{DynamicResource Brush.Fresh.FgDim}" FontSize="11"
-                                               TextWrapping="Wrap" Margin="0,6,0,0"/>
-                                </StackPanel>
-
-                                <!-- 两方式共用：会话超时 -->
-                                <TextBlock Text="扫码会话超时（秒，5~600）：" Margin="0,10,0,0"/>
-                                <TextBox Style="{StaticResource FreshInput}"
-                                         Text="{Binding EditSessionTimeout, UpdateSourceTrigger=PropertyChanged}"
-                                         ToolTip="扫了库位码后等产品码的最长间隔，超时自动回到『请扫库位码』；缺省 15"/>
-                            </StackPanel>
-                        </ScrollViewer>
-                    </Border>
-
-                    <!-- 右列：随连接方式切换的接线指引 + 生效口径 + 配置文件路径 -->
-                    <Border Grid.Column="1" Style="{StaticResource FreshCardBorder}">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="现场接线与操作步骤"/>
-
-                                <!-- 串口方式指引（未勾 TCP 时显示） -->
-                                <StackPanel>
-                                    <StackPanel.Style>
-                                        <Style TargetType="StackPanel">
-                                            <Setter Property="Visibility" Value="Visible"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding ShowSerialSection, FallbackValue=True}" Value="False">
-                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </StackPanel.Style>
-                                    <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Brush.Fresh.FgDim}"
-                                               Text="① 转接线插好后，打开设备管理器『端口(COM 和 LPT)』确认 COM 号（拔插转接线看哪个号出现/消失最稳）。&#x0a;② 最直接=把 COM 号填进『固定 COM 口』；想换 USB 口免改配置=PortName 留空、用设备关键字『USB』自动找口。&#x0a;③ 勾选『启用扫码枪』→ 保存 → 主窗统计条扫码胶囊变绿即接通。&#x0a;④ 扫一下任意条码验证：统计条会提示『请扫库位码』阶段变化。"/>
-                                </StackPanel>
-
-                                <!-- TCP 方式指引（勾 TCP 时显示） -->
-                                <StackPanel>
-                                    <StackPanel.Style>
-                                        <Style TargetType="StackPanel">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding ShowTcpSection, FallbackValue=False}" Value="True">
-                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </StackPanel.Style>
-                                    <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Brush.Fresh.FgDim}"
-                                               Text="① 枪串口线接 Eport E10 型 DTU；浏览器进 DTU Web 配置台（IP 在枪侧标签/联动地址段），把对应 socket 配成 TCP-SERVER、本地端口 8899、路由到串口（Rout=uart）并重启/保存生效。&#x0a;② 工控机网线与 DTU 同网段后，把 DTU 的 IP 与端口填进左侧『TCP 目标』。&#x0a;③ 勾选『启用扫码枪』→ 保存 → 主窗统计条扫码胶囊变绿即接通。&#x0a;④ 扫一下任意条码验证：统计条会提示『请扫库位码』阶段变化。"/>
-                                </StackPanel>
-
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="生效口径" Margin="0,16,0,0"/>
-                                <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Brush.Fresh.FgDim}"
-                                           Text="• 保存即生效：程序按新参数后台重建连接，不需要重启程序。&#x0a;• 串口方式：断线/换 USB 口每 3 秒后台自动重连，插回即恢复。&#x0a;• TCP 方式：网络断了自动重连（3 秒节流），TCP KeepAlive 兜底拔线/断电这类静默断连。&#x0a;• 未启用或没有配出目标（TCP 没填 IP / 串口定位全空）时不启动，程序其余功能零影响。&#x0a;• 扫码只做库位/产品绑定与提示，不拦截固化流程。"/>
-
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="配置文件" Margin="0,16,0,0"/>
-                                <TextBlock Text="config\config.ini"
-                                           TextWrapping="Wrap" Foreground="{DynamicResource Brush.Fresh.FgDim}"
-                                           ToolTip="{Binding IniPath}"
-                                           FontSize="11"/>
-                                <TextBlock Text="（本窗保存会写回该文件的 [Scanner] 节，也可手工编辑；悬停上面一行看完整路径）"
-                                           TextWrapping="Wrap" Foreground="{DynamicResource Brush.Fresh.FgDim}"
-                                           FontSize="11" Margin="0,3,0,0"/>
-                            </StackPanel>
-                        </ScrollViewer>
-                    </Border>
-                </Grid>
+                        <!-- 两方式共用：会话超时 -->
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="会话超时（秒）：" VerticalAlignment="Center" Margin="0,0,8,0"
+                                       ToolTip="扫了库位码后等产品码的最长间隔，超时自动回到『请扫库位码』；5~600，缺省 15"/>
+                            <TextBox Grid.Column="1" Style="{StaticResource FreshInput}"
+                                     Text="{Binding EditSessionTimeout, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="扫了库位码后等产品码的最长间隔，超时自动回到『请扫库位码』；5~600，缺省 15"/>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
 
                 <!-- 底：保存 / 取消 -->
-                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
                     <Button Tag="{StaticResource Geo.CloseX}" Style="{StaticResource FreshButton}" Content="取消"
                             Click="OnCloseClick" Width="100" Height="34" Margin="0,0,8,0"/>
                     <Button Tag="{StaticResource Geo.Save}" Style="{StaticResource FreshButton}"

@@ -6,6 +6,7 @@
 
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using CureStation.ViewModels;
 using CureLine.Core.Infrastructure;
@@ -32,6 +33,16 @@ public partial class MainWindow : Window
         // ContentRendered：ItemsControl 首轮模板化完成后的兜挂（Loaded 时可能
         // 还没生成第一张卡）。两个入口都幂等（HookSlotCardHeight 自防重复）。
         ContentRendered += (_, _) => HookSlotCardHeight();
+        // 登录空闲自动退出（V0.0.93）：进程级输入打点——InputManager 收本进程
+        // 全部窗口（主窗/弹窗/菜单）的鼠标键盘事件，任意操作都把空闲基线推到
+        // 当下（NotifyActivity 纯内存赋值，高频零成本）。事件在 UI 线程，
+        // DataContext 由 App 注入 ctor 时已就绪。
+        if (DataContext is MainViewModel vm)
+            InputManager.Current.PreProcessInput += (_, args) =>
+            {
+                if (args.StagingItem?.Input != null)
+                    vm.IdleMonitor.NotifyActivity();
+            };
     }
 
     /// <summary>根元素边距随窗口态同步：最大化垫回 resize 边框，还原/最小化归零。</summary>

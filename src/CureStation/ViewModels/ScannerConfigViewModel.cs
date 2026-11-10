@@ -20,7 +20,6 @@ using System.IO.Ports;
 using System.Text.RegularExpressions;
 using System.Collections.ObjectModel;
 using CureLine.Core.Comms;
-using CureLine.Core.Infrastructure;
 using CureLine.ViewModels;
 
 namespace CureStation.ViewModels;
@@ -52,9 +51,6 @@ public sealed class ScannerConfigViewModel : ViewModelBase
 
     /// <summary>保存成功→true / 取消关闭→false（View 转成 DialogResult 关窗）。</summary>
     public event Action<bool>? RequestClose;
-
-    /// <summary>配置文件实际路径（界面显示，方便现场核对/备份）。</summary>
-    public string IniPath => AppPaths.ConfigIni;
 
     /// <summary>最近一次"检测串口"枚举到的本机 COM 号（选择即回填 PortName）。</summary>
     public ObservableCollection<string> DetectedPorts { get; } = new();

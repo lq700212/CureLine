@@ -34,10 +34,11 @@ public sealed class MesPostConfigViewModel : ViewModelBase
     /// <summary>保存成功后置 true（DialogService 据此返回 true，主窗热更新过账服务）。</summary>
     public bool CloseDialog { get; private set; }
 
-    // ---------- 工位下拉选项（ComboBox 绑定） ----------
+    // ---------- 工位下拉选项（ComboBox 绑定；V0.0.93 文案去英文前缀——
+    //   老口径/触发点等语境进窗内 ToolTip，选项只留中文短词） ----------
     public string[] SideOptions { get; } = { "R", "L" };
-    public string[] TimeUnitOptions { get; } = { "Seconds（秒，老项目口径）", "Minutes（分钟）" };
-    public string[] InAtOptions { get; } = { "Arrive（托盘到位）", "Start（开计时）" };
+    public string[] TimeUnitOptions { get; } = { "秒", "分钟" };
+    public string[] InAtOptions { get; } = { "托盘到位", "开计时" };
 
     // ---------- 编辑区（打开回显；保存前 Flush 回对象） ----------
 

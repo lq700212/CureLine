@@ -1385,9 +1385,10 @@ public class CureStationViewModelTests
         Assert.True(vm.IsDualSide);
         Assert.True(vm.ShowRightPanel);
         Assert.True(vm.ShowLeftPanel);
+        Assert.True(vm.ShowPanelHeaders); // 双工位：R/L 子标题显示（V0.0.93 布局）
         Assert.Equal("工单信息（R/L 双工位）", vm.WindowTitle);
-        Assert.Equal("工单信息（R）", vm.RightPanelTitle);
-        Assert.Equal("工单信息（L）", vm.LeftPanelTitle);
+        Assert.Equal("R 工位", vm.RightPanelTitle);
+        Assert.Equal("L 工位", vm.LeftPanelTitle);
         Assert.Equal("R 计数清零", vm.ClearRText);
         Assert.Equal("L 计数清零", vm.ClearLText);
         Assert.Equal("上传 R 物料", vm.UploadRText);
@@ -1413,8 +1414,8 @@ public class CureStationViewModelTests
         Assert.False(vm.IsDualSide);
         Assert.True(vm.ShowRightPanel);
         Assert.False(vm.ShowLeftPanel);
+        Assert.False(vm.ShowPanelHeaders); // 单工位：R/L 子标题隐藏（卡片标题已是"生产信息"）
         Assert.Equal("工单信息", vm.WindowTitle);
-        Assert.Equal("工单信息", vm.RightPanelTitle);
         Assert.Equal("计数清零", vm.ClearRText);
         Assert.Equal("物料上传", vm.UploadRText);
         Assert.Equal("R-KEEP", vm.EditRtRcNo);
@@ -1446,7 +1447,7 @@ public class CureStationViewModelTests
 
         Assert.False(vm.ShowRightPanel);
         Assert.True(vm.ShowLeftPanel);
-        Assert.Equal("工单信息", vm.LeftPanelTitle);
+        Assert.False(vm.ShowPanelHeaders);
         Assert.Equal("L-MAIN", vm.EditLfRcNo); // 视图↔槽映射恒定：L 视图=Left 槽
 
         vm.EditLfPreset = "66";
@@ -1817,6 +1818,144 @@ public class CureStationViewModelTests
         Assert.Null(vm.Role);
         Assert.Contains("错误", vm.Tip);
         Assert.Equal("", vm.Password);             // 密码清空重输
+    }
+
+    // ---------- 登录窗"修改密码"面板（V0.0.93 加回：本人验旧密改自己密码） ----------
+
+    [Fact]
+    public void LoginVm_ChangePassword_Success_UpdatesStoreSyncsRememberAndFillsLoginBox()
+    {
+        using var scope = new TestScope();
+        var (vm, store, ini) = NewLoginVm(scope);
+        store.AddUser("op1", OperatorRole.Operator, "abc123", OperatorRole.Admin);
+        vm.UserName = "op1";
+        RunModeSettings.SaveLogin(ini, true, "op1", "abc123"); // 该账号勾了"记住密码"
+
+        vm.EnterChangeModeCommand.Execute(null);
+        Assert.True(vm.IsChangeMode);
+        Assert.Equal("修改密码", vm.ModeTitle); // 横幅随模式切换
+
+        vm.OldPassword = "abc123";
+        vm.NewPassword = "xyz789";
+        vm.ConfirmPassword = "xyz789";
+        vm.ChangePasswordCommand.Execute(null);
+
+        // 切回登录面板 + 新密码已填进登录密码框（直接点登录即可）+ 绿色成功提示
+        Assert.False(vm.IsChangeMode);
+        Assert.Equal("xyz789", vm.Password);
+        Assert.Equal("密码修改成功，请用新密码登录", vm.Tip);
+        Assert.False(vm.TipIsError);
+        Assert.Equal("", vm.OldPassword);          // 改密三框清空不残留
+        // 库里换新：新密可登录、旧密作废
+        Assert.Equal(OperatorRole.Operator, store.Verify("op1", "xyz789"));
+        Assert.Null(store.Verify("op1", "abc123"));
+        // 记住密码记忆同步换新（否则下次回填旧密码必登录失败）
+        var (remember, _, pwd) = RunModeSettings.ReadSavedLogin(ini, "op1");
+        Assert.True(remember);
+        Assert.Equal("xyz789", pwd);
+    }
+
+    [Fact]
+    public void LoginVm_ChangePassword_WrongOldPassword_ShowsErrorAndKeepsOldPassword()
+    {
+        using var scope = new TestScope();
+        var (vm, store, ini) = NewLoginVm(scope);
+        vm.UserName = "admin";
+        vm.EnterChangeModeCommand.Execute(null);
+
+        vm.OldPassword = "wrong-old";
+        vm.NewPassword = "xyz789";
+        vm.ConfirmPassword = "xyz789";
+        vm.ChangePasswordCommand.Execute(null);
+
+        Assert.True(vm.IsChangeMode);              // 留在改密面板
+        Assert.True(vm.TipIsError);
+        Assert.Contains("旧密码", vm.Tip);
+        Assert.Equal("", vm.OldPassword);          // 旧密框清空重输
+        // 库未动：原密码仍可登录
+        Assert.Equal(OperatorRole.Admin, store.Verify("admin", "test-admin-pwd"));
+    }
+
+    [Fact]
+    public void LoginVm_ChangePassword_ConfirmMismatch_BlocksAndClearsNewBoxes()
+    {
+        using var scope = new TestScope();
+        var (vm, store, ini) = NewLoginVm(scope);
+        vm.UserName = "admin";
+        vm.EnterChangeModeCommand.Execute(null);
+
+        vm.OldPassword = "test-admin-pwd";
+        vm.NewPassword = "xyz789";
+        vm.ConfirmPassword = "xyz780";
+        vm.ChangePasswordCommand.Execute(null);
+
+        Assert.True(vm.TipIsError);
+        Assert.Contains("不一致", vm.Tip);
+        Assert.Equal("", vm.NewPassword);          // 两个新框清空重输
+        Assert.Equal(OperatorRole.Admin, store.Verify("admin", "test-admin-pwd")); // 密码未改
+    }
+
+    [Fact]
+    public void LoginVm_ChangePassword_ShortOrSameAsOld_BlocksByRule()
+    {
+        using var scope = new TestScope();
+        var (vm, store, ini) = NewLoginVm(scope);
+        vm.UserName = "admin";
+        vm.EnterChangeModeCommand.Execute(null);
+        vm.OldPassword = "test-admin-pwd";
+
+        // ① 新密码不足 6 位
+        vm.NewPassword = "abc";
+        vm.ConfirmPassword = "abc";
+        vm.ChangePasswordCommand.Execute(null);
+        Assert.True(vm.TipIsError);
+        Assert.Contains("至少 6 位", vm.Tip);
+        Assert.Equal(OperatorRole.Admin, store.Verify("admin", "test-admin-pwd"));
+
+        // ② 新密码与旧密码相同（UI 层先拦——用户管理窗重置场景免验旧密，Store 不比旧）
+        vm.NewPassword = "test-admin-pwd";
+        vm.ConfirmPassword = "test-admin-pwd";
+        vm.ChangePasswordCommand.Execute(null);
+        Assert.Contains("不能与旧密码相同", vm.Tip);
+        Assert.Equal(OperatorRole.Admin, store.Verify("admin", "test-admin-pwd"));
+    }
+
+    [Fact]
+    public void LoginVm_ChangePassword_EmptyUserName_Blocks()
+    {
+        using var scope = new TestScope();
+        var (vm, store, ini) = NewLoginVm(scope);
+        vm.UserName = "";
+        vm.EnterChangeModeCommand.Execute(null);
+
+        vm.OldPassword = "abc123";
+        vm.NewPassword = "xyz789";
+        vm.ConfirmPassword = "xyz789";
+        vm.ChangePasswordCommand.Execute(null);
+
+        Assert.True(vm.TipIsError);
+        Assert.Contains("用户名", vm.Tip);
+        Assert.True(vm.IsChangeMode);
+    }
+
+    [Fact]
+    public void LoginVm_BackToLogin_ClearsInputsAndReturns()
+    {
+        using var scope = new TestScope();
+        var (vm, store, ini) = NewLoginVm(scope);
+        vm.EnterChangeModeCommand.Execute(null);
+        vm.OldPassword = "abc123";
+        vm.NewPassword = "xyz789";
+
+        vm.BackToLoginCommand.Execute(null);
+
+        Assert.False(vm.IsChangeMode);
+        Assert.Equal("账号登录", vm.ModeTitle);
+        Assert.Equal("", vm.OldPassword);          // 半截输入不残留
+        Assert.Equal("", vm.NewPassword);
+        Assert.Equal("", vm.ConfirmPassword);
+        Assert.Equal("", vm.Tip);
+        Assert.True(vm.TipIsError);                // 配色复位
     }
 
     // ---------- 工艺策略：预置库/套用/拦截/可视化预览（V0.0.20 三轮） ----------

@@ -19,11 +19,14 @@
                             ResizeBorderThickness="0"/>
     </shell:WindowChrome.WindowChrome>
     <!--★★ 登录窗（V0.0.20 对齐 HJVision mFormLogin 功能清单，配色走主题 Fresh 键板；
-         V0.0.49 起回归纯登录——改密面板删除，操作员无改密权，改密全走用户管理窗）：
-         用户名下拉（在册账号，可手输）+ 密码 + 记住密码勾选。PasswordBox 密码经
-         事件转交 VM（不可绑定，官方 workaround），VM 侧改密码经 PropertyChanged
-         回写框（见 xaml.cs Wire）；键盘链（回车跳框/密码回车=登录/Esc 关窗）在
-         xaml.cs PreviewKeyDown，按钮不用 IsDefault/IsCancel。
+         V0.0.93 加回"修改密码"面板（V0.0.49 曾删）——登录/改密同窗互斥切换，
+         改的是自己的密码（先验旧密），防锁死红线不变）：
+         横幅标题随模式切换 + 用户名下拉（在册账号，两模式共用，可手输）+
+         登录面板（密码 + 记住密码 + 修改密码/登录按钮）或
+         改密面板（旧密码/新密码/确认新密码 + 返回登录/确认修改）。
+         PasswordBox 密码经事件转交 VM（不可绑定，官方 workaround），VM 侧改密码
+         经 PropertyChanged 回写框（见 xaml.cs Wire）；键盘链（回车跳框/回车=提交/
+         Esc=关窗或返回）在 xaml.cs PreviewKeyDown，按钮不用 IsDefault/IsCancel。
          VM 与门禁链零改动（LoginName/Role 输出、OkCommand/CancelCommand 原样）。
          取色全走 Brush.Fresh.*（两主题字典同名异值，ThemeManager 切字典即换肤）；
          标题条/关闭钮走 App.xaml WinTitleBar/WinTitleClose 共享样式。-->
@@ -45,73 +48,170 @@
 
             <!-- 内容区 -->
             <StackPanel Margin="36,18,36,18">
-                <!-- 居中横幅 -->
-                <TextBlock Text="账号登录" FontSize="20"
+                <!-- 居中横幅（随模式切换文案） -->
+                <TextBlock Text="{Binding ModeTitle, FallbackValue=账号登录}" FontSize="20"
                            FontWeight="Bold" Foreground="{DynamicResource Brush.Fresh.FgStrong}"
                            HorizontalAlignment="Center"/>
 
+                <!-- 用户名行（登录/改密两模式共用：改密改的就是下拉当前账号的密码）。
+                     标签列统一固定宽 60——本窗有四个独立输入 Grid（用户名/密码/旧/新/
+                     确认），Auto 列各自按标签字数算宽会互不对齐（"密码"2 字 vs
+                     "用户名"3 字时框左缘错位，V0.0.93 用户目检拍回），固定宽全窗
+                     一条线；最长标签"确认密码"4 字 13 号≈52px，60 留余量。
+                     在册账号下拉（可编辑：点选或手输），Text 变化即跟随账号回填记住的密码。
+                     编辑框文本左缘 = 模板 PART_EditableTextBox Margin 8 定标（App.xaml FreshCombo），
+                     不要在 ComboBox 上挂 Padding 等"对齐补丁"——现行模板没有任何 Padding
+                     消费点（V0.0.40 旧口径"Padding 左 17"已随模板改版失效，勿再回写）；
+                     下拉列表项直接继承 App.xaml 隐式 ComboBoxItem Padding 8,4，其文本左缘
+                     （Popup 边框1+Padding2+Item8=11）与编辑框文本同线 -->
                 <Grid Margin="0,18,0,0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="60" SharedSizeGroup="Lbl"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="用户名" VerticalAlignment="Center" Margin="0,0,12,10"/>
-                    <!-- 在册账号下拉（可编辑：点选或手输），Text 变化即跟随账号回填记住的密码。
-                         编辑框文本左缘 = 模板 PART_EditableTextBox Margin 8 定标（App.xaml FreshCombo），
-                         不要在 ComboBox 上挂 Padding 等"对齐补丁"——现行模板没有任何 Padding
-                         消费点（V0.0.40 旧口径"Padding 左 17"已随模板改版失效，勿再回写）；
-                         下拉列表项直接继承 App.xaml 隐式 ComboBoxItem Padding 8,4，其文本左缘
-                         （Popup 边框1+Padding2+Item8=11）与编辑框文本同线，本地 ItemContainerStyle
-                         覆盖已删（V0.0.50，曾按旧模板补 19 反而多偏 13px——改对齐先在运行期
-                         放大截图比对两处文本左缘，勿凭记忆改数） -->
-                    <ComboBox Style="{StaticResource FreshCombo}" x:Name="UserCombo" Grid.Row="0" Grid.Column="1"
+                    <TextBlock Grid.Column="0" Text="用户名" VerticalAlignment="Center" Margin="0,0,12,10"/>
+                    <ComboBox Style="{StaticResource FreshCombo}" x:Name="UserCombo" Grid.Column="1"
                               Height="32" VerticalContentAlignment="Center"
                               IsEditable="True" StaysOpenOnEdit="False"
                               ItemsSource="{Binding HistoryUsers}"
                               Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}"
                               Margin="0,0,0,10"
                               ToolTip="下拉选在册账号或直接输入；换账号自动跟出该账号记住的密码"/>
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="密码" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                    <PasswordBox x:Name="PwdBox" Grid.Row="1" Grid.Column="1"
-                                 Style="{StaticResource FreshPwdInput}"/>
-                </Grid>
-                <!-- 记住密码（左）与登录按钮（右）同行排版（V0.0.87 用户拍板：删掉
-                     "按账号各记各的"括号注释后整行变短，单独一行+按钮单独一行显松散，
-                     合一行收口；语义不变——记忆机制注释见 RunModeSettings）。
-                     密码忘记/遗失找管理员在用户管理窗重置（操作员无改密入口——V0.0.49 口径） -->
-                <Grid Margin="0,10,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <CheckBox Grid.Column="0" Content="记住密码" IsChecked="{Binding Remember}"
-                              FontSize="12" Cursor="Hand" VerticalAlignment="Center"
-                              HorizontalAlignment="Left"/>
-                    <Button Grid.Column="1" Tag="{StaticResource Geo.Login}" Style="{StaticResource FreshPrimaryButton}" Content="登 录"
-                            Command="{Binding OkCommand}" Width="128" Height="32"/>
                 </Grid>
 
-                <!-- 提示条：错误=浅红底红字（登录失败；底/边/字全走 AlertErr* 键，
-                     Dark=低透明状态浸染）。登录成功即关窗，无成功绿条场景 -->
-                <Border CornerRadius="4" Padding="10,6" Margin="0,12,0,0"
-                        Background="{DynamicResource Brush.Fresh.AlertErrBg}"
-                        BorderBrush="{DynamicResource Brush.Fresh.AlertErrBorder}" BorderThickness="1">
+                <!-- 登录面板（缺省显示；进改密模式整体收起——Visibility 缺省值必须写进
+                     Style Setter，写元素标签上是本地值优先级高于触发器，触发器永远不生效） -->
+                <StackPanel>
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsChangeMode, FallbackValue=False}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="60"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="密码" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        <PasswordBox x:Name="PwdBox" Grid.Column="1"
+                                     Style="{StaticResource FreshPwdInput}"/>
+                    </Grid>
+                    <!-- 记住密码单独一行（用户拍板保留单行），水平位置=输入框列正下方
+                         （参考 HJVision mFormLogin 行3 口径：勾选框缩进到表单主体列、
+                         左缘与上方输入框一条线，不顶格贴左也不右悬）——用同款 60 标签
+                         列占位实现，标签列宽调整时自动跟随 -->
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="60"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <CheckBox Grid.Column="1" Content="记住密码" IsChecked="{Binding Remember}"
+                                  FontSize="12" Cursor="Hand" VerticalAlignment="Center"
+                                  HorizontalAlignment="Left"/>
+                    </Grid>
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Style="{StaticResource FreshButton}" Content="修改密码"
+                                Command="{Binding EnterChangeModeCommand}" Width="96" Height="32"
+                                HorizontalAlignment="Left"
+                                ToolTip="修改当前用户名的登录密码（需验证旧密码）"/>
+                        <Button Grid.Column="1" Tag="{StaticResource Geo.Login}" Style="{StaticResource FreshPrimaryButton}" Content="登 录"
+                                Command="{Binding OkCommand}" Width="128" Height="32"/>
+                    </Grid>
+                    <!-- 密码忘记/遗失：自己有旧密走"修改密码"；忘了找管理员在用户管理窗重置 -->
+                </StackPanel>
+
+                <!-- 修改密码面板（缺省收起；Visibility 缺省值同上纪律写进 Setter）。
+                     三框经事件转交（xaml.cs Wire），键盘链：旧密回车→新密→确认→提交，
+                     Esc=返回登录 -->
+                <StackPanel>
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsChangeMode, FallbackValue=False}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <Grid Margin="0,0,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="60"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="旧密码" VerticalAlignment="Center" Margin="0,0,12,10"/>
+                        <PasswordBox x:Name="OldPwdBox" Grid.Row="0" Grid.Column="1"
+                                     Style="{StaticResource FreshPwdInput}" Margin="0,0,0,10"
+                                     ToolTip="输入当前使用的密码验证身份"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="新密码" VerticalAlignment="Center" Margin="0,0,12,10"/>
+                        <PasswordBox x:Name="NewPwdBox" Grid.Row="1" Grid.Column="1"
+                                     Style="{StaticResource FreshPwdInput}" Margin="0,0,0,10"
+                                     ToolTip="至少 6 位，且不得与旧密码相同"/>
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="确认密码" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        <PasswordBox x:Name="ConfirmPwdBox" Grid.Row="2" Grid.Column="1"
+                                     Style="{StaticResource FreshPwdInput}"/>
+                    </Grid>
+                    <Grid Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Style="{StaticResource FreshButton}" Content="返回登录"
+                                Command="{Binding BackToLoginCommand}" Width="96" Height="32"
+                                HorizontalAlignment="Left"/>
+                        <Button Grid.Column="1" Tag="{StaticResource Geo.Login}" Style="{StaticResource FreshPrimaryButton}" Content="确认修改"
+                                Command="{Binding ChangePasswordCommand}" Width="128" Height="32"/>
+                    </Grid>
+                </StackPanel>
+
+                <!-- 提示条：双态配色（错误=浅红底红字 / 成功=浅绿底绿字——改密成功用；
+                     底/边/字全走 AlertErr*/AlertOk* 语义键，Dark=低透明状态浸染）。
+                     缺省值写进 Style Setter（触发器死区纪律）。Tip 为空整条收起。
+                     登录成功即关窗，绿条只在改密成功场景出现 -->
+                <Border CornerRadius="4" Padding="10,6" Margin="0,12,0,0">
                     <Border.Style>
                         <Style TargetType="Border">
+                            <Setter Property="Background" Value="{DynamicResource Brush.Fresh.AlertErrBg}"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.AlertErrBorder}"/>
+                            <Setter Property="BorderThickness" Value="1"/>
                             <Style.Triggers>
-                                <!-- Tip 为空整条收起（登录失败才显示） -->
+                                <DataTrigger Binding="{Binding TipIsError, FallbackValue=True}" Value="False">
+                                    <Setter Property="Background" Value="{DynamicResource Brush.Fresh.AlertOkBg}"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.AlertOkBorder}"/>
+                                </DataTrigger>
+                                <!-- Tip 为空整条收起（登录失败/改密结果才显示） -->
                                 <DataTrigger Binding="{Binding Tip, FallbackValue=提示占位}" Value="">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </Border.Style>
-                    <TextBlock Text="{Binding Tip}" TextWrapping="Wrap"
-                               Foreground="{DynamicResource Brush.Fresh.AlertErrFg}"/>
+                    <TextBlock Text="{Binding Tip}" TextWrapping="Wrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.AlertErrFg}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding TipIsError, FallbackValue=True}" Value="False">
+                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.AlertOkFg}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </Border>
             </StackPanel>
         </DockPanel>

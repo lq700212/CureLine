@@ -746,6 +746,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// <summary>是否有操作员在线（未登录时各功能入口一律拦下）。</summary>
     public bool IsLoggedIn => _currentRole.HasValue;
 
+    /// <summary>空闲超时监视器（View 层打点入口：MainWindow ctor 挂进程级
+    /// InputManager，任意鼠标键盘都调 NotifyActivity；判定与登出见 _idleMonitor/
+    /// OnIdleLogout）。</summary>
+    public IdleLogoutMonitor IdleMonitor => _idleMonitor;
+
     /// <summary>
     /// "设置"按钮可用性（V0.0.49 用户拍板）：operator 登录后整钮禁用——
     /// 该角色除工单外无任何管理功能，下拉可点无意义；未登录沿用现状
@@ -987,6 +992,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private SlotCuringMachine? _machine;   // 仓位状态机（与 VM 同生命周期，总线可换不丢流程）
     private CuringPolicyBook? _policyBook; // 工艺策略库（策略窗保存后经 LoadPolicyBook 重读）
     private CuringMesPoster? _poster;      // 单线过账服务（P3.2 后半；配置热更新不换实例）
+    private readonly IdleLogoutMonitor _idleMonitor; // 登录空闲超时监视（打点在 View 层 InputManager）
+    private readonly int _idleLogoutMinutes;         // 空闲上限分钟（ctor 读 ini 缓存；<=0=不启用）
 
     public RelayCommand OpenPointTableCommand { get; }
     public RelayCommand OpenCuringPolicyCommand { get; }
@@ -1003,9 +1010,18 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public RelayCommand OpenLicenseCommand { get; }
     public RelayCommand CancelScanCommand { get; }
 
-    public MainViewModel(IDialogService dialogs)
+    public MainViewModel(IDialogService dialogs, IdleLogoutMonitor? idleMonitor = null)
     {
         _dialogs = dialogs;
+
+        // 登录空闲自动退出（V0.0.93）：上限分钟读 [setting] AutoLogoutMinutes
+        // （缺省 15，0/负/非法=不启用；ctor 读一次缓存，改 ini 重启生效，同
+        // ScanIntervalMs 口径——非热调参数，不做每拍 ini IO）。监视器可注入
+        //（测试假时钟）；打点在 View 层 InputManager（MainWindow ctor），判定
+        // 随 _refreshTimer 刷新拍，登出链见 OnIdleLogout。
+        _idleLogoutMinutes = ParseIdleMinutes();
+        _idleMonitor = idleMonitor ?? new IdleLogoutMonitor(() => _idleLogoutMinutes);
+        _idleMonitor.LogoutDue += OnIdleLogout;
 
         OpenPointTableCommand = new RelayCommand(OpenPointTable);
         OpenCuringPolicyCommand = new RelayCommand(OpenCuringPolicy);
@@ -1040,7 +1056,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             Interval = TimeSpan.FromMilliseconds(500),
         };
-        _refreshTimer.Tick += (_, _) => RefreshSlots();
+        // 空闲超时判定随刷新拍（打点在 View 层 InputManager，见 _idleMonitor）。
+        _refreshTimer.Tick += (_, _) =>
+        {
+            RefreshSlots();
+            _idleMonitor.Tick();
+        };
         // 显示单位（时/分）联动（V0.0.56）：策略窗 DurationUnit.Change 切单位时
         // 广播——不等 500ms 拍，立即重刷卡片时长文本与统计条"⚡剩X"。事件在
         // UI 线程触发（策略窗 ComboBox 绑定链），订阅方同 RefreshSlots 线程口径。
@@ -1667,6 +1688,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         if (result == null)
             return;
         (_currentUserName, _currentRole) = result.Value;
+        // 登录成功重置空闲基线：开程序晾了很久才登录的场景，若沿用开程序时刻
+        // 的基线，登录后下一拍就"超时"被登出（IdleLogoutMonitor 契约）。
+        _idleMonitor.NotifyActivity();
         // 顶栏格式"开发者：dev"——角色名开头（V0.0.49 三级口径，不带 LEVEL 字样）。
         OperatorText = $"{OperatorRoleInfo.DisplayName(_currentRole.Value)}：{_currentUserName}";
         LocalLogService.Write($"操作员登录：{_currentUserName}（{OperatorRoleInfo.ToText(_currentRole.Value)}）");
@@ -1674,6 +1698,34 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         Raise(nameof(IsSettingsEnabled));
         Raise(nameof(ShowPointTableItem));
         Raise(nameof(ShowScannerConfigItem));
+    }
+
+    /// <summary>
+    /// 空闲超时自动退出（IdleLogoutMonitor.LogoutDue，V0.0.93）：静默登出——
+    /// 不弹框（超时即人已离岗，弹框挂着没意义还可能与在开的功能窗叠加），
+    /// 日志一行 + 顶栏回"未登录"；门禁即时收回——Gate/设置按钮可用性/菜单
+    /// 显隐全随 _currentRole 判空，之后的操作要么被拦"请先登录"要么置灰。
+    /// </summary>
+    private void OnIdleLogout(int minutes)
+    {
+        if (!_currentRole.HasValue)
+            return; // 未登录：监视器照跑（登录成功会重置基线），触发无语义直接忽略
+        LocalLogService.Write($"空闲超时（{minutes} 分钟无操作），自动退出登录：{_currentUserName}");
+        (_currentUserName, _currentRole) = ("", null);
+        OperatorText = "未登录";
+        // 与 Login() 对称的三件通知：设置按钮恢复可用、菜单项显隐回未登录口径。
+        Raise(nameof(IsSettingsEnabled));
+        Raise(nameof(ShowPointTableItem));
+        Raise(nameof(ShowScannerConfigItem));
+    }
+
+    /// <summary>空闲自动退出上限分钟（config.ini [setting] AutoLogoutMinutes）：
+    /// 缺省 15；0/负数/非法文本一律=0 不启用。ctor 读一次缓存（provider 闭包
+    /// 读字段），改 ini 重启生效（同 ScanIntervalMs 口径，非热调参数）。</summary>
+    private static int ParseIdleMinutes()
+    {
+        var text = IniFile.ReadStr(AppPaths.ConfigIni, "setting", "AutoLogoutMinutes", "15");
+        return int.TryParse(text.Trim(), out var minutes) && minutes > 0 ? minutes : 0;
     }
 
     /// <summary>工单信息窗：登录即可开（窗内编辑区按角色再细分禁用）。</summary>

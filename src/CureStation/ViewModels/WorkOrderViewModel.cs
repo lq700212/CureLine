@@ -7,12 +7,16 @@
 //   制程代码 L3+，员工工号/条码 L1+（登录即可）——不够级别的编辑区禁用。
 // 编辑模式：与策略窗同款——打开回显，保存前 Flush；数字解析失败当场弹框拦下。
 //
+// 布局口径（V0.0.93 简化重排，字段与门禁零变化）：单列两卡——"生产信息"
+//   （途程/预设/已生产+清零 + 员工工号 + 物料条码）与"制程与上传"（PT×2 +
+//   上传使能/按钮）。双工位时生产信息卡内 R/L 两套各带子标题（"R 工位"/
+//   "L 工位"）；单工位只一套、子标题隐藏（ShowPanelHeaders）降视觉噪音。
+//
 // 工位布局开关（[CuringMes] DualSide，构造传 postOptions；null=Load 现读盘）：
-//   ● 双工位（true）：R/L 双面板全显、文案带工位字样（"工单信息（R）"等）、
-//     上传 R/L 两枚——老口径不变；
-//   ● 单工位（缺省 false，现场就一套工位）：只显 Side 对应哪侧的面板
+//   ● 双工位（true）：R/L 两套全显、子标题带工位字样、上传 R/L 两枚——老口径；
+//   ● 单工位（缺省 false，现场就一套工位）：只显 Side 对应哪侧的一套
 //     （Side=L 用 Left 槽——视图↔槽映射恒定：R↔Right、L↔Left，Sync/Flush
-//     零改动，隐藏侧数据原样往返=盘上等值落回）；标题/按钮文案全去 R/L 字样，
+//     零改动，隐藏侧数据原样往返=盘上等值落回）；按钮文案全去 R/L 字样，
 //     上传按钮带 Side 侧（过账报文口径与界面一致）。
 //
 // 怎么改：新增字段 = WorkOrderBook 加属性 + 窗加控件 + Sync/Flush 两处；
@@ -69,11 +73,14 @@ public sealed class WorkOrderViewModel : ViewModelBase
     /// <summary>窗标题/标题条文案：双工位带（R/L 双工位）字样，单工位不带。</summary>
     public string WindowTitle => IsDualSide ? "工单信息（R/L 双工位）" : "工单信息";
 
-    /// <summary>R 侧面板标题（单工位=就是唯一那套，不带工位字样）。</summary>
-    public string RightPanelTitle => IsDualSide ? "工单信息（R）" : "工单信息";
+    /// <summary>R 套子标题（双工位="R 工位"；单工位不显示——卡片标题已是"生产信息"）。</summary>
+    public string RightPanelTitle => IsDualSide ? "R 工位" : "工单信息";
 
-    /// <summary>L 侧面板标题（双工位专用；单工位 L 口径下同款去字样）。</summary>
-    public string LeftPanelTitle => IsDualSide ? "工单信息（L）" : "工单信息";
+    /// <summary>L 套子标题（双工位="L 工位"）。</summary>
+    public string LeftPanelTitle => IsDualSide ? "L 工位" : "工单信息";
+
+    /// <summary>是否显示 R/L 子标题（双工位才需要区分两侧；单工位隐藏降视觉噪音）。</summary>
+    public bool ShowPanelHeaders => IsDualSide;
 
     /// <summary>R 侧清零钮文案。</summary>
     public string ClearRText => IsDualSide ? "R 计数清零" : "计数清零";

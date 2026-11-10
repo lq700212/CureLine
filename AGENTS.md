@@ -72,7 +72,8 @@
   策略窗 + 主窗接线）。**P3.2 前半=权限 + 登录 + 工单信息页（已完成，
   V0.0.49 重做三级角色）**：
   `Security/OperatorStore`（operators 表三级 `OperatorRole` operator/admin/
-  dev + actor 兜底 + 防锁死）+ 登录窗（纯登录，改密面板已删）+
+  dev + actor 兜底 + 防锁死）+ 登录窗（V0.0.93 加回"修改密码"面板——
+  本人验旧密改自己密码，见权限门禁语义⑦）+
   工单窗（R/L 双工位，编辑区按角色三档禁用）+ 用户管理窗 +
   主窗 Gate 统一门禁（工单·日志=登录即可/策略·IO·过账·演示·用户管理=
   管理员+/点表=开发者，operator 登录后设置整钮禁用）。
@@ -199,6 +200,21 @@
   复现）。浅底窗一律 `FreshButton`/`FreshPrimaryButton` 系（浅底深字，
   双主题同名键）；改按钮样式前先确认宿主容器底色走哪套键板。
 
+## 界面简化标准（2026-11-10 用户拍板：做界面默认执行，不再逐次提醒）
+
+- **全局 skill=`ui-simplify`**（`C:\Users\Administrator\.config\opencode\skills\ui-simplify\SKILL.md`，
+  跨项目通用）：**新建/改动任何配置窗、表单页、设置页前必读并按其执行**；
+  用户说"太复杂/简化/能合并就合并/简单好上手"就是全套走一遍。
+- 核心口诀：**界面只放"要用户做的决定"**——字段键名/API 号/格式约束/现场
+  口径进 ToolTip，全局口径（保存即生效等）收顶部一行提示条，说明墙/说明书
+  列一律不建；标签 2~5 字纯名词去括号；低频参数收 Expander；互斥方式用
+  Radio（只一只双向绑定）；简化**语义零变化**（字段/键名/校验/门禁不动，
+  外部契约进 ToolTip 保留可查）。
+- **目检纪律（构建过≠好看）**：UI 改完必须截图逐项核对——输入框左缘一条
+  线、行间不贴死不叠压、无真空失衡列；同批窗同模式问题一次改净。本仓走
+  `tools/DocShot/run_docshot.ps1` 一键重拍（cs-login/cs-workorder-*/cs-scanner/
+  cs-mespost/cs-operators 等镜头与文档引用全对齐）。
+
 ## 关键文件导航
 
 | 文件 | 作用 |
@@ -226,8 +242,8 @@
 | **Core 共享（单线过账家族，P3.2 后半新增）** | |
 | `src/CureLine.Core/Curing/CuringMesOptions.cs` | 过账配置模型（ini `[CuringMes]` 节）：开关/工位/时间单位/进站时机/中途取件/静态参数五件；`NormSide` 规范化（非 L 按 R 兜底） |
 | `src/CureLine.Core/Curing/CuringMesPoster.cs` | **过账服务**：状态机边沿→MES 报文（进站/出站链/物料上传）；出站被接受→已生产+1；门槛双保险（开关+URL）；全 Task.Run 后台+异常兜底；`UpdateOptions` 热更新；`PostingChanged` 顶栏事件（后台线程触发，UI 须封送） |
-| `src/CureStation/MesPostConfigWindow.*` + `ViewModels/MesPostConfigViewModel.cs` | 过账配置窗（管理员+）：全参数一窗改，URL 校验→写 ini→`MesConfig` 本进程生效；主窗保存后热更新 |
-| `src/CureStation/ScannerConfigWindow.*` + `ViewModels/ScannerConfigViewModel.cs` | 扫码枪配置窗（V0.0.77，**仅 dev 可见**）：启用/COM 口检测/串口参数/会话超时；保存落 `[Scanner]` → 主窗 `ApplyScannerOptions` 后台热重启串口（生命周期锁串行，UI 零阻塞） |
+| `src/CureStation/MesPostConfigWindow.*` + `ViewModels/MesPostConfigViewModel.cs` | 过账配置窗（管理员+；V0.0.93 单列说明撤下——口径进提示条/ToolTip、静态参数收折叠 Expander、下拉选项文案短化）：全参数一窗改，URL 校验→写 ini→`MesConfig` 本进程生效；主窗保存后热更新 |
+| `src/CureStation/ScannerConfigWindow.*` + `ViewModels/ScannerConfigViewModel.cs` | 扫码枪配置窗（V0.0.77，**仅 dev 可见**；V0.0.93 单列简化——说明长文撤下进 ToolTip、串口低频参数收折叠 Expander、连接方式双 Radio、`IniPath` 属性随右列删除）：启用/COM 口检测/串口参数/会话超时；保存落 `[Scanner]` → 主窗 `ApplyScannerOptions` 后台热重启串口（生命周期锁串行，UI 零阻塞） |
 | `src/CureStation/DialogService.cs` | 生产 `IDialogService` + `CuringMesPosterHolder`（工单窗上传动作的静态桥接点，收在程序①内） |
 | **Core 共享（扫码绑定家族，P3.3 新增）** | |
 | `src/CureLine.Core/Curing/SlotBinding.cs` | 库位绑定记录 + 绑定簿（`SlotBindingBook`）+ `SlotBindingStore` 存取 `config/slotbindings.json`（缺/坏文件回 null 自愈；脏记录剔除；全量重写） |
@@ -245,6 +261,7 @@
 | `src/CureStation/ViewModels/IoTestViewModel.cs` + `IoTestWindow.*` | IO 通讯测试窗：点表驱动仓位卡网格（DI 只读灯/DO 点击钮）+ 一键遍历跑马灯 + 共享总线（关窗 Detach） |
 | **Core 共享（软件授权家族，V0.0.62 起真源收口 kaleidoscope）** | |
 | `src/CureLine.Core/Security/LicenseHost.cs` | **授权唯一接线层**（宿主对 kaleidoscope `Kaleidoscope.Security` 的薄桥）：`Setup()` 幂等注入四覆盖点（产品 ID=`ProductCureLine` 0x434C / 注册表根=`Software\CureLine\License` / 演示桥=`Simulate` 现读 ini / SQLite 水位桥=`SqliteHelper` app_meta 同键 `LicenseWaterMark`）+ 顶栏/激活窗文案转发（StateText/ShortStatusText/DetailText 保留本项目口径）+ `StateChanged` 边沿事件（子模块无事件，`Refresh` 差分产生）+ `TryActivate`（era 档内挑战收口 + 补发边沿）；业务层只许调 `LicenseHost`，勿直碰子模块静态类 |
+| `src/CureLine.Core/Security/IdleLogoutMonitor.cs` | 登录空闲超时监视（V0.0.93）：活动打点+超时判定纯逻辑（假时钟可测）；打点在程序① MainWindow ctor `InputManager.PreProcessInput`，驱动在主窗刷新拍，登出收口 `MainViewModel.OnIdleLogout`（静默+日志）；上限=ini `[setting] AutoLogoutMinutes` 缺省 15、0=不启用 |
 | `extern/kaleidoscope/Kaleidoscope/Security/`（子模块真源） | 授权真源三件（**勿私改，跨仓库改动需用户批准**）：`LicenseGate`（门禁五态+激活落盘+era 挑战+三存储防回拨+Debug 开发兜底 `KX_DEV_LICENSE`）、`LicenseCodec`（设备码/payload/Crockford Base32/内置公钥验签/双产品 ID 隔离）、`LicenseBridges`（宿主桥：IsMockLicensedProvider/SqliteWaterMarkGet/Set）+ `LicenseStateIni`（状态文件 `MainSetting\LicenseState.ini` 自写 UTF-8） |
 | `src/CureLine.Core/ViewModels/LicenseActivationViewModel.cs` + 两程序 `LicenseActivationWindow.*` | 激活窗 VM（设备码/状态/原因/激活码输入/命令）+ 两程序各自 XAML（文案产品名不同）；演示模式隐藏入口并禁用命令 |
 | `src/CureStation/App.xaml.cs` / `src/CimGateway/App.xaml.cs` | 启动门禁（`LicenseHost.Setup`→`Refresh`，未授权弹窗，关闭即退出；`ShutdownMode=OnExplicitShutdown` 到主窗建好恢复）+ 每小时巡检 |
@@ -546,8 +563,18 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   口径）——改门禁只动 `MainViewModel.Gate` 调用处；
   ⑥ **operator 登录后设置整钮禁用**（`IsSettingsEnabled` → XAML 半透明
   触发器）——不是逐项隐藏，勿拆成逐项控制；
-  ⑦ **operator 无改密权**（登录窗改密面板已删勿加回）：改密全走用户管理窗
-  （`AccountManagerWindow`，替代原"权限管理窗"）由 admin/dev **重置**
+  ⑦ **改密双通道（V0.0.93 用户拍板推翻 V0.0.49"登录窗改密面板已删勿加回"）**：
+  ① **登录窗"修改密码"**（登录页"记住密码"上方移位后其下、登录钮左侧）——
+  改的是**自己的密码**：先验旧密码（`Verify` 拿到本人角色作 actor）→ 两次
+  一致 → `PasswordHasher.ValidateNewPassword(new, old)`（≥6 位/不得与旧相同
+  ——UI 与 Store 同一口径）→ `SetPassword(user, new, actor=本人角色)`；防锁死
+  红线不受影响（dev 密码只有 dev 本人可改——登录窗先验旧密=本人到场）；勾了
+  "记住密码"的账号改密后**记忆密文同步换新**（否则下次回填旧密码必登录失败）；
+  成功切回登录面板并把新密码填进登录框，`TipIsError=false` 绿条提示。同窗
+  面板互斥切换不弹新窗（`IsChangeMode` + XAML 两 StackPanel Visibility 缺省值
+  写 Setter 纪律）；View 层四密码框各自 Wire（登录/旧/新/确认），键盘链按
+  模式分发（改密模式 Esc=返回登录不关窗）；
+  ② **用户管理窗重置**（`AccountManagerWindow`）由 admin/dev **重置他人**
   （免验原密码，立即生效；新密码 ≥6 位）；admin 可重置 operator+admin
   （含自己）、dev 可重置所有人（含自己）；用户管理窗操作方法开头有
   CanXxx 兜底（RelayCommand 直调 Execute 不判灰，程序态调用也拦）+
@@ -560,8 +587,9 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   ⑨ **登录窗记忆语义（V0.0.20 对齐 mFormLogin 的保留部分）**——记住密码
   复用 `RunModeSettings`（DPAPI 密文存 config.ini [setting]，SavedUser +
   RememberToken_<账号>，ini 永无明文），用户名一改就跟出该账号记忆（命中
-  回填+勾选，未命中清空+取消勾）；改密面板删除后"改密成功同步记忆"链路
-  已不存在，记忆只在登录成功时保存；用户名下拉=在册账号实时表（ListUsers），
+  回填+勾选，未命中清空+取消勾）；登录窗改密成功且该账号有记忆时**同步换新
+  密文**（V0.0.93 链路随改密面板回归恢复）；登录成功也保存记忆；用户名下拉=
+  在册账号实时表（ListUsers），
   不是登录历史文件；登录密码框双向接线（VM→框回写靠"值不同才走"防互踢），
   键盘链统一在 View 层 PreviewKeyDown（按钮禁用 IsDefault/IsCancel——
   下拉展开时回车/Esc 放行）；`ListUsers` 排序走 case 表达式定权
@@ -585,6 +613,17 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   部分台在线保"N/M 台已连"，全断/一目连接错误的全文="未连接"）；
   `ConnectionDetailText`=详情全文（总线摘要/设备错误串）只走悬停
   ToolTip——错误长文永远不写回顶栏文本，勿再回滚全文字口径。
+  ⑪ **登录空闲自动退出（V0.0.93，全在 `Core/Security/IdleLogoutMonitor`
+  + `MainViewModel.OnIdleLogout`/`MainWindow` ctor 打点三处）**：登录后
+  连续无键鼠操作达 `[setting] AutoLogoutMinutes`（缺省 15，0/负/非法=不
+  启用；ctor 读一次缓存，改 ini 重启生效）→ 静默登出（**不弹框**——超时
+  即人已离岗；日志一行 + 顶栏回"未登录" + 门禁三件通知对称收回）。接线
+  三件：打点=MainWindow ctor 挂 **进程级** `InputManager.PreProcessInput`
+  （主窗/弹窗/菜单的鼠标键盘都算活动，纯内存打点）；驱动=`_refreshTimer`
+  500ms 拍顺带 `Tick()`；上限 provider 每拍现取（先例 resetModeProvider）。
+  **基线契约**：登录成功即 `NotifyActivity()`（开程序晾久了才登录若沿用
+  开程序基线，登录后下一拍就"超时"）；触发后基线重置防连发。监视器测试
+  经 VM ctor 可选参注入假时钟（DispatcherTimer 测试态不走泵，Tick 手动调）。
 - **策略窗时间单位语义（V0.0.53 起，V0.0.56 删秒档+主窗联动，真源在
   `DurationUnit`（src/CureStation/ViewModels/DurationUnit.cs）+ 两 VM 各自
   消费）**：① 页面可切 **时/分**（秒档已删——用户拍板没有秒级的固化；
@@ -720,7 +759,8 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   ⑩ **双工位开关（V0.0.38，现场实拍无双工位→缺省关）**：`[CuringMes]
   DualSide` 0=单工位——`SideOfRack` 恒回 Side（RackSides 残留配置也忽略，
   防把唯一工单引到空 L 槽）、工单窗只显 Side 侧一套面板且文案全去 R/L
-  字样（**视图↔槽映射恒定** R↔Right/L↔Left，Sync/Flush 不判开关——隐藏
+  字样、R/L 子标题随 `ShowPanelHeaders` 隐藏（V0.0.93 单列两卡重排——
+  **视图↔槽映射恒定** R↔Right/L↔Left，Sync/Flush 不判开关——隐藏
   侧数据原样往返）、顶栏过账文本不带工位字样；1=老双架双面板口径全量
   回归（映射+Mac*_L+R/L 两枚上传钮）。过账配置窗勾选（管理员+/热生效）。
   **主窗底部工单带同口径（V0.0.47 补齐——V0.0.38 漏网）**：双工位 R/L 两卡并排
@@ -795,15 +835,20 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   时保留各自上次配置，数值坏也有 Norm* 兜底），程序其余功能零影响；
   ⑧ 绑定簿是**生产追溯数据**（重启保留，现场可打开核对），不是配置——
   `SlotBindingStore.Reset()` 删文件只回到"全部未绑定"，不影响程控；
-  ⑨ **配置窗（V0.0.77 建，V0.0.78 双模式化，V0.0.79 缺省=现场预置）**：「设置→
+  ⑨ **配置窗（V0.0.77 建，V0.0.78 双模式化，V0.0.79 缺省=现场预置；V0.0.93
+  单列简化）**：「设置→
   扫码枪配置」仅 dev 可见可进（门禁双保险见权限门禁语义⑤）；`ScannerConfigWindow`
-  仿过账配置窗骨架，VM `ScannerConfigViewModel` 负责回显（停止位 `1/1.5/2` ↔ ini
+  VM `ScannerConfigViewModel` 负责回显（停止位 `1/1.5/2` ↔ ini
   `1/15/2`）/
   **按方式分桶校验**/落盘/【检测串口】（`SerialPort.GetPortNames`，唯一口自动
-  回填；仅串口方式显示）；**连接方式勾选框 `EditUseTcp`** 切换区块显隐
-  （`ShowTcpSection`/`ShowSerialSection`——Visibility 缺省值必须写进 Style
-  Setter 再 DataTrigger 切，XAML 触发器死区纪律；TCP 区块=IP/端口/触发指令
-  含"留空=不发"红线提示，右列接线指引随方式换）；
+  回填；仅串口方式显示）；**连接方式双 Radio（V0.0.93，原勾选框）**——TCP 钮
+  双向绑 `EditUseTcp`、串口钮 **OneWay + `InverseBoolConverter` 取反只显示**
+  （两只都双向取反会互踢：WPF 同组自动取消的另一只 ConvertBack 先写回错值，
+  回写链必须唯一）；区块显隐 `ShowTcpSection`/`ShowSerialSection`——Visibility
+  缺省值必须写进 Style Setter 再 DataTrigger 切，XAML 触发器死区纪律；TCP
+  区块=IP/端口/触发指令（"留空=不发"红线进 ToolTip），串口低频参数（波特率
+  四件+调试日志）收折叠 Expander；V0.0.93 起右列接线指引整卡撤下（关键口径
+  浓缩成顶部"保存即生效"一行，细节进各字段 ToolTip；`IniPath` 属性随之删除）；
   **保存即热重建连接**：主窗 `ApplyScannerOptions()` 读盘 → 绑定簿 `Snapshot()`
   带入新会话（在架绑定不丢、等待产品码阶段重置）→ UI 退订旧服务 → 后台
   `lock(_scannerLifecycleGate)` 内"旧 Dispose → 新 Start"串行（串口独占 +

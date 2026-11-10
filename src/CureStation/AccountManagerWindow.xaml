@@ -7,20 +7,21 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:AccountManagerViewModel, IsDesignTimeCreatable=False}"
-        Title="用户管理" Height="620" Width="760"
-        WindowStartupLocation="CenterOwner"
+        Title="用户管理" Height="560" Width="640"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         WindowStyle="None" Background="Transparent" AllowsTransparency="True"
         Foreground="{DynamicResource Brush.Fresh.FgMid}"
         Icon="Assets/app.ico" FontSize="12">
     <shell:WindowChrome.WindowChrome>
-        <!-- 无边框自绘（V0.0.27 弹窗统一）：标题条命中拖动 + 边沿 6px 缩放 -->
+        <!-- 无边框自绘（V0.0.27 弹窗统一）；V0.0.93 起定高窗，缩放边沿不再需要 -->
         <shell:WindowChrome CaptionHeight="34" GlassFrameThickness="0"
                             UseAeroCaptionButtons="False"
-                            ResizeBorderThickness="6"/>
+                            ResizeBorderThickness="0"/>
     </shell:WindowChrome.WindowChrome>
-    <!--★★ 用户管理窗（V0.0.49 重做，替代四级"权限管理"窗）：三级账号
-         开发者(dev)/管理员(admin)/操作员(operator)的增删与代改密码。
-         左=系统账号列表；右=三组操作（新增账号/重置密码/删除）。
+    <!--★★ 用户管理窗（V0.0.49 重做，替代四级"权限管理"窗；V0.0.93 简化——
+         标签/按钮文案短化、重置与删除并一行、括号键注进 ToolTip，规则零变化）：
+         三级账号 开发者(dev)/管理员(admin)/操作员(operator)的增删与代改密码。
+         左=账号列表；右=新增账号 + 重置密码/删除（对左侧选中账号生效）。
          授权规则（UI 置灰 + Store actor 兜底双层）：
            admin=建/删操作员、重置 operator+admin 密码（含自己）；
            dev=建（操作员/管理员）、删 dev 外任何号、重置所有人密码（含自己）；
@@ -41,16 +42,16 @@
                             Click="OnCloseClick" ToolTip="关闭"/>
                 </Grid>
             </Border>
-            <Grid Margin="8">
+            <Grid Margin="10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="300"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- 左：系统账号列表 -->
+                <!-- 左：账号列表 -->
                 <Border Grid.Column="0" Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0">
                     <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}" Text="系统账号"/>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionTitle}" Text="账号"/>
                         <DataGrid ItemsSource="{Binding Users, FallbackValue={x:Null}}"
                                   SelectedItem="{Binding SelectedUser}"
                                   AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True">
@@ -62,8 +63,9 @@
                     </DockPanel>
                 </Border>
 
-                <!-- 右：操作面板（新增 / 重置密码 / 删除） -->
+                <!-- 右：操作面板（新增 / 重置密码+删除同行——都只对左侧选中账号生效） -->
                 <Border Grid.Column="1" Style="{StaticResource FreshCardBorder}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <TextBlock Style="{StaticResource SectionTitle}" Text="新增账号"/>
                         <TextBlock Text="用户名：" Margin="0,8,0,2"/>
@@ -71,24 +73,31 @@
                         <TextBlock Text="角色：" Margin="0,8,0,2"/>
                         <ComboBox Style="{StaticResource FreshCombo}" ItemsSource="{Binding CreateRoleOptions, FallbackValue={x:Null}}"
                                   SelectedItem="{Binding EditRoleText}"/>
-                        <TextBlock Text="初始密码（≥6 位）：" Margin="0,8,0,2"/>
-                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditPassword}" FontFamily="Consolas"/>
+                        <TextBlock Text="初始密码：" Margin="0,8,0,2" ToolTip="≥6 位；开发者角色不开放创建"/>
+                        <TextBox Style="{StaticResource FreshInput}" Text="{Binding EditPassword}" FontFamily="Consolas"
+                                 ToolTip="≥6 位；开发者角色不开放创建"/>
                         <Button Tag="{StaticResource Geo.Plus}" Style="{StaticResource FreshPrimaryButton}" Content="＋ 新增账号"
                                 Command="{Binding AddUserCommand}" Margin="0,12,0,0" Height="32"
                                 ToolTip="按用户名/角色/初始密码新增账号（开发者角色不开放创建）"/>
 
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="重置选中账号密码" Margin="0,16,0,0"/>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="重置密码" Margin="0,16,0,0"
+                                   ToolTip="对左侧选中的账号生效；免验原密码，立即生效"/>
                         <TextBlock Text="新密码：" Margin="0,8,0,2"/>
                         <TextBox Style="{StaticResource FreshInput}" Text="{Binding NewPassword}" FontFamily="Consolas"/>
-                        <TextBlock Text="确认新密码：" Margin="0,8,0,2"/>
+                        <TextBlock Text="确认密码：" Margin="0,8,0,2"/>
                         <TextBox Style="{StaticResource FreshInput}" Text="{Binding NewPassword2}" FontFamily="Consolas"/>
-                        <Button Tag="{StaticResource Geo.Edit}" Style="{StaticResource FreshSuccessButton}" Content="重置密码（免验原密码）"
-                                Command="{Binding ResetPasswordCommand}" Margin="0,12,0,0" Height="32"
-                                ToolTip="把选中账号密码直接重置为新密码（操作员无改密权，都由此窗代改）"/>
-
-                        <Button Tag="{StaticResource Geo.Trash}" Style="{StaticResource FreshDangerButton}" Content="－ 删除选中账号"
-                                Command="{Binding RemoveUserCommand}" Margin="0,16,0,0" Height="32"
-                                ToolTip="删除选中账号（开发者账号不可删；管理员账号只有开发者可删）"/>
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Tag="{StaticResource Geo.Edit}" Style="{StaticResource FreshSuccessButton}" Content="重置密码"
+                                    Command="{Binding ResetPasswordCommand}" Height="32" Margin="0,0,8,0"
+                                    ToolTip="把选中账号密码直接重置为新密码（免验原密码，立即生效）"/>
+                            <Button Grid.Column="1" Tag="{StaticResource Geo.Trash}" Style="{StaticResource FreshDangerButton}" Content="删除账号"
+                                    Command="{Binding RemoveUserCommand}" Height="32"
+                                    ToolTip="删除选中账号（开发者账号不可删；管理员账号只有开发者可删）"/>
+                        </Grid>
 
                         <!-- 选中不可操作的原因提示（空时不占行高；文本绑定无静态预览值，设计器空行即可） -->
                         <TextBlock Text="{Binding SelectedActionHint}"
@@ -106,9 +115,10 @@
                             </TextBlock.Style>
                         </TextBlock>
 
-                        <TextBlock Text="红线：开发者账号不可删（防锁死）；新密码 ≥6 位，保存即生效。"
+                        <TextBlock Text="开发者账号不可删（防锁死）；新密码 ≥6 位。"
                                    Foreground="{DynamicResource Brush.Fresh.FgDim}" TextWrapping="Wrap" Margin="0,12,0,0"/>
                     </StackPanel>
+                    </ScrollViewer>
                 </Border>
             </Grid>
         </DockPanel>
