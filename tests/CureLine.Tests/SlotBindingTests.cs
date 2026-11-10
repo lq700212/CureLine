@@ -38,8 +38,8 @@ public class SlotBindingTests
 
     // ---------------- 会话状态机 ----------------
 
-    [Fact(DisplayName = "扫码绑定_先扫库位再扫产品完成绑定并落盘")]
-    public void Session_LocationThenProduct_BindsAndPersists()
+    [Fact(DisplayName = "扫码绑定_扫库位→扫产品→再扫库位=上料结束并落盘")]
+    public void Session_LocationThenProductThenConfirm_EndsLoadAndPersists()
     {
         var (session, saved, _) = MakeSession();
 
@@ -48,22 +48,77 @@ public class SlotBindingTests
         Assert.Equal(SlotBindingPhase.WaitingProduct, session.Phase);
         Assert.Equal(1, session.PendingRack);
         Assert.Equal(1, session.PendingLevel);
-        Assert.Equal("A01 待扫产品码", session.Prompt);
+        Assert.Contains("A01 待扫产品码", session.Prompt);
         Assert.Empty(saved);   // 还没绑产品，不落盘
+        Assert.True(session.IsLoadPending(1, 1));   // 上料未确认 → 该库位抑制光栅报警
 
         var second = session.Handle("  SN-2026-000123  ");
         Assert.Equal(ScanOutcomeKind.ProductBound, second.Kind);
         Assert.Equal("SN-2026-000123", second.ProductCode);   // 首尾空白已 Trim
-        Assert.Equal(SlotBindingPhase.WaitingLocation, session.Phase);
+        Assert.Equal(SlotBindingPhase.WaitingProduct, session.Phase);   // 还能继续扫产品
 
         var record = session.Get(1, 1)!;
-        Assert.Equal("SN-2026-000123", record.ProductCode);
+        Assert.Equal(new[] { "SN-2026-000123" }, record.ProductCodes.ToArray());
         Assert.Equal("A01", record.LocationCode);
         Assert.Single(saved);                                  // 绑定成功立即落盘一次
-        Assert.Equal("SN-2026-000123", saved[0].Bindings.Single().ProductCode);
+        Assert.Equal("SN-2026-000123", saved[0].Bindings.Single().ProductCodes.Single());
+
+        // 第三次：再扫同一个库位码 = 上料结束（二次确认）
+        var third = session.Handle("A01");
+        Assert.Equal(ScanOutcomeKind.LoadConfirmed, third.Kind);
+        Assert.Equal(SlotBindingPhase.WaitingLocation, session.Phase);
+        Assert.Equal("请扫库位码", session.Prompt);
+        Assert.True(session.IsLoadConfirmed(1, 1));
+        Assert.False(session.IsLoadPending(1, 1));   // 上料已确认 → 恢复光栅报警
     }
 
-    [Fact(DisplayName = "扫码绑定_扫库位即清除该库位旧绑定")]
+    [Fact(DisplayName = "扫码绑定_一个库位可绑多个产品（逐个追加不清旧）")]
+    public void Session_MultipleProducts_AppendedToSameSlot()
+    {
+        var (session, _, _) = MakeSession();
+        session.Handle("A01");
+        session.Handle("SN-1");
+        session.Handle("SN-2");
+        session.Handle("SN-3");
+
+        var record = session.Get(1, 1)!;
+        Assert.Equal(new[] { "SN-1", "SN-2", "SN-3" }, record.ProductCodes.ToArray());
+        Assert.Equal(3, session.ProductCount(1, 1));
+        Assert.Equal(3, session.TotalProductCount);
+        // 上料未确认（还没二次扫库位码）
+        Assert.True(session.IsLoadPending(1, 1));
+    }
+
+    [Fact(DisplayName = "扫码绑定_同库位重复扫同一SN不重复入库")]
+    public void Session_DuplicateProduct_Ignored()
+    {
+        var (session, _, _) = MakeSession();
+        session.Handle("A01");
+        session.Handle("SN-1");
+        var again = session.Handle("SN-1");
+
+        Assert.Equal(ScanOutcomeKind.DuplicateProduct, again.Kind);
+        Assert.Equal(1, session.ProductCount(1, 1));
+    }
+
+    [Fact(DisplayName = "扫码绑定_上料确认事件抛给宿主（追溯库盖章用）")]
+    public void Session_LoadConfirmed_RaisesEvent()
+    {
+        var (session, _, _) = MakeSession();
+        var confirmed = new List<(int Rack, int Level)>();
+        var bound = new List<(int Rack, int Level, string Sn)>();
+        session.LoadConfirmed += (rack, level) => confirmed.Add((rack, level));
+        session.ProductBound += (rack, level, sn) => bound.Add((rack, level, sn));
+
+        session.Handle("A01");
+        session.Handle("SN-1");
+        session.Handle("A01");
+
+        Assert.Equal(new[] { (1, 1, "SN-1") }, bound.ToArray());
+        Assert.Equal(new[] { (1, 1) }, confirmed.ToArray());
+    }
+
+    [Fact(DisplayName = "扫码绑定_新扫库位码=新一轮上料（旧产品绑定清空）")]
     public void Session_ScanLocation_ClearsOldBindingImmediately()
     {
         var (session, saved, _) = MakeSession();
@@ -71,11 +126,14 @@ public class SlotBindingTests
         session.Handle("OLD-CODE");
         Assert.NotNull(session.Get(2, 1));
 
-        // 再扫同一库位：旧绑定立即清掉（客户口径：扫库位先清旧产品信息）
+        // 上料结束（再扫同一库位码）后再次扫该库位 = 新一轮上料 → 旧绑定清掉
+        // （客户口径：扫库位先清旧产品信息）
         session.Handle("B02");
-        Assert.Null(session.Get(2, 1));
+        session.Handle("B02");
+        Assert.NotNull(session.Get(2, 1));
+        Assert.Empty(session.Get(2, 1)!.ProductCodes);
         Assert.Equal(SlotBindingPhase.WaitingProduct, session.Phase);
-        Assert.Empty(saved[^1].Bindings);   // 清除动作已落盘（最近一次是空簿）
+        Assert.DoesNotContain(saved[^1].Bindings, b => b.ProductCodes.Count > 0);
     }
 
     [Fact(DisplayName = "扫码绑定_等产品码时扫另一个库位自动切换")]
@@ -88,7 +146,7 @@ public class SlotBindingTests
         Assert.Equal(ScanOutcomeKind.LocationSwitched, outcome.Kind);
         Assert.Equal(3, session.PendingRack);
         Assert.Equal(1, session.PendingLevel);   // C03 = 架 3 层 1（level = 3-3+1）
-        Assert.Equal("C03 待扫产品码", session.Prompt);
+        Assert.Contains("C03 待扫产品码", session.Prompt);
     }
 
     [Fact(DisplayName = "扫码绑定_非库位码在等库位阶段被拒并保持原状态")]
@@ -111,16 +169,16 @@ public class SlotBindingTests
         Assert.Equal(SlotBindingPhase.WaitingLocation, session.Phase);
     }
 
-    [Fact(DisplayName = "扫码绑定_重扫同一库位只刷新不计重复清除")]
-    public void Session_SameLocationAgain_RefreshesPending()
+    [Fact(DisplayName = "扫码绑定_再扫同一库位码=上料结束（二次确认）")]
+    public void Session_SameLocationAgain_ConfirmsLoadEnd()
     {
         var (session, _, _) = MakeSession();
         session.Handle("D05");
         var outcome = session.Handle("D05");
-        Assert.Equal(ScanOutcomeKind.LocationAccepted, outcome.Kind);
-        Assert.Contains("重新计时", outcome.Message);
-        Assert.Equal(4, session.PendingRack);
-        Assert.Equal(2, session.PendingLevel);   // D05 = 架 4 层 2
+        Assert.Equal(ScanOutcomeKind.LoadConfirmed, outcome.Kind);
+        Assert.Equal(SlotBindingPhase.WaitingLocation, session.Phase);
+        Assert.Equal(0, session.PendingRack);              // 已回空闲（待绑目标清零）
+        Assert.True(session.IsLoadConfirmed(4, 2));           // D05 = 架 4 层 2
     }
 
     [Fact(DisplayName = "扫码绑定_等产品码超时自动回请扫库位码")]
@@ -172,6 +230,7 @@ public class SlotBindingTests
         {
             session.Handle(code);
             session.Handle("SN-" + code);
+            session.Handle(code);   // 上料结束（再扫同库位码）
         }
 
         var book = session.Snapshot();
@@ -180,8 +239,8 @@ public class SlotBindingTests
         Assert.Equal(3, session.Count);
 
         // 快照是副本：改快照不影响内存
-        book.Bindings[0].ProductCode = "TAMPERED";
-        Assert.Equal("SN-A01", session.Get(1, 1)!.ProductCode);
+        book.Bindings[0].ProductCodes[0] = "TAMPERED";
+        Assert.Equal("SN-A01", session.Get(1, 1)!.ProductCodes[0]);
     }
 
     // ---------------- 绑定簿存取 ----------------
@@ -194,20 +253,47 @@ public class SlotBindingTests
         var book = new SlotBindingBook();
         book.Bindings.Add(new SlotBindingRecord
         {
-            Rack = 1, Level = 1, ProductCode = "SN-001",
+            Rack = 1, Level = 1,
+            ProductCodes = new List<string> { "SN-001", "SN-002" },
             BoundAt = new DateTimeOffset(2026, 11, 7, 9, 30, 0, TimeSpan.FromHours(8)),
+            UpdatedAt = new DateTimeOffset(2026, 11, 7, 9, 30, 0, TimeSpan.FromHours(8)),
+            LoadConfirmed = true,
+            LoadConfirmedAt = new DateTimeOffset(2026, 11, 7, 9, 31, 0, TimeSpan.FromHours(8)),
         });
         book.Bindings.Add(new SlotBindingRecord
         {
-            Rack = 10, Level = 3, ProductCode = "SN-002",
+            Rack = 10, Level = 3,
+            ProductCodes = new List<string> { "SN-003" },
             BoundAt = DateTimeOffset.Now,
+            UpdatedAt = DateTimeOffset.Now,
         });
         SlotBindingStore.Save(book);
 
         var loaded = SlotBindingStore.Load()!;
         Assert.Equal(2, loaded.Bindings.Count);
-        Assert.Equal("SN-001", loaded.Bindings[0].ProductCode);
+        Assert.Equal(new[] { "SN-001", "SN-002" }, loaded.Bindings[0].ProductCodes.ToArray());
+        Assert.True(loaded.Bindings[0].LoadConfirmed);
         Assert.Equal("J12", loaded.Bindings[1].LocationCode);
+        Assert.Equal(2, loaded.Bindings[0].ProductCount);
+    }
+
+    [Fact(DisplayName = "绑定簿_旧格式单值产品码一次性迁进清单")]
+    public void Store_LegacySingleProductCode_MigratesToList()
+    {
+        // V0.0.97 之前盘上是一条记录一个 productCode；读取时迁进 ProductCodes
+        // 清单（一次性搬家，此后盘上即新格式）。
+        using var scope = new TestScope();
+        Directory.CreateDirectory(AppPaths.ConfigDir);
+        File.WriteAllText(SlotBindingStore.DefaultPath,
+            """
+            {"Bindings":[
+              {"Rack":1,"Level":1,"productCode":"LEGACY-SN-1","BoundAt":"2026-11-07T08:00:00+08:00"}
+            ]}
+            """);
+        var loaded = SlotBindingStore.Load()!;
+        Assert.Single(loaded.Bindings);
+        Assert.Equal(new[] { "LEGACY-SN-1" }, loaded.Bindings[0].ProductCodes.ToArray());
+        Assert.Null(loaded.Bindings[0].LegacyProductCode);
     }
 
     [Fact(DisplayName = "绑定簿_缺文件回null并带原因")]
@@ -238,15 +324,14 @@ public class SlotBindingTests
         File.WriteAllText(SlotBindingStore.DefaultPath,
             """
             {"Bindings":[
-              {"Rack":1,"Level":1,"ProductCode":"OK-1","BoundAt":"2026-11-07T08:00:00+08:00"},
-              {"Rack":0,"Level":1,"ProductCode":"BAD-RACK","BoundAt":"2026-11-07T08:00:00+08:00"},
-              {"Rack":1,"Level":0,"ProductCode":"BAD-LEVEL","BoundAt":"2026-11-07T08:00:00+08:00"},
-              {"Rack":1,"Level":2,"ProductCode":"   ","BoundAt":"2026-11-07T08:00:00+08:00"}
+              {"Rack":1,"Level":1,"ProductCodes":["OK-1"],"BoundAt":"2026-11-07T08:00:00+08:00"},
+              {"Rack":0,"Level":1,"ProductCodes":["BAD-RACK"],"BoundAt":"2026-11-07T08:00:00+08:00"},
+              {"Rack":1,"Level":0,"ProductCodes":["BAD-LEVEL"],"BoundAt":"2026-11-07T08:00:00+08:00"}
             ]}
             """);
         var loaded = SlotBindingStore.Load()!;
         Assert.Single(loaded.Bindings);
-        Assert.Equal("OK-1", loaded.Bindings[0].ProductCode);
+        Assert.Equal("OK-1", loaded.Bindings[0].ProductCodes.Single());
     }
 
     // ---------------- 扫码枪配置 ----------------

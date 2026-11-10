@@ -52,6 +52,8 @@ using CwPointTable = CureStation.PointTableWindow;
 using CwAccounts = CureStation.AccountManagerWindow;
 using CwMesPost = CureStation.MesPostConfigWindow;
 using CwScannerConfig = CureStation.ScannerConfigWindow;
+using CwAlarm = CureStation.GrillAlarmResetWindow;
+using CwTraceReport = CureStation.TraceReportWindow;
 using CureDialogs = CureStation.ViewModels.IDialogService;
 using CureMainVm = CureStation.ViewModels.MainViewModel;
 using CureLoginVm = CureStation.ViewModels.LoginViewModel;
@@ -62,6 +64,8 @@ using CurePointTableVm = CureStation.ViewModels.PointTableViewModel;
 using CureAccountVm = CureStation.ViewModels.AccountManagerViewModel;
 using CureMesPostVm = CureStation.ViewModels.MesPostConfigViewModel;
 using CureScannerVm = CureStation.ViewModels.ScannerConfigViewModel;
+using CureAlarmVm = CureStation.ViewModels.GrillAlarmResetCoordinator;
+using CureTraceReportVm = CureStation.ViewModels.TraceReportViewModel;
 using CureLogSnap = CureStation.ViewModels.LogSystemSnapshot;
 
 using GwMain = CimGateway.MainWindow;
@@ -78,6 +82,7 @@ using CureLine.Core.Security;
 using CureLine.Core.Curing;
 using CureLine.Core.Comms;
 using CureLine.Core.Mes;
+using CureLine.Core.Data;
 
 namespace DocShot;
 
@@ -165,17 +170,21 @@ public static class Program
         Directory.CreateDirectory(AppPaths.ConfigDir);
         Directory.CreateDirectory(AppPaths.BaseDir + "\\DataBase");
         WriteCureSeedIni(AppPaths.ConfigIni);
-        // 扫码演示种子（P3.3）：A01 预置一条产品绑定——主窗截图同屏展示
-        // "已绑定产品码"（A01 灰字）与"托盘在架未绑定红字"（A02/A03）两态；
-        // 只写 seed 目录，不触碰现场 config。
+        // 扫码演示种子（P3.3；V0.0.97 改为多产品 + 上料确认状态）：A01 预置
+        // 一条产品绑定——主窗截图同屏展示"已绑 N 件"（A01）与"托盘在架未绑定
+        // 红字"（A02/A03）两态；只写 seed 目录，不触碰现场 config。
         SlotBindingStore.Save(new SlotBindingBook
         {
             Bindings =
             {
                 new SlotBindingRecord
                 {
-                    Rack = 1, Level = 1, ProductCode = "SN-2026-000123",
+                    Rack = 1, Level = 1,
+                    ProductCodes = new List<string> { "SN-2026-000123", "SN-2026-000124" },
                     BoundAt = DateTimeOffset.Now,
+                    UpdatedAt = DateTimeOffset.Now,
+                    LoadConfirmed = true,
+                    LoadConfirmedAt = DateTimeOffset.Now,
                 },
             },
         });
@@ -313,6 +322,44 @@ public static class Program
         var sc = new CwScannerConfig { DataContext = new CureScannerVm(fake) };
         Shot(sc, "cs-scanner.png", 900);
 
+        // ---------- 光栅报警现场确认窗（V0.0.97 三步流程） ----------
+        // 步骤一：报警库位清单（每行两个处置按钮：误报·解除 / 有产品取出）。
+        var alarmVm = new CureAlarmVm(() => GrillAlarmResetMode.Manual);
+        alarmVm.Refresh([(1, 1), (3, 2)]);
+        var aw = new CwAlarm { DataContext = alarmVm };
+        ShotFrame(aw, "cs-alarm-confirm.png", 800);
+        // 步骤二：补扫被取出的产品 SN（扫码补扫提示 + 已扫清单）。
+        alarmVm.Items[0].TakeOut.Execute(null);
+        alarmVm.TryHandleOutScan("SN-2026-000123");
+        alarmVm.TryHandleOutScan("SN-2026-000124");
+        ShotFrame(aw, "cs-alarm-scanout.png", 600);
+        aw.Hide();
+        try { aw.Close(); } catch { }
+
+        // ---------- 固化追溯报表窗（V0.0.97：库位↔SN↔固化时长） ----------
+        // 种子数据走真实追溯库（seed 目录的 DataBase\CureLine.db3）——报表读的就是
+        // 生产那张表，不是 P 图。
+        try
+        {
+            var traceStore = new SlotProductTraceStore(new SqliteHelper(AppPaths.DatabaseFile));
+            traceStore.EnsureSchema();
+            var seedNow = DateTimeOffset.Now;
+            traceStore.AddBound(1, 1, "SN-2026-000123", seedNow.AddHours(-3));
+            traceStore.AddBound(1, 1, "SN-2026-000124", seedNow.AddHours(-3));
+            traceStore.AddBound(3, 2, "SN-2026-000201", seedNow.AddHours(-2));
+            traceStore.MarkCuringStarted(1, 1, seedNow.AddHours(-3), 120);
+            traceStore.MarkLeft(1, 1, seedNow.AddHours(-1), 120, SlotTraceEndReason.Released);
+            traceStore.MarkTakenOut(3, 2, "SN-2026-000201", seedNow.AddMinutes(-30), 30);
+
+            var trVm = new CureTraceReportVm(traceStore);
+            trVm.QueryAsync();          // 开窗即查（生产同款）
+            var tr = new CwTraceReport { DataContext = trVm };
+            ShotFrame(tr, "cs-trace-report.png", 1200);
+            tr.Hide();
+            try { tr.Close(); } catch { }
+        }
+        catch (Exception ex) { Log($"WARN 追溯报表镜头失败：{ex.Message}"); }
+
         // ---------- 主窗流转后期（更多仓位走过一轮；避开 Mock 演示掉线窗口） ----------
         Pump(6000);
         ShotFrame(main, "cs-main-flow2.png");
@@ -383,8 +430,8 @@ public static class Program
                 }, DateTimeOffset.Now);
                 vm.Slots.FirstOrDefault(s => s.Rack == 1 && s.Level == 1)
                     ?.Refresh(snap, true, new SlotStatus(SlotPhase.Curing, 120, 47),
-                        productCode: SlotBindingStore.Load()?.Bindings
-                            .FirstOrDefault(b => b.Rack == 1 && b.Level == 1)?.ProductCode ?? "");
+                        boundProductCount: SlotBindingStore.Load()?.Bindings
+                            .FirstOrDefault(b => b.Rack == 1 && b.Level == 1)?.ProductCount ?? 0);
                 // 统计条（⚡剩余最短/五态计数）同拍重算——刷新停在注入拍，不手动
                 // 重算的话顶栏还挂着注入前数值，与卡内 47 分对不上（演示帧自治愈态）。
                 typeof(CureMainVm).GetMethod("RefreshStats",
@@ -798,6 +845,8 @@ public static class Program
         // 另拍该窗时需显式构造，与日志窗同款口径）。
         public void ShowGrillAlarmReset(CureStation.ViewModels.GrillAlarmResetCoordinator presenter) { }
         public void CloseGrillAlarmReset() { }
+        // 追溯报表窗桩（V0.0.97 接口补齐）：镜头段显式构造真实窗拍（同日志窗口径）。
+        public void ShowTraceReport(SlotProductTraceStore store, Func<string?>? askSavePath) { }
     }
 
     private sealed class SilentGatewayDialogs : GwDialogs

@@ -92,6 +92,13 @@ public interface IDialogService
     /// <summary>程序化关闭光栅报警人工复位窗（全解除/切回自动模式时收窗；未开为 no-op）。</summary>
     void CloseGrillAlarmReset();
 
+    /// <summary>
+    /// 打开固化追溯报表窗（V0.0.97，模态）。store=追溯库存取（主窗私有资产，
+    /// 本窗只读不改）；askSavePath=导出 CSV 的保存路径询问（UI 线程弹保存框，
+    /// VM 不碰 UI 窗）。窗内含"产品明细"与"库位汇总"两个视图。
+    /// </summary>
+    void ShowTraceReport(CureLine.Core.Data.SlotProductTraceStore store, Func<string?> askSavePath);
+
     /// <summary>程序化关闭主进程（退出）。</summary>
     void Shutdown();
 }
@@ -263,6 +270,17 @@ public sealed class DialogService : IDialogService
         // 记"用户已表态"——程序化收窗要绕过该表态（全解除后收窗不算用户 ✕）：
         // 走 SilentClose（见 GrillAlarmResetWindow）。
         _alarmWindow?.SilentClose();
+    }
+
+    public void ShowTraceReport(CureLine.Core.Data.SlotProductTraceStore store, Func<string?> askSavePath)
+    {
+        // 模态窗：报表是"看一眼就走"的功能（与报警确认那种常驻弹窗不同）。
+        // VM 在这里 new（测试绕过此窗直接实例化 VM 用 Fake 桩，同其它窗口径）。
+        var win = new TraceReportWindow
+        {
+            Owner = Application.Current?.MainWindow,
+        };
+        win.Present(new TraceReportViewModel(store, askSavePath));
     }
 
     public void Shutdown() => Application.Current?.Shutdown();

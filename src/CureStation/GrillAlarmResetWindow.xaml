@@ -7,8 +7,8 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:GrillAlarmResetCoordinator, IsDesignTimeCreatable=False}"
-        Title="光栅报警 · 人工复位 - 固化程控"
-        Width="480" Height="430" MinWidth="420" MinHeight="300"
+        Title="光栅报警 · 现场确认 - 固化程控"
+        Width="560" Height="420" MinWidth="520" MinHeight="360"
         WindowStartupLocation="Manual"
         WindowStyle="None"
         Background="Transparent" AllowsTransparency="True"
@@ -22,15 +22,19 @@
                             ResizeBorderThickness="6"/>
     </shell:WindowChrome.WindowChrome>
     <!--
-      光栅报警·人工复位悬浮窗（V0.0.69，用户拍板）：
-      - 人工复位模式下光栅让空不复位（红灯+蜂鸣保持），列出正在报警的库位，
-        操作员逐行【解除报警】或一键【全部解除】后才停蜂鸣灭红灯；
-      - 清单热更（用户拍板）：绑 coordinator.Items 差分集合——报警期间新库位
-        加入/解除即删行，窗开着不用重开；全解除自动收窗（CloseGrillAlarmReset）；
-      - 非模态单例（DialogService.ShowGrillAlarmReset 防重复开）；Owner=主窗，
-        主窗退出联动关闭；显示位置=屏幕工作区右下角（code-behind
-        PositionBottomRight，不记忆位置——日志窗同款拍板口径）；
+      光栅报警·现场确认悬浮窗（V0.0.97，用户拍板升级为三步确认）：
+      - 步骤一 清单：列出正在报警的库位，逐个判断现场情况——
+        【误报·解除】=没人取产品（纯误触）→ 解除报警、计时继续；
+        【有产品取出】=确实取走了产品 → 进入步骤二补扫产品码；
+      - 步骤二 补扫：把取出的产品 SN 扫回来（可多个），每扫一件立即落
+        "中途取出"追溯记录（带当时已固化时长）；扫完点【扫完了】；
+      - 步骤三 计时处置：决定该库位计时怎么办——【继续计时】=未取出的
+        产品继续固化；【终止计时】=整个库位产品全部停表（实际时长入库）；
+      - 清单热更：新报警自动加入清单，处理完的自动移除；全解除自动收窗；
+      - 非模态单例（DialogService.ShowGrillAlarmReset 防重复开）；Owner=主窗；
+        显示位置=屏幕工作区右下角（code-behind PositionBottomRight）；
       - 全部取色走语义键（Brush.*）→ ThemeManager 切主题本窗自动跟换。
+      ★Visibility 缺省值一律写进 Style Setter 再 DataTrigger 切（触发器死区纪律）。
     -->
     <Grid Margin="14">
         <Border CornerRadius="10" Background="{DynamicResource Brush.WindowBg}"
@@ -43,96 +47,239 @@
                         CornerRadius="10,10,0,0"
                         Height="36" Padding="12,0">
                     <DockPanel>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                    Margin="0,0,16,0">
                             <!-- 红点：报警警示（区别于日志窗绿点=日常） -->
                             <Ellipse Width="12" Height="12" Fill="{DynamicResource Brush.StateRed}"
                                      VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBlock Text="光栅报警 · 人工复位" FontSize="14" FontWeight="Bold"
+                            <TextBlock Text="光栅报警 · 现场确认" FontSize="14" FontWeight="Bold"
                                        Foreground="{DynamicResource Brush.LfHeadFg}" VerticalAlignment="Center"/>
                         </StackPanel>
                         <Button DockPanel.Dock="Right" Style="{StaticResource WinTitleClose}"
                                 Height="36" Foreground="{DynamicResource Brush.LfHeadFg}"
                                 Content="✕" Click="OnCloseClick" ToolTip="关闭窗（报警不消失，红卡仍可见）"/>
+                        <!-- 报警计数（仅步骤一=清单时显示；步骤二/三在处理单个库位，
+                             计数无意义还挤标题） -->
                         <TextBlock DockPanel.Dock="Right"
                                    Text="{Binding AlarmCountText, FallbackValue=暂无正在报警的库位}"
                                    Foreground="{DynamicResource Brush.LfHeadSubFg}"
-                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                   VerticalAlignment="Center" Margin="0,0,10,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Step}" Value="List">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </DockPanel>
                 </Border>
 
-                <!-- 底部操作条：全部解除 + 说明（先声明靠 Dock 底部） -->
+                <!-- 底部操作条：全部按误报解除（仅步骤一可见——步骤二/三处理单个库位） -->
                 <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Brush.DimLine}"
                         BorderThickness="0,1,0,0" Padding="12,10">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Step}" Value="List">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="解除蜂鸣与红灯需逐库位确认；固化计时不受影响。"
+                        <TextBlock Text="没取产品 → 误报解除；取了产品 → 补扫产品码。"
                                    Foreground="{DynamicResource Brush.FgDim}"
                                    VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,10,0"/>
-                        <Button Grid.Column="1" Style="{StaticResource FreshDangerButton}"
+                        <Button Grid.Column="1" Style="{StaticResource FreshButton}"
                                 Command="{Binding ResetAllCommand}"
-                                Content="全部解除" MinWidth="96" ToolTip="对当前清单内全部库位执行人工复位"/>
+                                Content="全部按误报解除" MinWidth="130"
+                                ToolTip="对当前清单内全部库位按误报处理：解除报警、计时继续"/>
                     </Grid>
                 </Border>
 
                 <Grid Margin="10,8">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
+                    <!-- 步骤一：报警库位清单 ==================== -->
+                    <StackPanel>
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Step}" Value="List">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
 
-                    <!-- 提示行：模式说明（文本固定， isVisible 由报警行数无关） -->
-                    <Border Grid.Row="0" CornerRadius="6" Padding="10,7" Margin="0,0,0,8"
-                            Background="{DynamicResource Brush.PanelBg}"
-                            BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1">
-                        <TextBlock TextWrapping="Wrap"
-                                   Foreground="{DynamicResource Brush.FgMid}">
-                            <Run Text="人工复位模式：正在报警的库位在下方清单中，逐一确认现场已无人手后点击"/>
-                            <Run Text="【解除报警】" FontWeight="Bold"/>
-                            <Run Text="。新报警会自动加入清单，处理完的自动移除。"/>
-                        </TextBlock>
-                    </Border>
+                        <!-- 提示行（只说"要用户做的决定"，操作口径进各按钮 ToolTip） -->
+                        <Border CornerRadius="6" Padding="10,7" Margin="0,0,0,8"
+                                Background="{DynamicResource Brush.PanelBg}"
+                                BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1">
+                            <TextBlock TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Brush.FgMid}">
+                                <Run Text="光栅被挡，请确认现场情况："/>
+                                <Run Text="没取产品（误触）" FontWeight="Bold"/>
+                                <Run Text="就点【误报·解除】；"/>
+                                <Run Text="确实取走了产品" FontWeight="Bold"/>
+                                <Run Text="就点【有产品取出】，按提示补扫取出的产品码。"/>
+                            </TextBlock>
+                        </Border>
 
-                    <!-- 报警清单（差分热更集合；行卡） -->
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding Items, FallbackValue={x:Null}}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border CornerRadius="8" Padding="12,9" Margin="0,0,0,8"
-                                            Background="{DynamicResource Brush.PanelBg}"
-                                            BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <!-- 库位编码+架层号（主窗卡片标题同源，一眼对上现场） -->
-                                            <TextBlock Text="{Binding Caption, FallbackValue=A03 · 架1-层3}"
-                                                       FontSize="14" FontWeight="Bold"
-                                                       Foreground="{DynamicResource Brush.FgStrong}"
-                                                       VerticalAlignment="Center"/>
-                                            <!-- 正在报警胶囊（红字醒目） -->
-                                            <Border Grid.Column="1" CornerRadius="9" Padding="8,3"
-                                                    Background="{DynamicResource Brush.PanelBg}"
-                                                    BorderBrush="{DynamicResource Brush.StateRed}"
-                                                    BorderThickness="1" Margin="12,0,0,0"
-                                                    HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <TextBlock Text="正在报警" FontSize="11"
-                                                           Foreground="{DynamicResource Brush.StateRed}"
+                        <!-- 报警清单（差分热更集合；行卡） -->
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Items, FallbackValue={x:Null}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border CornerRadius="8" Padding="12,9" Margin="0,0,0,8"
+                                                Background="{DynamicResource Brush.PanelBg}"
+                                                BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <!-- 库位编码+架层号（主窗卡片标题同源，一眼对上现场） -->
+                                                <TextBlock Text="{Binding Caption, FallbackValue=A03 · 架1-层3}"
+                                                           FontSize="14" FontWeight="Bold"
+                                                           Foreground="{DynamicResource Brush.FgStrong}"
                                                            VerticalAlignment="Center"/>
-                                            </Border>
-                                            <Button Grid.Column="2" Style="{StaticResource FreshPrimaryButton}"
-                                                    Command="{Binding Reset}"
-                                                    Content="解除报警" MinWidth="92" ToolTip="人工确认现场已处理：红灯灭、黄灯复亮（蜂鸣停）"/>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
+                                                <!-- 正在报警胶囊（红字醒目） -->
+                                                <Border Grid.Column="1" CornerRadius="9" Padding="8,3"
+                                                        Background="{DynamicResource Brush.PanelBg}"
+                                                        BorderBrush="{DynamicResource Brush.StateRed}"
+                                                        BorderThickness="1" Margin="10,0,0,0"
+                                                        HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                    <TextBlock Text="正在报警" FontSize="11"
+                                                               Foreground="{DynamicResource Brush.StateRed}"
+                                                               VerticalAlignment="Center"/>
+                                                </Border>
+                                                <!-- 两个处置按钮（现场二选一） -->
+                                                <StackPanel Grid.Column="3" Orientation="Horizontal">
+                                                    <Button Style="{StaticResource FreshButton}"
+                                                            Command="{Binding Reset}"
+                                                            Content="误报·解除" MinWidth="100" Margin="0,0,8,0"
+                                                            ToolTip="现场确认没有人取产品（纯误触）：解除报警（红灯灭、蜂鸣停），固化计时继续"/>
+                                                    <Button Style="{StaticResource FreshPrimaryButton}"
+                                                            Command="{Binding TakeOut}"
+                                                            Content="有产品取出" MinWidth="108"
+                                                            ToolTip="现场确认确实取走了产品：进入补扫，把取出的产品码扫回来做追溯"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+
+                    <!-- 步骤二：补扫被取出的产品 SN ==================== -->
+                    <StackPanel>
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Step}" Value="ScanOut">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+
+                        <Border CornerRadius="6" Padding="10,7" Margin="0,0,0,8"
+                                Background="{DynamicResource Brush.PanelBg}"
+                                BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="{Binding CurrentCaption, FallbackValue=A03 · 架1-层3}"
+                                           FontSize="14" FontWeight="Bold"
+                                           Foreground="{DynamicResource Brush.FgStrong}"/>
+                                <TextBlock Text="{Binding ScanOutHintText, FallbackValue=请把取出的产品码逐个扫回来}"
+                                           TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Foreground="{DynamicResource Brush.FgMid}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 已扫到的产品清单（现场核对"扫了几件"） -->
+                        <Border CornerRadius="8" Padding="10,8" Margin="0,0,0,8"
+                                Background="{DynamicResource Brush.PanelBg}"
+                                BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="已补扫产品" FontSize="11"
+                                           Foreground="{DynamicResource Brush.FgDim}" Margin="0,0,0,4"/>
+                                <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding OutScans, FallbackValue={x:Null}}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Sn, FallbackValue=SN0001}"
+                                                           FontFamily="Consolas" FontSize="12"
+                                                           Foreground="{DynamicResource Brush.FgStrong}"
+                                                           Margin="0,1"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource FreshButton}"
+                                    Command="{Binding CommandBackToList}" Content="返回" MinWidth="88"
+                                    Margin="0,0,8,0" ToolTip="放弃本次补扫，回到报警清单"/>
+                            <Button Style="{StaticResource FreshPrimaryButton}"
+                                    Command="{Binding CommandFinishScan}" Content="扫完了" MinWidth="100"
+                                    ToolTip="补扫结束，进入计时处置"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 步骤三：计时处置 ==================== -->
+                    <StackPanel>
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Step}" Value="TimingDecision">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+
+                        <Border CornerRadius="6" Padding="10,7" Margin="0,0,0,8"
+                                Background="{DynamicResource Brush.PanelBg}"
+                                BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="{Binding CurrentCaption, FallbackValue=A03 · 架1-层3}"
+                                           FontSize="14" FontWeight="Bold"
+                                           Foreground="{DynamicResource Brush.FgStrong}"/>
+                                <TextBlock Text="{Binding TimingHintText, FallbackValue=请选择该库位计时怎么处理}"
+                                           TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Foreground="{DynamicResource Brush.FgMid}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource FreshButton}"
+                                    Command="{Binding CommandBackToList}" Content="返回" MinWidth="88"
+                                    Margin="0,0,8,0" ToolTip="不做处置，回到报警清单"/>
+                            <Button Style="{StaticResource FreshButton}"
+                                    Command="{Binding CommandKeepTiming}" Content="继续计时" MinWidth="100"
+                                    Margin="0,0,8,0"
+                                    ToolTip="库位上没取出的产品继续固化计时（部分取出场景的常规处置）"/>
+                            <Button Style="{StaticResource FreshDangerButton}"
+                                    Command="{Binding CommandStopTiming}" Content="终止计时" MinWidth="100"
+                                    ToolTip="整个库位的产品全部终止计时：不再等到点放行，当前已固化时长入库追溯"/>
+                        </StackPanel>
+                    </StackPanel>
                 </Grid>
             </DockPanel>
         </Border>

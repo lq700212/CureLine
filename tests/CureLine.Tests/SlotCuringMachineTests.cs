@@ -31,7 +31,8 @@ public class SlotCuringMachineTests
         CuringPolicy? policy = null, Func<int, string>? durationText = null,
         Func<GrillAlarmResetMode>? resetModeProvider = null,
         Func<GrillSignalPolarity>? polarityProvider = null,
-        Func<bool>? alarmEnabledProvider = null)
+        Func<bool>? alarmEnabledProvider = null,
+        Func<int, int, bool>? loadPendingProvider = null)
     {
         var bus = new ScriptedPointBus();
         var logs = new List<string>();
@@ -39,7 +40,8 @@ public class SlotCuringMachineTests
             clock: () => _now, log: logs.Add, durationText: durationText,
             resetModeProvider: resetModeProvider,
             grillPolarityProvider: polarityProvider,
-            grillAlarmEnabledProvider: alarmEnabledProvider);
+            grillAlarmEnabledProvider: alarmEnabledProvider,
+            loadPendingProvider: loadPendingProvider);
         // 宿主转发边沿（生产由 MainViewModel 做——machine 不直接订阅总线）
         bus.PointChanged += (_, e) => machine.OnPointChanged(e);
         return (bus, machine, logs);
@@ -1251,6 +1253,139 @@ public class SlotCuringMachineTests
             bus.SetInput(Tray(2, 1), false); // 取件
             Assert.Equal(2, lefts.Count);
             Assert.Equal((2, 1, SlotPhase.Done, 3600), lefts[1]);
+        }
+    }
+
+    // ---------- 上料抑制（V0.0.97：正在上料的库位不报光栅报警） ----------
+    // 上料时操作员的手和产品会挡住光栅，报了是误报；上料结束（二次扫同库位码）
+    // 后光栅被挡才是真报警。
+
+    [Fact(DisplayName = "上料抑制：该库位正在上料时光栅被挡不报警（红灯不亮/清单空）")]
+    public void LoadPending_GrillBlocked_NoAlarm()
+    {
+        var (bus, machine, logs) = Make(loadPendingProvider: (r, l) => true);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);        // 托盘到位 → 开计时
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+
+            bus.SetInput(GrillL(1, 1), true);      // 光栅被挡（手在架内放产品）
+            Assert.Empty(machine.GetAlarmSlots());                       // 不报警
+            Assert.DoesNotContain(bus.Writes,
+                w => w.Key == Lamp(IoPointRole.LampRed, 1, 1) && w.State); // 红灯不亮
+            Assert.DoesNotContain(logs, m => m.Contains("光栅被挡"));      // 零报警日志
+        }
+    }
+
+    [Fact(DisplayName = "上料抑制解除：下一拍按快照补报（不漏报）")]
+    public void LoadPending_Released_ThenAlarmRaised()
+    {
+        bool pending = true;
+        var (bus, machine, logs) = Make(loadPendingProvider: (r, l) => pending);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            bus.SetInput(GrillL(1, 1), true);      // 上料中：被挡不报
+            Assert.Empty(machine.GetAlarmSlots());
+
+            pending = false;                       // 上料确认（二次扫库位码）
+            machine.Pump(_now);                    // 下一拍：按快照补报
+            Assert.Single(machine.GetAlarmSlots());
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampRed, 1, 1), true));
+        }
+    }
+
+    [Fact(DisplayName = "上料抑制只作用于本库位：别的库位照常报警")]
+    public void LoadPending_OnlyAffectsTargetSlot()
+    {
+        var (bus, machine, logs) = Make(loadPendingProvider: (rack, level) => rack == 1);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            bus.SetInput(Tray(2, 1), true);
+            bus.SetInput(GrillL(1, 1), true);      // 1-1 上料中 → 不报
+            bus.SetInput(GrillL(2, 1), true);      // 2-1 正常固化 → 报
+            Assert.Single(machine.GetAlarmSlots());
+            Assert.Equal(2, machine.GetAlarmSlots()[0].Rack);
+        }
+    }
+
+    // ---------- 报警终止（V0.0.97：报警确认后人工停表） ----------
+
+    [Fact(DisplayName = "终止计时：整个库位停表（黄灯灭/不放绿灯），返回实际固化秒数")]
+    public void TerminateCuring_StopsTimerAndReportsCuredSeconds()
+    {
+        var (bus, machine, logs) = Make(new CuringPolicy { Name = "T", GlobalMinutes = 60 });
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            _now += TimeSpan.FromMinutes(25);
+            machine.Pump(_now);
+
+            Assert.True(machine.TerminateCuring(1, 1, out int curedSeconds));
+            Assert.Equal(25 * 60, curedSeconds);
+            var status = machine.GetStatus(1, 1)!;
+            Assert.Equal(SlotPhase.Terminated, status.Phase);
+            Assert.True(status.Terminated);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), false));
+            Assert.DoesNotContain(bus.Writes,
+                w => w.Key == Lamp(IoPointRole.LampGreen, 1, 1) && w.State);
+
+            // 终止后不再等到点放行（计时真的停了）
+            _now += TimeSpan.FromMinutes(60);
+            machine.Pump(_now);
+            Assert.Equal(SlotPhase.Terminated, machine.GetStatus(1, 1)!.Phase);
+        }
+    }
+
+    [Fact(DisplayName = "终止计时：托盘离开按实际固化时长记账（不足计划时长）")]
+    public void TerminateCuring_TrayLeft_ReportsActualCuredSeconds()
+    {
+        var (bus, machine, logs) = Make(new CuringPolicy { Name = "T", GlobalMinutes = 60 });
+        var lefts = new List<(int Rack, int Level, SlotPhase Phase, int Seconds)>();
+        using (machine)
+        {
+            machine.TrayLeft += (r, l, p, s) => lefts.Add((r, l, p, s));
+            bus.SetInput(Tray(1, 1), true);
+            _now += TimeSpan.FromMinutes(30);
+            machine.Pump(_now);
+            machine.TerminateCuring(1, 1, out _);
+
+            bus.SetInput(Tray(1, 1), false);   // 取件
+            Assert.Single(lefts);
+            Assert.Equal((1, 1, SlotPhase.Terminated, 1800), lefts[0]);
+        }
+    }
+
+    [Fact(DisplayName = "终止计时：不在计时中的仓位返回 false（幂等安全）")]
+    public void TerminateCuring_NotCuring_ReturnsFalse()
+    {
+        var (bus, machine, logs) = Make();
+        using (machine)
+        {
+            Assert.False(machine.TerminateCuring(1, 1, out _));   // 空位
+            bus.SetInput(Tray(1, 1), true);
+            machine.TerminateCuring(1, 1, out _);
+            Assert.False(machine.TerminateCuring(1, 1, out _));   // 已终止：重复调用 no-op
+        }
+    }
+
+    // ---------- 报警产生边沿（V0.0.97：追溯库打"经历过报警"标记） ----------
+
+    [Fact(DisplayName = "报警产生边沿：只在真正亮起时抛一次")]
+    public void GrillAlarmRaised_FiresOnceOnAlarm()
+    {
+        var (bus, machine, logs) = Make();
+        var raised = new List<(int Rack, int Level)>();
+        using (machine)
+        {
+            machine.GrillAlarmRaised += (r, l) => raised.Add((r, l));
+            bus.SetInput(Tray(1, 1), true);
+            bus.SetInput(GrillL(1, 1), true);
+            Assert.Equal(new[] { (1, 1) }, raised.ToArray());
+
+            bus.SetInput(GrillR(1, 1), true);   // 另一侧也被挡：仍在报警态，不重复抛
+            Assert.Single(raised);
         }
     }
 }

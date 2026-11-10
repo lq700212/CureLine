@@ -22,7 +22,8 @@ public sealed class CuringSlotRecord
     public int Rack { get; set; }
     public int Level { get; set; }
 
-    /// <summary>"Curing"=计时中（按 StartedAt+Minutes 续算）；"Done"=已放行（恢复绿灯）。</summary>
+    /// <summary>"Curing"=计时中（按 StartedAt+Minutes 续算）；"Done"=已放行（恢复绿灯）；
+    /// "Terminated"=已人工终止计时（V0.0.97；恢复成终止态，不续算也不放行）。</summary>
     public string Phase { get; set; } = "";
 
     /// <summary>开计时那一刻的绝对时间（墙钟——断电期间流逝自然计入固化时长）。</summary>
@@ -30,6 +31,12 @@ public sealed class CuringSlotRecord
 
     /// <summary>开计时时锁定的时长（分钟）——恢复用记录值，不用当前策略（热切不干扰在制品）。</summary>
     public int Minutes { get; set; }
+
+    /// <summary>
+    /// 终止计时的时刻（V0.0.97；仅 Phase=Terminated 有值）——恢复后据此算
+    /// 实际已固化时长（不足计划时长=提前取走，追溯库要留这个数）。
+    /// </summary>
+    public DateTimeOffset? TerminatedAt { get; set; }
 }
 
 /// <summary>持久化信封：全部进行中仓位的快照。</summary>

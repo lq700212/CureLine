@@ -96,8 +96,9 @@
   **P3.3 扫码绑定库位/产品（已完成 2026-11-07，V0.0.76；V0.0.77 补配置窗；
   V0.0.78 通讯换 TCP；V0.0.79 缺省值/配置窗直预置现场 TCP——手工抄错 IP
   （曾把 DTU 死配置里的旧上位机地址当枪侧 IP，连接恒超时）这一类坑封口）**：
-  现场先扫库位码（A01~J12）再扫产品二维码绑定（`SlotBindingSession` 两段式
-  会话 + `SlotBindingStore` 落盘 `config/slotbindings.json`）；托盘离开清绑定、
+  现场先扫库位码（A01~J12）再逐个扫产品二维码、扫完再扫一次库位码结束上料
+  （`SlotBindingSession` 三段式会话 + `SlotBindingStore` 落盘
+  `config/slotbindings.json`；V0.0.98 起一库位多产品 + 追溯库入 SQLite）；托盘离开清绑定、
   下次入库重扫；未绑定只在统计条/卡片红字报警**不拦截固化流程**；扫码枪=
   **SH-5000-GHD（自动连续读码），现役接入 = 枪串口接 Eport E10 型 DTU
   （串口转以太网，TCP-SERVER 8899 落 NVRAM），上位机复用 kaleidoscope
@@ -122,7 +123,7 @@
 5. **SQL 一律参数化**：禁止字符串拼接 SQL（老项目残留的拼接只允许在
    `CureRecordStore` 内的固定语句，新增查询必须 `@参数`）。
 6. **改动后必须构建 + 测试全绿**：`dotnet build` 0 警告 0 错误，
-   `dotnet test` 596/596（V0.0.97 全量；V0.0.34~96 各轮增量明细见各版本
+   `dotnet test` 620/620（V0.0.98 全量；V0.0.34~96 各轮增量明细见各版本
    CHANGELOG——基线此后只增不减，V0.0.62 授权真源收口 kaleidoscope：删
    宿主授权注入类语义用例 −21，重写编解码/era/门禁接线 +13，补真私钥
    激活链 +3，净减 5；V0.0.63 光栅报警链 +8，V0.0.64 总线时序契约+光栅
@@ -131,7 +132,8 @@
    绑定 +19，V0.0.77 扫码枪配置窗 +9，V0.0.88 幽灵模态护栏 7 例，
    V0.0.90 光栅报警总开关 +11，V0.0.92 判据放宽补 1 例；V0.0.97 光栅
    四项收编为策略字段：删全局键解析/回显 21 例、补策略序列化/整组回显
-   3 例，全量基线按实测 596 记）；禁止交付编译不过/测试不过的代码。
+   3 例；V0.0.98 扫码三段式+报警现场确认+追溯库净增 24（删 12 例 SN 显示相关、
+   新增 36 例），全量基线按实测 620 记）；禁止交付编译不过/测试不过的代码。
 7. **机密红线**：`hsl.dat`（HSL 授权）只放 exe 同目录，已 ignore，
    **不得入库、不得外泄、不得写进任何文档**；源码禁止出现授权码明文。
    **`LicenseSignKey.dat`（软件激活签名私钥）** 只留厂商签发工具目录，已
@@ -270,7 +272,9 @@
 | `src/CureStation/DialogService.cs` | 生产 `IDialogService` + `CuringMesPosterHolder`（工单窗上传动作的静态桥接点，收在程序①内） |
 | **Core 共享（扫码绑定家族，P3.3 新增）** | |
 | `src/CureLine.Core/Curing/SlotBinding.cs` | 库位绑定记录 + 绑定簿（`SlotBindingBook`）+ `SlotBindingStore` 存取 `config/slotbindings.json`（缺/坏文件回 null 自愈；脏记录剔除；全量重写） |
-| `src/CureLine.Core/Curing/SlotBindingSession.cs` | **两段式扫码会话**：等库位码（A01~J12）→ 等产品码 → 绑定落盘；扫库位即清旧绑定、换库位切换、同库位刷新计时、超时/取消回空闲、`Remove` 取件作废；全部 UI 线程调用（无锁无后台线程），`Changed` 驱动主窗刷新 |
+| `src/CureLine.Core/Curing/SlotBindingSession.cs` | **三段式扫码会话（V0.0.98）**：扫库位码=开始该库位上料（清上一轮产品绑定）→ 逐个扫产品码（**追加**进该库位产品清单，一库位多产品）→ **再扫一次同库位码=上料结束**（`LoadConfirmed`）；`IsLoadPending` 是"上料未确认"唯一查询口（状态机报警抑制据此）；超时只清待绑目标不清上料状态；`Remove` 取件作废；全部 UI 线程调用（无锁无后台线程），`Changed` 驱动主窗刷新 |
+| `src/CureLine.Core/Data/SlotProductTraceStore.cs` | **固化追溯库（V0.0.98）**：SQLite 表 `slot_product_trace`（一件产品一行：绑定/上料确认/开计时/计划时长/离架/实际固化分钟/结束原因/报警标志/备注）+ 视图 `slot_trace_summary`（一库位一行汇总）；写入点=扫码绑定/上料确认/开计时/离架/报警产生/中途取出/报警终止，**全后台线程**（UI 线程禁 DB IO），写操作加锁串行 |
+| `src/CureStation/TraceReportWindow.*` + `ViewModels/TraceReportViewModel.cs` | **固化追溯报表窗（V0.0.98）**：主窗顶栏【追溯】入口（登录即可见）；筛选行（时间/库位码/SN/结束原因）+ 5 张统计卡 + 两页签（产品明细/库位汇总）+ 分页 + 导出 CSV（当前筛选全量，UTF-8 BOM）；布局参考 HJVision 视觉数据报表，配色走本项目主题键板 |
 | `src/CureLine.Core/Comms/ScannerOptions.cs` | 扫码枪配置 `[Scanner]` 节（**Serial/Tcp 双模式，V0.0.78；V0.0.79 起缺省=现场 TCP 预置**）：`Mode` 缺省 Tcp（显式 Serial 才走串口）+ TCP 三键（`TcpIp` 缺省=`FieldTcpIp` 现场常量、空值 ini 自愈回预置/`TcpPort` 缺省 8899/`TriggerCommand` 缺省空=不发）+ 串口五键（Enabled 缺省 0=不自启连接/PortName/DeviceKeyword/串口参数）+ `SessionTimeoutSeconds`/DebugLog + `Norm*` 规范化（非法值回缺省，坏值不喂驱动） |
 | `src/CureLine.Core/Comms/ScannerBarcodeService.cs` | 子模块 `IScanner` 宿主封装（Serial/Tcp 双模式，V0.0.78 起 TCP=经枪侧 DTU 透传 `ScannerTcpService`，Serial=`ScannerService`）；TCP **触发指令红线=必须显式取 NormTriggerCommand 缺省空串，绝不落子模块缺省 "LON"**（透传枪自动连续读码）；Start/Dispose 后台调用，日志桥接 `LocalLogService`，事件转发 |
 | **Core 共享（IO 家族，P1 新增）** | |
@@ -297,7 +301,8 @@
 | `src/CureLine.Core/Mes/` | 模型/配置/日志/HTTP/参数记忆（16 字段）+ `MockMesServer`（内置模拟 MES 桩，仅 Simulate=1 且 URL 空/占位时接管，自配 URL 透传） |
 | `src/CureLine.Core/Data/CureRecordStore.cs` | `cure_record` 表 CRUD（V0.0.32 由 PLCtable 改名，项目未上线无兼容包袱）+ `ComputeStats` 纯统计 |
 | `src/CureLine.Core/Infrastructure/` | INI/SQLite/路径/语言/启动配置/机台连接配置（`StationConfig.cs`：StationConfigStore/Validator） |
-| `tests/CureLine.Tests/` | 596 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用；`LicenseTests` 16 例锁 kaleidoscope 接线与双产品授权——有厂商私钥环境自动加跑真码激活链 3 例，无钥自动跳过；`SlotBindingTests` 19 例锁扫码绑定工序；`ScannerConfigTests` 8 例锁扫码枪配置窗校验/预置/落盘） |
+| `tests/CureLine.Tests/` | 620 用例 xUnit（`Mocks/`：本地桩 MES / 网关标准报文 / Fake 对话框两套 / 静态快照隔离 / `ScriptedPointBus` 状态机桩，加用例直接复用；`LicenseTests` 16 例锁 kaleidoscope 接线与双产品授权——有厂商私钥环境自动加跑真码激活链 3 例，无钥自动跳过；`SlotBindingTests` 25 例锁扫码上料三段式；`SlotProductTraceStoreTests` 8 例 +
+   `TraceReportViewModelTests` 5 例锁追溯库与报表窗；`ScannerConfigTests` 8 例锁扫码枪配置窗校验/预置/落盘） |
 | `docs/重构设计_20261028.md` | 两程序拆分施工图（边界/点表布局规律/Phase 划分/风险） |
 | `tools/DocShot/` | **文档截图 harness（V0.0.50 重作）**：`run_docshot.ps1` 一键 build 两程序→build harness→组装 runner→起 exe 全自动；**完全后台静默纪律（用户拍板）**——所有窗（含两主窗）`ShowActivated=false`+`ShowInTaskbar=false`+Left/Top=-20000 离屏，绝不抢焦点/不进任务栏/不落用户屏幕；**成品口径=RTB 优先**（`ShotRtb` 按 DPI 缩放渲染视觉树——无 DWM 阴影黑边、与窗口位置无关），PrintWindow 降为兜底（离屏下拍出黑边已被用户目检否决）；镜头名与文档引用全对齐（`cs-workorder-operator/admin.png` 三级视角、`cs-main-idle/flow/dark.png` 三帧），万象清单校验走 `check_config.py`（IMG_WHITE/REQUIRED_IMGS 两张表）+`check_docs.py`；**深色帧换装坑**：斜杠 URI `"/Themes/Dark.xaml"` 相对 Application 根（harness=DocShot 组件 404 FATAL）——必须手 Build `pack://…/CureStation;component/Themes/Dark.xaml` 并**按 Source 认出主题槽替换**（盲替 merged[0] 会把主样式字典换没，半坏视觉），`ThemeManager.Current` 私有 setter 反射同步防顶栏按钮文案不符；工单镜头演示数据用种子 `WorkOrderBook` 不落盘（R1 纪律） |
 
@@ -306,7 +311,7 @@
 ```powershell
 # 全量构建（0 警告 0 错误）
 dotnet build CureLine.slnx --nologo
-# 全量测试（596/596 全绿，串行，约 30s；含本地 HttpListener 桩 MES 端到端
+# 全量测试（620/620 全绿，串行，约 30s；含本地 HttpListener 桩 MES 端到端
 #   + 模拟链路 VM 全链路用例：按钮→注入→扫触发→POST 内置桩→回写→观测
 #   + 授权 16 例——其中真私钥激活链 3 例依赖 tools/LicenseIssuer 私钥，
 #   无钥环境自动跳过）
@@ -557,6 +562,21 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   `MainViewModel.LoadPolicyBook` 后台 Task.Run 立即调状态机
   `ApplyAlarmSwitch`（红灯当场灭/"报警复位"窗清单即清）+ Pump 尾每拍兜底
   （最迟 1 秒生效；开启态快速路径零动作）。
+  **⑧ 上料抑制（V0.0.98，用户拍板"上料时也报警"要改）**：
+  `loadPendingProvider`（构造第 9 可选参 `Func<int,int,bool>?`，边沿/心跳每拍
+  现取，null=恒不抑制=Core/测试缺省）——true=该库位**正在上料**（操作员已扫
+  库位码、货还没上完——手和产品会挡住光栅，报了是误报）→ 该库位报警链**整条
+  静默**（被挡边沿吞掉：零写灯/零日志；StartCuring 开计时复核与
+  RestoreFromRecord 续算复核跳过报警；Pump 补报兜底同样跳过）；抑制解除（上料
+  确认=二次扫同库位码）后**下一拍按快照补报**（不漏报）。**门控闸不受影响**
+  ——`GrillGate`（托盘到位要光栅让空才计时）是工艺防呆，勿顺带关掉。宿主接线=
+  `MainViewModel` 的 `loadPendingProvider: (rack,level) =>
+  _bindings.IsLoadPending(rack,level)`（会话侧真源见扫码绑定语义②）。
+  **⑨ 报警终止（V0.0.98）**：`TerminateCuring(rack,level,out curedSeconds)`
+  ——报警现场确认后选【终止计时】时把该库位计时停表：Phase 转新增的
+  `SlotPhase.Terminated`（黄灯灭、不放绿灯、不再等到点），实际已固化秒数随出参
+  返回入库追溯；托盘离开按**实际已固化时长**记账（非计划时长）；终止时刻随
+  `CuringSlotRecord.TerminatedAt` 落盘（断电恢复仍是终止态，不续算）。
 
   **光栅四项统一跟随策略（V0.0.96 用户拍板"不要出现某一个不跟随策略"）**：
   门控 `GrillGate` / 报警总开关 `GrillAlarmEnabled` / 信号极性 `GrillPolarity`
@@ -819,38 +839,30 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   （缺省空串=连上不发），**绝不能落子模块 `ScanConfig` 缺省 "LON"**（基恩士
   口径；透传枪收到任何指令都被 DTU 当串口数据写进枪可能干扰读码）；
   旧 UDP 推送已弃用（DTU 断电重启不恢复、可靠性差——勿回退）；
-  ② **两段式会话**：等库位码（`SlotLocationCode.TryDecode` 严格 A01~J12）
-  → 等产品码 → 绑定落盘 `config/slotbindings.json`；扫库位即**清除该库位
-  旧绑定并落盘**（扫了新库位又取消=该库位保持未绑定，安全侧）；等产品码
-  时扫到另一个库位码=切换待绑（扫错自救）、同库位=刷新超时计时；
+  ② **三段式会话（V0.0.98 用户拍板改）**：扫库位码（`SlotLocationCode.TryDecode`
+  严格 A01~J12）= **开始该库位上料**（清该库位上一轮产品绑定并落盘）→ 逐个
+  扫产品码 = **追加**进该库位产品清单（**一个库位可放多个产品**；同库位重复
+  扫同一 SN 不重复入库，只提示）→ **再扫一次同一个库位码 = 上料结束**
+  （`LoadConfirmed=true`，抛 `LoadConfirmed` 边沿）；扫到另一个库位码 = 切换
+  待绑目标（旧目标保持"上料未确认"不变）；`SlotBindingRecord.ProductCodes` 是
+  产品清单（旧版单值 `productCode` 落盘件读时**一次性迁进**清单，迁移后盘上
+  即新格式——不是并存的第二套口径）；**上料未确认 = 该库位不报光栅报警**
+  （见状态机语义⑥"上料抑制"，`IsLoadPending` 是唯一查询口）；
   ③ 超时（`[Scanner] SessionTimeoutSeconds` 缺省 15 秒）自动回"请扫库位码"，
-  【取消】同效；扫错码 3 秒浮层提示且**不改变会话阶段**；
+  【取消】同效；扫错码 3 秒浮层提示且**不改变会话阶段**；**超时只清"当前待绑
+  目标"，不清该库位的上料未确认状态**（托盘还架着、货还没上完，报警仍应抑制
+  ——宁可漏报不误报）；
   ④ **取件作废**：状态机 `TrayLeft` 边沿调 `Remove` 清该库位绑定，落盘/刷新
   一律 `UiInvoke` 回 UI（状态机锁内禁 IO；重启对齐 `AlignFromSnapshot` 不发
   `TrayLeft`，故重启不会清在架绑定）；⑤ **未绑定只提示不拦截**（客户口径）：
-   统计条扫码胶囊红字 + 卡片库位码正下方红字"未绑定"（V0.0.80 SN 从卡片
-   foot 底部上移：默认主题蓝 11 号 SemiBold；**V0.0.84 动态行数区（用户拍板
-   「两行显示不完就三行，三行不行就四行」）**：SN 区 1~2 行恒高 32（V0.0.83
-   定标，短码/摘要码锚点零移动）、3 行 48、4 行 64——分档唯一口 =
-   `RackSlotViewModel.SnZoneOf`（按显示文本长度保守 13 字符/行估算），Height
-   直绑 `SnZoneHeight`、mid 补偿直绑 `SnZoneCompensation`（=Margin-top 4+
-   区高 → 36/52/68，无绑定整区 Collapsed 时=0，V0.0.81 双补偿语义保留、
-   V0.0.83 的 Style+DataTrigger 恒 36 已随动态值删除）；>52 字符才走 VM
-   摘要「头 6+…+尾 10」保头尾双可见（52=四行容量保守口径 ≈窄卡 104px
-   文本/7.5px×4 行，改阈值同步 CuringDisplayTests 的 SN 边界用例；摘要 17
-   字符回两行区必装下；ClipToBounds 防字体回退出界仅保险；**V0.0.85 小屏
-   自适应（拍板「重叠风险下优先固化时间，SN 减行 + 中段 …」）**：摘要
-   阈值随行数档联动=档×13——主窗 code-behind 实测首张卡渲染高（30 卡
-   UniformGrid 均分同高量一张代表全部）→ `SnMaxRowsForCardHeight`（卡内
-   除 SN 必需 ≈139 定标宁紧勿松）得 1~4 档 → `UpdateSnCardHeight` 档位
-   变化才统一发 30 卡（`SnMaxRows` setter 即重算不等 Refresh——窗口拖动
-   中立刻反映）；正常窗档恒 4、行为与 V0.0.84 完全一致，找不到实测点
-   静默不接管（fail-safe 旧行为）；1 档是极矮卡底线：区塌单行 16、摘要
-   缩「头4+…+尾6」=11 字符；卡高档界 ≥207→4 / ≥191→3 / ≥175→2 / 更低
-   →1（改定标同步 CuringDisplayTests 卡高分档用例）；**V0.0.85 二轮收口（用户实测"缩小窗口 SN 与固化时间重叠、Mock 刷新才恢复"回归）**：①档界公式改 Chrome+双份 SN 占高（SN 区 Row0 一份 + mid Margin-bottom 同值再一份，一轮漏计后者档界低估 30~62px——缩小窗口必穿溢出带），r=floor((h−143)/32)、档界 >271→4 / >239→3 / >207→2 / >175→1（最大化卡高≈277 仍 4 档）；②mid 内容整包 Viewbox(DownOnly MaxHeight=70) 兜底——垂直 StackPanel 量 child 传 ∞ 高使内部 Viewbox 缩放失效，Row1 扣补偿装不下大数字 70 时 Row1 Grid 不裁溢出绘制进 SN 区（Mock 切状态词视图才"恢复"的根源，生产低频数据下重叠持续），包后 mid Desired 被可用高压住等比缩、任何窗高永不溢出（正常窗 70 原样零变化），Viewbox 单 child 纪律=两互斥视图先装一格 Grid）；V0.0.82 的
-   Viewbox 等比缩/SnMaxWidthConverter/BindingTip 已全部退役删除——用户
-   否决 tooltip 看全、否决无下限整串缩小（字太小））+ 日志只记新出现的边沿，
-  固化/过账流程零依赖绑定簿；⑥ 线程：`ScannerBarcodeService.Start/Dispose`
+   统计条扫码胶囊红字 + 卡片库位码正下方红字"未绑定"；**卡片只显示"已绑 N 件"
+   （V0.0.98 用户拍板：一个库位可能有十几个产品，卡片上显示单个 SN 根本显示不
+   下——V0.0.80~V0.0.86 的 SN 显示整块退役：动态行数区 1~4 行分档 / 摘要「头6+…
+   +尾10」/ 小屏自适应降档（`SnMaxRowsForCardHeight` + `UpdateSnCardHeight` +
+   主窗卡高实测钩子）全部删除，只剩单行固定高 16 的"已绑 N 件"行，mid 补偿两档
+   （行可见=20 / 隐藏=0，属性 `BindingRowMargin`）——完整 SN 与固化时长去【追溯】
+   报表查）**；日志只记新出现的边沿，固化/过账流程零依赖绑定簿；
+  ⑥ 线程：`ScannerBarcodeService.Start/Dispose`
   必须后台调（Dispose 最坏等心跳线程 3 秒），两个事件在子模块后台线程触发、
   订阅方必须封送；⑦ 配置两桶按方式生效（V0.0.78）：Tcp 方式=`TcpIp` 非空即
   目标（`TcpPort` 有 8899 兜底；**TcpIp 代码缺省=现场预置值

@@ -1,15 +1,25 @@
 // =========================================================================
-// SlotBindingSession：扫码绑定会话（等库位码 → 等产品码 → 绑定 → 回等库位码）
+// SlotBindingSession：扫码绑定会话（扫库位码 → 扫产品码（可多个）→ 再扫库位码=上料结束）
 //
-// 干什么：把扫码枪扫到的字符串按"两段式"流程解释成业务动作，并维护
-//   "当前正在等哪一段"的状态：
+// 干什么：把扫码枪扫到的字符串按"上料工序"解释成业务动作，并维护"当前
+//   正在等哪一段"的状态：
 //     ① 空闲（WaitingLocation）：扫到的必须是库位码（A01~J12），否则报错不前进；
-//     ② 已扫库位（WaitingProduct）：扫到的当作产品条码 → 覆盖写入绑定簿 →
-//        回到空闲；此阶段若又扫到库位码，视为"换库位"（操作员扫错/改主意），
-//        直接切到新库位继续等产品码。
+//        扫到库位码 = **开始该库位的上料**（清掉上一轮的产品绑定）。
+//     ② 已扫库位（WaitingProduct）：扫到的当作产品条码 → **追加**进该库位的
+//        产品清单（一个库位可以放多个产品，逐个扫）；此阶段若扫到
+//        · 同一个库位码 → **上料结束**（二次确认，LoadConfirmed=true）；
+//        · 另一个库位码 → 切换待绑库位（操作员扫错/改主意），旧目标保持
+//          "上料未确认"状态不变。
+// 为什么上料要"扫两次库位码"：现场一个库位要放多个产品，操作员不知道
+//   扫了几个才算完。两次扫同一个库位码 = 明确的"上完了"信号，也是
+//   **报警抑制的边界**：上料未确认期间操作员的手和产品会挡住光栅，
+//   那时报警是误报；确认之后光栅被挡才是真报警（见 SlotCuringMachine
+//   的 loadPendingProvider 闸）。库位码重复扫不判错——它就是"结束"的意思。
 // 为什么要有超时：操作员扫了库位码后走开，窗口会一直挂着"A01 待扫产品码"，
 //   下一个来的人会以为在等他接着扫——超时（[Scanner] SessionTimeoutSeconds，
 //   缺省 15 秒）自动回到"请扫库位码"，把界面状态与现场行为对齐。
+//   注意：超时只清"当前待绑目标"，**不清该库位的上料未确认状态**——
+//   托盘还架在那儿、货还没上完，报警就该继续抑制（宁可漏报不误报）。
 // 为什么不自动拦截固化：客户口径是"未绑定只提示、不停机"（流程不能因为
 //   漏扫码就断产），所以本类只维护绑定事实，不参与状态机任何判定。
 //
@@ -27,7 +37,7 @@ public enum SlotBindingPhase
     /// <summary>空闲：等待扫库位码。</summary>
     WaitingLocation,
 
-    /// <summary>已扫库位：等待扫产品条码。</summary>
+    /// <summary>已扫库位：等待扫产品条码（可扫多个），再扫同库位码=上料结束。</summary>
     WaitingProduct,
 }
 
@@ -40,14 +50,20 @@ public enum ScanOutcomeKind
     /// <summary>等待库位码阶段扫到非库位码（不是 A01~J12 形态）——保留原位，提示重扫。</summary>
     InvalidLocation,
 
-    /// <summary>库位码被接受，进入等产品码阶段。</summary>
+    /// <summary>库位码被接受，该库位开始上料（进入等产品码阶段）。</summary>
     LocationAccepted,
 
     /// <summary>等产品码阶段又扫到另一个库位码——切换待绑库位（自愈）。</summary>
     LocationSwitched,
 
-    /// <summary>产品条码已绑定（覆盖旧绑定）。</summary>
+    /// <summary>产品条码已绑定（追加进该库位的产品清单）。</summary>
     ProductBound,
+
+    /// <summary>同一库位扫了重复的产品码——不重复入库，只提示。</summary>
+    DuplicateProduct,
+
+    /// <summary>再次扫到同一个库位码——上料结束（二次确认）。</summary>
+    LoadConfirmed,
 }
 
 /// <summary>扫码处理结果（Message 可直接显示/记日志；架层与产品码供调用方回填 UI）。</summary>
@@ -59,7 +75,7 @@ public sealed record ScanOutcome(
     string ProductCode = "");
 
 /// <summary>
-/// 两段式扫码绑定会话（见文件头注释）。生命周期与主窗一致；
+/// 扫码绑定会话（见文件头注释）。生命周期与主窗一致；
 /// <see cref="Changed"/> 在每次阶段/绑定变化后触发（UI 线程）。
 /// </summary>
 public sealed class SlotBindingSession
@@ -76,7 +92,7 @@ public sealed class SlotBindingSession
     /// <summary>会话日志出口（缺省静默——MainViewModel 注入 LocalLogService）。</summary>
     private readonly Action<string>? _log;
 
-    /// <summary>等产品码阶段的超时秒数（&lt;=0 表示不超时，现场不建议）。</summary>
+    /// <summary>等产品码阶段的超时秒数（<=0 表示不超时，现场不建议）。</summary>
     private readonly int _timeoutSeconds;
 
     /// <summary>最近一次扫到库位码的时刻（超时判定锚点）。</summary>
@@ -84,6 +100,18 @@ public sealed class SlotBindingSession
 
     /// <summary>本次会话变化通知（阶段切换/绑定增删后；UI 线程）。</summary>
     public event Action? Changed;
+
+    /// <summary>
+    /// 产品绑定边沿（新增一件产品；参数=架、层、SN）。宿主据此写追溯库
+    /// （一个 SN 一行流水）——本类只管内存事实，落库由宿主做（Core 不碰 DB）。
+    /// </summary>
+    public event Action<int, int, string>? ProductBound;
+
+    /// <summary>
+    /// 上料确认边沿（二次扫同库位码=上料结束；参数=架、层）。宿主据此给
+    /// 追溯库盖"上料确认时刻"，并把该库位从"报警抑制"名单里放出来。
+    /// </summary>
+    public event Action<int, int>? LoadConfirmed;
 
     /// <summary>当前阶段。</summary>
     public SlotBindingPhase Phase { get; private set; } = SlotBindingPhase.WaitingLocation;
@@ -101,11 +129,14 @@ public sealed class SlotBindingSession
 
     /// <summary>UI 指引文案（统计条扫码胶囊直接显示）。</summary>
     public string Prompt => Phase == SlotBindingPhase.WaitingProduct
-        ? $"{PendingLocationCode} 待扫产品码"
+        ? $"{PendingLocationCode} 待扫产品码（扫完再扫一次库位码结束上料）"
         : "请扫库位码";
 
-    /// <summary>已绑定条数（诊断/状态卡用）。</summary>
+    /// <summary>已绑定的库位数（诊断/状态卡用；一个库位可有多个产品）。</summary>
     public int Count => _map.Count;
+
+    /// <summary>已绑定的产品总件数（跨库位合计；诊断用）。</summary>
+    public int TotalProductCount => _map.Values.Sum(r => r.ProductCodes.Count);
 
     /// <summary>
     /// 构造会话。
@@ -137,6 +168,31 @@ public sealed class SlotBindingSession
     /// <summary>取某库位的绑定（没有返回 null）。</summary>
     public SlotBindingRecord? Get(int rack, int level) =>
         _map.TryGetValue((rack, level), out var record) ? record : null;
+
+    /// <summary>某库位已绑产品件数（0=未绑定；主窗卡片显示用）。</summary>
+    public int ProductCount(int rack, int level) =>
+        _map.TryGetValue((rack, level), out var record) ? record.ProductCodes.Count : 0;
+
+    /// <summary>某库位已绑产品 SN 清单（空=未绑定；追溯/弹窗用）。</summary>
+    public IReadOnlyList<string> GetProducts(int rack, int level) =>
+        _map.TryGetValue((rack, level), out var record)
+            ? record.ProductCodes.ToList()
+            : Array.Empty<string>();
+
+    /// <summary>
+    /// 该库位上料是否已确认（第二次扫同一个库位码=上料结束）。
+    /// 从未扫过库位码的库位=false（未上料，也没确认）。
+    /// </summary>
+    public bool IsLoadConfirmed(int rack, int level) =>
+        _map.TryGetValue((rack, level), out var record) && record.LoadConfirmed;
+
+    /// <summary>
+    /// 该库位是否处于"上料未确认"（= 装了产品但操作员还没说"上完了"）。
+    /// 宿主据此抑制该库位的光栅报警（上料时手挡光栅是正常动作，见
+    /// SlotCuringMachine 的 loadPendingProvider 闸）。
+    /// </summary>
+    public bool IsLoadPending(int rack, int level) =>
+        _map.TryGetValue((rack, level), out var record) && !record.LoadConfirmed;
 
     /// <summary>当前绑定簿快照（按架层升序，落盘/诊断用）。</summary>
     public SlotBindingBook Snapshot() => new()
@@ -173,10 +229,10 @@ public sealed class SlotBindingSession
         // ---- 等产品码阶段 ----
         if (isLocation)
         {
-            // 又扫到库位码：视为换库位/重扫（产品码不会正好是 A01 形态）。
-            // 同一个库位=刷新超时计时；不同库位=切换待绑目标（旧目标已清空，无需善后）。
+            // 扫到库位码：同一个 = 上料结束（二次确认）；不同 = 切换待绑库位
+            // （操作员扫错/改主意，旧目标保持"上料未确认"不变）。
             bool same = rack == PendingRack && level == PendingLevel;
-            return same ? RefreshPending() : AcceptLocation(rack, level, switched: true);
+            return same ? ConfirmLoad() : AcceptLocation(rack, level, switched: true);
         }
 
         return BindProduct(code);
@@ -185,6 +241,8 @@ public sealed class SlotBindingSession
     /// <summary>
     /// 超时检查（由 500ms UI 拍驱动）：等产品码超过阈値自动回空闲。
     /// 返回 true=本次发生了超时重置（调用方需刷 UI）。
+    /// 注意：只清"当前待绑目标"，该库位的上料未确认状态保留——托盘还架着、
+    /// 货还没上完，报警仍应抑制（宁可漏报不误报）。
     /// </summary>
     public bool Tick()
     {
@@ -195,7 +253,8 @@ public sealed class SlotBindingSession
 
         string code = PendingLocationCode;
         ResetPending();
-        _log?.Invoke($"扫码超时：库位 {code} 未扫产品码，已回到『请扫库位码』");
+        _log?.Invoke($"扫码超时：库位 {code} 未扫完产品码，已回到『请扫库位码』" +
+                     "（该库位仍按上料未确认处理，不报光栅报警）");
         Changed?.Invoke();
         return true;
     }
@@ -236,12 +295,21 @@ public sealed class SlotBindingSession
     // ---------------- 内部 ----------------
 
     /// <summary>
-    /// 接受库位码：清除该库位旧绑定（客户口径：扫库位即清旧产品信息）→
-    /// 进入等产品码并重置超时锚点。
+    /// 接受库位码 = 开始该库位的上料：清除该库位上一轮的产品绑定（客户口径：
+    /// 扫库位即清旧产品信息）→ 进入等产品码并重置超时锚点。
     /// </summary>
     private ScanOutcome AcceptLocation(int rack, int level, bool switched)
     {
         bool hadOld = _map.Remove((rack, level));
+        var record = new SlotBindingRecord
+        {
+            Rack = rack,
+            Level = level,
+            BoundAt = _clock(),
+            UpdatedAt = _clock(),
+            LoadConfirmed = false,
+        };
+        _map[(rack, level)] = record;
         if (hadOld)
             Persist();   // 旧绑定已清——即使随后超时/取消，库位也保持"未绑定"（安全侧）
 
@@ -254,41 +322,75 @@ public sealed class SlotBindingSession
         string code = SlotLocationCode.EncodeInRack(rack, level);
         string tail = hadOld ? "（旧绑定已清除）" : "";
         string verb = switched ? "已切换待绑库位" : "库位已扫";
-        _log?.Invoke($"扫码：{verb} {code}{tail}，请扫产品码");
+        _log?.Invoke($"扫码：{verb} {code}{tail}，请扫产品码（可扫多个，扫完再扫一次库位码结束上料）");
         return new ScanOutcome(
             switched ? ScanOutcomeKind.LocationSwitched : ScanOutcomeKind.LocationAccepted,
             $"{code} 待扫产品码{tail}", rack, level);
     }
 
-    /// <summary>重扫同一库位：只刷新超时锚点，不重复清除/记日志。</summary>
-    private ScanOutcome RefreshPending()
-    {
-        _pendingAt = _clock();
-        string code = PendingLocationCode;
-        return new ScanOutcome(ScanOutcomeKind.LocationAccepted,
-            $"{code} 待扫产品码（已重新计时）", PendingRack, PendingLevel);
-    }
-
-    /// <summary>绑定产品码（覆盖旧值）→ 落盘 → 回空闲。</summary>
+    /// <summary>
+    /// 绑定产品码（**追加**进该库位产品清单，一个库位可放多个产品）→ 落盘。
+    /// 同一 SN 重复扫不重复入库（只提示），避免手抖扫两遍把计数搞乱。
+    /// </summary>
     private ScanOutcome BindProduct(string productCode)
     {
         int rack = PendingRack;
         int level = PendingLevel;
         string location = SlotLocationCode.EncodeInRack(rack, level);
 
-        _map[(rack, level)] = new SlotBindingRecord
+        if (!_map.TryGetValue((rack, level), out var record))
         {
-            Rack = rack,
-            Level = level,
-            ProductCode = productCode,
-            BoundAt = _clock(),
-        };
+            record = new SlotBindingRecord
+            {
+                Rack = rack,
+                Level = level,
+                BoundAt = _clock(),
+            };
+            _map[(rack, level)] = record;
+        }
+        if (record.ProductCodes.Contains(productCode))
+        {
+            _log?.Invoke($"扫码：库位 {location} 的产品 {productCode} 已绑定过，忽略重复");
+            return new ScanOutcome(ScanOutcomeKind.DuplicateProduct,
+                $"{location} 的 {productCode} 已绑定过", rack, level, productCode);
+        }
+
+        record.ProductCodes.Add(productCode);
+        record.UpdatedAt = _clock();
+        Persist();
+        _log?.Invoke($"扫码绑定：库位 {location} ← 产品 {productCode}（本库位 {record.ProductCodes.Count} 件）");
+        Changed?.Invoke();
+        ProductBound?.Invoke(rack, level, productCode);
+        return new ScanOutcome(ScanOutcomeKind.ProductBound,
+            $"已绑定 {location} ← {productCode}（本库位 {record.ProductCodes.Count} 件）",
+            rack, level, productCode);
+    }
+
+    /// <summary>
+    /// 再次扫到同一个库位码 = 上料结束（二次确认）：给该库位盖"已确认"标志，
+    /// 回"请扫库位码"，并抛 LoadConfirmed 边沿（宿主据此解除该库位的报警抑制）。
+    /// </summary>
+    private ScanOutcome ConfirmLoad()
+    {
+        int rack = PendingRack;
+        int level = PendingLevel;
+        string location = SlotLocationCode.EncodeInRack(rack, level);
+
+        if (!_map.TryGetValue((rack, level), out var record))
+        {
+            record = new SlotBindingRecord { Rack = rack, Level = level, BoundAt = _clock() };
+            _map[(rack, level)] = record;
+        }
+        record.LoadConfirmed = true;
+        record.LoadConfirmedAt = _clock();
+        record.UpdatedAt = _clock();
         Persist();
         ResetPending();
-        _log?.Invoke($"扫码绑定：库位 {location} ← 产品 {productCode}");
+        _log?.Invoke($"扫码确认：库位 {location} 上料结束（{record.ProductCodes.Count} 件产品已绑定）");
         Changed?.Invoke();
-        return new ScanOutcome(ScanOutcomeKind.ProductBound,
-            $"已绑定 {location} ← {productCode}", rack, level, productCode);
+        LoadConfirmed?.Invoke(rack, level);
+        return new ScanOutcome(ScanOutcomeKind.LoadConfirmed,
+            $"{location} 上料结束（{record.ProductCodes.Count} 件产品）", rack, level);
     }
 
     /// <summary>落盘（失败只记日志——内存绑定照常生效，重启重扫即可）。</summary>
@@ -321,7 +423,10 @@ public sealed class SlotBindingSession
     {
         Rack = source.Rack,
         Level = source.Level,
-        ProductCode = source.ProductCode,
+        ProductCodes = source.ProductCodes.ToList(),
         BoundAt = source.BoundAt,
+        UpdatedAt = source.UpdatedAt,
+        LoadConfirmed = source.LoadConfirmed,
+        LoadConfirmedAt = source.LoadConfirmedAt,
     };
 }

@@ -1,0 +1,314 @@
+<Window x:Class="CureStation.TraceReportWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:CureStation.ViewModels"
+        xmlns:local="clr-namespace:CureStation"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:TraceReportViewModel, IsDesignTimeCreatable=False}"
+        Title="固化追溯报表 - 固化程控"
+        Width="1120" Height="700" MinWidth="900" MinHeight="520"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        Background="Transparent" AllowsTransparency="True"
+        Foreground="{DynamicResource Brush.FgMid}"
+        FontSize="12">
+    <shell:WindowChrome.WindowChrome>
+        <!-- 无边框自绘（与报警窗/日志窗同族）：头条即命中拖动区，边沿 6px 缩放；
+             系统按钮全关，✕ 内置于头条右端 -->
+        <shell:WindowChrome CaptionHeight="36" GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False"
+                            ResizeBorderThickness="6"/>
+    </shell:WindowChrome.WindowChrome>
+    <Window.Resources>
+        <local:TraceReasonConverter x:Key="ReasonText"/>
+        <local:BoolMarkConverter x:Key="BoolMark"/>
+    </Window.Resources>
+    <!--
+      固化追溯报表（V0.0.97 新增）：
+      - 布局参考 HJVision「视觉数据报表」：筛选行 → 统计卡行 → 表格 → 底栏
+        分页/导出；配色走本项目主题键板（双主题同名），不照抄硬编码色；
+      - 两个视图页签（Radio 互斥）：产品明细（一个 SN 一行流水）/ 库位汇总
+        （一个库位一行，来自 SQLite 视图 slot_trace_summary）；
+      - 统计卡与表格同一次查询口径（现场两处数字必须对得上）；
+      - 导出 CSV 导当前筛选下的全部记录（不分页），后台线程写文件。
+    -->
+    <Grid Margin="14">
+        <Border CornerRadius="10" Background="{DynamicResource Brush.WindowBg}"
+                BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1"
+                Effect="{StaticResource Fx.WinShadow}">
+            <DockPanel>
+                <!-- 标题条 -->
+                <Border DockPanel.Dock="Top" Background="{DynamicResource Brush.LfHeadGrad}"
+                        BorderBrush="{DynamicResource Brush.TopbarBorder}" BorderThickness="0,0,0,1"
+                        CornerRadius="10,10,0,0"
+                        Height="36" Padding="12,0">
+                    <DockPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="固化追溯报表" FontSize="14" FontWeight="Bold"
+                                       Foreground="{DynamicResource Brush.LfHeadFg}" VerticalAlignment="Center"/>
+                            <TextBlock Text="库位 ↔ 产品 SN ↔ 固化时长"
+                                       FontSize="11" Margin="10,0,0,0"
+                                       Foreground="{DynamicResource Brush.LfHeadSubFg}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource WinTitleClose}"
+                                Height="36" Foreground="{DynamicResource Brush.LfHeadFg}"
+                                Content="✕" Click="OnCloseClick" ToolTip="关闭报表"/>
+                    </DockPanel>
+                </Border>
+
+                <!-- 底栏：状态摘要 + 页码 + 翻页 + 导出 -->
+                <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Brush.DimLine}"
+                        BorderThickness="0,1,0,0" Padding="12,8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding StatusText, FallbackValue=就绪}"
+                                   Foreground="{DynamicResource Brush.FgDim}"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding PageText, FallbackValue=第 1/1 页}"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"
+                                       Foreground="{DynamicResource Brush.FgMid}"/>
+                            <Button Style="{StaticResource FreshButton}" Command="{Binding PrevPageCommand}"
+                                    Content="上一页" MinWidth="80" Margin="0,0,8,0"/>
+                            <Button Style="{StaticResource FreshButton}" Command="{Binding NextPageCommand}"
+                                    Content="下一页" MinWidth="80" Margin="0,0,16,0"/>
+                            <Button Style="{StaticResource FreshPrimaryButton}" Command="{Binding ExportCommand}"
+                                    Content="导出 CSV" MinWidth="100"
+                                    ToolTip="导出当前筛选条件下的全部记录（不分页）"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Grid Margin="12,10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- ① 筛选行（标签统一固定宽 44 右对齐——同宽标签让每组
+                         "标签+控件"的起点一致，栏面不因标签字数不同而参差） -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="起始" Width="44" TextAlignment="Right"
+                                   VerticalAlignment="Center" Margin="0,0,6,0"
+                                   Foreground="{DynamicResource Brush.FgMid}"/>
+                        <TextBox Grid.Column="1" Style="{StaticResource FreshInput}" Width="118"
+                                 Text="{Binding FromText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="按绑定时刻筛选（yyyy-MM-dd）；留空=不限"/>
+                        <TextBlock Grid.Column="2" Text="结束" Width="44" TextAlignment="Right"
+                                   VerticalAlignment="Center" Margin="16,0,6,0"
+                                   Foreground="{DynamicResource Brush.FgMid}"/>
+                        <TextBox Grid.Column="3" Style="{StaticResource FreshInput}" Width="118"
+                                 Text="{Binding ToText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="按绑定时刻筛选（yyyy-MM-dd）；留空=不限"/>
+                        <TextBlock Grid.Column="4" Text="库位" Width="44" TextAlignment="Right"
+                                   VerticalAlignment="Center" Margin="16,0,6,0"
+                                   Foreground="{DynamicResource Brush.FgMid}"/>
+                        <TextBox Grid.Column="5" Style="{StaticResource FreshInput}" Width="92"
+                                 Text="{Binding LocationText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="库位码（客户标签 A01~J12）；支持前缀，留空=不限"/>
+                        <StackPanel Grid.Column="6" Orientation="Horizontal" Margin="16,0,0,0">
+                            <TextBlock Text="SN" Width="44" TextAlignment="Right"
+                                       VerticalAlignment="Center" Margin="0,0,6,0"
+                                       Foreground="{DynamicResource Brush.FgMid}"/>
+                            <TextBox Style="{StaticResource FreshInput}" Width="150"
+                                     Text="{Binding SnText, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="产品 SN 关键字（包含匹配）；留空=不限"/>
+                            <TextBlock Text="结果" Width="44" TextAlignment="Right"
+                                       VerticalAlignment="Center" Margin="16,0,6,0"
+                                       Foreground="{DynamicResource Brush.FgMid}"/>
+                            <ComboBox Style="{StaticResource FreshCombo}" Width="104"
+                                      ItemsSource="{Binding ReasonOptions, FallbackValue={x:Null}}"
+                                      SelectedItem="{Binding ReasonText}"
+                                      ToolTip="按结束原因筛选；全部=不限"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="7" Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource FreshPrimaryButton}" Command="{Binding QueryCommand}"
+                                    Content="查询" MinWidth="88" Margin="0,0,8,0"/>
+                            <Button Style="{StaticResource FreshButton}" Command="{Binding ResetCommand}"
+                                    Content="重置" MinWidth="72"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- ② 统计卡行（5 张：总数/正常/异常/在架/库位数） -->
+                    <UniformGrid Grid.Row="1" Columns="5" Margin="0,10,0,10">
+                        <Border Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0" Padding="12,9">
+                            <StackPanel>
+                                <TextBlock Text="记录总数" FontSize="11"
+                                           Foreground="{DynamicResource Brush.StatFg}"/>
+                                <TextBlock Text="{Binding TotalText, FallbackValue=0}" FontSize="22"
+                                           FontWeight="Bold" Margin="0,2,0,0"
+                                           Foreground="{DynamicResource Brush.StatNumFg}"/>
+                                <TextBlock Text="件产品记录" FontSize="10"
+                                           Foreground="{DynamicResource Brush.FgDim}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0" Padding="12,9">
+                            <StackPanel>
+                                <TextBlock Text="正常放行" FontSize="11"
+                                           Foreground="{DynamicResource Brush.StatFg}"/>
+                                <TextBlock Text="{Binding FinishedText, FallbackValue=0}" FontSize="22"
+                                           FontWeight="Bold" Margin="0,2,0,0"
+                                           Foreground="{DynamicResource Brush.StateGreen}"/>
+                                <TextBlock Text="固化到点取走" FontSize="10"
+                                           Foreground="{DynamicResource Brush.FgDim}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0" Padding="12,9">
+                            <StackPanel>
+                                <TextBlock Text="异常终止" FontSize="11"
+                                           Foreground="{DynamicResource Brush.StatFg}"/>
+                                <TextBlock Text="{Binding AbnormalText, FallbackValue=0}" FontSize="22"
+                                           FontWeight="Bold" Margin="0,2,0,0"
+                                           Foreground="{DynamicResource Brush.StateRed}"/>
+                                <TextBlock Text="取出/终止/误报" FontSize="10"
+                                           Foreground="{DynamicResource Brush.FgDim}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource FreshCardBorder}" Margin="0,0,8,0" Padding="12,9">
+                            <StackPanel>
+                                <TextBlock Text="仍在架" FontSize="11"
+                                           Foreground="{DynamicResource Brush.StatFg}"/>
+                                <TextBlock Text="{Binding ActiveText, FallbackValue=0}" FontSize="22"
+                                           FontWeight="Bold" Margin="0,2,0,0"
+                                           Foreground="{DynamicResource Brush.StateYellow}"/>
+                                <TextBlock Text="未离架" FontSize="10"
+                                           Foreground="{DynamicResource Brush.FgDim}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource FreshCardBorder}" Padding="12,9">
+                            <StackPanel>
+                                <TextBlock Text="涉及库位" FontSize="11"
+                                           Foreground="{DynamicResource Brush.StatFg}"/>
+                                <TextBlock Text="{Binding SlotCountText, FallbackValue=0}" FontSize="22"
+                                           FontWeight="Bold" Margin="0,2,0,0"
+                                           Foreground="{DynamicResource Brush.StatNumFg}"/>
+                                <TextBlock Text="个库位" FontSize="10"
+                                           Foreground="{DynamicResource Brush.FgDim}"/>
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+
+                    <!-- ③ 视图页签（Radio 互斥：产品明细 / 库位汇总）
+                         ★命令链而非 IsChecked 双向绑定：Radio 未勾选时 IsChecked=null，
+                         双向绑 bool 属性会把 null 写回 false，开窗瞬间视图被误切走
+                         （WPF Radio 互踢坑的变体）。Command 切视图，勾选态由
+                         GroupName 互斥自动管。 -->
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8">
+                        <RadioButton GroupName="TraceView" Content="产品明细" IsChecked="True"
+                                     Command="{Binding ShowDetailCommand}"
+                                     Style="{StaticResource FreshRadio}" Margin="0,0,16,0"
+                                     ToolTip="一个产品 SN 一行：绑定/开计时/离架/实际固化时长/结束原因"/>
+                        <RadioButton GroupName="TraceView" Content="库位汇总" Margin="0,0,0,0"
+                                     Style="{StaticResource FreshRadio}"
+                                     Command="{Binding ShowSummaryCommand}"
+                                     ToolTip="一个库位一行：累计件数/正常/异常/在架/累计固化时长"/>
+                    </StackPanel>
+
+                    <!-- ④ 表格区（两表互斥；圆角边框板 = PanelBg + PanelBorder） -->
+                    <Border Grid.Row="3" CornerRadius="8" Background="{DynamicResource Brush.CardBg}"
+                            BorderBrush="{DynamicResource Brush.CardBorder}" BorderThickness="1">
+                        <Grid>
+                            <!-- 产品明细（流水表） -->
+                            <DataGrid ItemsSource="{Binding Rows, FallbackValue={x:Null}}"
+                                      ColumnHeaderHeight="30" RowHeight="26"
+                                      IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      CanUserReorderColumns="True" HeadersVisibility="Column"
+                                      SelectionMode="Single" GridLinesVisibility="Horizontal"
+                                      Background="Transparent" BorderThickness="0"
+                                      RowBackground="Transparent" AlternatingRowBackground="Transparent">
+                                <DataGrid.Style>
+                                    <Style TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ShowDetail}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </DataGrid.Style>
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="绑定时刻" Binding="{Binding BoundAt}" Width="140"/>
+                                    <DataGridTextColumn Header="库位" Binding="{Binding LocationCode}" Width="60"/>
+                                    <DataGridTextColumn Header="产品 SN" Binding="{Binding ProductSn}" Width="180"/>
+                                    <DataGridTextColumn Header="开计时" Binding="{Binding CuringStartedAt}" Width="140"/>
+                                    <DataGridTextColumn Header="计划(分)" Binding="{Binding PlannedMinutes}" Width="70"/>
+                                    <DataGridTextColumn Header="离架时刻" Binding="{Binding LeftAt}" Width="140"/>
+                                    <DataGridTextColumn Header="实际固化(分)" Binding="{Binding CuredMinutes}" Width="90"/>
+                                    <DataGridTemplateColumn Header="结束原因" Width="90">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding EndReason, Converter={StaticResource ReasonText}}"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <!-- 报警列用文字（是/空）而非复选框：复选框在窄表格里
+                                         是个小方块，行内读不出"是否报警"，且勾框会挤
+                                         掉末列宽度。 -->
+                                    <DataGridTemplateColumn Header="报警" Width="56">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding AlarmFlag, Converter={StaticResource BoolMark}}"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="备注" Binding="{Binding OperatorNote}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <!-- 库位汇总（视图） -->
+                            <DataGrid ItemsSource="{Binding SummaryRows, FallbackValue={x:Null}}"
+                                      ColumnHeaderHeight="30" RowHeight="26"
+                                      IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      CanUserReorderColumns="True" HeadersVisibility="Column"
+                                      SelectionMode="Single" GridLinesVisibility="Horizontal"
+                                      Background="Transparent" BorderThickness="0"
+                                      RowBackground="Transparent" AlternatingRowBackground="Transparent">
+                                <DataGrid.Style>
+                                    <Style TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ShowDetail}" Value="False">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </DataGrid.Style>
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="库位" Binding="{Binding LocationCode}" Width="90"/>
+                                    <DataGridTextColumn Header="架" Binding="{Binding Rack}" Width="60"/>
+                                    <DataGridTextColumn Header="层" Binding="{Binding Level}" Width="60"/>
+                                    <DataGridTextColumn Header="产品数" Binding="{Binding ProductCount}" Width="80"/>
+                                    <DataGridTextColumn Header="正常" Binding="{Binding FinishedCount}" Width="70"/>
+                                    <DataGridTextColumn Header="异常" Binding="{Binding AbnormalCount}" Width="70"/>
+                                    <DataGridTextColumn Header="在架" Binding="{Binding ActiveCount}" Width="70"/>
+                                    <DataGridTextColumn Header="首次绑定" Binding="{Binding FirstBoundAt}" Width="150"/>
+                                    <DataGridTextColumn Header="最近离架" Binding="{Binding LastLeftAt}" Width="150"/>
+                                    <DataGridTextColumn Header="累计固化(分)" Binding="{Binding CuredMinutes}" Width="110"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

@@ -39,38 +39,26 @@ public class CureStationViewModelTests
     }
 
     [Fact]
-    public void MainVm_UpdateSnCardHeight_DispatchesRowsToAllSlots()
+    public void MainVm_CardShowsBoundProductCount_NotSn()
     {
-        // V0.0.85 小屏自适应：卡高实测 → 全局 SN 行数档统一下发 30 卡
-        // （档位变化才下发：Repeated same-row 用值相等收敛断言体现——再喂同档
-        // 高度后卡片状态不再变化，无多余重算）。
+        // V0.0.97：卡片不再显示产品 SN（原 V0.0.84~V0.0.86 的动态行数区/
+        // 摘要/小屏降档一整套随之退役），改为显示"已绑 N 件"。
         using var scope = new TestScope();
         EnsureConfigDir();
         IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
         var fake = new FakeCureDialogService();
         using var vm = new CureStation.ViewModels.MainViewModel(fake);
 
-        Assert.All(vm.Slots, s => Assert.Equal(4, s.SnMaxRows));   // 缺省档 4
-        vm.UpdateSnCardHeight(300);                              // 大屏：不变仍 4
-        Assert.All(vm.Slots, s => Assert.Equal(4, s.SnMaxRows));
+        // 空位：无绑定 → 文案空、整行收起（不留空白）
+        Assert.All(vm.Slots, s => Assert.False(s.HasBindingText));
+        Assert.All(vm.Slots, s => Assert.Equal(0, s.BoundProductCount));
+        Assert.All(vm.Slots, s => Assert.Equal(new System.Windows.Thickness(0), s.BindingRowMargin));
 
-        vm.UpdateSnCardHeight(210);   // 2 档（二轮档界 207~238 → 2，见换算用例）
-        Assert.All(vm.Slots, s => Assert.Equal(2, s.SnMaxRows));
-
-        vm.UpdateSnCardHeight(120);   // 1 档：极矮钳 1
-        Assert.All(vm.Slots, s => Assert.Equal(1, s.SnMaxRows));
-
-        // 1 档 + 长码：文案即时缩为"头4+…+尾6"（降档路径重算不等 Refresh 拍）
-        vm.UpdateSnCardHeight(120);
-        Assert.All(vm.Slots, s => Assert.Equal(1, s.SnMaxRows));
-        vm.Slots[0].Refresh(PointTableSnapshot.Empty, true, null, 0,
-            "AAAA-20260909-BKWWWW");
-        Assert.Equal("AAAA…BKWWWW", vm.Slots[0].BindingText);     // 11 字符单行
-        Assert.Equal(16, vm.Slots[0].SnZoneHeight);
-
-        // 复原正常高度 → 回 4 档（升档同样即时）
-        vm.UpdateSnCardHeight(300);
-        Assert.All(vm.Slots, s => Assert.Equal(4, s.SnMaxRows));
+        // 有绑定：显示件数，不显示任何 SN 原文
+        vm.Slots[0].Refresh(PointTableSnapshot.Empty, true, null, 0, 3);
+        Assert.Equal("已绑 3 件", vm.Slots[0].BindingText);
+        Assert.Equal(3, vm.Slots[0].BoundProductCount);
+        Assert.DoesNotContain("SN", vm.Slots[0].BindingText);
     }
 
     [Fact]

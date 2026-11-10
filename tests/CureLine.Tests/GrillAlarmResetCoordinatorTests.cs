@@ -185,4 +185,118 @@ public class GrillAlarmResetCoordinatorTests
     {
         public GrillAlarmResetMode Value { get; set; } = value;
     }
+
+    // ---------- 三步现场确认流程（V0.0.97） ----------
+    // 清单 → 【有产品取出】→ 补扫取出的产品 SN → 计时处置（继续/终止）→ 回清单。
+
+    [Fact(DisplayName = "报警确认：点【有产品取出】进入补扫步骤并抛确认事件")]
+    public void TakeOut_EntersScanOutStep()
+    {
+        var c = MakeManual();
+        var confirmed = new List<(int Rack, int Level)>();
+        c.TakeOutConfirmed += (r, l) => confirmed.Add((r, l));
+        c.Refresh([(2, 3)]);
+
+        c.Items[0].TakeOut.Execute(null);
+
+        Assert.Equal(GrillAlarmDialogStep.ScanOut, c.Step);
+        Assert.Equal([(2, 3)], confirmed);
+        Assert.Equal(2, c.CurrentRack);
+        Assert.Equal(3, c.CurrentLevel);
+        Assert.Equal("B04", c.CurrentLocationCode);   // 架2层3 → 客户编码 B04
+        Assert.Empty(c.OutScans);
+    }
+
+    [Fact(DisplayName = "报警确认：补扫的每个 SN 逐件抛事件（含当时已固化分钟数）")]
+    public void OutScan_RecordsEachSnWithCuredMinutes()
+    {
+        var c = new GrillAlarmResetCoordinator(() => GrillAlarmResetMode.Manual,
+            (rack, level) => 25);      // 已固化 25 分钟
+        var recorded = new List<(int Rack, int Level, string Sn, int Cured)>();
+        c.OutScanRecorded += (r, l, sn, cm) => recorded.Add((r, l, sn, cm));
+        c.Refresh([(1, 1)]);
+        c.Items[0].TakeOut.Execute(null);
+
+        Assert.True(c.TryHandleOutScan("SN-1"));
+        Assert.True(c.TryHandleOutScan("SN-2"));
+
+        Assert.Equal([(1, 1, "SN-1", 25), (1, 1, "SN-2", 25)], recorded);
+        Assert.Equal(2, c.OutScans.Count);
+        Assert.Contains("已扫 2 件", c.ScanOutHintText);
+    }
+
+    [Fact(DisplayName = "报警确认：补扫通道只认产品码（库位码忽略/重复SN不重复记）")]
+    public void OutScan_IgnoresLocationCodeAndDuplicates()
+    {
+        var c = MakeManual();
+        var recorded = new List<string>();
+        c.OutScanRecorded += (r, l, sn, cm) => recorded.Add(sn);
+        c.Refresh([(1, 1)]);
+        c.Items[0].TakeOut.Execute(null);
+
+        Assert.True(c.TryHandleOutScan("A01"));      // 库位码：被通道消费但不算产品
+        Assert.True(c.TryHandleOutScan("SN-1"));
+        Assert.True(c.TryHandleOutScan("SN-1"));      // 重复：不算新件
+        Assert.Equal(["SN-1"], recorded);
+        Assert.Single(c.OutScans);
+    }
+
+    [Fact(DisplayName = "报警确认：非补扫阶段不消费扫码（普通绑定通道不受影响）")]
+    public void OutScan_NotInScanOutStep_ReturnsFalse()
+    {
+        var c = MakeManual();
+        c.Refresh([(1, 1)]);
+        Assert.False(c.TryHandleOutScan("SN-1"));    // 步骤一：交回普通通道
+        Assert.Equal(GrillAlarmDialogStep.List, c.Step);
+    }
+
+    [Fact(DisplayName = "报警确认：【扫完了】进入计时处置，【继续计时】派发不终止")]
+    public void TimingDecision_KeepTiming_KeepsCuring()
+    {
+        var c = MakeManual();
+        var decisions = new List<(int Rack, int Level, bool Terminate)>();
+        c.TimingDecisionRequested += (r, l, t) => decisions.Add((r, l, t));
+        c.Refresh([(1, 1)]);
+        c.Items[0].TakeOut.Execute(null);
+        c.TryHandleOutScan("SN-1");
+
+        c.CommandFinishScan.Execute(null);
+        Assert.Equal(GrillAlarmDialogStep.TimingDecision, c.Step);
+
+        c.CommandKeepTiming.Execute(null);
+        Assert.Equal([(1, 1, false)], decisions);
+        Assert.Equal(GrillAlarmDialogStep.List, c.Step);   // 处置完回清单
+        Assert.Equal(0, c.CurrentRack);
+    }
+
+    [Fact(DisplayName = "报警确认：【终止计时】派发终止（整个库位产品停表）")]
+    public void TimingDecision_StopTiming_DispatchesTerminate()
+    {
+        var c = MakeManual();
+        var decisions = new List<(int Rack, int Level, bool Terminate)>();
+        c.TimingDecisionRequested += (r, l, t) => decisions.Add((r, l, t));
+        c.Refresh([(4, 2)]);
+        c.Items[0].TakeOut.Execute(null);
+        c.CommandFinishScan.Execute(null);
+
+        c.CommandStopTiming.Execute(null);
+        Assert.Equal([(4, 2, true)], decisions);
+        Assert.Equal(GrillAlarmDialogStep.List, c.Step);
+    }
+
+    [Fact(DisplayName = "报警确认：【返回】放弃补扫回清单（不派发任何处置）")]
+    public void BackToList_AbandonsScanWithoutDecision()
+    {
+        var c = MakeManual();
+        var decisions = new List<(int Rack, int Level, bool Terminate)>();
+        c.TimingDecisionRequested += (r, l, t) => decisions.Add((r, l, t));
+        c.Refresh([(1, 1)]);
+        c.Items[0].TakeOut.Execute(null);
+        c.TryHandleOutScan("SN-1");
+
+        c.CommandBackToList.Execute(null);
+        Assert.Equal(GrillAlarmDialogStep.List, c.Step);
+        Assert.Empty(decisions);
+        Assert.Empty(c.OutScans);
+    }
 }

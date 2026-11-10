@@ -156,32 +156,18 @@
                         </Grid.RowDefinitions>
 
                         <!-- top：库位码（大字号，空闲/未配置灰降权）+ 状态胶囊（六态彩底，设计图顶替灯点）
-                             + 库位码正下方一行=产品码（SN，V0.0.80 从卡片 foot 底部迁上来——
-                             底缘太不醒目；已绑=主题蓝 SemiBold 稍醒目，未绑定红字优先） -->
+                             + 库位码正下方一行=已绑定产品件数（V0.0.97：卡片不再显示
+                             产品 SN——一个库位可能有十几个产品，卡片显示不下；
+                             完整 SN 去「追溯报表」查，一件一行可检索） -->
                         <Grid Grid.Row="0" x:Name="SnCardCap" ToolTipService.ShowDuration="12000">
                             <Grid.ToolTip>
                                 <ToolTip>
                                     <StackPanel>
                                         <TextBlock Text="{Binding Title, FallbackValue=A01-上层}"
                                                    FontWeight="SemiBold"/>
-                                        <!-- 产品 SN 完整码（V0.0.86，用户拍板推翻 V0.0.82 否决）：
-                                             卡上显示摘要（可能头尾省略），悬停看全码——扫码核对
-                                             不用去翻绑定簿；未绑定（ProductCode=""）整行隐藏，
-                                             卡片红字"未绑定"已足够。触发器死区纪律：Visibility
-                                             缺省 Visible 写进 Style Setter，空码才收 Collapsed。 -->
-                                        <TextBlock Margin="0,2,0,0"
-                                                   Text="{Binding ProductCode, StringFormat=产品 SN：{0}}">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding ProductCode}" Value="">
-                                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
+                                        <!-- 已绑定件数（V0.0.97）：不再显示任何 SN 原文 -->
+                                        <TextBlock Text="{Binding BindingText, FallbackValue=已绑 0 件}"
+                                                   Margin="0,2,0,0"/>
                                         <TextBlock Text="{Binding SlotStateText, FallbackValue=空闲}"
                                                    Margin="0,2,0,0"/>
                                         <TextBlock Text="{Binding GrillText, FallbackValue=L:— R:—, StringFormat=光栅 {0}}"
@@ -231,6 +217,12 @@
                                             <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
                                                 <Setter Property="Background" Value="{DynamicResource Brush.StateRed}"/>
                                             </DataTrigger>
+                                            <!-- 【V0.0.97】已终止计时（报警确认后人工停表）：
+                                                 紫色=不再计时也不放行，与"待门控"同色系但
+                                                 文案不同，现场一眼分得清。 -->
+                                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Terminated">
+                                                <Setter Property="Background" Value="{DynamicResource Brush.StatePurple}"/>
+                                            </DataTrigger>
                                             <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="NotConfigured">
                                                 <Setter Property="Background" Value="{DynamicResource Brush.StateBlue}"/>
                                             </DataTrigger>
@@ -265,6 +257,11 @@
                                                     <Setter Property="Text" Value="占用"/>
                                                     <Setter Property="Foreground" Value="{DynamicResource Brush.FgOnAccent}"/>
                                                 </DataTrigger>
+                                                <!-- 【V0.0.97】已终止计时（人工停表） -->
+                                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Terminated">
+                                                    <Setter Property="Text" Value="已终止"/>
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.FgOnAccent}"/>
+                                                </DataTrigger>
                                                 <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="NotConfigured">
                                                     <Setter Property="Text" Value="未配置"/>
                                                     <Setter Property="Foreground" Value="{DynamicResource Brush.FgOnAccent}"/>
@@ -274,30 +271,11 @@
                                     </TextBlock.Style>
                                 </TextBlock>
                             </Border>
-                            <!-- 产品码（SN，P3.3；V0.0.80 从卡片 foot 底部迁到库位码正下方——
-                                 用户拍板：底缘太不醒目）：已绑产品=主题蓝（Brush.Accent 双主题
-                                 同名：浅 #1E90FF / 深 #4FC3F7）11 号 SemiBold 稍醒目；未绑定
-                                 红字 + 加粗优先（同一行红色报警）。
-                                  ★V0.0.84 动态行数口径（拍板「两行显示不完就三行，三行不行
-                                  就四行」）：区高按显示文本长度分档（VM SnZoneOf 唯一计算
-                                  口）——1~2 行恒 32（V0.0.83 两行区定标，短码与摘要码锚点
-                                  零移动）、3 行 48、4 行 64（保守 13 字符/行估算）——
-                                  Border.Height 直绑 SnZoneHeight（数值绑定给 FallbackValue
-                                  纪律），TextWrapping=Wrap 在区内自动换行消化；摘要阈值
-                                  同步 26→52（四行容量），>52 才由 VM 摘要（头 6+…+尾 10）
-                                  兜底、摘要 17 字符回两行区。ClipToBounds 只是防字体回退
-                                  把行画出区外的保险，正常口径永不触发。
-                                  ★V0.0.85 小屏自适应（拍板"重叠风险下优先固化时间"）：
-                                  行数档上限来自主窗实测卡高（SnMaxRows，缺省 4=正常窗口
-                                  本注释全部口径不变）——卡矮时档降、阈值随档缩、1 档区高
-                                  塌到 16 单行，中段摘要"头4+…+尾6"（详见 VM 注释链），
-                                  mid 补偿同拍收窄、固化时间不再被挤压/重叠。
-                                  V0.0.82 的「Viewbox 等比缩小」口径已废（换行+缩放字号两不
-                                  相宜，一并退役 SnMaxWidthConverter）。
-                                  无绑定整区 Collapsed（mid 区补偿 Margin 同步清零，
-                                  锚点与「无 SN 卡」一致，见 mid 注释）。
-                                 ★缺省色/可见性/字重全进 Style Setter（标签本地值会压死触发器——坑⑥）。 -->
-                            <Border Grid.Row="1" Height="{Binding SnZoneHeight, FallbackValue=32}" Margin="0,4,0,0" ClipToBounds="True">
+                            <!-- 已绑定件数行（V0.0.97）：单行固定高 16（原 V0.0.84~V0.0.85
+                                 的动态 1~4 行区随 SN 显示需求取消整体退役）——文本
+                                 "已绑 N 件"（主题蓝 Brush.Accent）/ "未绑定"（红字加粗）。
+                                 缺省可见性/字重全进 Style Setter（标签本地值会压死触发器——坑⑥）。 -->
+                            <Border Grid.Row="1" Height="16" Margin="0,4,0,0" ClipToBounds="True">
                                 <Border.Style>
                                     <Style TargetType="Border">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -308,9 +286,8 @@
                                         </Style.Triggers>
                                     </Style>
                                 </Border.Style>
-                                <TextBlock Text="{Binding BindingText, FallbackValue=未绑定产品}"
+                                <TextBlock Text="{Binding BindingText, FallbackValue=已绑 0 件}"
                                            FontSize="11"
-                                           TextWrapping="Wrap"
                                            VerticalAlignment="Center">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
@@ -327,17 +304,15 @@
                             </Border>
                         </Grid>
 
-                        <!-- mid：状态词视图（idle/gate/done/alarm/notconfig/灯色反推计时，含副文案行）
+                        <!-- mid：状态词视图（idle/gate/done/alarm/terminated/notconfig/灯色反推计时，含副文案行）
                              与大数字视图（状态机精确计时+进度条）互斥；文本随 Kind 分支给字面量
                              （对齐设计图文案），不绑 VM。
-                             ★V0.0.85 动态补偿（V0.0.81 位置锁定语义保留；V0.0.84 动态
-                             行数区扩展）：库位码下的 SN 区总占高 = Margin-top 4 + 区高
-                             （正常窗 32/48/64，卡矮时 16/32/48——分档随实测卡高降，
-                             分档唯一口=VM SnZoneOf）——mid Margin-bottom 直绑
-                             SnZoneCompensation（=4+区高），居中锚点始终与
-                             "无 SN 卡"完全一致的水平线（区高变化同步增减，mid 不漂）；
-                             无绑定/未关联整区 Collapsed 时补偿=0 与旧版像素级一致。 -->
-                        <Grid Grid.Row="1" VerticalAlignment="Center" Margin="{Binding SnZoneCompensation}">
+                             ★V0.0.97：库位码下的"已绑件数"行是固定单行（16px），mid 区
+                             Margin 直绑 BindingRowMargin（该行可见=20 / 隐藏=0），居中
+                             锚点始终与"无绑定行卡"完全一致的水平线（不会因有无
+                             绑定行而漂移）。原 V0.0.84~V0.0.85 的动态行数区补偿
+                             （SnZoneCompensation）随 SN 显示退役整体删除。 -->
+                        <Grid Grid.Row="1" VerticalAlignment="Center" Margin="{Binding BindingRowMargin}">
                             <!-- ★mid 内容整包 Viewbox（V0.0.85 二轮，用户实测"缩小窗口时 SN 与
                                  固化时间重叠、Mock 刷新后才恢复"的根治）：外层垂直 StackPanel 量
                                  child 传 ∞ 高，内部 Viewbox(MaxHeight=36/16) 的 DownOnly 缩放失效
@@ -785,6 +760,11 @@
                     <Button Tag="{StaticResource Geo.Log}" Style="{StaticResource PrimaryGhostButton}" Content="日志"
                             Command="{Binding ShowLogCommand}" Margin="0,0,6,0"
                             ToolTip="打开操作日志 / 控制台悬浮窗（L1+）"/>
+                    <!-- 追溯报表（V0.0.97）：客户要求"记录能追溯"，现场查
+                         库位↔产品SN↔固化时长；登录即可见（操作员/质检都要能查）。 -->
+                    <Button Style="{StaticResource GhostButton}" Content="追溯"
+                            Command="{Binding OpenTraceReportCommand}" Margin="0,0,6,0"
+                            ToolTip="打开固化追溯报表：按时间/库位/SN 查产品固化了多久、为什么没固化够"/>
                     <!-- 设置 ▾：下拉收拢 重新连接/演示开关/用户管理/策略/过账配置/IO测试/点表/主题。
                          IsOpen 双向绑 IsChecked（点外 StaysOpen=False 自关）；菜单项点击在
                          code-behind OnMenuClick 把 IsChecked 收回 false，防止下拉挂住不关。

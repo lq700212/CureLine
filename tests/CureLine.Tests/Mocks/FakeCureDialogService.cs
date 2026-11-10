@@ -115,5 +115,14 @@ public class FakeCureDialogService : CureStation.ViewModels.IDialogService
 
     public void CloseGrillAlarmReset() => Calls.Add("CloseGrillAlarmReset");
 
+    /// <summary>ShowTraceReport 收到的追溯库存取（断言主窗把 owner 实例传对了）。</summary>
+    public CureLine.Core.Data.SlotProductTraceStore? TraceStore { get; private set; }
+
+    public void ShowTraceReport(CureLine.Core.Data.SlotProductTraceStore store, Func<string?>? askSavePath)
+    {
+        Calls.Add("ShowTraceReport");
+        TraceStore = store;
+    }
+
     public void Shutdown() => Calls.Add("Shutdown");
 }

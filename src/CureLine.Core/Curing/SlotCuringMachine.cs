@@ -54,6 +54,21 @@
 //   恒开启（Core 独立/测试缺省——既有行为零改动；程序①现场由激活策略的
 //   GrillAlarmEnabled 决定）。
 //
+// 上料抑制（V0.0.97，用户拍板"上料时不该报警"）：
+//   loadPendingProvider（可空，每拍现取）= true 时**该库位正在上料**
+//   （操作员已扫库位码、货还没上完——手和产品会挡住光栅，那是正常动作，
+//   报警是误报）。此期间该库位的光栅报警整条链静默：不亮红灯、不记
+//   报警日志、不进报警复位窗；上料确认（二次扫同库位码）后下一拍恢复
+//   正常报警——被挡边沿若发生在抑制期间会被吞掉，Pump 的补报兜底会在
+//   抑制解除后的下一拍按快照补报（与报警总开关同款双保险）。
+//   null=恒不抑制（Core 独立/测试缺省——既有行为零改动；程序①现场由
+//   扫码会话的上料确认状态决定）。
+//
+// 报警终止（V0.0.97）：报警弹窗里操作员确认"确实取出了产品"后，可选择
+//   **终止计时**——该库位整个产品的固化计时就此停表（不再等到点放行），
+//   实际已固化时长入库供追溯。终止后该库位进 Terminated 相位（黄灯灭、
+//   不放行绿灯），托盘离开时按"实际经过时长"记账。
+//
 // 线程模型（铁律 2）：灯写 WritePoint 是网络 IO，绝不能进 UI 线程——
 //   本类全部动作发生在后台：OnPointChanged 由宿主从总线后台事件转发进来，
 //   Pump 由内部 1s 心跳 Timer（后台线程）调；测试注入虚拟时钟手动 Pump
@@ -89,13 +104,17 @@ using CureLine.Core.Comms;
 
 namespace CureLine.Core.Curing;
 
-/// <summary>仓位流程状态。Idle=空闲；WaitingGate=托盘在但等光栅让空；Curing=计时中；Done=到点放行。</summary>
+/// <summary>
+/// 仓位流程状态。Idle=空闲；WaitingGate=托盘在但等光栅让空；Curing=计时中；
+/// Done=到点放行；Terminated=报警确认后人工终止计时（V0.0.97）。
+/// </summary>
 public enum SlotPhase
 {
     Idle,
     WaitingGate,
     Curing,
     Done,
+    Terminated,
 }
 
 /// <summary>仓位状态机快照（record 不可变，锁内构造后随便传）。</summary>
@@ -110,7 +129,12 @@ public enum SlotPhase
 /// 态路线下永远轮不到，此前卡牌报警不显示的根因即缺这个标志）。
 /// 第 4 参缺省 false：既有 3 参构造点（DocShot 演示帧/测试）零改动。
 /// </remarks>
-public sealed record SlotStatus(SlotPhase Phase, int TotalMinutes, int RemainMinutes, bool AlarmGrill = false);
+/// <remarks>
+/// Terminated（V0.0.97）：报警确认后人工终止计时的标志（Phase=Terminated）。
+/// 第 5 参缺省 false：既有构造点零改动。
+/// </remarks>
+public sealed record SlotStatus(SlotPhase Phase, int TotalMinutes, int RemainMinutes,
+    bool AlarmGrill = false, bool Terminated = false);
 
 public sealed class SlotCuringMachine : IDisposable
 {
@@ -141,6 +165,14 @@ public sealed class SlotCuringMachine : IDisposable
     /// 每拍现取；provider 须线程安全（后台线程逐拍调）。
     /// </summary>
     private readonly Func<bool>? _grillAlarmEnabledProvider;
+    /// <summary>
+    /// 上料未确认提供者（V0.0.97；null=恒不抑制——Core 独立/测试缺省，
+    /// 程序①现场由扫码会话的上料确认状态决定）。true=该库位正在上料
+    /// （操作员已扫库位码、货还没上完），此期间该库位的光栅报警整条链
+    /// 静默（手挡光栅是上料正常动作，报了是误报）。边沿/心跳每拍现取；
+    /// provider 须线程安全（后台线程逐拍调）。
+    /// </summary>
+    private readonly Func<int, int, bool>? _loadPendingProvider;
     private readonly Dictionary<(int Rack, int Level), SlotRuntime> _slots = new();
     /// <summary>成功写过的灯态（IoPointKey→值）：去重 + 失败补写的比对基准。</summary>
     private readonly Dictionary<IoPointKey, bool> _writtenLamps = new();
@@ -166,6 +198,13 @@ public sealed class SlotCuringMachine : IDisposable
     /// </summary>
     public event Action<int, int, SlotPhase, int>? TrayLeft;
 
+    /// <summary>
+    /// 光栅报警产生（V0.0.97；参数=架、层）。宿主据此给追溯库该库位的
+    /// 未结束记录盖"经历过报警"标记（现场回查"这个库位报警过没有"用）。
+    /// 只在报警**真正亮起**的那一次触发（状态去重，重复遮挡不重复发）。
+    /// </summary>
+    public event Action<int, int>? GrillAlarmRaised;
+
     /// <summary>单仓位运行态（内部可变，只在 _sync 锁内动）。</summary>
     private sealed class SlotRuntime
     {
@@ -173,6 +212,7 @@ public sealed class SlotCuringMachine : IDisposable
         public DateTimeOffset? StartedAt; // Curing 起点（时钟可注入，测试虚拟推进）
         public int TotalMinutes;          // 开计时时锁定的时长（在制热更单向上调，见 ApplyPolicyHotChange）
         public bool AlarmGrill;           // Curing 中光栅被挡的报警态（红灯亮着）——瞬时安全态不落盘
+        public DateTimeOffset? TerminatedAt; // 报警确认后人工终止计时的时刻（V0.0.97；算实际固化时长用）
     }
 
     /// <summary>
@@ -189,13 +229,17 @@ public sealed class SlotCuringMachine : IDisposable
     /// grillAlarmEnabledProvider（V0.0.90，可空）=报警总开关每拍现取（null=
     /// 恒开启——Core 独立/测试缺省；程序①现场由激活策略的 GrillAlarmEnabled
     /// 决定，false=整条报警链静默，见类头"报警总开关"）。
+    /// loadPendingProvider（V0.0.97，可空）=上料未确认每拍现取（null=恒不
+    /// 抑制——Core 独立/测试缺省；程序①现场=扫码会话的上料确认状态，
+    /// true=该库位正在上料，此期间不报光栅报警，见类头"上料抑制"）。
     /// </summary>
     public SlotCuringMachine(IPointTableBus bus, Func<CuringPolicy?> policyProvider,
         Func<DateTimeOffset>? clock = null, Action<string>? log = null,
         Func<int, string>? durationText = null,
         Func<GrillAlarmResetMode>? resetModeProvider = null,
         Func<GrillSignalPolarity>? grillPolarityProvider = null,
-        Func<bool>? grillAlarmEnabledProvider = null)
+        Func<bool>? grillAlarmEnabledProvider = null,
+        Func<int, int, bool>? loadPendingProvider = null)
     {
         _bus = bus;
         _policyProvider = policyProvider;
@@ -205,6 +249,7 @@ public sealed class SlotCuringMachine : IDisposable
         _resetModeProvider = resetModeProvider;
         _grillPolarityProvider = grillPolarityProvider;
         _grillAlarmEnabledProvider = grillAlarmEnabledProvider;
+        _loadPendingProvider = loadPendingProvider;
         _pumpTimer = new Timer(_ => SafePump(), null,
             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
@@ -295,11 +340,16 @@ public sealed class SlotCuringMachine : IDisposable
                             $"{GrillSideText(key.Rack, key.Level)}），人工复位模式待确认，红灯保持");
                     }
                 }
-                else if (rt.Phase == SlotPhase.Curing && !rt.AlarmGrill && AlarmEnabled())
+                else if (rt.Phase == SlotPhase.Curing && !rt.AlarmGrill && AlarmEnabled() &&
+                         !LoadPending(key.Rack, key.Level))
                 {
-                    // 【报警总开关 V0.0.90】关闭态：被挡边沿吞掉不报警（零写灯/
-                    // 零日志——稳态静默）；重开开关后由 Pump 兜底按快照补报
-                    // （见 Pump Curing 分支），不至于下一次光栅动作才想起来。
+                    // 两个静默闸（任一成立即不报警，零写灯零日志）：
+                    // ① 【报警总开关 V0.0.90】关闭态：被挡边沿吞掉；重开开关后
+                    //    由 Pump 兜底按快照补报（见 Pump Curing 分支），不至于
+                    //    下一次光栅动作才想起来。
+                    // ② 【上料抑制 V0.0.97】该库位正在上料（货还没上完，手挡
+                    //    光栅是正常动作）——抑制解除（上料确认）后由 Pump 补报
+                    //    兜底按快照补报，不至于漏报。
                     SetGrillAlarm(rt, key.Rack, key.Level, on: true);
                 }
             }
@@ -358,12 +408,15 @@ public sealed class SlotCuringMachine : IDisposable
                             EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampYellow, false);
                             EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampGreen, false);
                         }
-                        else if (!GrillClear(slot.Rack, slot.Level) && AlarmEnabled())
+                        else if (!GrillClear(slot.Rack, slot.Level) && AlarmEnabled() &&
+                                 !LoadPending(slot.Rack, slot.Level))
                         {
                             // 【报警总开关 V0.0.90】重开开关的补报兜底：关闭期间被挡的
                             // 边沿被吞（没进报警态），开关重新打开后不再等下一次光栅
                             // 动作——下一拍按快照补报（与 StartCuring 开计时复核同语义
                             // ：计时中被挡=该报警）。关闭态走到这里=继续静默零网络写。
+                            // 【上料抑制 V0.0.97】上料中同样静默：抑制解除（上料确认）
+                            // 后的下一拍，这里会按快照把漏掉的报警补上——不漏报。
                             SetGrillAlarm(rt, slot.Rack, slot.Level, on: true);
                         }
                         else
@@ -376,6 +429,14 @@ public sealed class SlotCuringMachine : IDisposable
                         break;
                     case SlotPhase.Done:
                         EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampGreen, true); // 绿灯保持到取件
+                        break;
+                    case SlotPhase.Terminated:
+                        // 【报警终止 V0.0.97】计时已停表：不等到点放行（不放绿灯），
+                        // 黄灯灭；红灯保持到报警被解除（灯色归报警态管）。
+                        EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampYellow, false);
+                        EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampGreen, false);
+                        if (rt.AlarmGrill)
+                            EnsureLamp(slot.Rack, slot.Level, IoPointRole.LampRed, true);
                         break;
                     case SlotPhase.WaitingGate:
                         if (GrillClear(slot.Rack, slot.Level))
@@ -458,6 +519,7 @@ public sealed class SlotCuringMachine : IDisposable
                 saved = CuringStateStore.Load(reasons)?.Slots
                     .Where(r => r.Minutes > 0 && (
                         r.Phase == nameof(SlotPhase.Done) ||
+                        r.Phase == nameof(SlotPhase.Terminated) ||
                         (r.Phase == nameof(SlotPhase.Curing) && r.StartedAt != default)))
                     .GroupBy(r => (r.Rack, r.Level))
                     .ToDictionary(g => g.Key, g => g.First());
@@ -497,6 +559,20 @@ public sealed class SlotCuringMachine : IDisposable
             _log($"架{rack}层{level} 重启恢复：断电前已固化到点，保持放行（绿灯，共 {MinutesText(rec.Minutes)}）");
             return;
         }
+        if (rec.Phase == nameof(SlotPhase.Terminated))
+        {
+            // 【报警终止 V0.0.97】断电前已人工终止计时——恢复成终止态（不放行绿灯、
+            // 不续算），产品留在架上等取件，固化时长按断电前记录（不足计划时长）。
+            rt.Phase = SlotPhase.Terminated;
+            rt.StartedAt = rec.StartedAt;
+            rt.TotalMinutes = rec.Minutes;
+            rt.TerminatedAt = rec.TerminatedAt ?? rec.StartedAt;
+            EnsureLamp(rack, level, IoPointRole.LampRed, false);
+            EnsureLamp(rack, level, IoPointRole.LampYellow, false);
+            EnsureLamp(rack, level, IoPointRole.LampGreen, false);
+            _log($"架{rack}层{level} 重启恢复：断电前已终止计时，保持终止态（不再计时）");
+            return;
+        }
         // Curing：按记录起点续算——断电期间流逝的时间自然计入固化时长
         rt.Phase = SlotPhase.Curing;
         rt.StartedAt = rec.StartedAt;
@@ -504,8 +580,8 @@ public sealed class SlotCuringMachine : IDisposable
         EnsureLamp(rack, level, IoPointRole.LampYellow, true);
         EnsureLamp(rack, level, IoPointRole.LampGreen, false);
         EnsureLamp(rack, level, IoPointRole.LampRed, false); // 防残留红灯（报警态不落盘，见下）
-        if (!GrillClear(rack, level) && AlarmEnabled())
-            SetGrillAlarm(rt, rack, level, on: true); // 续算恢复即复核：人手仍在架内 → 重新进报警态（报警总开关关则静默，V0.0.90）
+        if (!GrillClear(rack, level) && AlarmEnabled() && !LoadPending(rack, level))
+            SetGrillAlarm(rt, rack, level, on: true); // 续算恢复即复核：人手仍在架内 → 重新进报警态（报警总开关关则静默，V0.0.90；上料中则静默，V0.0.97）
         int remain = Math.Max(0, rec.Minutes - (int)Math.Ceiling((_clock() - rec.StartedAt).TotalMinutes));
         _log($"架{rack}层{level} 重启恢复：续算断电前计时，剩 {MinutesText(remain)}（共 {MinutesText(rec.Minutes)}）");
     }
@@ -525,7 +601,8 @@ public sealed class SlotCuringMachine : IDisposable
                 var elapsed = _clock() - start;
                 remain = Math.Max(0, rt.TotalMinutes - (int)Math.Ceiling(elapsed.TotalMinutes));
             }
-            return new SlotStatus(rt.Phase, rt.TotalMinutes, remain, rt.AlarmGrill);
+            return new SlotStatus(rt.Phase, rt.TotalMinutes, remain, rt.AlarmGrill,
+                rt.Phase == SlotPhase.Terminated);
         }
     }
 
@@ -558,6 +635,17 @@ public sealed class SlotCuringMachine : IDisposable
         _grillAlarmEnabledProvider?.Invoke() ?? true;
 
     /// <summary>
+    /// 该库位是否正在上料（V0.0.97，每拍现取 provider，勿缓存）：true=操作员
+    /// 已扫库位码、货还没上完——手和产品会挡住光栅，那是上料正常动作，
+    /// 报警是误报。此期间该库位不报光栅报警（整条报警链静默）。
+    /// null provider=恒不抑制（Core 独立/测试缺省——既有行为零改动；
+    /// 程序①现场由扫码会话的上料确认状态决定）。
+    /// 后台线程（边沿/心跳）逐次调用——provider 必须线程安全纯读。
+    /// </summary>
+    private bool LoadPending(int rack, int level) =>
+        _loadPendingProvider?.Invoke(rack, level) ?? false;
+
+    /// <summary>
     /// 人工复位确认（V0.0.69，宿主"报警复位"窗【解除报警】按钮的唯一解除口）：
     /// 报警态的仓位解除报警（红灯灭、黄灯复亮、机台蜂鸣停），计时不动。
     /// 不要求光栅已让空——操作员点按钮=人工确认现场已处理，按钮是权威；
@@ -574,6 +662,46 @@ public sealed class SlotCuringMachine : IDisposable
             if (!_slots.TryGetValue((rack, level), out var rt) || !rt.AlarmGrill)
                 return false;
             SetGrillAlarm(rt, rack, level, on: false, manual: true);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// 终止该库位的固化计时（V0.0.97，报警弹窗"确实取出了产品 + 终止计时"
+    /// 分支的唯一出口）：该库位**整个产品的固化计时就此停表**——不再等到点
+    /// 放行（不放绿灯），实际已固化时长随出参返回给调用方入库追溯
+    /// （不足计划时长=产品被提前取走，质量追溯最关心的就是这个数）。
+    ///
+    /// 为什么不做"只停取出的那几件"：状态机按库位计时（一个库位一个托盘），
+    /// 单件产品的计时由追溯库逐件记账（MarkTakenOut）；库位级只有"继续 /
+    /// 终止"两个口径。
+    ///
+    /// 报警态不受影响：终止计时不等于解除报警，红灯与蜂鸣照旧（解除口仍是
+    /// 人工复位确认）——现场口径"报警归报警，计时归计时"两件事分开确认。
+    ///
+    /// 返回 false=该库位不在计时中（已放行/已终止/空位，无需终止——幂等安全，
+    /// 重复点按钮无害）。curedSeconds=实际已固化秒数（未开计时=0）。
+    /// 线程：任意线程可调（锁内动作；内部 EnsureLamp 是写灯网络 IO，勿在 UI
+    /// 线程直调——宿主从后台 Task 调）。
+    /// </summary>
+    public bool TerminateCuring(int rack, int level, out int curedSeconds)
+    {
+        lock (_sync)
+        {
+            curedSeconds = 0;
+            if (!_slots.TryGetValue((rack, level), out var rt) || rt.Phase != SlotPhase.Curing)
+                return false;
+            if (rt.StartedAt is { } start)
+                curedSeconds = Math.Max(0, (int)(_clock() - start).TotalSeconds);
+            rt.Phase = SlotPhase.Terminated;
+            rt.TerminatedAt = _clock();
+            // 黄灯灭（不再计时）、绿灯不放行；红灯保持（报警未解除）。
+            EnsureLamp(rack, level, IoPointRole.LampYellow, false);
+            EnsureLamp(rack, level, IoPointRole.LampGreen, false);
+            _log($"架{rack}层{level} 人工终止计时（已固化 {MinutesText(curedSeconds / 60)}，" +
+                 $"计划 {MinutesText(rt.TotalMinutes)}），产品不再等到点放行");
+            PersistState(); // 状态变化落盘（开关开时）：断电恢复仍是终止态
+            RefreshMachineBeacon(); // 塔灯同步：不再算"固化中"，回待料黄灯
             return true;
         }
     }
@@ -626,7 +754,7 @@ public sealed class SlotCuringMachine : IDisposable
 
     private void OnTrayArrived(SlotRuntime rt, int rack, int level, bool realEdge)
     {
-        if (rt.Phase is SlotPhase.Curing or SlotPhase.Done)
+        if (rt.Phase is SlotPhase.Curing or SlotPhase.Done or SlotPhase.Terminated)
             return; // 已在流程中（传感器抖动/重复边沿），不重置计时
         // 真实到位恒发（进站挂点，Arrive 口径）——门控等放行与直接开计时两路
         // 都要发，否则"门控关直接开计时"的仓位进站就漏了；重启对齐（realEdge
@@ -661,7 +789,8 @@ public sealed class SlotCuringMachine : IDisposable
         // 开计时即复核光栅：门控关（GrillGate=false）的现场人手也可能恰好在架内，
         // 计时一开始就"被挡"——按报警语义立即亮红（SetGrillAlarm 内有状态去重，
         // 正常门控放行路径此刻光栅已让空，走到这里必然零操作）。
-        if (!GrillClear(rack, level) && AlarmEnabled())
+        // 【上料抑制 V0.0.97】正在上料的库位不报（手挡光栅是上料正常动作）。
+        if (!GrillClear(rack, level) && AlarmEnabled() && !LoadPending(rack, level))
             SetGrillAlarm(rt, rack, level, on: true); // 报警总开关关则静默（V0.0.90）
         PersistState(); // 状态变化落盘（开关开时）
         RefreshMachineBeacon(); // 机台塔灯同步：新仓位开计时，全机聚合即时跟随（黄/红）
@@ -678,6 +807,10 @@ public sealed class SlotCuringMachine : IDisposable
             SlotPhase.Done => rt.TotalMinutes * 60,
             SlotPhase.Curing when rt.StartedAt is { } start =>
                 Math.Max(0, (int)(_clock() - start).TotalSeconds),
+            // 【报警终止 V0.0.97】终止时刻 − 开计时时刻 = 实际已固化时长
+            // （不够计划时长=提前取走，追溯库据此判"固化不足"）。
+            SlotPhase.Terminated when rt.StartedAt is { } s2 =>
+                Math.Max(0, (int)((rt.TerminatedAt ?? _clock()) - s2).TotalSeconds),
             _ => 0, // WaitingGate：没开计时
         };
         string note = leavePhase switch
@@ -685,11 +818,13 @@ public sealed class SlotCuringMachine : IDisposable
             SlotPhase.Curing => "计时中取件，计时作废",
             SlotPhase.Done => "取件完成",
             SlotPhase.WaitingGate => "托盘离开（未开计时）",
+            SlotPhase.Terminated => "终止计时后取件",
             _ => "托盘离开",
         };
         rt.Phase = SlotPhase.Idle;
         rt.StartedAt = null;
         rt.TotalMinutes = 0;
+        rt.TerminatedAt = null;
         // 报警态随取件一并消除（人手在架内直接端走托盘的场景）：红灯也让位，
         // 与黄绿同批灭灯——不额外记"复位"日志，取件日志（下方 note）已是本边沿。
         rt.AlarmGrill = false;
@@ -720,7 +855,7 @@ public sealed class SlotCuringMachine : IDisposable
             var book = new CuringStateBook();
             foreach (var (slot, rt) in _slots)
             {
-                if (rt.Phase is not (SlotPhase.Curing or SlotPhase.Done))
+                if (rt.Phase is not (SlotPhase.Curing or SlotPhase.Done or SlotPhase.Terminated))
                     continue;
                 book.Slots.Add(new CuringSlotRecord
                 {
@@ -729,6 +864,7 @@ public sealed class SlotCuringMachine : IDisposable
                     Phase = rt.Phase.ToString(),
                     StartedAt = rt.StartedAt ?? _clock(),
                     Minutes = rt.TotalMinutes,
+                    TerminatedAt = rt.TerminatedAt,
                 });
             }
             CuringStateStore.Save(book);
@@ -889,6 +1025,7 @@ public sealed class SlotCuringMachine : IDisposable
             EnsureLamp(rack, level, IoPointRole.LampYellow, false);
             EnsureLamp(rack, level, IoPointRole.LampGreen, false);
             _log($"架{rack}层{level} 光栅被挡（人手伸入），报警（红灯），计时继续");
+            GrillAlarmRaised?.Invoke(rack, level);   // 报警边沿（追溯库打标记用）
         }
         else
         {

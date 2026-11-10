@@ -501,6 +501,17 @@
                 </Style.Triggers>
             </Style>
 
+            <!-- 单选按钮（追溯报表页签用，V0.0.97）：不重模板（系统圆点外观两主题
+                 都可辨），只统一前景色/间距/垂直对齐——文字色走主题键，深色主题下
+                 不发黑。互斥靠 RadioButton 的 GroupName（同组自动取消另一只），
+                 回写链唯一：一只双向绑 bool，另一只 OneWay + 反向转换器只显示。 -->
+            <Style x:Key="FreshRadio" TargetType="RadioButton">
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.FgMid}"/>
+                <Setter Property="Padding" Value="4,2"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                <Setter Property="Cursor" Value="Hand"/>
+            </Style>
+
             <!-- ============ 通用控件主题化（隐式，全程序弹窗+日志窗共用） ============ -->
             <!-- ListBox 容器本体：缺省 Aero2 底是白（dark 下刺眼大白块）——V0.0.27 换 CardBg
                  无边框，与卡片面板融底；滚动条/列表行走下方各自样式。 -->

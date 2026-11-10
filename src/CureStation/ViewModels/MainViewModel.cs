@@ -18,6 +18,7 @@ using System.Windows.Threading;
 using CureStation.Themes;
 using CureLine.Core.Comms;
 using CureLine.Core.Curing;
+using CureLine.Core.Data;
 using CureLine.Core.Infrastructure;
 using CureLine.Core.Security;
 using CureLine.Core.Services;
@@ -77,23 +78,24 @@ public sealed class RackSlotViewModel : ViewModelBase
         private set => Set(ref _slotStateText, value);
     }
 
-    // ---------- 扫码绑定（P3.3 扫码工序） ----------
-    // 卡片库位码正下方显示产品码（V0.0.80 从卡片 foot 底部上移——底缘太不醒目）；
-    // 未绑定且在架时红色加粗"未绑定"；完整码在卡片 ToolTip 给全（V0.0.86 用户
-    // 拍板，推翻 V0.0.82"ToolTip 不给全码"——卡上摘要可能头尾省略，悬停即看全，
-    // 12 秒 ShowDuration 够扫码核对）。
+    // ---------- 扫码绑定（P3.3 扫码工序；V0.0.97 改为显示"已绑件数"） ----------
+    // V0.0.97 用户拍板：一个库位可能放多个产品，卡片上显示单个 SN 根本
+    // 显示不下（V0.0.80~V0.0.86 折腾出的动态行数区/摘要/小屏降档一整套
+    // 随之作废并整体删除）。卡片改为显示**已入库绑定的产品件数**：
+    // "已绑 3 件"；托盘在架却一件没绑 → 红字"未绑定"（只提示不拦截）。
+    // 完整 SN 清单在「追溯报表」里查（SQLite 流水表，一件一行）。
     // 绑定数据由会话（SlotBindingSession）维护，每拍随 Refresh 注入。
 
-    private string _productCode = "";
-    /// <summary>本库位已绑定的产品条码（空=未绑定）。构造后由 Refresh 每拍注入。</summary>
-    public string ProductCode
+    private int _boundProductCount;
+    /// <summary>本库位已绑定产品件数（0=未绑定）。构造后由 Refresh 每拍注入。</summary>
+    public int BoundProductCount
     {
-        get => _productCode;
-        private set => Set(ref _productCode, value);
+        get => _boundProductCount;
+        private set => Set(ref _boundProductCount, value);
     }
 
     private string _bindingText = "";
-    /// <summary>库位码下方产品码文案：产品码（主题蓝）/ "未绑定"（红加粗，托盘在架却没扫码）/ 空（空位）。</summary>
+    /// <summary>库位码下方文案："已绑 N 件"（主题蓝）/ "未绑定"（红加粗，托盘在架却没扫码）。</summary>
     public string BindingText
     {
         get => _bindingText;
@@ -109,104 +111,24 @@ public sealed class RackSlotViewModel : ViewModelBase
     }
 
     private bool _hasBindingText;
-    /// <summary>产品码行是否需要占位（无产品码且未报警=空位，直接隐藏不留空白）。</summary>
+    /// <summary>绑定行是否需要占位（无绑定=空位，直接隐藏不留空白）。</summary>
     public bool HasBindingText
     {
         get => _hasBindingText;
         private set => Set(ref _hasBindingText, value);
     }
 
-    // ---------- SN 换行区分档（V0.0.84：两行装不下递增三行/四行，用户拍板） ----------
-    // V0.0.83 是"固定两行区 + 摘要兜底"；V0.0.84 把摘要兜底的起征点后移，长码
-    // 先按需要多占一两行、仍装不下才摘要。行数按显示文本长度分档（唯一口
-    // SnZoneOf），随 Refresh 一拍同步落 Height 与 mid 补偿，防两者异步抖动。
-    // ★V0.0.85 小屏自适应（用户拍板"尽量换行显示完整；重叠风险下优先保证
-    // 不与固化时间文本重叠，SN 减行 + 中段 …"）：主窗实测卡片渲染高
-    // （30 卡 UniformGrid 均分同高，量一张代表全部）→ MainViewModel 换算
-    // 出 SN 最大行数档 SnMaxRows（1~4，缺省 4）统一下发 30 张卡——正常
-    // 窗口档恒 4（行为与 V0.0.84 完全一致），卡矮时档位下降：字符摘要
-    // 阈值随档联动（档×13）、被截时摘要保头尾（≥2 档"头6+…+尾10"、
-    // 1 档"头4+…+尾6"），区高/补偿同拍收窄，mid 大数字再也不被挤。
-
-    private double _snZoneHeight = 32;
+    private System.Windows.Thickness _bindingRowMargin = new(0);
     /// <summary>
-    /// SN 换行区高度（MainWindow.xaml SN 区 Border.Height 直绑，FallbackValue=32）：
-    /// 按最终显示文本长度分档——1~2 行恒 32（V0.0.83 两行区定标，短码与摘要码
-    /// 锚点零移动）、3 行 48、4 行 64；行数按保守容量 13 字符/行估算、峰值四行。
+    /// 绑定行的下方留白（mid 区 Margin 直绑）：绑定行可见时留一行高度（16+4=20），
+    /// 隐藏时清零——mid 大数字的水平锚点不因"有没有绑定行"而漂移。
+    /// V0.0.97：原 V0.0.84~V0.0.85 的动态行数区（1~4 行分档 + 摘要 + 小屏
+    /// 降档）随"SN 显示"需求取消整体退役，这里只留"有/无"两档补偿。
     /// </summary>
-    public double SnZoneHeight
+    public System.Windows.Thickness BindingRowMargin
     {
-        get => _snZoneHeight;
-        private set => Set(ref _snZoneHeight, value);
-    }
-
-    private System.Windows.Thickness _snZoneCompensation = new(0);
-    /// <summary>
-    /// mid 区补偿 Margin（MainWindow.xaml mid Grid.Margin 直绑）：无 SN 整区
-    /// Collapsed 时 =0（与旧版像素一致）；有 SN 时 = (0,0,0, Margin-top 4 + 区高)
-    /// ——区高 32/48/64 对应补偿 36/52/68，mid 大数字居中锚点始终与无 SN 卡一致。
-    /// 用 Thickness 直绑替代 V0.0.83 的 Style+DataTrigger（补偿值不再恒 36，
-    /// 需随行数变化，触发器表达不了动态值）。
-    /// </summary>
-    public System.Windows.Thickness SnZoneCompensation
-    {
-        get => _snZoneCompensation;
-        private set => Set(ref _snZoneCompensation, value);
-    }
-
-    private int _snMaxRows = 4;
-    /// <summary>
-    /// SN 显示区最大行数档（V0.0.85 小屏自适应；1=单行 ~ 4=四行，缺省 4）。
-    /// 正常窗口恒 4——分档行为与 V0.0.84（32/48/64）完全一致；主窗实测卡片
-    /// 渲染高度不够时由 MainViewModel.UpdateSnCardHeight 统一下发降档
-    /// （30 卡同高、同步降，用户拍板"重叠风险下优先固化时间，SN 减行 + 中段 …"）。
-    /// setter 变样即重算 SN 展示（文案摘要阈值=档×13 + 区高/补偿同拍落，
-    /// 不等下一拍 Refresh——窗口拖动中降档要立刻跟上）。
-    /// </summary>
-    public int SnMaxRows
-    {
-        get => _snMaxRows;
-        set
-        {
-            var rows = Math.Clamp(value, 1, 4);
-            if (Set(ref _snMaxRows, rows))
-                RecomputeSnPresentation();
-        }
-    }
-
-    // ---- 下列常量与换算是小屏自适应的唯一定标处（改过要同步注释推导链） ----
-    private const double SnLineHeight = 16;    // 11 号字单行高（V0.0.83 两行区=32 定标）
-    private const double SnZoneTopMargin = 4;  // SN 区 Margin-top（并入 mid 补偿口径）
-
-    /// <summary>
-    /// 卡内除 SN 外的必需高度（保守定标）：SlotCard 模板三段（MainWindow.xaml）
-    /// ——库位码行 17 号 ≈23 + mid 大数字全套原生高 ≈70（数字 Viewbox MaxHeight 36
-    /// + 副文 16+上距 3 + 进度条 6+上距 9）+ foot 行 ≈18 + 卡内边距上 10 下 8 = 18
-    /// → ≈129，+6 渲染误差缓冲 = 135。取大只会**早降档**（宁紧勿松——不重叠是
-    /// 底线，早降档代价只是底部少量留白），故仍故意略高估。
-    /// </summary>
-    private const double SnChromeHeight = 135;
-
-    /// <summary>
-    /// 实测卡高 → SN 最大行数档（V0.0.85 小屏自适应唯一换算口，
-    /// MainViewModel.UpdateSnCardHeight 消费）。
-    /// ★V0.0.85 二轮收口（用户实测"缩小窗口时 SN 与固化时间重叠"）：档 r 需要
-    /// 卡高 = Chrome(135) + 2×SN 区总占高(4+16r)——SN 区在 Row0 占一份、mid 的
-    /// Margin-bottom 补偿（=SN 区同值）在 Row1 **再占一份**（一轮换算漏计了
-    /// 后者，档界被系统性低估 30~62px：缩小窗口中卡高必穿过溢出带，mid 大数字
-    /// 溢出绘制进 SN 区 = 用户看到的重叠；XAML 已加 mid 整包 Viewbox 兜底，
-    /// 双保险后本公式只影响"何时过早缩小 mid 内容"的档位精度）。解 r：
-    /// r = floor((cardHeight − 135 − 8) / 32)，档界 **>271 → 4 档（最大化卡高
-    /// ≈277 仍余 6px 全覆盖，行为与 V0.0.84 一致）/ >239 → 3 / >207 → 2 /
-    /// >175 → 1 / 更低 → 1（钳底）**。
-    /// </summary>
-    public static int SnMaxRowsForCardHeight(double cardHeight)
-    {
-        // 每档步进 = 2×SnLineHeight = 32（margin 常数已由分子 −2×SnZoneTopMargin 扣掉；
-        // 分母写成 2*(margin+line)=40 是一轮笔误——会整体多降半档）
-        var rows = (int)Math.Floor((cardHeight - SnChromeHeight - 2 * SnZoneTopMargin)
-                                   / (2 * SnLineHeight));
-        return Math.Clamp(rows, 1, 4);
+        get => _bindingRowMargin;
+        private set => Set(ref _bindingRowMargin, value);
     }
 
     // ---------- 卡片视觉状态（Kind，新卡模板六态状态口径，2026-10-29） ----------
@@ -376,90 +298,33 @@ public sealed class RackSlotViewModel : ViewModelBase
     /// P3.3：productCode=库位绑定的产品条码（空=未绑定）；bindingMissing=
     /// 托盘在架却没绑定（库位码下方显示红字"未绑定"，只提示不拦截固化流程）。
     /// </summary>
-    /// <summary>产品码行文案（V0.0.84 摘要口径；V0.0.85 阈值随行数档联动）：未绑定返回
-    /// "未绑定"（红字触发器吃 BindingMissing）；码短原样；超容量才摘要保头尾。
-    /// 为什么掐中间：现场扫码对货以**尾号**对账、头部是型号/批次前缀，中间流水段
-    /// 剩余价值最低。动态行数区（V0.0.83 两行 32 → V0.0.84 三行 48/四行 64，用户
-    /// 拍板"两行显示不完就三行，三行不行就四行"，见 MainWindow.xaml「产品码 SN」
-    /// 注释与 SnZoneOf）——13 字符/行按最窄正常窗口保守定标（≈1280 宽下 10 列卡
-    /// 文本 ≈104px，11 号 ≈7.5px/字符）。**容量=摘要阈值=maxRows×13**：档 4 → 52
-    /// （V0.0.84 同值）、3 → 39、2 → 26、1 → 13；容量内原样换行完整可见。
-    /// 被截（>容量）才摘要"头 6+…+尾 10"（17 字符 ≈1.3 行，两行区必装下）；
-    /// 1 档是极矮卡底线（区只够一行），摘要缩为"头 4+…+尾 6"（11 字符单行）。
-    /// 想调阈值口径：改这里的 ×13 与 CuringDisplayTests 的 SN 边界用例。</summary>
-    private static string SnDisplayText(string productCode, bool bindingMissing, int maxRows = 4)
+    /// <summary>
+    /// 绑定行文案（V0.0.97）：只说"绑了几件"，不再显示任何 SN——
+    /// 一个库位可能有十几个产品，卡片上显示不下（完整 SN 去追溯报表查）。
+    /// 托盘在架却一件没绑 → "未绑定"（红字，BindingMissing 触发）。
+    /// </summary>
+    private static string BindingCountText(int count, bool bindingMissing)
     {
         if (bindingMissing)
-        {
             return "未绑定";
-        }
-
-        var code = productCode ?? string.Empty;
-        // 容量阈值 = SN 最大行数档 × 单行保守容量 13（V0.0.85 随小屏降档联动）
-        var threshold = maxRows * 13;
-        if (code.Length <= threshold)
-        {
-            return code;
-        }
-
-        // 保头尾摘中段：档 2~4 "头 6+…+尾 10"；档 1 缩 "头 4+…+尾 6"（单行装下）
-        const int keepHeadWide = 6;        // 头部保留：型号/批次前缀
-        const int keepTailWide = 10;       // 尾部保留：对货核号的流水段
-        return maxRows <= 1
-            ? code.Substring(0, 4) + "…" + code.Substring(code.Length - 6, 6)
-            : code.Substring(0, keepHeadWide) + "…" + code.Substring(code.Length - keepTailWide, keepTailWide);
+        return count > 0 ? $"已绑 {count} 件" : "";
     }
 
     /// <summary>
-    /// SN 换行区分档（V0.0.84 建，V0.0.85 加行数档上限，Height 与 mid 补偿的
-    /// 唯一计算口）：行数按**显示文本**（摘要后的 BindingText）长度保守估算
-    /// ——最窄正常窗口单行 ≈13 字符（104px / 7.5px，V0.0.83 口径），
-    /// ceil(len/13) 封顶 **maxRows**（缺省 4）；1~2 行恒 32 高（V0.0.83 定标：
-    /// 短码/摘要码锚点零移动），3 行 48、4 行 64（用户拍板"两行显示不完就
-    /// 三行，三行不行就四行"）。小屏降档（V0.0.85）：maxRows 由主窗实测卡高
-    /// 经 SnMaxRowsForCardHeight 下发——1 档是极矮卡底线，区高塌到单行 16
-    /// （此时"两行 32 锚点"让位给"不与固化时间重叠"的更高优先级，同窗 30 卡
-    /// 全体同塌、观感一致）。估算只可能 ≥ 实际需要行数（窗口更宽时每行装更多、
-    /// 实际换行更少），偏高方向的底部留白由垂直居中消化，永不裁字。
-    /// 补偿 = Margin-top 4 + 区高（32→36、48→52、64→68、16→20），
-    /// mid 大数字锚点恒与无 SN 卡一致。
+    /// 绑定行可见时的下方留白（16px 行高 + 4px 上距 = 20）；隐藏时清零。
     /// </summary>
-    private static (double Height, System.Windows.Thickness Compensation) SnZoneOf(string shown, int maxRows = 4)
-    {
-        const double charsPerLine = 13;   // 单行保守容量（最窄正常窗口口径，V0.0.83 定标）
-        if (string.IsNullOrEmpty(shown))
-        {
-            return (32, new(0));          // 整区 Collapsed：区高回缺省、补偿清零
-        }
-
-        var lines = Math.Min(maxRows, (int)Math.Ceiling(shown.Length / charsPerLine));
-        var height = maxRows <= 1
-            ? SnLineHeight                                   // 1 档：单行区 16（小屏底线）
-            : Math.Max(32, lines * SnLineHeight);           // 2 档起保 32：锚点零移动
-        return (height, new(0, 0, 0, SnZoneTopMargin + height));
-    }
-
-    /// <summary>
-    /// SN 展示四属性同拍重算（文案 → 占位 → 区高 → mid 补偿，防彼生异步抖动）：
-    /// Refresh 每拍与 SnMaxRows 降档共用——档变化时用已存 ProductCode/BindingMissing
-    /// 立即重算（RefreshSnPresentation 不等下一拍，窗口拖动中降档/升档立刻反映）。
-    /// </summary>
-    private void RecomputeSnPresentation()
-    {
-        BindingText = SnDisplayText(ProductCode, BindingMissing, _snMaxRows);
-        HasBindingText = !string.IsNullOrEmpty(BindingText);
-        var zone = SnZoneOf(BindingText, _snMaxRows);
-        SnZoneHeight = zone.Height;
-        SnZoneCompensation = zone.Compensation;
-    }
+    private static System.Windows.Thickness BindingMarginOf(bool visible) =>
+        visible ? new System.Windows.Thickness(0, 0, 0, 20) : new System.Windows.Thickness(0);
 
     public void Refresh(PointTableSnapshot snapshot, bool hasTable, SlotStatus? machineStatus = null,
-        int planMinutes = 0, string productCode = "", bool bindingMissing = false)
+        int planMinutes = 0, int boundProductCount = 0, bool bindingMissing = false)
     {
         // 绑定信息与流程状态无关，每拍先落（即使点表未配置也照常显示已存绑定）。
-        ProductCode = productCode;
-        BindingMissing = bindingMissing && string.IsNullOrWhiteSpace(productCode);
-        RecomputeSnPresentation();   // V0.0.85：文案/区高/补偿同拍收口（行数档随卡高联动）
+        BoundProductCount = boundProductCount;
+        BindingMissing = bindingMissing && boundProductCount <= 0;
+        BindingText = BindingCountText(boundProductCount, BindingMissing);
+        HasBindingText = !string.IsNullOrEmpty(BindingText);
+        BindingRowMargin = BindingMarginOf(HasBindingText);
 
         _planMinutes = planMinutes;   // 缓存本拍策略解析值（ApplyKind 落 Idle 字面 / 单位切换重拼用）
         _lastCuring = machineStatus is { Phase: SlotPhase.Curing } c ? c : null;
@@ -488,6 +353,7 @@ public sealed class RackSlotViewModel : ViewModelBase
             { Phase: SlotPhase.Curing } st => DescribeCuring(st),
             { Phase: SlotPhase.Done } => "放行",
             { Phase: SlotPhase.WaitingGate } => "待门控",
+            { Phase: SlotPhase.Terminated } => "已终止",              // V0.0.97：报警确认后人工终止计时
             _ => mapState(tray, red, yellow, green),                 // 空闲走灯色反推
         };
         // Kind（新口径）：状态机给精确状态的仓位以状态机为准（含剩余分钟）；
@@ -504,6 +370,8 @@ public sealed class RackSlotViewModel : ViewModelBase
             ApplyKind("Done", 0, 0);
         else if (machineStatus is { Phase: SlotPhase.WaitingGate })
             ApplyKind("Gate", 0, 0);
+        else if (machineStatus is { Phase: SlotPhase.Terminated })
+            ApplyKind("Terminated", 0, 0);   // V0.0.97：已终止计时（不放行、不再计时）
         else if (red == true) ApplyKind("Alarm", 0, 0);
         else if (yellow == true) ApplyKind("Curing", 0, 0);
         else if (green == true) ApplyKind("Done", 0, 0);
@@ -610,29 +478,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public GrillAlarmResetCoordinator AlarmPresenter { get; }
 
     public ObservableCollection<RackSlotViewModel> Slots { get; } = new();
-
-    /// <summary>最近一次下发的 SN 行数档（缺省 4；View 未挂接实测时卡片自持缺省，不漂移）。</summary>
-    private int _snMaxRowsDispatched = 4;
-
-    /// <summary>
-    /// 主窗实测卡片渲染高度喂进来（MainWindow code-behind 量第一张卡——30 卡
-    /// UniformGrid 均分同高，量一张代表全部；窗口 resize 中持续触发）。
-    /// 换算全局 SN 行数档并**档位变化才**下发 30 卡（值不同才走，防拖动中
-    /// SizeChanged 高频重复下发）；下发正文 RackSlotViewModel.SnMaxRows 的
-    /// setter 自带"重算 SN 文案/区高/补偿"收口，本轮无需再调 Refresh。
-    /// 找不到卡片实测点（极端异常）时此方法不被调，档恒 4、行为与 V0.0.84 一致——
-    /// 自适应只在确有实测时生效（fail-safe 到旧行为）。
-    /// UI 线程调用（SizeChanged 事件线程；测试直调也安全——Set 封送兜底）。
-    /// </summary>
-    public void UpdateSnCardHeight(double cardHeight)
-    {
-        var rows = RackSlotViewModel.SnMaxRowsForCardHeight(cardHeight);
-        if (rows == _snMaxRowsDispatched)
-            return;
-        _snMaxRowsDispatched = rows;
-        foreach (var slot in Slots)   // 组内卡与平铺 Slots 同批实例，平铺集遍历即全覆盖
-            slot.SnMaxRows = rows;
-    }
 
     /// <summary>
     /// 固化架分组视图（V0.0.20 双架支持）：主窗主内容按组上下堆叠——
@@ -831,14 +676,24 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         private set => Set(ref _simulateText, value);
     }
 
-    // ---------- 扫码枪 + 库位绑定（P3.3 扫码工序） ----------
-    // 现场流程：托盘入库前先扫库位码（A01~J12）再扫产品二维码 → 绑定；
-    // 固化完成取件后绑定作废（状态机 TrayLeft 清），下次入库必须重新扫。
+    // ---------- 扫码枪 + 库位绑定（P3.3 扫码工序；V0.0.97 改三段式） ----------
+    // 现场流程：托盘入库前先扫库位码（A01~J12）→ 逐个扫产品二维码（一个库位
+    // 可放多个产品）→ 全部扫完再扫一次同一个库位码 = 上料结束；固化完成取件
+    // 后绑定作废（状态机 TrayLeft 清），下次入库必须重新扫。
     // 未绑定的在架托盘只做界面报警提示，不拦截固化流程（客户口径）。
+    // 上料未确认期间该库位不报光栅报警（手挡光栅是上料正常动作）——
+    // 状态机经 loadPendingProvider 现取本会话的上料确认状态。
 
     private ScannerOptions _scannerOptions = new();
     private ScannerBarcodeService? _scanner;
     private SlotBindingSession _bindings = new();
+
+    // ---------- 固化追溯库（V0.0.97） ----------
+    // 一个产品 SN 一行的流水表 + 库位汇总视图（SQLite，DataBase\CureLine.db3）。
+    // 写入点：扫码绑定/上料确认/开计时/离架/报警产生/中途取出/报警终止。
+    // 全部走后台线程（UI 线程禁 DB IO——铁律 2）。
+
+    private readonly SlotProductTraceStore _trace = new(new SqliteHelper(AppPaths.DatabaseFile));
 
     /// <summary>
     /// 扫码枪"关旧→开新"的生命周期锁（配置窗保存热重启用）：串口是独占资源、
@@ -1026,6 +881,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public RelayCommand OpenLicenseCommand { get; }
     public RelayCommand CancelScanCommand { get; }
 
+    /// <summary>打开固化追溯报表（V0.0.97；登录即可见——操作员也要能查追溯）。</summary>
+    public RelayCommand OpenTraceReportCommand { get; }
+
     public MainViewModel(IDialogService dialogs, IdleLogoutMonitor? idleMonitor = null)
     {
         _dialogs = dialogs;
@@ -1033,7 +891,14 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // 光栅报警复位编排器（V0.0.96）：复位模式读激活策略，构造时才有
         // GetActivePolicy 可调（属性初始化器不能引用实例成员）。
         AlarmPresenter = new GrillAlarmResetCoordinator(
-            () => GetActivePolicy()?.GrillResetMode ?? GrillAlarmResetMode.Manual);
+            () => GetActivePolicy()?.GrillResetMode ?? GrillAlarmResetMode.Manual,
+            // 已固化分钟数（Total-Remain）：给"中途取出"记录填当时固化不足多久——
+            // 质量追溯最关键的数。状态机锁内读，UI 线程调无碍。
+            (rack, level) =>
+            {
+                var st = _machine?.GetStatus(rack, level);
+                return st == null ? 0 : Math.Max(0, st.TotalMinutes - st.RemainMinutes);
+            });
 
         // 登录空闲自动退出（V0.0.93）：上限分钟读 [setting] AutoLogoutMinutes
         // （缺省 15，0/负/非法=不启用；ctor 读一次缓存，改 ini 重启生效，同
@@ -1057,6 +922,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         ToggleThemeCommand = new RelayCommand(ToggleTheme);
         ToggleSimulateCommand = new RelayCommand(ToggleSimulate);
         OpenLicenseCommand = new RelayCommand(OpenLicense);
+        OpenTraceReportCommand = new RelayCommand(OpenTraceReport);
         // 扫码【取消】：结束当前"待扫产品码"回到等库位码（按钮只在待扫产品时显示）。
         CancelScanCommand = new RelayCommand(() =>
         {
@@ -1115,6 +981,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // 扫码枪 + 库位绑定（P3.3）：读绑定簿 → 建会话 → 后台启动扫码枪（串口/TCP 按配置）。
         // 放在总线启动前——首拍刷新就能把已存绑定的产品码挂到卡片上。
         InitScanner();
+        // 追溯库建表 + 建视图（V0.0.97；幂等——启动时调一次，删表重建也安全）。
+        try
+        {
+            _trace.EnsureSchema();
+        }
+        catch (Exception ex)
+        {
+            LocalLogService.Write($"追溯库建表失败（{ex.Message}），追溯记录本次不可用");
+        }
         LoadPolicyBook();
         // 演示开关初始态：与 StartBus 同源读 ini——顶栏按钮状态与实际总线类型一致
         IsSimulate = IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Simulate", "0") == "1";
@@ -1150,7 +1025,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             book,
             timeoutSeconds: _scannerOptions.NormSessionTimeoutSeconds,
             log: m => LocalLogService.Write(m));
-        _bindings.Changed += OnBindingsChanged;
+        WireBindingEvents(_bindings);
 
         _scanner = new ScannerBarcodeService(_scannerOptions);
         _scanner.BarcodeScanned += OnBarcodeScanned;
@@ -1212,12 +1087,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
 
         var book = _bindings.Snapshot();
-        _bindings.Changed -= OnBindingsChanged;
+        UnwireBindingEvents(_bindings);
         _bindings = new SlotBindingSession(
             book,
             timeoutSeconds: options.NormSessionTimeoutSeconds,
             log: m => LocalLogService.Write(m));
-        _bindings.Changed += OnBindingsChanged;
+        WireBindingEvents(_bindings);
 
         var fresh = new ScannerBarcodeService(options);
         fresh.BarcodeScanned += OnBarcodeScanned;
@@ -1244,9 +1119,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// <summary>
     /// 读码（子模块后台线程 → 封送回 UI）：交给会话解释成"扫库位/绑产品"。
     /// 扫错库位码给 3 秒浮层提示（日志同时留一行），不改变会话阶段。
+    /// 【V0.0.97】报警补扫通道优先：报警确认流程正在补扫取出的产品时，
+    /// 扫到的码进补扫通道，**不进普通绑定通道**（否则操作员补扫的产品码
+    /// 会被当成新绑定写进在架清单）。
     /// </summary>
     private void OnBarcodeScanned(object? sender, string code) => UiInvoke(() =>
     {
+        if (AlarmPresenter.TryHandleOutScan(code))
+        {
+            RefreshScanState();
+            return;
+        }
         var outcome = _bindings.Handle(code);
         if (outcome.Kind == ScanOutcomeKind.InvalidLocation)
         {
@@ -1265,6 +1148,68 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         RefreshScanState();
         RefreshSlots();
+    }
+
+    // ---------- 绑定会话事件接线（V0.0.97） ----------
+
+    /// <summary>
+    /// 订阅绑定会话的三类事件（换会话时先退订旧的——会话有两条事件源，
+    /// 漏退订会让旧会话继续往追溯库写脏数据）。
+    /// </summary>
+    private void WireBindingEvents(SlotBindingSession session)
+    {
+        session.Changed += OnBindingsChanged;
+        session.ProductBound += OnProductBound;
+        session.LoadConfirmed += OnLoadConfirmed;
+    }
+
+    /// <summary>退订绑定会话事件（换会话/Dispose 时调）。</summary>
+    private void UnwireBindingEvents(SlotBindingSession session)
+    {
+        session.Changed -= OnBindingsChanged;
+        session.ProductBound -= OnProductBound;
+        session.LoadConfirmed -= OnLoadConfirmed;
+    }
+
+    /// <summary>
+    /// 扫到一件新产品 → 追溯库落一行（一个 SN 一行）。写库放后台线程
+    /// （UI 线程禁 DB IO——铁律 2）；失败只记日志，不影响扫码流程。
+    /// </summary>
+    private void OnProductBound(int rack, int level, string productSn)
+    {
+        var at = DateTimeOffset.Now;
+        Task.Run(() =>
+        {
+            try
+            {
+                _trace.AddBound(rack, level, productSn, at);
+            }
+            catch (Exception ex)
+            {
+                LocalLogService.Write($"追溯库写入失败（{ex.Message}），本条记录未入库");
+            }
+        });
+    }
+
+    /// <summary>
+    /// 上料确认（二次扫同库位码=上料结束）→ 追溯库给该库位未结束的记录盖
+    /// 确认时刻；顺带解除该库位的"上料中"状态（状态机下一拍现取，
+    /// 光栅被挡恢复正常报警）。
+    /// </summary>
+    private void OnLoadConfirmed(int rack, int level)
+    {
+        var at = DateTimeOffset.Now;
+        Task.Run(() =>
+        {
+            try
+            {
+                _trace.MarkLoadConfirmed(rack, level, at);
+            }
+            catch (Exception ex)
+            {
+                LocalLogService.Write($"追溯库写入失败（{ex.Message}），上料确认时刻未入库");
+            }
+        });
     }
 
     /// <summary>
@@ -1300,16 +1245,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         else if (ScanWaitingProduct)
         {
             ScanWarning = false;
-            ScanText = _bindings.Prompt;   // "A01 待扫产品码"
-            ScanTip = "已扫库位码，请扫产品二维码完成绑定。扫错库位可直接扫另一个库位码切换，" +
+            ScanText = _bindings.Prompt;   // "A01 待扫产品码（扫完再扫一次库位码结束上料）"
+            ScanTip = "已扫库位码，请逐个扫产品二维码（一个库位可放多个产品）；" +
+                      "全部扫完后再扫一次同一个库位码=上料结束。扫错库位可直接扫另一个库位码切换，" +
                       "或点【取消】回到请扫库位码";
         }
         else if (_unboundTrayCount > 0)
         {
             ScanWarning = true;
             ScanText = $"⚠ {_unboundTrayCount} 个在架托盘未绑产品";
-            ScanTip = "托盘在架但库位没有绑定产品：请先扫库位码（A01~J12）、再扫产品码。" +
-                      "只提示，不拦截固化流程";
+            ScanTip = "托盘在架但库位没有绑定产品：请先扫库位码（A01~J12）、再逐个扫产品码，" +
+                      "扫完再扫一次库位码结束上料。只提示，不拦截固化流程";
         }
         else
         {
@@ -1318,8 +1264,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             // 未连接排查指引按接入方式给（Tcp=查网线/DTU；Serial=查转接线/COM 口）。
             bool tcpMode = _scannerOptions.NormMode == "Tcp";
             ScanTip = ScanConnected
-                ? $"扫码枪已连接（{_scanner?.Name ?? "扫码枪"}）：先扫库位码 A01~J12，再扫产品码；" +
-                  $"{_scannerOptions.NormSessionTimeoutSeconds} 秒未扫产品码自动回到请扫库位码"
+                ? $"扫码枪已连接（{_scanner?.Name ?? "扫码枪"}）：先扫库位码 A01~J12，再逐个扫产品码，" +
+                  $"扫完再扫一次库位码结束上料；{_scannerOptions.NormSessionTimeoutSeconds} 秒无操作自动回到请扫库位码"
                 : tcpMode
                     ? "扫码枪未连接：检查网线与枪侧 DTU（TCP 目标 IP:端口，枪/DTU 断电重启后确认 " +
                       "TCP-SERVER 配置还在）；服务每 3 秒后台自动重连，网络恢复即接通"
@@ -1520,12 +1466,37 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                     grillPolarityProvider: () => GetActivePolicy()?.GrillPolarity
                         ?? GrillSignalPolarity.BlockedOn,
                     grillAlarmEnabledProvider: () => GetActivePolicy()?.GrillAlarmEnabled
-                        ?? true);
+                        ?? true,
+                    // 【上料抑制 V0.0.97】该库位正在上料（已扫库位码、货还没上完）
+                    // → 不报光栅报警（手挡光栅是上料正常动作，报了是误报）。
+                    // 判定口径：托盘在架 且 该库位尚未二次确认上料。托盘不在架
+                    // 时仓位本就不在计时相位（天然不报），所以只需看会话状态。
+                    loadPendingProvider: (rack, level) => _bindings.IsLoadPending(rack, level));
                 // 过账挂点（P3.2 后半）：状态机三事件 → 过账服务（只在创建时订阅
                 // 一次——重连 Attach 换通道不重复订阅）。事件在状态机锁内触发，
                 // Poster 方法内部 Task.Run 立即返回，不重入不阻塞。
                 _machine.TrayArrived += (rack, level) => _poster?.OnTrayArrived(rack, level);
-                _machine.CuringStarted += (rack, level) => _poster?.OnCuringStarted(rack, level);
+                _machine.CuringStarted += (rack, level) =>
+                {
+                    _poster?.OnCuringStarted(rack, level);
+                    // 追溯库：盖开计时时刻与计划时长（V0.0.97）
+                    var at = DateTimeOffset.Now;
+                    int plan = GetActivePolicy()?.ResolveMinutes(rack, level) ?? 0;
+                    Task.Run(() =>
+                    {
+                        try { _trace.MarkCuringStarted(rack, level, at, plan); }
+                        catch (Exception ex) { LocalLogService.Write($"追溯库写入失败（{ex.Message}）"); }
+                    });
+                };
+                _machine.GrillAlarmRaised += (rack, level) =>
+                {
+                    // 追溯库：标记该库位经历过光栅报警（现场回查用）
+                    Task.Run(() =>
+                    {
+                        try { _trace.MarkAlarm(rack, level); }
+                        catch (Exception ex) { LocalLogService.Write($"追溯库写入失败（{ex.Message}）"); }
+                    });
+                };
                 _machine.TrayLeft += (rack, level, phase, sec) =>
                 {
                     _poster?.OnTrayLeft(rack, level, phase, sec);
@@ -1536,6 +1507,25 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                         if (_bindings.Remove(rack, level))
                             LocalLogService.Write(
                                 $"库位 {SlotLocationCode.EncodeInRack(rack, level)} 托盘离开，产品绑定已清除");
+                    });
+                    // 追溯库：盖离架时刻 + 实际固化时长 + 结束原因（V0.0.97）
+                    // Done=正常放行；Curing 中途取件=取件（固化不足）；Terminated=已终止。
+                    var reason = phase switch
+                    {
+                        SlotPhase.Done => SlotTraceEndReason.Released,
+                        SlotPhase.Curing => SlotTraceEndReason.TakenOut,
+                        SlotPhase.Terminated => SlotTraceEndReason.AlarmStopped,
+                        _ => SlotTraceEndReason.None,
+                    };
+                    var at = DateTimeOffset.Now;
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            if (reason != SlotTraceEndReason.None)
+                                _trace.MarkLeft(rack, level, at, sec / 60, reason);
+                        }
+                        catch (Exception ex) { LocalLogService.Write($"追溯库写入失败（{ex.Message}）"); }
                     });
                 };
             }
@@ -1564,11 +1554,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         foreach (var slot in Slots)
         {
             var status = _machine?.GetStatus(slot.Rack, slot.Level);
-            var binding = _bindings.Get(slot.Rack, slot.Level);
+            // V0.0.97：一个库位可有多个产品，卡片只显示"已绑 N 件"。
+            var boundCount = _bindings.ProductCount(slot.Rack, slot.Level);
             // 未绑定报警（客户口径只提示不拦截）：只要托盘在架就必须已绑产品。
             // 日志只记边沿——新出现的未绑定写一行，绑上/托盘离开后自动解除。
             bool missing = snapshot?.Get(new(true, IoPointRole.TrayDetect, slot.Rack, slot.Level)) == true
-                           && binding == null;
+                           && boundCount <= 0;
             if (missing)
             {
                 unboundTray++;
@@ -1584,7 +1575,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
             slot.Refresh(snapshot ?? PointTableSnapshot.Empty, snapshot != null, status,
                 planPolicy?.ResolveMinutes(slot.Rack, slot.Level) ?? 0,
-                binding?.ProductCode ?? "", missing);
+                boundCount, missing);
         }
         _unboundTrayCount = unboundTray;
 
@@ -1629,6 +1620,72 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             foreach (var (rack, level) in _machine?.GetAlarmSlots() ?? [])
                 _machine?.ManualResetGrillAlarm(rack, level);
         }).ContinueWith(_ => UiInvoke(RefreshAlarmList));
+
+    /// <summary>
+    /// 报警确认"确实取出了产品"（进入补扫步骤）：记一行日志——现场确认这
+    /// 是质量追溯的第一手证据，出问题查日志知道当时是误触还是真取件。
+    /// </summary>
+    private void OnAlarmTakeOutConfirmed(int rack, int level) =>
+        LocalLogService.Write(
+            $"库位 {SlotLocationCode.EncodeInRack(rack, level)} 光栅报警：操作员确认有产品被取出，" +
+            "请补扫取出的产品码（固化可能不足，后续需追溯）");
+
+    /// <summary>
+    /// 补扫到一件被取出的产品：写追溯库"中途取出"记录——该 SN 的固化
+    /// 在此刻终止，时长=当时已固化分钟数（不足计划时长，质量追溯用）。
+    /// 写库放后台线程（UI 线程禁 DB IO——铁律 2）。
+    /// </summary>
+    private void OnAlarmOutScanRecorded(int rack, int level, string productSn, int curedMinutes)
+    {
+        var at = DateTimeOffset.Now;
+        Task.Run(() =>
+        {
+            try
+            {
+                _trace.MarkTakenOut(rack, level, productSn, at, curedMinutes, alarmFlag: true,
+                    note: "报警确认取出（补扫）");
+            }
+            catch (Exception ex)
+            {
+                LocalLogService.Write($"追溯库写入失败（{ex.Message}），中途取出记录未入库");
+            }
+        });
+        LocalLogService.Write(
+            $"库位 {SlotLocationCode.EncodeInRack(rack, level)} 补扫取出产品 {productSn}" +
+            $"（当时已固化 {curedMinutes} 分钟）");
+    }
+
+    /// <summary>
+    /// 计时处置决定：terminate=true=整个库位的产品终止计时（不再等到点
+    /// 放行，实际已固化时长入库）；false=未取出的产品继续固化（状态机不动）。
+    /// 终止走状态机 TerminateCuring（写灯=网络 IO，必须后台——铁律 2）。
+    /// </summary>
+    private void OnAlarmTimingDecision(int rack, int level, bool terminate)
+    {
+        if (!terminate)
+        {
+            LocalLogService.Write(
+                $"库位 {SlotLocationCode.EncodeInRack(rack, level)} 未取出的产品继续固化计时");
+            return;
+        }
+        Task.Run(() =>
+        {
+            try
+            {
+                if (_machine?.TerminateCuring(rack, level, out int curedSeconds) == true)
+                {
+                    var at = DateTimeOffset.Now;
+                    _trace.MarkLeft(rack, level, at, curedSeconds / 60,
+                        SlotTraceEndReason.AlarmStopped, alarmFlag: true,
+                        note: "报警确认后终止计时");
+                }
+            }
+            catch (Exception ex)
+            {
+                LocalLogService.Write($"终止计时失败（{ex.Message}）");
+            }
+        }).ContinueWith(_ => UiInvoke(RefreshAlarmList));
+    }
 
     /// <summary>
     /// 策略窗切显示单位（时↔分）的同步刷：卡片时长文本立即按新单位重写 +
@@ -1743,6 +1800,28 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         return int.TryParse(text.Trim(), out var minutes) && minutes > 0 ? minutes : 0;
     }
 
+    /// <summary>固化追溯报表（V0.0.97）：登录即可开——操作员也要能查追溯
+    /// （客户要"记录能追溯"，查的人就是现场的质检/操作员）。导出 CSV 的保存
+    /// 对话框在 UI 线程弹（VM 不碰 UI 窗）。</summary>
+    private void OpenTraceReport()
+    {
+        if (!Gate(OperatorRole.Operator, "固化追溯报表"))
+            return;
+        _dialogs.ShowTraceReport(_trace, AskSaveCsvPath);
+    }
+
+    /// <summary>导出 CSV 的保存路径询问（UI 线程弹保存框；取消返回 null）。</summary>
+    private static string? AskSaveCsvPath()
+    {
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "CSV 文件 (*.csv)|*.csv",
+            FileName = $"固化追溯_{DateTime.Now:yyyyMMdd_HHmmss}.csv",
+            Title = "导出追溯记录",
+        };
+        return dlg.ShowDialog() == true ? dlg.FileName : null;
+    }
+
     /// <summary>工单信息窗：登录即可开（窗内编辑区按角色再细分禁用）。</summary>
     private void OpenWorkOrder()
     {
@@ -1855,7 +1934,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         LicenseHost.StateChanged -= OnLicenseStateChanged;   // 退订授权状态边沿
         // 扫码枪退订 + 释放（P3.3）：子模块 Dispose 会等心跳线程退出（最坏 3 秒），
         // 放后台不卡关窗；串口句柄随进程退出由 OS 回收，无数据落盘风险。
-        _bindings.Changed -= OnBindingsChanged;
+        UnwireBindingEvents(_bindings);
         var scanner = _scanner;
         _scanner = null;
         if (scanner != null)
@@ -1875,6 +1954,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         AlarmPresenter.CloseRequested -= OnAlarmCloseRequested;
         AlarmPresenter.ResetRequested -= OnAlarmResetRequested;
         AlarmPresenter.ResetAllRequested -= OnAlarmResetAllRequested;
+        AlarmPresenter.TakeOutConfirmed -= OnAlarmTakeOutConfirmed;
+        AlarmPresenter.OutScanRecorded -= OnAlarmOutScanRecorded;
+        AlarmPresenter.TimingDecisionRequested -= OnAlarmTimingDecision;
         _dialogs.CloseGrillAlarmReset();
         _refreshTimer.Stop();
         lock (_busLock)
