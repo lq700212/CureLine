@@ -252,6 +252,19 @@ public class SlotProductTraceStoreTests : IDisposable
         Assert.Equal(0, b02.AbnormalCount);
     }
 
+    [Fact(DisplayName = "追溯库：汇总时间筛选按最近一次绑定（老库位晚绑也能筛到）")]
+    public void Store_SummaryView_TimeFilter_UsesLastBoundAt()
+    {
+        var store = MakeStore();
+        store.AddBound(1, 1, "SN-OLD", At(8, 0));    // 首绑 8:00
+        store.AddBound(1, 1, "SN-NEW", At(20, 0));   // 最近绑定 20:00（同库位）
+
+        // 时间范围 10:00 之后：按"最近一次绑定"口径 → 该库位在范围内；
+        // （旧口径按首次绑定筛会把它漏掉——明细里 20:00 那条明明存在，两表对不上）
+        Assert.Equal(1, store.CountSummary(new SlotTraceFilter { From = Stamp(10, 0) }));
+        Assert.Equal(0, store.CountSummary(new SlotTraceFilter { To = Stamp(9, 0) }));
+    }
+
     [Fact(DisplayName = "追溯库：经历报警标记（现场回查用）")]
     public void Store_MarkAlarm_SetsFlag()
     {

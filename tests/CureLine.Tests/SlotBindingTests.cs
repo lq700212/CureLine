@@ -295,7 +295,7 @@ public class SlotBindingTests
         Assert.Equal(1, session.ProductCount(3, 1));
     }
 
-    [Fact(DisplayName = "扫码绑定_放回流程取消=不绑定")]
+    [Fact(DisplayName = "扫码绑定_放回流程取消=不绑定（轻提示类别，非红线拦截）")]
     public void Session_ReturnCancelled_NotBound()
     {
         var (session, _, _) = MakeSession(
@@ -308,7 +308,7 @@ public class SlotBindingTests
         session.Handle("C03");
         var outcome = session.Handle("SN-R");
 
-        Assert.Equal(ScanOutcomeKind.CureBasisConflict, outcome.Kind);
+        Assert.Equal(ScanOutcomeKind.ReloadCancelled, outcome.Kind);
         Assert.Contains("已取消放入", outcome.Message);
         Assert.Equal(0, session.ProductCount(3, 1));
     }

@@ -1161,6 +1161,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 _scanHintText = outcome.Message;
                 _scanHintUntil = DateTime.Now.AddSeconds(3);
                 break;
+            case ScanOutcomeKind.ReloadCancelled:
+                // 放回口径确认里点了【取消】=操作员主动放弃，不是红线拦截——
+                // 3 秒轻浮层确认一句即可，不弹"扫码被拦截"窗（V0.0.100）。
+                _scanHintText = outcome.Message;
+                _scanHintUntil = DateTime.Now.AddSeconds(3);
+                break;
             case ScanOutcomeKind.LocationFlowNotFinished:
                 _dialogs.ShowScanNotice(
                     "扫码被拦截：上一个绑定流程未结束",
@@ -1584,12 +1590,16 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                                 $"库位 {SlotLocationCode.EncodeInRack(rack, level)} 托盘离开，产品绑定已清除");
                     });
                     // 追溯库：盖离架时刻 + 实际固化时长 + 结束原因（V0.0.97）
-                    // Done=正常放行；Curing 中途取件=取件（固化不足）；Terminated=已终止。
+                    // Done=正常放行；Curing 中途取件=取件（固化不足）；
+                    // Terminated=已终止；WaitingGate=托盘来了没开计时就走——
+                    // 产品已随托盘离架，追溯行必须收口（V0.0.100 修：此前该
+                    // 相位不落任何结束原因，行永挂"仍在架"统计变幽灵）。
                     var reason = phase switch
                     {
                         SlotPhase.Done => SlotTraceEndReason.Released,
                         SlotPhase.Curing => SlotTraceEndReason.TakenOut,
                         SlotPhase.Terminated => SlotTraceEndReason.AlarmStopped,
+                        SlotPhase.WaitingGate => SlotTraceEndReason.TakenOut,
                         _ => SlotTraceEndReason.None,
                     };
                     var at = DateTimeOffset.Now;
@@ -1598,7 +1608,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                         try
                         {
                             if (reason != SlotTraceEndReason.None)
-                                _trace.MarkLeft(rack, level, at, sec / 60, reason);
+                                _trace.MarkLeft(rack, level, at, sec / 60, reason,
+                                    note: phase == SlotPhase.WaitingGate ? "未开计时托盘离架" : null);
                         }
                         catch (Exception ex) { LocalLogService.Write($"追溯库写入失败（{ex.Message}）"); }
                     });
@@ -1870,12 +1881,39 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     /// <summary>固化追溯报表（V0.0.97）：登录即可开——操作员也要能查追溯
     /// （客户要"记录能追溯"，查的人就是现场的质检/操作员）。导出 CSV 的保存
-    /// 对话框在 UI 线程弹（VM 不碰 UI 窗）。</summary>
+    /// 对话框在 UI 线程弹（VM 不碰 UI 窗）。库位选择预置当前点表换算的分组
+    /// 格子（V0.0.100：与主窗排布一一对应，点格子选库位，不让操作员手敲）。</summary>
     private void OpenTraceReport()
     {
         if (!Gate(OperatorRole.Operator, "固化追溯报表"))
             return;
-        _dialogs.ShowTraceReport(_trace, AskSaveCsvPath);
+        _dialogs.ShowTraceReport(_trace, AskSaveCsvPath, BuildLocationGroups());
+    }
+
+    /// <summary>
+    /// 追溯报表的库位格子数据（当前点表的库位码，**按固化架分组**）：
+    /// 全局架号每 10 站切一组（与主窗 RackGroups 同口径），组内码**行优先**
+    /// （先层后站）——第 1 行=本组全部架的上层、第 2 行=中层、第 3 行=下层，
+    /// 下拉面板铺出来与主窗"N号固化架"卡片网格完全同排布。点表未配任何绑定
+    /// 时 RackCount/LevelCount 走客户编码表缺省（10×3），与主窗卡片网格同源，
+    /// 不会出现"面板里没有现场贴的码"。
+    /// </summary>
+    private List<TraceLocationGroup> BuildLocationGroups()
+    {
+        int racks = Math.Max(RackCount, 1);
+        int levels = Math.Max(LevelCount, 1);
+        var groups = new List<TraceLocationGroup>();
+        for (int start = 1; start <= racks; start += 10)
+        {
+            int end = Math.Min(start + 9, racks);
+            int columns = end - start + 1;
+            var codes = new List<string>(columns * levels);
+            for (int level = 1; level <= levels; level++)       // 行=层（先层后站）
+            for (int rack = start; rack <= end; rack++)          // 列=架内站号
+                codes.Add(SlotLocationCode.EncodeInRack(rack, level));
+            groups.Add(new TraceLocationGroup($"{start / 10 + 1}号固化架", columns, codes));
+        }
+        return groups;
     }
 
     /// <summary>导出 CSV 的保存路径询问（UI 线程弹保存框；取消返回 null）。</summary>

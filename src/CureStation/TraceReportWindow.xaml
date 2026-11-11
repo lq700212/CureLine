@@ -9,7 +9,7 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:TraceReportViewModel, IsDesignTimeCreatable=False}"
         Title="固化追溯报表 - 固化程控"
-        Width="1120" Height="700" MinWidth="900" MinHeight="520"
+        Width="1240" Height="700" MinWidth="1200" MinHeight="520"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
         Background="Transparent" AllowsTransparency="True"
@@ -25,11 +25,196 @@
     <Window.Resources>
         <local:TraceReasonConverter x:Key="ReasonText"/>
         <local:BoolMarkConverter x:Key="BoolMark"/>
+        <!-- ============ 时间筛选（V0.0.100 参考 HJVision mFormMesRecord 重做） ============
+             HJVision 口径：一侧一个 "yyyy-MM-dd HH:mm" 整框（150px）——本窗同款：
+             外层 FieldShell 输入框壳（FreshInput 同观感：悬停换边/聚焦变主蓝边），
+             内部 = 无边框 DatePicker（自绘模板：日历图标钮 + PART_Calendar 弹出）
+             + 1px 分隔线 + 无边框时刻下拉。日历弹出层保持系统缺省样式：弹层是
+             瞬时交互控件，深浅主题差异可接受，不做整套 Calendar 深模板。 -->
+        <Style x:Key="FieldShell" TargetType="Border">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Background" Value="{DynamicResource Brush.Fresh.InputBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.ButtonHoverBorder}"/>
+                </Trigger>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Accent}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <!-- 无边框日期段（DatePicker 四模板件名 PART_Root/PART_TextBox/PART_Button/
+             PART_Calendar 必守——DatePicker.OnApplyTemplate 按名认件、自挂日历弹出）。
+             文本层：WPF DatePicker 只有 Short/Long 两档格式（无 WinForms 的
+             CustomFormat），要恒定 "yyyy-MM-dd" 就在模板里盖一层格式化 TextBlock
+             （PART_TextBox 藏起不接键盘——本窗时间筛选是纯点选口径，无手输）。 -->
+        <Style x:Key="BareDatePicker" TargetType="{x:Type DatePicker}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.FgMid}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type DatePicker}">
+                        <Grid x:Name="PART_Root">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <!-- 文本层与隐藏的 PART_TextBox 同列（列 0）；日历钮独占
+                                 列 1——不分列时 Button 默认 Stretch 铺满整格，Path
+                                 居中渲染会叠在文字上（探针 3x 放大实测） -->
+                            <DatePickerTextBox x:Name="PART_TextBox" Grid.Column="0" Visibility="Hidden"
+                                               Background="Transparent" BorderThickness="0"/>
+                            <TextBlock Grid.Column="0" Margin="8,0,2,0" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Brush.Fresh.FgMid}"
+                                       Text="{Binding SelectedDate, RelativeSource={RelativeSource TemplatedParent},
+                                              FallbackValue=选择日期, TargetNullValue=选择日期,
+                                              StringFormat=yyyy-MM-dd}"/>
+                            <Button x:Name="PART_Button" Grid.Column="1" Focusable="False" Cursor="Hand"
+                                    Margin="0,0,7,0">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="Transparent">
+                                            <!-- 日历图标（galaxy 线性风格，Stroke 跟 Fresh 键板） -->
+                                            <Path Data="{StaticResource Geo.Calendar}"
+                                                  Width="13" Height="13" Stretch="Uniform"
+                                                  Stroke="{DynamicResource Brush.Fresh.FgMid}" StrokeThickness="1.6"
+                                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                                  StrokeLineJoin="Round" Opacity="0.8"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                            <Popup x:Name="PART_Calendar" Grid.Column="1" Placement="Bottom"
+                                   AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- 无边框时刻段（FreshCombo 的模板削壳版：透明 Bd/无边框——外壳观感由
+             FieldShell 统一给，这里只留选中项展示 + 箭头 + 弹层） -->
+        <Style x:Key="FreshComboBare" TargetType="ComboBox">
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.FgMid}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ContentPresenter x:Name="Selected" Margin="4,0" VerticalAlignment="Center"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              TextElement.Foreground="{DynamicResource Brush.Fresh.FgMid}"
+                                              IsHitTestVisible="False"/>
+                            <ToggleButton Background="Transparent" BorderThickness="0"
+                                          Focusable="False" ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="Transparent"/>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Path Data="M 0 0 L 4 4 L 8 0 Z" Fill="{DynamicResource Brush.Fresh.FgMid}"
+                                  HorizontalAlignment="Right" Margin="0,0,5,0" VerticalAlignment="Center"
+                                  IsHitTestVisible="False"/>
+                            <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}" PopupAnimation="Fade"
+                                   Focusable="False">
+                                <Border Background="{DynamicResource Brush.Fresh.CardBg}"
+                                        BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+                                        CornerRadius="4" Padding="2" Margin="0,2,0,0"
+                                        MinWidth="{TemplateBinding ActualWidth}" MaxHeight="220">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- ============ 库位格子选择面板（V0.0.100） ============
+             壳=ToggleButton（FreshCombo 观感：文字+箭头，点哪都开）；面板=Popup
+             （IsOpen↔IsChecked 双向 + StaysOpen=False 点外自关——主窗"设置▾"同款
+             搭配，无互踢）。面板内容按 VM.LocationGroups 铺格子：一台固化架一组，
+             组内 UniformGrid 行优先=先层后站，与主窗"N号固化架"卡片网格同排布。 -->
+        <Style x:Key="LocShellToggle" TargetType="ToggleButton">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Background" Value="{DynamicResource Brush.Fresh.InputBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Border}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.FgMid}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid>
+                            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="1" CornerRadius="4"/>
+                            <ContentPresenter Margin="10,0,24,0" VerticalAlignment="Center"
+                                              HorizontalAlignment="Left"/>
+                            <Path Data="M 0 0 L 4 4 L 8 0 Z" Fill="{DynamicResource Brush.Fresh.FgMid}"
+                                  HorizontalAlignment="Right" Margin="0,0,10,0" VerticalAlignment="Center"
+                                  IsHitTestVisible="False"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Fresh.ButtonHoverBorder}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Fresh.Accent}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- 库位格子小按钮（Fresh 键板：InputBg 底，悬停/按下随 FreshButton 模板） -->
+        <Style x:Key="LocCell" TargetType="Button" BasedOn="{StaticResource FreshButton}">
+            <Setter Property="Width" Value="34"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Margin" Value="0,0,4,4"/>
+            <Setter Property="Background" Value="{DynamicResource Brush.Fresh.InputBg}"/>
+        </Style>
+        <!-- 组标题显隐（触发器死区纪律：缺省值必须写 Setter——多架才显示"N号
+             固化架"，单架只有一排格子不摆标题，与主窗组标题条同口径） -->
+        <Style x:Key="LocGroupHeader" TargetType="TextBlock">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding DataContext.ShowGroupHeaders,
+                                       RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
     <!--
       固化追溯报表（V0.0.97 新增）：
       - 布局参考 HJVision「视觉数据报表」：筛选行 → 统计卡行 → 表格 → 底栏
         分页/导出；配色走本项目主题键板（双主题同名），不照抄硬编码色；
+      - 筛选行（V0.0.100 重做）：时间=一侧一个 "yyyy-MM-dd HH:mm" 整框
+        （HJVision mFormMesRecord 同口径——日期点日历、时刻下拉点选）；库位=
+        按固化架分组铺格子的面板（与主窗仓位卡排布一一对应，点格子选）；
       - 两个视图页签（Radio 互斥）：产品明细（一个 SN 一行流水）/ 库位汇总
         （一个库位一行，来自 SQLite 视图 slot_trace_summary）；
       - 统计卡与表格同一次查询口径（现场两处数字必须对得上）；
@@ -103,9 +288,13 @@
                     </Grid.RowDefinitions>
 
                     <!-- ① 筛选行（标签统一固定宽 44 右对齐——同宽标签让每组
-                         "标签+控件"的起点一致，栏面不因标签字数不同而参差） -->
+                         "标签+控件"的起点一致，栏面不因标签字数不同而参差）。
+                         时间=单框合并（HJVision 口径：一侧一个整框，日期点日历、
+                         时刻下拉点选）；库位=格子面板（按固化架分组铺格子，与
+                         主窗仓位卡排布一一对应）——全部免键盘输入，防手输格式错 -->
                     <Grid Grid.Row="0">
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
@@ -118,37 +307,127 @@
                         <TextBlock Text="起始" Width="44" TextAlignment="Right"
                                    VerticalAlignment="Center" Margin="0,0,6,0"
                                    Foreground="{DynamicResource Brush.FgMid}"/>
-                        <TextBox Grid.Column="1" Style="{StaticResource FreshInput}" Width="118"
-                                 Text="{Binding FromText, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="按绑定时刻筛选（yyyy-MM-dd）；留空=不限"/>
+                        <Border Grid.Column="1" Style="{StaticResource FieldShell}" Width="150"
+                                ToolTip="按绑定时刻筛选的起始时间（点日历选日期、下拉选时刻）；留空=不限">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="62"/>
+                                </Grid.ColumnDefinitions>
+                                <DatePicker Style="{StaticResource BareDatePicker}"
+                                            SelectedDate="{Binding FromDate}"/>
+                                <Border Grid.Column="1" Width="1" Margin="0,5"
+                                        Background="{DynamicResource Brush.Fresh.Border}"/>
+                                <ComboBox Grid.Column="2" Style="{StaticResource FreshComboBare}"
+                                          ItemsSource="{Binding TimeOptions, FallbackValue={x:Null}}"
+                                          SelectedItem="{Binding FromTime}"
+                                          ToolTip="起始时刻（点选；缺省 00:00）"/>
+                            </Grid>
+                        </Border>
                         <TextBlock Grid.Column="2" Text="结束" Width="44" TextAlignment="Right"
                                    VerticalAlignment="Center" Margin="16,0,6,0"
                                    Foreground="{DynamicResource Brush.FgMid}"/>
-                        <TextBox Grid.Column="3" Style="{StaticResource FreshInput}" Width="118"
-                                 Text="{Binding ToText, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="按绑定时刻筛选（yyyy-MM-dd）；留空=不限"/>
+                        <Border Grid.Column="3" Style="{StaticResource FieldShell}" Width="150"
+                                ToolTip="按绑定时刻筛选的结束时间（点日历选日期、下拉选时刻）；留空=不限">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="62"/>
+                                </Grid.ColumnDefinitions>
+                                <DatePicker Style="{StaticResource BareDatePicker}"
+                                            SelectedDate="{Binding ToDate}"/>
+                                <Border Grid.Column="1" Width="1" Margin="0,5"
+                                        Background="{DynamicResource Brush.Fresh.Border}"/>
+                                <ComboBox Grid.Column="2" Style="{StaticResource FreshComboBare}"
+                                          ItemsSource="{Binding TimeOptions, FallbackValue={x:Null}}"
+                                          SelectedItem="{Binding ToTime}"
+                                          ToolTip="结束时刻（点选；缺省 23:59=当天收尾）"/>
+                            </Grid>
+                        </Border>
                         <TextBlock Grid.Column="4" Text="库位" Width="44" TextAlignment="Right"
                                    VerticalAlignment="Center" Margin="16,0,6,0"
                                    Foreground="{DynamicResource Brush.FgMid}"/>
-                        <TextBox Grid.Column="5" Style="{StaticResource FreshInput}" Width="92"
-                                 Text="{Binding LocationText, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="库位码（客户标签 A01~J12）；支持前缀，留空=不限"/>
+                        <Grid Grid.Column="5">
+                            <ToggleButton x:Name="LocToggle" Style="{StaticResource LocShellToggle}"
+                                          Width="110"
+                                          ToolTip="库位码：点开按固化架铺格子的面板，点格子选择（与主页排布一致）；全部=不限。&#x0a;同一编码每台固化架各有一套，按编码查出所有架的同名库位">
+                                <TextBlock Text="{Binding LocationText, FallbackValue=全部}"
+                                           Foreground="{DynamicResource Brush.Fresh.FgMid}"/>
+                            </ToggleButton>
+                            <Popup x:Name="LocPopup" Placement="Bottom" PlacementTarget="{Binding ElementName=LocToggle}"
+                                   AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade"
+                                   IsOpen="{Binding IsChecked, ElementName=LocToggle, Mode=TwoWay}">
+                                <Border Background="{DynamicResource Brush.Fresh.CardBg}"
+                                        BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
+                                        CornerRadius="4" Padding="8" Margin="0,2,0,0"
+                                        MinWidth="150" MaxWidth="480" MaxHeight="360">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <StackPanel>
+                                            <!-- 全部行：清掉库位筛选（=不限） -->
+                                            <Button Style="{StaticResource FreshButton}" Content="全部（不限库位）"
+                                                    HorizontalAlignment="Stretch"
+                                                    Command="{Binding SelectLocationCommand}"
+                                                    CommandParameter="全部"
+                                                    Click="OnLocationPicked"/>
+                                            <ItemsControl ItemsSource="{Binding LocationGroups, FallbackValue={x:Null}}"
+                                                          Margin="0,6,0,0">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Margin="0,0,0,8">
+                                                            <TextBlock Text="{Binding Title, FallbackValue=固化架}"
+                                                                       Style="{StaticResource LocGroupHeader}"
+                                                                       FontSize="11" Margin="2,0,0,4"
+                                                                       Foreground="{DynamicResource Brush.Fresh.FgStrong}"/>
+                                                            <!-- 格子铺列：UniformGrid 必须做 ItemsControl 的
+                                                                 ItemsPanel（套在外面只会"1 个 child"——内层
+                                                                 还是纵向 StackPanel，铺不出 10×3）；列数绑
+                                                                 组的 Columns（面板模板里 item 的 DataContext
+                                                                 是单个码，须 RelativeSource 找回组对象） -->
+                                                            <ItemsControl ItemsSource="{Binding Codes, FallbackValue={x:Null}}">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate>
+                                                                        <UniformGrid Columns="{Binding DataContext.Columns,
+                                                                                                RelativeSource={RelativeSource AncestorType=ItemsControl},
+                                                                                                FallbackValue=10}"/>
+                                                                    </ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <Button Style="{StaticResource LocCell}"
+                                                                                Content="{Binding}"
+                                                                                Command="{Binding DataContext.SelectLocationCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                CommandParameter="{Binding}"
+                                                                                Click="OnLocationPicked"/>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
                         <StackPanel Grid.Column="6" Orientation="Horizontal" Margin="16,0,0,0">
                             <TextBlock Text="SN" Width="44" TextAlignment="Right"
                                        VerticalAlignment="Center" Margin="0,0,6,0"
                                        Foreground="{DynamicResource Brush.FgMid}"/>
-                            <TextBox Style="{StaticResource FreshInput}" Width="150"
+                            <TextBox Style="{StaticResource FreshInput}" Width="140"
                                      Text="{Binding SnText, UpdateSourceTrigger=PropertyChanged}"
                                      ToolTip="产品 SN 关键字（包含匹配）；留空=不限"/>
                             <TextBlock Text="结果" Width="44" TextAlignment="Right"
                                        VerticalAlignment="Center" Margin="16,0,6,0"
                                        Foreground="{DynamicResource Brush.FgMid}"/>
-                            <ComboBox Style="{StaticResource FreshCombo}" Width="104"
+                            <ComboBox Style="{StaticResource FreshCombo}" Width="96"
                                       ItemsSource="{Binding ReasonOptions, FallbackValue={x:Null}}"
                                       SelectedItem="{Binding ReasonText}"
                                       ToolTip="按结束原因筛选；全部=不限"/>
                         </StackPanel>
-                        <StackPanel Grid.Column="7" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <StackPanel Grid.Column="8" Orientation="Horizontal" HorizontalAlignment="Right">
                             <Button Style="{StaticResource FreshPrimaryButton}" Command="{Binding QueryCommand}"
                                     Content="查询" MinWidth="88" Margin="0,0,8,0"/>
                             <Button Style="{StaticResource FreshButton}" Command="{Binding ResetCommand}"

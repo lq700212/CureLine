@@ -54,6 +54,7 @@ using CwMesPost = CureStation.MesPostConfigWindow;
 using CwScannerConfig = CureStation.ScannerConfigWindow;
 using CwAlarm = CureStation.GrillAlarmResetWindow;
 using CwTraceReport = CureStation.TraceReportWindow;
+using CwLog = CureStation.LogWindow;
 using CwScanNotice = CureStation.ScanNoticeWindow;
 using CwSlotReload = CureStation.SlotReloadWindow;
 using CureDialogs = CureStation.ViewModels.IDialogService;
@@ -68,6 +69,7 @@ using CureMesPostVm = CureStation.ViewModels.MesPostConfigViewModel;
 using CureScannerVm = CureStation.ViewModels.ScannerConfigViewModel;
 using CureAlarmVm = CureStation.ViewModels.GrillAlarmResetCoordinator;
 using CureTraceReportVm = CureStation.ViewModels.TraceReportViewModel;
+using CureTraceLocGroup = CureStation.ViewModels.TraceLocationGroup;
 using CureScanNoticeVm = CureStation.ViewModels.ScanNoticeViewModel;
 using CureSlotReloadVm = CureStation.ViewModels.SlotReloadViewModel;
 using CureLogSnap = CureStation.ViewModels.LogSystemSnapshot;
@@ -246,6 +248,14 @@ public static class Program
         // （剩 119/进度 1%），拍不到断电续算的 61% 填充——harness 直改演（见方法注）。
         InjectCuringFrame(main, "cs-main-curing.png");
 
+        // ---------- 日志窗（顶栏【日志】：操作日志流 + 系统状态卡） ----------
+        // 12s Mock 演示后 LocalLogService 进程内缓存已有一波日志（启动/连接/
+        //   状态机边沿），VM 构造即历史预填，画面为真实运行态；状态卡定格
+        //   BuildSystemSnapshot 当前值（Present 装配链与生产 DialogService 同款）。
+        var cslog = new CwLog();
+        cslog.Present(((CureMainVm)main.DataContext).BuildSystemSnapshot());
+        Shot(cslog, "cs-log.png", 900);
+
         // ---------- 登录窗（纯登录——V0.0.49 起改密面板删除，operator 无改密权） ----------
         var lv = new CureLoginVm();
         lv.Password = "123456";                // R1 例外允许的"模拟打字"
@@ -355,7 +365,14 @@ public static class Program
             traceStore.MarkLeft(1, 1, seedNow.AddHours(-1), 120, SlotTraceEndReason.Released);
             traceStore.MarkTakenOut(3, 2, "SN-2026-000201", seedNow.AddMinutes(-30), 30);
 
-            var trVm = new CureTraceReportVm(traceStore);
+            // 库位格子数据与主窗演示口径同源（10 架×3 层单架；行优先=先层后站，
+            // 下拉面板铺出来与主页卡片网格同排布——V0.0.100）。
+            var trLocCodes = new List<string>();
+            for (int level = 1; level <= 3; level++)
+            for (int rack = 1; rack <= 10; rack++)
+                trLocCodes.Add(SlotLocationCode.EncodeInRack(rack, level));
+            var trGroups = new List<CureTraceLocGroup> { new("1号固化架", 10, trLocCodes) };
+            var trVm = new CureTraceReportVm(traceStore, null, trGroups);
             trVm.QueryAsync();          // 开窗即查（生产同款）
             var tr = new CwTraceReport { DataContext = trVm };
             ShotFrame(tr, "cs-trace-report.png", 1200);
@@ -891,7 +908,8 @@ public static class Program
         public void ShowGrillAlarmReset(CureStation.ViewModels.GrillAlarmResetCoordinator presenter) { }
         public void CloseGrillAlarmReset() { }
         // 追溯报表窗桩（V0.0.97 接口补齐）：镜头段显式构造真实窗拍（同日志窗口径）。
-        public void ShowTraceReport(SlotProductTraceStore store, Func<string?>? askSavePath) { }
+        public void ShowTraceReport(SlotProductTraceStore store, Func<string?>? askSavePath,
+            System.Collections.Generic.IReadOnlyList<CureStation.ViewModels.TraceLocationGroup>? locationGroups) { }
         // 扫码拦截提示窗桩（V0.0.99 接口补齐）：镜头段显式构造真实窗拍。
         public void ShowScanNotice(string title, string message, string detail) { }
         // 放回口径确认窗桩（V0.0.99 接口补齐）：镜头段显式构造真实窗拍。

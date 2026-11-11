@@ -277,8 +277,8 @@
 | `src/CureLine.Core/Curing/SlotBindingSession.cs` | **三段式扫码会话（V0.0.98；V0.0.99 去超时+防呆+放回三道闸）**：扫库位码=开始该库位上料（清上一轮产品绑定）→ 逐个扫产品码（**追加**进该库位产品清单，一库位多产品）→ **再扫一次同库位码=上料结束**（`LoadConfirmed`）；**无超时**（V0.0.99 用户拍板：上料结束只认二次扫库位码）；未结束就扫新库位码 → `LocationFlowNotFinished` 拦截（弹窗提示先结束上一个）；`IsLoadUnconfirmed` 是"上料未完成确认"唯一查询口（状态机报警抑制据此，含**完全没扫码**的库位）；放回件三道闸（`ReturnToOriginBlocked` 禁放回原库位 / `SlotOccupiedBlocked` 禁往在制库位加新产品 / `CureBasisConflict` 禁混装）+ `resumeDecider` 弹窗问固化口径（续接/全新/取消）；`Remove` 取件作废；全部 UI 线程调用（`_map` 访问有锁——状态机后台线程读抑制闸），`Changed` 驱动主窗刷新 |
 | `src/CureLine.Core/Curing/SlotTakeOutInfo.cs` | 中途取出履历（SN + 取出库位架层 + **累计**已固化分钟 + 时刻）；"放回原库位拦截"与"续接口径确认"的判据来源 |
 | `src/CureLine.Core/Curing/SlotReloadPrompt.cs` | 放回再加工产品时的"固化时长口径"确认（`SlotReloadChoice` 枚举 + Prompt 组装：产品/目标库位架层/原库位/前段分钟/计划分钟）；宿主弹窗问操作员，Core 不碰 UI |
-| `src/CureLine.Core/Data/SlotProductTraceStore.cs` | **固化追溯库（V0.0.98；V0.0.99 增前段累计列 + 待放回台账）**：SQLite 表 `slot_product_trace`（一件产品一行：绑定/上料确认/开计时/计划时长/离架/**实际固化分钟=本轮+前段累计**/前段分钟 `prior_cured_minutes`/结束原因/报警标志/备注）+ 视图 `slot_trace_summary`（一库位一行汇总）；写入点=扫码绑定/上料确认/开计时/离架/报警产生/中途取出/报警终止，**全后台线程**（UI 线程禁 DB IO），写操作加锁串行；**待放回台账**（`TryGetTakeOut` 内存索引 + 启动时 `LoadTakeOutIndex` 后台装载）= 放回判定与续接基准的真源 |
-| `src/CureStation/TraceReportWindow.*` + `ViewModels/TraceReportViewModel.cs` | **固化追溯报表窗（V0.0.98；V0.0.99 关闭钮移右上角）**：主窗顶栏【追溯】入口（登录即可见）；筛选行（时间/库位码/SN/结束原因）+ 5 张统计卡 + 两页签（产品明细/库位汇总）+ 分页 + 导出 CSV（当前筛选全量，UTF-8 BOM）；布局参考 HJVision 视觉数据报表，配色走本项目主题键板；**标题条用 Grid 两列**（标题 `*` + ✕ `Auto`——`DockPanel.LastChildFill` 会把 ✕ 拉伸飘到标题栏中间） |
+| `src/CureLine.Core/Data/SlotProductTraceStore.cs` | **固化追溯库（V0.0.98；V0.0.99 增前段累计列 + 待放回台账；V0.0.100 汇总时间口径修）**：SQLite 表 `slot_product_trace`（一件产品一行：绑定/上料确认/开计时/计划时长/离架/**实际固化分钟=本轮+前段累计**/前段分钟 `prior_cured_minutes`/结束原因/报警标志/备注）+ 视图 `slot_trace_summary`（一库位一行汇总，**含 `last_bound_at`=`MAX(bound_at)`——报表"时间范围"筛汇总按最近一次绑定判定，EnsureSchema 走 DROP+CREATE 重建〔派生数据零风险，老库重启即升级〕**）；写入点=扫码绑定/上料确认/开计时/离架（**含 WaitingGate 相位**——托盘没开计时就走也要收口结束原因，否则永挂"仍在架"变幽灵）/报警产生/中途取出/报警终止，**全后台线程**（UI 线程禁 DB IO），写操作加锁串行；**待放回台账**（`TryGetTakeOut` 内存索引 + 启动时 `LoadTakeOutIndex` 后台装载）= 放回判定与续接基准的真源 |
+| `src/CureStation/TraceReportWindow.*` + `ViewModels/TraceReportViewModel.cs` | **固化追溯报表窗（V0.0.98；V0.0.99 关闭钮移右上角；V0.0.100 筛选重做）**：主窗顶栏【追溯】入口（登录即可见）；筛选行（**起始/结束=日期+时刻整框**〔原生 `DatePicker` 裸模板定格 `yyyy-MM-dd`+框内时刻下拉 30 分钟步进、23:59 收尾，缺省 00:00/23:59；藏 `PART_TextBox`+覆盖格式化 TextBlock 纯点选无手输——**模板必须分两列**，不分列 PART_Button Stretch 铺满整格图标叠字（探针放大实测）〕/**库位=格子分组面板**〔与主窗卡片网格一一对应：每架一组、组内 10×3 **行优先先层后站**，宿主 `BuildLocationGroups`→`TraceLocationGroup` 传入，多架才显示组标题条，首项"全部"，点格子即选中收面板；**UniformGrid 必须做内层 ItemsControl 的 ItemsPanel**——套在外面板=1 个 child 竖排一列，`Columns` 用 `RelativeSource AncestorType=ItemsControl` 绑组属性〕/SN/结束原因）+ 5 张统计卡 + 两页签（产品明细/库位汇总，**切页签即按当前筛选重查**，两视图各自条数口径分页）+ 分页（**页码越界即收敛重查**）+ 导出 CSV（当前筛选全量，UTF-8 BOM）；**开窗首查收口在 `Present()`**（VM 构造零副作用——测试可直驱；构造里首查会让测试并发查询翻车）；起始晚于结束=状态栏提示不硬查；布局参考 HJVision 视觉数据报表，配色走本项目主题键板；**标题条用 Grid 两列**（标题 `*` + ✕ `Auto`——`DockPanel.LastChildFill` 会把 ✕ 拉伸飘到标题栏中间） |
 | `src/CureStation/ScanNoticeWindow.*` + `ViewModels/ScanNoticeViewModel.cs` | **扫码拦截提示窗（V0.0.99）**：红线拦截（防呆/禁放回原库位/禁混装/禁往在制库位加新产品）时讲清"为什么没扫进去、下一步怎么做"，纯告知一个"知道了"按钮；经 `IDialogService.ShowScanNotice` |
 | `src/CureStation/SlotReloadWindow.*` + `ViewModels/SlotReloadViewModel.cs` | **放回产品固化口径确认窗（V0.0.99）**：接着之前固化继续（累计达标）/ 完全重新开始 / 取消，三决策；两个数字（已固化多久、还要固化多久）由 VM 算好摆出；经 `IDialogService.AskSlotReloadBasis` |
 | `src/CureLine.Core/Comms/ScannerOptions.cs` | 扫码枪配置 `[Scanner]` 节（**Serial/Tcp 双模式，V0.0.78；V0.0.79 起缺省=现场 TCP 预置**）：`Mode` 缺省 Tcp（显式 Serial 才走串口）+ TCP 三键（`TcpIp` 缺省=`FieldTcpIp` 现场常量、空值 ini 自愈回预置/`TcpPort` 缺省 8899/`TriggerCommand` 缺省空=不发）+ 串口五键（Enabled 缺省 0=不自启连接/PortName/DeviceKeyword/串口参数）+ DebugLog + `Norm*` 规范化（非法值回缺省，坏值不喂驱动）；**V0.0.99 起无会话超时键**（上料结束只认二次扫库位码，`SessionTimeoutSeconds` 全落点已删） |
@@ -817,7 +817,9 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   三事件在 _sync 锁内触发，处理器禁止同步回调状态机公共方法（重入死锁），
   只做轻量投递；⑥ 物料上传（API0032）按**按钮工位**取槽（不走全局配置
   Side——自动进/出站才用配置工位）；⑦ WaitingGate 离开在 Arrive 口径下补
-  出站（固化 0 秒，有进必有出），Start 口径没发进站则出站也不发；⑧ BC_NO=
+  出站（固化 0 秒，有进必有出），Start 口径没发进站则出站也不发；**Terminated
+  （报警终止）离架=与"计时中取件"同口径**（`PostAbortOut` 控制，V0.0.100
+  补漏——此前 Terminated 落 `_` 恒不发，进站已报却永不报出站）；⑧ BC_NO=
   工单批次物料条码（批次级过账），板级产品 ID 上报走程序②整线网关（架构
   差异已登记）；⑨ **双架工位映射**（V0.0.20）：自动进/出站按全局架号查
   `[CuringMes] RackSides`（"11-20:L" 架号段:工位，非法段忽略，空=全用
@@ -889,7 +891,9 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
    （`CureBasisConflict`：口径由**第一个**产品定档，后来者口径不同即拦截）；
    放到新库位时 `resumeDecider` 弹窗问固化时长口径——【接着之前固化继续】
    （累计达标：之前已固化 8h + 计划 24h → 本盘再固化 16h 即放行，累计 = 计划）
-   /【完全重新开始】（前段作废）/【取消】（不绑定）；库位本轮时长取各续接件
+   /【完全重新开始】（前段作废）/【取消】（不绑定，**V0.0.100 起单独归类
+   `ReloadCancelled` 走 3 秒轻浮层确认**——不是红线拦截，勿弹"扫码被拦截"
+   窗；三道闸四个拦截 Kind 才走 ShowScanNotice）；库位本轮时长取各续接件
    前段时长的**最小值**（宁多勿少：库里每件产品的累计固化都 ≥ 计划时长），由
    `SlotCuringMachine.resumeBaselineProvider` 在托盘到位那一刻现读；取出台账
    真源=追溯库内存索引（`SlotProductTraceStore.TryGetTakeOut`，启动时后台装载，

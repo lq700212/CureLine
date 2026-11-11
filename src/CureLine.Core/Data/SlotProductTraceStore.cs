@@ -274,14 +274,20 @@ public sealed class SlotProductTraceStore
 
             // 库位汇总视图：一个库位一行（现场看"这个库位放过几个、几个正常"）。
             // 用 COUNT/SUM 聚合，异常件 = 结束原因非 0 且非"正常放行"。
+            // last_bound_at = 该库位最近一次绑定时刻——报表"时间范围"筛汇总时
+            // 按"最近一次绑定落在范围内"判定（V0.0.100 修正：此前按 first_bound_at
+            // 筛，老库位晚些再绑产品时筛"今天"反而看不到，与明细口径对不上）。
+            // 视图是派生数据，先 DROP 再建零风险——老库（无 last_bound_at 列）重启即升级。
+            _db.ExecuteNonQuery("DROP VIEW IF EXISTS slot_trace_summary", null);
             _db.ExecuteNonQuery(
-                "CREATE VIEW IF NOT EXISTS slot_trace_summary AS " +
+                "CREATE VIEW slot_trace_summary AS " +
                 "SELECT rack, level, location_code, " +
                 "COUNT(1) AS product_count, " +
                 "SUM(CASE WHEN end_reason = 1 THEN 1 ELSE 0 END) AS finished_count, " +
                 "SUM(CASE WHEN end_reason <> 0 AND end_reason <> 1 THEN 1 ELSE 0 END) AS abnormal_count, " +
                 "SUM(CASE WHEN end_reason = 0 THEN 1 ELSE 0 END) AS active_count, " +
                 "MIN(bound_at) AS first_bound_at, " +
+                "MAX(bound_at) AS last_bound_at, " +
                 "MAX(left_at) AS last_left_at, " +
                 "SUM(CASE WHEN cured_minutes > 0 THEN cured_minutes ELSE 0 END) AS cured_minutes " +
                 "FROM slot_product_trace GROUP BY rack, level, location_code", null);
@@ -781,7 +787,7 @@ public sealed class SlotProductTraceStore
         return (parts.Count > 0 ? " WHERE " + string.Join(" AND ", parts) : "", ps);
     }
 
-    /// <summary>汇总筛选条件 → WHERE 子句 + 参数字典（时间范围按最近绑定时刻口径）。</summary>
+    /// <summary>汇总筛选条件 → WHERE 子句 + 参数字典（时间范围按最近一次绑定时刻口径）。</summary>
     private static (string Where, Dictionary<string, object?> Params) BuildSummaryWhere(SlotTraceFilter filter)
     {
         var parts = new List<string>();
@@ -793,12 +799,12 @@ public sealed class SlotProductTraceStore
         }
         if (!string.IsNullOrWhiteSpace(filter.From))
         {
-            parts.Add("first_bound_at >= @from");
+            parts.Add("last_bound_at >= @from");
             ps["@from"] = filter.From;
         }
         if (!string.IsNullOrWhiteSpace(filter.To))
         {
-            parts.Add("first_bound_at <= @to");
+            parts.Add("last_bound_at <= @to");
             ps["@to"] = filter.To;
         }
         return (parts.Count > 0 ? " WHERE " + string.Join(" AND ", parts) : "", ps);

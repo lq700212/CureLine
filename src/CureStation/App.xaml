@@ -47,6 +47,7 @@
             <Geometry x:Key="Geo.Edit">M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z</Geometry>                                                         <!-- galaxy/Buttons/barisdogansutcu_lovely-walrus-42 -->
             <Geometry x:Key="Geo.Scanner">M4 8V5a1 1 0 0 1 1-1h3 M16 4h3a1 1 0 0 1 1 1v3 M20 16v3a1 1 0 0 1-1 1h-3 M8 20H5a1 1 0 0 1-1-1v-3 M8 9v6 M12 9v6 M16 9v6</Geometry> <!-- 自绘：扫描框+条码竖线（galaxy 无对应条码样例） -->
             <Geometry x:Key="Geo.CloseX">M6 18L18 6M6 6l12 12</Geometry>                                                                                          <!-- galaxy/Buttons/Creatlydev_dull-chicken-81 -->
+            <Geometry x:Key="Geo.Calendar">M6 5 H18 A2 2 0 0 1 20 7 V19 A2 2 0 0 1 18 21 H6 A2 2 0 0 1 4 19 V7 A2 2 0 0 1 6 5 Z M8 3 V7 M16 3 V7 M4 11 H20</Geometry> <!-- galaxy/Buttons/andrew-demchenk0_giant-termite-81 -->
 
             <!-- ============ 主窗专用样式（色走语义键，随主题换皮） ============ -->
             <!-- 幽灵按钮：主窗顶栏胶囊（HTML .btn 直译 padding 5px 13px ≈ 27px 高）；

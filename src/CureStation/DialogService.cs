@@ -95,9 +95,12 @@ public interface IDialogService
     /// <summary>
     /// 打开固化追溯报表窗（V0.0.97，模态）。store=追溯库存取（主窗私有资产，
     /// 本窗只读不改）；askSavePath=导出 CSV 的保存路径询问（UI 线程弹保存框，
-    /// VM 不碰 UI 窗）。窗内含"产品明细"与"库位汇总"两个视图。
+    /// VM 不碰 UI 窗）；locationGroups=库位格子选择数据（主窗按当前点表换算的
+    /// 分组集合，一台固化架一组、组内行优先——报表下拉按它铺格子）。
+    /// 窗内含"产品明细"与"库位汇总"两个视图。
     /// </summary>
-    void ShowTraceReport(CureLine.Core.Data.SlotProductTraceStore store, Func<string?> askSavePath);
+    void ShowTraceReport(CureLine.Core.Data.SlotProductTraceStore store, Func<string?> askSavePath,
+        System.Collections.Generic.IReadOnlyList<TraceLocationGroup>? locationGroups);
 
     /// <summary>
     /// 扫码拦截提示窗（V0.0.99，模态）：现场红线拦截时给操作员讲清"为什么没
@@ -286,7 +289,8 @@ public sealed class DialogService : IDialogService
         _alarmWindow?.SilentClose();
     }
 
-    public void ShowTraceReport(CureLine.Core.Data.SlotProductTraceStore store, Func<string?> askSavePath)
+    public void ShowTraceReport(CureLine.Core.Data.SlotProductTraceStore store, Func<string?> askSavePath,
+        System.Collections.Generic.IReadOnlyList<TraceLocationGroup>? locationGroups)
     {
         // 模态窗：报表是"看一眼就走"的功能（与报警确认那种常驻弹窗不同）。
         // VM 在这里 new（测试绕过此窗直接实例化 VM 用 Fake 桩，同其它窗口径）。
@@ -294,7 +298,7 @@ public sealed class DialogService : IDialogService
         {
             Owner = Application.Current?.MainWindow,
         };
-        win.Present(new TraceReportViewModel(store, askSavePath));
+        win.Present(new TraceReportViewModel(store, askSavePath, locationGroups));
     }
 
     public void Shutdown() => Application.Current?.Shutdown();

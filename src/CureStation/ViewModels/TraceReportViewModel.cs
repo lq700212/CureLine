@@ -24,6 +24,32 @@ using CureLine.ViewModels;
 
 namespace CureStation.ViewModels;
 
+/// <summary>
+/// 库位格子选择的一组数据（一台固化架一组，与主窗"N号固化架"分组同源）。
+/// Codes 是**行优先**排布：第 1 行=全部站的上层、第 2 行=中层、第 3 行=下层
+/// ——与主窗仓位卡网格（先层后架）完全对应，操作员在主页看到什么排布，
+/// 在下拉里就是什么排布，点格子选库位一目了然。
+/// </summary>
+public sealed class TraceLocationGroup
+{
+    /// <summary>构造（组标题/列数/该组库位码集合——行优先）。</summary>
+    public TraceLocationGroup(string title, int columns, IReadOnlyList<string> codes)
+    {
+        Title = title;
+        Columns = columns;
+        Codes = codes;
+    }
+
+    /// <summary>组标题（"1号固化架"——与主窗分组标题同源）。</summary>
+    public string Title { get; }
+
+    /// <summary>格子列数（本组架内站数，恒 ≤10；UniformGrid 按它铺列）。</summary>
+    public int Columns { get; }
+
+    /// <summary>本组库位码（行优先：先层后站，与主窗卡片网格同序）。</summary>
+    public IReadOnlyList<string> Codes { get; }
+}
+
 /// <summary>追溯报表窗 VM（纯 VM，无 WPF 依赖——测试可直驱）。</summary>
 public sealed class TraceReportViewModel : ViewModelBase
 {
@@ -38,8 +64,14 @@ public sealed class TraceReportViewModel : ViewModelBase
     /// </summary>
     private readonly Func<string?>? _askSavePath;
 
-    /// <summary>构造（注入追溯库；askSavePath 可空=不支持导出）。</summary>
-    public TraceReportViewModel(SlotProductTraceStore store, Func<string?>? askSavePath = null)
+    /// <summary>
+    /// 构造（注入追溯库；askSavePath 可空=不支持导出；locationGroups=库位格子
+    /// 选择数据——宿主按当前点表换算传入，空=下拉里只有"全部"）。
+    /// 注意：构造**不查询**（测试可直驱实例化、不会惊动后台线程）——开窗首查
+    /// 由宿主装配（TraceReportWindow.Present）触发。
+    /// </summary>
+    public TraceReportViewModel(SlotProductTraceStore store, Func<string?>? askSavePath = null,
+        IReadOnlyList<TraceLocationGroup>? locationGroups = null)
     {
         _store = store;
         _askSavePath = askSavePath;
@@ -53,12 +85,16 @@ public sealed class TraceReportViewModel : ViewModelBase
         {
             ReasonOptions.Add(SlotTraceEndReasonText.ToText(reason));
         }
+        // 库位格子选择：宿主按当前点表换算（一台固化架一组，行优先=先层后站）。
+        LocationGroups = locationGroups ?? [];
 
         QueryCommand = new RelayCommand(() => QueryAsync(resetPage: true));
         ResetCommand = new RelayCommand(() => ResetFilters());
         PrevPageCommand = new RelayCommand(() => QueryAsync(resetPage: false), () => Page > 1);
         NextPageCommand = new RelayCommand(() => QueryAsync(resetPage: false), () => Page < PageCount);
         ExportCommand = new RelayCommand(() => ExportCsv());
+        // 库位格子点选（参数=库位码或"全部"）：格子/全部行共用一个命令。
+        SelectLocationCommand = new RelayCommand(code => LocationText = (string)code!);
         // 页签命令（V0.0.97：页签钮用 Command 切视图，不用 Radio 的 IsChecked
         // 双向绑定——Radio 未勾选时 IsChecked=null，双向绑 bool 属性会把 null
         // 写回 false，开窗瞬间视图被误切走。Command 链无此坑，勾选态仍由
@@ -69,29 +105,86 @@ public sealed class TraceReportViewModel : ViewModelBase
 
     // ---------------- 筛选条件 ----------------
 
-    private string _fromText = "";
-    /// <summary>绑定时刻起（yyyy-MM-dd；空=不限）。</summary>
-    public string FromText
+    /// <summary>起始缺省时刻（当天 00:00）。</summary>
+    public const string StartDefaultTime = "00:00";
+
+    /// <summary>结束缺省时刻（23:59=当天收尾——下拉里单列此项，选 23:30
+    /// 会丢掉最后半小时的记录）。</summary>
+    public const string EndDefaultTime = "23:59";
+
+    /// <summary>库位下拉的"不限"项（首项恒为此值）。</summary>
+    public const string LocationAll = "全部";
+
+    /// <summary>
+    /// 时刻下拉选项（30 分钟步进 + 23:59 收尾）。静态列表只建一次，
+    /// 起止两个下拉共用同一份。
+    /// </summary>
+    public IReadOnlyList<string> TimeOptions { get; } = BuildTimeOptions();
+
+    private static List<string> BuildTimeOptions()
     {
-        get => _fromText;
-        set => Set(ref _fromText, value);
+        var list = new List<string>(49);
+        for (int h = 0; h < 24; h++)
+        for (int m = 0; m <= 30; m += 30)
+            list.Add($"{h:00}:{m:00}");
+        list.Add(EndDefaultTime);   // 23:59 收尾（当天最后一分钟的记录也能筛到）
+        return list;
     }
 
-    private string _toText = "";
-    /// <summary>绑定时刻止（yyyy-MM-dd；空=不限）。</summary>
-    public string ToText
+    private DateTime? _fromDate;
+    /// <summary>绑定时刻起（日期；空=不限）——DatePicker 点选。</summary>
+    public DateTime? FromDate
     {
-        get => _toText;
-        set => Set(ref _toText, value);
+        get => _fromDate;
+        set => Set(ref _fromDate, value);
     }
 
-    private string _locationText = "";
-    /// <summary>库位码（如 A01；支持前缀模糊；空=不限）。</summary>
+    private DateTime? _toDate;
+    /// <summary>绑定时刻止（日期；空=不限）——DatePicker 点选。</summary>
+    public DateTime? ToDate
+    {
+        get => _toDate;
+        set => Set(ref _toDate, value);
+    }
+
+    private string _fromTime = StartDefaultTime;
+    /// <summary>起始时刻（HH:mm 下拉点选；缺省 00:00）。</summary>
+    public string FromTime
+    {
+        get => _fromTime;
+        set => Set(ref _fromTime, value);
+    }
+
+    private string _toTime = EndDefaultTime;
+    /// <summary>结束时刻（HH:mm 下拉点选；缺省 23:59）。</summary>
+    public string ToTime
+    {
+        get => _toTime;
+        set => Set(ref _toTime, value);
+    }
+
+    private string _locationText = LocationAll;
+    /// <summary>库位码（格子点选；"全部"=不限）。</summary>
     public string LocationText
     {
         get => _locationText;
         set => Set(ref _locationText, value);
     }
+
+    /// <summary>
+    /// 库位格子选择数据（一台固化架一组；宿主按当前点表换算传入）。
+    /// 下拉面板按它铺格子——与主窗仓位卡排布一一对应，点格子选库位。
+    /// </summary>
+    public IReadOnlyList<TraceLocationGroup> LocationGroups { get; }
+
+    /// <summary>
+    /// 是否显示组标题条（多台固化架才显示"N号固化架"；单架只有一排格子，
+    /// 标题多余——与主窗"组数>1 才显示标题条"同口径）。
+    /// </summary>
+    public bool ShowGroupHeaders => LocationGroups.Count > 1;
+
+    /// <summary>库位格子点选（参数=库位码或"全部"——格子/全部行共用）。</summary>
+    public RelayCommand SelectLocationCommand { get; }
 
     private string _snText = "";
     /// <summary>产品 SN 关键字（模糊包含；空=不限）。</summary>
@@ -170,7 +263,13 @@ public sealed class TraceReportViewModel : ViewModelBase
         set
         {
             if (Set(ref _showDetail, value))
+            {
                 Raise(nameof(ShowSummary));
+                // 切页签=按当前筛选重查该视图（页码归一回第一页）——两个视图
+                // 条数口径不同（件数 vs 库位数），共用一个页码会"翻页没反应"
+                // （明细第 3 页翻页，汇总还是那几行，现场以为按钮坏了）。
+                QueryAsync(resetPage: true);
+            }
         }
     }
 
@@ -254,69 +353,98 @@ public sealed class TraceReportViewModel : ViewModelBase
 
     /// <summary>
     /// 执行查询（后台线程查库 → 回 UI 线程填表）。resetPage=true=回到第一页。
+    /// 查哪个视图按当前页签定：明细=件数分页，汇总=库位数分页（两套条数口径，
+    /// 切页签时各自重查归一）。
     /// </summary>
     public void QueryAsync(bool resetPage = true)
     {
         if (resetPage)
             Page = 1;
         var filter = BuildFilter();
-        int skip = (Page - 1) * PageSize;
+        // 时间口径守门：起始晚于结束=条件写反（硬查只会得到空表，现场会误以为
+        // "没数据"）。From/To 是固定格式的完整时间串，字典序=时间序。
+        if (filter.From != null && filter.To != null &&
+            string.CompareOrdinal(filter.From, filter.To) > 0)
+        {
+            StatusText = "起始时间晚于结束时间，请检查筛选条件";
+            return;
+        }
+        bool detailView = ShowDetail;   // 查询发起时的页签（回填跟随同一次决定）
+        int page = Page;
+        int skip = (page - 1) * PageSize;
         Task.Run(() =>
         {
             var stats = _store.Stats(filter);
-            var rows = _store.Query(filter, skip, PageSize);
-            var total = _store.Count(filter);
-            var summary = _store.QuerySummary(filter, 0, 500);
-            return (stats, rows, total, summary);
+            int total = detailView ? _store.Count(filter) : _store.CountSummary(filter);
+            var rows = detailView ? _store.Query(filter, skip, PageSize) : null;
+            var summary = detailView ? null : _store.QuerySummary(filter, skip, PageSize);
+            return (stats, rows, summary, total);
         }).ContinueWith(t =>
         {
             if (t.IsFaulted)
             {
-                StatusText = "查询失败：" + (t.Exception?.GetBaseException().Message ?? "未知错误");
+                UiInvoke(() =>
+                    StatusText = "查询失败：" + (t.Exception?.GetBaseException().Message ?? "未知错误"));
                 return;
             }
-            var (stats, rows, total, summary) = t.Result;
+            var (stats, rows, summary, total) = t.Result;
             UiInvoke(() =>
             {
+                int pageCount = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
+                if (page > pageCount)
+                {
+                    // 页码越界（筛选收窄后原页超界）：本次取回的是越界空页，
+                    // 直接填会让"第 3/1 页挂着空表格"——收敛页码并按新页重查
+                    // （只发生在越界这一次，收敛后的页码必 ≤ 总页数）。
+                    PageCount = pageCount;
+                    Page = pageCount;
+                    QueryAsync(resetPage: false);
+                    return;
+                }
                 Rows.Clear();
-                foreach (var r in rows)
-                    Rows.Add(r);
+                if (rows != null)
+                    foreach (var r in rows)
+                        Rows.Add(r);
                 SummaryRows.Clear();
-                foreach (var r in summary)
-                    SummaryRows.Add(r);
+                if (summary != null)
+                    foreach (var r in summary)
+                        SummaryRows.Add(r);
                 TotalText = stats.Total.ToString("N0");
                 FinishedText = stats.Finished.ToString("N0");
                 AbnormalText = stats.Abnormal.ToString("N0");
                 ActiveText = stats.Active.ToString("N0");
                 SlotCountText = stats.SlotCount.ToString("N0");
-                PageCount = Math.Max(1, (int)Math.Ceiling(total / (double)PageSize));
-                if (Page > PageCount)
-                    Page = PageCount;
+                PageCount = pageCount;
                 PageText = $"第 {Page}/{PageCount} 页 · 共 {total} 条";
-                StatusText = $"共 {total} 条记录 · 本页 {rows.Count} 条";
+                StatusText = detailView
+                    ? $"共 {total} 条记录 · 本页 {rows?.Count ?? 0} 条"
+                    : $"共 {total} 个库位 · 本页 {summary?.Count ?? 0} 行";
             });
         });
     }
 
-    /// <summary>重置筛选条件并重查。</summary>
+    /// <summary>重置筛选条件并重查（日期清空、时刻回缺省、库位回"全部"）。</summary>
     public void ResetFilters()
     {
-        FromText = "";
-        ToText = "";
-        LocationText = "";
+        FromDate = null;
+        ToDate = null;
+        FromTime = StartDefaultTime;
+        ToTime = EndDefaultTime;
+        LocationText = LocationAll;
         SnText = "";
         ReasonText = "全部";
         QueryAsync(resetPage: true);
     }
 
-    /// <summary>VM 属性 → Core 筛选对象（日期补成整天区间）。</summary>
+    /// <summary>VM 属性 → Core 筛选对象（日期+时刻合成完整时间点；日期空=不限）。</summary>
     private SlotTraceFilter BuildFilter()
     {
         return new SlotTraceFilter
         {
-            From = ParseDay(FromText, startOfDay: true),
-            To = ParseDay(ToText, startOfDay: false),
-            LocationCode = string.IsNullOrWhiteSpace(LocationText) ? null : LocationText.Trim(),
+            From = CombineTime(FromDate, FromTime, StartDefaultTime),
+            To = CombineTime(ToDate, ToTime, EndDefaultTime),
+            LocationCode = string.IsNullOrWhiteSpace(LocationText) || LocationText == LocationAll
+                ? null : LocationText.Trim(),
             ProductSn = string.IsNullOrWhiteSpace(SnText) ? null : SnText.Trim(),
             EndReason = ReasonText == "全部"
                 ? SlotTraceEndReason.None
@@ -324,17 +452,26 @@ public sealed class TraceReportViewModel : ViewModelBase
         };
     }
 
-    /// <summary>日期文本 → 库里的时间字符串（yyyy-MM-dd HH:mm:ss）。</summary>
-    private static string? ParseDay(string? text, bool startOfDay)
+    /// <summary>日期+时刻 → 库里的时间字符串（yyyy-MM-dd HH:mm:ss）；日期空=不限。</summary>
+    private static string? CombineTime(DateTime? date, string? timeText, string fallbackTime)
     {
-        if (string.IsNullOrWhiteSpace(text))
+        if (date == null)
             return null;
-        if (!DateTime.TryParse(text.Trim(), CultureInfo.InvariantCulture,
-                DateTimeStyles.None, out DateTime day))
-            return null;
-        return startOfDay
-            ? day.ToString("yyyy-MM-dd 00:00:00")
-            : day.ToString("yyyy-MM-dd 23:59:59");
+        return new DateTime(date.Value.Year, date.Value.Month, date.Value.Day)
+            .AddMinutes(ParseMinutes(timeText, fallbackTime))
+            .ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>"HH:mm" → 当日分钟数（解析失败回缺省——下拉只产合法文本，
+    /// 兜底只为坏数据不崩；缺省时刻是常量恒可解析）。</summary>
+    private static int ParseMinutes(string? text, string fallbackTime)
+    {
+        string t = (text ?? "").Trim();
+        if (TimeSpan.TryParseExact(t, @"hh\:mm", CultureInfo.InvariantCulture, out var span)
+            && span >= TimeSpan.Zero && span < TimeSpan.FromDays(1))
+            return (int)span.TotalMinutes;
+        TimeSpan.TryParseExact(fallbackTime, @"hh\:mm", CultureInfo.InvariantCulture, out var fb);
+        return (int)fb.TotalMinutes;
     }
 
     // ---------------- 导出 ----------------

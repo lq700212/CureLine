@@ -93,6 +93,37 @@ public class CureStationViewModelTests
     }
 
     [Fact]
+    public void MainVm_TraceReport_LocationGroups_MirrorMainGrid()
+    {
+        // V0.0.100：追溯报表库位选择=按固化架分组的格子面板，换算必须与主窗
+        // 仓位卡网格同源（行优先=先层后站、每 10 架一组）——操作员在主页看到
+        // 什么排布，面板里就是什么排布（客户点名"3 行 10 列一目了然"）。
+        using var scope = new TestScope();
+        EnsureConfigDir();
+        IniFile.Write(AppPaths.ConfigIni, "setting", "Simulate", "1");
+        var fake = new FakeCureDialogService();
+        using var vm = new CureStation.ViewModels.MainViewModel(fake);
+        fake.LoginResult = ("operator", OperatorRole.Operator);
+        vm.LoginCommand.Execute(null);
+
+        vm.OpenTraceReportCommand.Execute(null);
+
+        Assert.Contains(fake.Calls, c => c.Contains("ShowTraceReport"));
+        var groups = fake.TraceLocationGroups;
+        Assert.NotNull(groups);
+        Assert.Single(groups!);                        // 10 架 → 每 10 架一组 = 1 组
+        Assert.Equal("1号固化架", groups![0].Title);    // 组标题与主窗分组条同源
+        Assert.Equal(10, groups[0].Columns);           // 列数=架内站数
+        Assert.Equal(30, groups[0].Codes.Count);
+        // 行优先（先层后站）与主窗 Slots 完全同序：首行=上层 A01~J10
+        Assert.Equal("A01", groups[0].Codes[0]);
+        Assert.Equal("B02", groups[0].Codes[1]);
+        Assert.Equal("J10", groups[0].Codes[9]);
+        Assert.Equal("A02", groups[0].Codes[10]);      // 第二行=中层
+        Assert.Equal("J12", groups[0].Codes[29]);      // 第三行=下层
+    }
+
+    [Fact]
     public void MainVm_EmptyPointTable_SelfHealsWithDefaultTemplate()
     {
         using var scope = new TestScope();

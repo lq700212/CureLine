@@ -75,24 +75,77 @@ public class TraceReportViewModelTests : IDisposable
         Assert.Contains("共 2 条", vm.PageText);
     }
 
-    [Fact(DisplayName = "报表：筛选按库位码收窄并可重置")]
+    [Fact(DisplayName = "报表：库位格子分组点选/重置（分组与主页排布对应）")]
     public void Query_FilterByLocation_AndReset()
     {
         var store = MakeStore();
         store.AddBound(1, 1, "SN-1", At(8, 0));
         store.AddBound(2, 1, "SN-2", At(8, 1));
 
-        var vm = new CureStation.ViewModels.TraceReportViewModel(store);
-        vm.LocationText = "A01";
+        // 分组构造：一台架一组、组内行优先（先层后站）——宿主按点表换算传入
+        var groups = new List<CureStation.ViewModels.TraceLocationGroup>
+        {
+            new("1号固化架", 2, new[] { "A01", "B01", "A02", "B02" }),
+            new("2号固化架", 1, new[] { "K01", "K02", "K03" }),
+        };
+        var vm = new CureStation.ViewModels.TraceReportViewModel(store, null, groups);
+        Assert.Equal(2, vm.LocationGroups.Count);
+        Assert.True(vm.ShowGroupHeaders);                        // 多架才显示组标题
+        Assert.Equal(2, vm.LocationGroups[0].Columns);           // 列数=架内站数
+
+        // 点格子选库位（命令参数=库位码，与 XAML 格子按钮同链路）
+        vm.SelectLocationCommand.Execute("A01");
+        Assert.Equal("A01", vm.LocationText);
         vm.QueryAsync();
         WaitUntil(() => vm.Rows.Count > 0);
         Assert.Single(vm.Rows);
         Assert.Equal("A01", vm.Rows[0].LocationCode);
 
+        // 【全部】行=清掉库位筛选（命令参数"全部"），重置后同样回"全部"
+        vm.SelectLocationCommand.Execute(
+            CureStation.ViewModels.TraceReportViewModel.LocationAll);
+        vm.QueryAsync();
+        WaitUntil(() => vm.Rows.Count == 2);
         vm.ResetFilters();
         WaitUntil(() => vm.Rows.Count == 2);
-        Assert.Equal("", vm.LocationText);
+        Assert.Equal(CureStation.ViewModels.TraceReportViewModel.LocationAll, vm.LocationText);
         Assert.Equal("全部", vm.ReasonText);
+    }
+
+    [Fact(DisplayName = "报表：单架时不显示组标题（与主窗组标题条同口径）")]
+    public void LocationGroups_SingleGroup_HidesHeader()
+    {
+        var store = MakeStore();
+        var vm = new CureStation.ViewModels.TraceReportViewModel(store, null,
+            new List<CureStation.ViewModels.TraceLocationGroup>
+            {
+                new("1号固化架", 10, Enumerable.Range(1, 30)
+                    .Select(_ => "A01").ToList()),
+            });
+        Assert.Single(vm.LocationGroups);
+        Assert.False(vm.ShowGroupHeaders);
+    }
+
+    [Fact(DisplayName = "报表：时间筛选按日期+时刻收窄（日期时间选择器口径）")]
+    public void Query_FilterByDateAndTime()
+    {
+        var store = MakeStore();
+        store.AddBound(1, 1, "SN-EARLY", At(8, 0));
+        store.AddBound(1, 1, "SN-LATE", At(9, 0));
+
+        var vm = new CureStation.ViewModels.TraceReportViewModel(store);
+        vm.FromDate = DateTime.Today;
+        vm.FromTime = "08:30";
+        vm.QueryAsync();
+        WaitUntil(() => vm.Rows.Count == 1);
+        Assert.Equal("SN-LATE", vm.Rows[0].ProductSn);
+
+        // 起始晚于结束 = 条件写反 → 不查询，状态栏直接给提示
+        vm.ToDate = DateTime.Today;
+        vm.ToTime = "08:00";
+        vm.QueryAsync();
+        WaitUntil(() => vm.StatusText.Contains("起始时间晚于结束时间"));
+        Assert.Single(vm.Rows);   // 行保持上次结果（本次未查）
     }
 
     [Fact(DisplayName = "报表：结束原因下拉含全部选项 + 筛选生效")]

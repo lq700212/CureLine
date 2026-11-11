@@ -118,10 +118,15 @@ public class FakeCureDialogService : CureStation.ViewModels.IDialogService
     /// <summary>ShowTraceReport 收到的追溯库存取（断言主窗把 owner 实例传对了）。</summary>
     public CureLine.Core.Data.SlotProductTraceStore? TraceStore { get; private set; }
 
-    public void ShowTraceReport(CureLine.Core.Data.SlotProductTraceStore store, Func<string?>? askSavePath)
+    /// <summary>ShowTraceReport 收到的库位格子分组（断言主窗把点表换算的分组传对了）。</summary>
+    public System.Collections.Generic.IReadOnlyList<CureStation.ViewModels.TraceLocationGroup>? TraceLocationGroups { get; private set; }
+
+    public void ShowTraceReport(CureLine.Core.Data.SlotProductTraceStore store, Func<string?>? askSavePath,
+        System.Collections.Generic.IReadOnlyList<CureStation.ViewModels.TraceLocationGroup>? locationGroups)
     {
         Calls.Add("ShowTraceReport");
         TraceStore = store;
+        TraceLocationGroups = locationGroups;
     }
 
     /// <summary>

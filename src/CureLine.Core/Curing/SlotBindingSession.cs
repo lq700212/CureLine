@@ -86,6 +86,12 @@ public enum ScanOutcomeKind
 
     /// <summary>该库位本轮已定档一种固化口径，本产品口径与之冲突（混装）——拦截。</summary>
     CureBasisConflict,
+
+    /// <summary>
+    /// 放回件在"固化时长口径"确认窗点了【取消】——操作员主动放弃，不绑定。
+    /// 与红线拦截不同：提示用 3 秒轻浮层即可，不弹"扫码被拦截"窗（V0.0.100）。
+    /// </summary>
+    ReloadCancelled,
 }
 
 /// <summary>扫码处理结果（Message 可直接显示/记日志；架层与产品码供调用方回填 UI）。</summary>
@@ -519,7 +525,8 @@ public sealed class SlotBindingSession
                 if (choice == SlotReloadChoice.Cancel)
                 {
                     _log?.Invoke($"扫码：产品 {productCode} 的放回流程已取消（未绑定）");
-                    return new ScanOutcome(ScanOutcomeKind.CureBasisConflict,
+                    // 主动取消≠红线拦截：单独归类，宿主给轻提示不弹拦截窗（V0.0.100）。
+                    return new ScanOutcome(ScanOutcomeKind.ReloadCancelled,
                         $"已取消放入 {productCode}", rack, level, productCode);
                 }
                 if (choice == SlotReloadChoice.Resume)

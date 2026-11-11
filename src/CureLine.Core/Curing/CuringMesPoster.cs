@@ -103,8 +103,10 @@ public sealed class CuringMesPoster
     /// <summary>
     /// 托盘离开（任何非空闲相位）。出站口径：
     ///   Done=正常取件（恒传）；Curing 中途取件=强制出料（PostAbortOut 控制）；
+    ///   Terminated=报警终止后取件，未固化到点，与中途取件同口径（PostAbortOut 控制）；
     ///   WaitingGate=进站了没开计时（Arrive 口径下补出站，有进必有出）。
-    /// curedSeconds=已固化秒数（Done=计划时长；Curing=实际经过；WaitingGate=0）。
+    /// curedSeconds=已固化秒数（Done=计划时长；Curing=实际经过；Terminated=终止时刻−开计时；
+    /// WaitingGate=0）。
     /// </summary>
     public void OnTrayLeft(int rack, int level, SlotPhase leavePhase, int curedSeconds) =>
         Task.Run(async () =>
@@ -115,6 +117,10 @@ public sealed class CuringMesPoster
                 {
                     SlotPhase.Done => true,
                     SlotPhase.Curing => _options.PostAbortOut,
+                    // 报警终止后取件（V0.0.100 补漏）：Terminated 相位此前落到
+                    // `_` 恒不发——进站已报（Arrive 口径）却永不报出站，MES 台账
+                    // "有进无出"挂人。未固化到点的出站与"计时中取件"同口径。
+                    SlotPhase.Terminated => _options.PostAbortOut,
                     // WaitingGate：进站已发（Arrive 口径）才补出站；Start 口径没发进站不发出站
                     SlotPhase.WaitingGate => _options.InAt == PostInAt.Arrive,
                     _ => false,

@@ -364,6 +364,47 @@ public class CuringMesPosterTests
     }
 
     [Fact]
+    public void TerminatedLeave_PostsOutWithActualSeconds_WhenPostAbortOutOn()
+    {
+        using var scope = new TestScope();
+        using var mes = new MesStubServer();
+        MesConfig.UrlApi0027 = mes.Url;
+        MesConfig.UrlApi0030 = mes.Url;
+        var (poster, _, _) = Make(new CuringMesOptions
+        {
+            Enabled = true,
+            InAt = PostInAt.Arrive,
+            PostAbortOut = true,
+        });
+
+        // 报警终止后取件：有进必须有出（V0.0.100 修——此前 Terminated 恒不出站）
+        poster.OnTrayLeft(1, 1, SlotPhase.Terminated, curedSeconds: 3600);
+        mes.WaitForRequests(2);
+
+        Assert.Contains("\"PRA_Value\":\"3600\"", mes.Bodies[0]); // 实际已固化秒数
+        Assert.Contains("\"ACTION\":\"O\"", mes.Bodies[1]);
+    }
+
+    [Fact]
+    public void TerminatedLeave_NoPost_WhenPostAbortOutOff()
+    {
+        using var scope = new TestScope();
+        using var mes = new MesStubServer();
+        MesConfig.UrlApi0027 = mes.Url;
+        MesConfig.UrlApi0030 = mes.Url;
+        var (poster, logs, _) = Make(new CuringMesOptions
+        {
+            Enabled = true,
+            PostAbortOut = false,
+        });
+
+        poster.OnTrayLeft(1, 1, SlotPhase.Terminated, 3600);
+        WaitUntil(() => logs.Any(m => m.Contains("按配置不上报出站")));
+
+        Assert.Empty(mes.Bodies);
+    }
+
+    [Fact]
     public void AbortLeave_NoPost_WhenPostAbortOutOff()
     {
         using var scope = new TestScope();
