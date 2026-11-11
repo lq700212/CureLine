@@ -2,6 +2,52 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.103（2026-11-11，追溯报表日期框加宽——日期串不再截断）
+
+- **用户目检反馈**：起始框选中日期后 `2026-12-31` 被裁成 `2026-12-`——日期整框
+  150px 装不下完整日期串
+- **根因**：框内日期段文本可用宽只有约 57px（150 − 壳边框 2 − 时刻下拉 62 −
+  分隔线 1 − 日历图标 20 − 左内边距 8），而 `yyyy-MM-dd`（10 字符，12 号字）需
+  62~67px；HJVision 同口径的 150px 是 WinForms CustomFormat 的量——WPF 版还要
+  在框内装日历图标钮与时刻下拉，量纲更紧
+- **修复**：起始/结束两框 150→170px（文本可用 77px，余量 10~15px）；配套窗
+  `MinWidth` 1200→1240 与默认宽对齐——整行合计约 1170px，再窄行尾"重置"钮会被
+  裁出可视区；注释同步（FieldShell 时间筛选块 + 筛选行布局约束）
+- **验证**：DocShot 全量重拍 ALL PASS（`cs-trace-report.png` 目检：整行无溢出、
+  无裁剪、无重叠）；641/641 全绿
+
+## V0.0.102（2026-11-11，追溯报表日期框"点了没反应"真根因——DatePicker 模板件名）
+
+- **用户实测反馈**：V0.0.101 之后日期框红框区域（含日历图标）点击仍没有任何
+  反应；上一轮探针证明 `IsDropDownOpen` 已被设 true，但日历没弹
+- **真根因（离屏探针反射实证）**：DatePicker 的模板件契约是**弹出层 Popup 必须命名
+  `PART_Popup`**（OnApplyTemplate 找到它后把自己的 Calendar 塞进 `Child`）；`PART_Calendar`
+  这个名字属于模板里显式摆放的 Calendar 件。V0.0.100~101 模板把空 Popup 命名成了
+  `PART_Calendar` → DatePicker 找不到 `PART_Popup`，内部 `_popUp` 恒 null →
+  `IsDropDownOpen=true` 无处弹出（图标钮 toggle 与根转发两条路都一样哑）
+- **修复**：模板 Popup 改名 `PART_Popup`（内容仍留空——探针 v4 实证 DatePicker
+  无条件覆盖 Popup 内容，摆底板/摆 Calendar 件都会被顶掉，弹层视觉=Calendar
+  缺省样式，符合"弹层保持系统缺省"既有口径）；同批删掉 V0.0.101 残留的
+  code-behind 调试探针（写 Temp 日志）
+- **验证**：反射探针对比默认模板/自绘模板 `_popUp` 字段与 `IsOpen` 实测（探针
+  已删）；641/641 全绿
+
+## V0.0.101（2026-11-11，追溯报表日期整框"点哪儿都弹日历"）
+
+- **用户实测反馈**：起始/结束日期框点主体无反应，只有右端 13px 日历图标能开
+  日历——整框可点才符合直觉
+- **根因**：原生 DatePicker 只认 `PART_Button` 图标钮的点击；V0.0.100 模板里
+  `PART_TextBox` 藏了（Hidden 不参与命中测试）、覆盖格式化 TextBlock 无背景
+  （穿透）、模板根 `PART_Root` Grid 也无背景（穿透）——点框主体的命中一路
+  穿到外层 FieldShell 壳上，DatePicker 收不到任何鼠标事件
+- **修复**：模板根铺 `Background=Transparent` 接住整框命中 + 挂
+  `MouseLeftButtonDown` 转发 `IsDropDownOpen=true`（`OnDatePickerShellMouseDown`，
+  View 层 code-behind）；覆盖 TextBlock 加 `IsHitTestVisible=False` 显式装饰层
+  语义。点图标钮时 ButtonBase 自己吃掉 MouseDown（Handled=true 冒泡到不了根），
+  与图标钮的开/关 toggle 天然不打架；纯点选无手输口径不变
+- **验证**：DocShot 临时探针从模板根发 MouseDown 断言两 DatePicker
+  `IsDropDownOpen=True`（探针已删）；641/641 全绿
+
 ## V0.0.100（2026-11-11，三笔提交回顾修 bug + 追溯报表筛选体验重做）
 
 - **需求**（用户拍板两件事）：① 回顾检查最近三笔提交（V0.0.97~99）找 bug 并修复

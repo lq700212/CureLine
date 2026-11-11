@@ -515,8 +515,7 @@ public static class Program
     }
 
     // ───────────────────── 程序② CimGateway 截图 ─────────────────────
-    private static void ShotGateway(Application app, string exeDir)
-    {
+    private static void ShotGateway(Application app, string exeDir)    {
         // 资源换装：从 CimGateway 源 App.xaml 摘段生成的 Gw.App.Resources.xaml
         // （原 Styles/FreshBlue.xaml 已随 V0.0.20 弹窗统一样式删除，pack 必 404）
         // + 主题键板（程序①同款手法：ThemeManager 实际装载用的就是组件内 Themes 字典）。

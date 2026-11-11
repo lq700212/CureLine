@@ -9,7 +9,7 @@
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:TraceReportViewModel, IsDesignTimeCreatable=False}"
         Title="固化追溯报表 - 固化程控"
-        Width="1240" Height="700" MinWidth="1200" MinHeight="520"
+        Width="1240" Height="700" MinWidth="1240" MinHeight="520"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
         Background="Transparent" AllowsTransparency="True"
@@ -26,9 +26,12 @@
         <local:TraceReasonConverter x:Key="ReasonText"/>
         <local:BoolMarkConverter x:Key="BoolMark"/>
         <!-- ============ 时间筛选（V0.0.100 参考 HJVision mFormMesRecord 重做） ============
-             HJVision 口径：一侧一个 "yyyy-MM-dd HH:mm" 整框（150px）——本窗同款：
+             HJVision 口径：一侧一个 "yyyy-MM-dd HH:mm" 整框（150px）——本窗加宽到
+             170px 才装得下：WPF 无 CustomFormat，日期段 TextBlock 要完整铺出
+             "yyyy-MM-dd"（12 号字约 62~67px）+ 日历图标 + 分隔线 + 时刻下拉 62px，
+             150px 时日期被裁成 "2026-12-"（用户目检实测）：
              外层 FieldShell 输入框壳（FreshInput 同观感：悬停换边/聚焦变主蓝边），
-             内部 = 无边框 DatePicker（自绘模板：日历图标钮 + PART_Calendar 弹出）
+             内部 = 无边框 DatePicker（自绘模板：日历图标钮 + PART_Popup 弹出）
              + 1px 分隔线 + 无边框时刻下拉。日历弹出层保持系统缺省样式：弹层是
              瞬时交互控件，深浅主题差异可接受，不做整套 Calendar 深模板。 -->
         <Style x:Key="FieldShell" TargetType="Border">
@@ -47,10 +50,15 @@
             </Style.Triggers>
         </Style>
         <!-- 无边框日期段（DatePicker 四模板件名 PART_Root/PART_TextBox/PART_Button/
-             PART_Calendar 必守——DatePicker.OnApplyTemplate 按名认件、自挂日历弹出）。
+             PART_Popup 必守——DatePicker.OnApplyTemplate 按名认件、自挂日历弹出）。
              文本层：WPF DatePicker 只有 Short/Long 两档格式（无 WinForms 的
              CustomFormat），要恒定 "yyyy-MM-dd" 就在模板里盖一层格式化 TextBlock
-             （PART_TextBox 藏起不接键盘——本窗时间筛选是纯点选口径，无手输）。 -->
+             （PART_TextBox 藏起不接键盘——本窗时间筛选是纯点选口径，无手输）。
+             ★V0.0.102 血泪：弹出 Popup 的模板件名是 PART_Popup（内容留空——
+             DatePicker 自塞日历），不是 PART_Calendar！命名成 PART_Calendar 的
+             Popup 找不到，_popUp 恒 null，IsDropDownOpen=true 也无处弹出——
+             点哪儿都"没反应"（离屏探针实测：默认模板 _popUp 非 null 能弹，
+             命名 PART_Calendar 的 Popup 反射 _popUp=null 恒不弹）。 -->
         <Style x:Key="BareDatePicker" TargetType="{x:Type DatePicker}">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -58,7 +66,14 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type DatePicker}">
-                        <Grid x:Name="PART_Root">
+                        <!-- 根铺 Transparent + 挂 MouseDown（View 层转发开日历）：
+                             原生 DatePicker 只认 PART_Button 图标钮点击——PART_TextBox
+                             藏了不参与命中、格式化 TextBlock 无背景穿透，根再不铺
+                             底整框命中就穿透到外壳，点主体恒无反应（用户实测）。
+                             点图标钮时 ButtonBase 自己吃掉 MouseDown（Handled=true）
+                             不会冒泡到这里，与图标钮的开/关 toggle 不打架。 -->
+                        <Grid x:Name="PART_Root" Background="Transparent"
+                              MouseLeftButtonDown="OnDatePickerShellMouseDown">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
@@ -69,6 +84,7 @@
                             <DatePickerTextBox x:Name="PART_TextBox" Grid.Column="0" Visibility="Hidden"
                                                Background="Transparent" BorderThickness="0"/>
                             <TextBlock Grid.Column="0" Margin="8,0,2,0" VerticalAlignment="Center"
+                                       IsHitTestVisible="False"
                                        Foreground="{DynamicResource Brush.Fresh.FgMid}"
                                        Text="{Binding SelectedDate, RelativeSource={RelativeSource TemplatedParent},
                                               FallbackValue=选择日期, TargetNullValue=选择日期,
@@ -88,7 +104,11 @@
                                     </ControlTemplate>
                                 </Button.Template>
                             </Button>
-                            <Popup x:Name="PART_Calendar" Grid.Column="1" Placement="Bottom"
+                            <!-- 弹出层：名字必须叫 PART_Popup（DatePicker.OnApplyTemplate
+                                 按此名认件并把自己的 Calendar 塞进 Child）——内容
+                                 留空，摆外框底板或 Calendar 件都会被 DatePicker 塞
+                                 日历时覆盖掉（离屏探针实测）。 -->
+                            <Popup x:Name="PART_Popup" Grid.Column="1" Placement="Bottom"
                                    AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade"/>
                         </Grid>
                         <ControlTemplate.Triggers>
@@ -291,7 +311,9 @@
                          "标签+控件"的起点一致，栏面不因标签字数不同而参差）。
                          时间=单框合并（HJVision 口径：一侧一个整框，日期点日历、
                          时刻下拉点选）；库位=格子面板（按固化架分组铺格子，与
-                         主窗仓位卡排布一一对应）——全部免键盘输入，防手输格式错 -->
+                         主窗仓位卡排布一一对应）——全部免键盘输入，防手输格式错。
+                         整行合计约 1170px，窗 MinWidth 与默认宽对齐（1240）——
+                         再窄行尾"重置"钮会被裁出可视区。 -->
                     <Grid Grid.Row="0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -307,7 +329,7 @@
                         <TextBlock Text="起始" Width="44" TextAlignment="Right"
                                    VerticalAlignment="Center" Margin="0,0,6,0"
                                    Foreground="{DynamicResource Brush.FgMid}"/>
-                        <Border Grid.Column="1" Style="{StaticResource FieldShell}" Width="150"
+                        <Border Grid.Column="1" Style="{StaticResource FieldShell}" Width="170"
                                 ToolTip="按绑定时刻筛选的起始时间（点日历选日期、下拉选时刻）；留空=不限">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -328,7 +350,7 @@
                         <TextBlock Grid.Column="2" Text="结束" Width="44" TextAlignment="Right"
                                    VerticalAlignment="Center" Margin="16,0,6,0"
                                    Foreground="{DynamicResource Brush.FgMid}"/>
-                        <Border Grid.Column="3" Style="{StaticResource FieldShell}" Width="150"
+                        <Border Grid.Column="3" Style="{StaticResource FieldShell}" Width="170"
                                 ToolTip="按绑定时刻筛选的结束时间（点日历选日期、下拉选时刻）；留空=不限">
                             <Grid>
                                 <Grid.ColumnDefinitions>

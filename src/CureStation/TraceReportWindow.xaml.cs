@@ -7,6 +7,8 @@
 // =========================================================================
 
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using CureStation.ViewModels;
 
 namespace CureStation;
@@ -41,5 +43,24 @@ public partial class TraceReportWindow : Window
     private void OnLocationPicked(object sender, RoutedEventArgs e)
     {
         LocToggle.IsChecked = false;
+    }
+
+    /// <summary>
+    /// 日期整框"点哪儿都弹日历"（V0.0.101 修用户实测：原生 DatePicker 只认
+    /// PART_Button 图标钮点击——图标区才 13px，点框主体恒无反应）。模板根
+    /// PART_Root 铺 Transparent 接住整框命中后在这里转发开日历；点图标钮时
+    /// ButtonBase 自己吃掉 MouseLeftButtonDown（Handled=true，冒泡到不了根），
+    /// 不会与图标钮的开/关 toggle 打架。纯点选口径无手输，键盘行为不动。
+    /// （V0.0.102 补：IsDropDownOpen 转发一直有效，日历弹不出是模板件名错——
+    /// 弹出 Popup 必须命名 PART_Popup，见 BareDatePicker 模板注释。）
+    /// </summary>
+    private void OnDatePickerShellMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.TemplatedParent is DatePicker dp &&
+            !dp.IsDropDownOpen)
+        {
+            dp.IsDropDownOpen = true;
+            e.Handled = true;
+        }
     }
 }
