@@ -15,6 +15,13 @@ namespace CureStation;
 
 public partial class TraceReportWindow : Window
 {
+    /// <summary>
+    /// 日期框按下时记录"本次点击落在哪个日期框"（V0.0.105 整框统一点击重做）。
+    /// 日历已打开时点框内属于"点外部关闭"（StaysOpen=False 由弹层自己收），
+    /// 不记——否则抬起会被误判成一次新的打开。
+    /// </summary>
+    private DatePicker? _pressPicker;
+
     public TraceReportWindow()
     {
         InitializeComponent();
@@ -46,18 +53,32 @@ public partial class TraceReportWindow : Window
     }
 
     /// <summary>
-    /// 日期整框"点哪儿都弹日历"（V0.0.101 修用户实测：原生 DatePicker 只认
-    /// PART_Button 图标钮点击——图标区才 13px，点框主体恒无反应）。模板根
-    /// PART_Root 铺 Transparent 接住整框命中后在这里转发开日历；点图标钮时
-    /// ButtonBase 自己吃掉 MouseLeftButtonDown（Handled=true，冒泡到不了根），
-    /// 不会与图标钮的开/关 toggle 打架。纯点选口径无手输，键盘行为不动。
-    /// （V0.0.102 补：IsDropDownOpen 转发一直有效，日历弹不出是模板件名错——
-    /// 弹出 Popup 必须命名 PART_Popup，见 BareDatePicker 模板注释。）
+    /// 日期整框"点哪儿都弹日历"——按下阶段只做资格登记，真正打开在抬起
+    /// （见 <see cref="OnDatePickerShellPreviewMouseUp"/>）。
+    /// 判据三件：命中在日期框内（鼠标在控件上）、日历当前未打开、按下与抬起
+    /// 是同一个日期框（防止按下 A 框、拖到 B 框松开时 B 框被误开）。
     /// </summary>
-    private void OnDatePickerShellMouseDown(object sender, MouseButtonEventArgs e)
+    private void OnDatePickerShellPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if ((sender as FrameworkElement)?.TemplatedParent is DatePicker dp &&
-            !dp.IsDropDownOpen)
+        var dp = (sender as FrameworkElement)?.TemplatedParent as DatePicker;
+        _pressPicker = dp != null && !dp.IsDropDownOpen && dp.IsMouseOver ? dp : null;
+    }
+
+    /// <summary>
+    /// 抬起时打开日历（★必须是 MouseUp，不能用 MouseDown——V0.0.105 用户实测
+    /// 的根因）：DatePicker 的弹出层是 StaysOpen=False，在 MouseDown 里置
+    /// IsDropDownOpen=true 后，紧接着的本次 MouseUp 会被弹层判定为"框外抬起"
+    /// 而立即关闭（临时日志实测：Popup.Opened → 214ms 后 Popup.Closed，肉眼
+    /// 就是"点了没反应"）。抬起时打开=本次点击已结束，与原生图标钮的 Click
+    /// 打开同序，日历才留得住。
+    /// 鼠标按下后拖出框外再松开（IsMouseOver=false）视为取消，不打开。
+    /// </summary>
+    private void OnDatePickerShellPreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        var dp = (sender as FrameworkElement)?.TemplatedParent as DatePicker;
+        bool pressedWithin = dp != null && ReferenceEquals(dp, _pressPicker);
+        _pressPicker = null;
+        if (dp != null && pressedWithin && dp.IsMouseOver && !dp.IsDropDownOpen)
         {
             dp.IsDropDownOpen = true;
             e.Handled = true;

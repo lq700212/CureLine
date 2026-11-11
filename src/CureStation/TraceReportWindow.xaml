@@ -62,18 +62,25 @@
         <Style x:Key="BareDatePicker" TargetType="{x:Type DatePicker}">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Foreground" Value="{DynamicResource Brush.Fresh.FgMid}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type DatePicker}">
-                        <!-- 根铺 Transparent + 挂 MouseDown（View 层转发开日历）：
-                             原生 DatePicker 只认 PART_Button 图标钮点击——PART_TextBox
-                             藏了不参与命中、格式化 TextBlock 无背景穿透，根再不铺
-                             底整框命中就穿透到外壳，点主体恒无反应（用户实测）。
-                             点图标钮时 ButtonBase 自己吃掉 MouseDown（Handled=true）
-                             不会冒泡到这里，与图标钮的开/关 toggle 不打架。 -->
+                        <!-- 根铺 Transparent 接住整框命中；鼠标按下/抬起都挂 Preview（隧道）
+                             事件——本框是"整框一个点击目标"：图标钮也设
+                             IsHitTestVisible=False（纯装饰，点击穿透到根），文字/空白/
+                             图标任意位置效果完全一致。
+                             ★为什么在 MouseUp 打开而不是 MouseDown（V0.0.105 用户实测
+                             的真正根因）：DatePicker 的日历弹层是 StaysOpen=False，
+                             在 MouseDown 里置 IsDropDownOpen=true 后，本次点击的
+                             MouseUp 会被弹层当成"框外抬起"、立刻把日历收掉（日志实测
+                             Opened→214ms 后 Closed，肉眼看就是"点了没反应"）。
+                             MouseUp 时打开=本次点击已结束，与原生图标钮的 Click 打开
+                             同序，日历能留住。 -->
                         <Grid x:Name="PART_Root" Background="Transparent"
-                              MouseLeftButtonDown="OnDatePickerShellMouseDown">
+                              PreviewMouseLeftButtonDown="OnDatePickerShellPreviewMouseDown"
+                              PreviewMouseLeftButtonUp="OnDatePickerShellPreviewMouseUp">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
@@ -89,8 +96,11 @@
                                        Text="{Binding SelectedDate, RelativeSource={RelativeSource TemplatedParent},
                                               FallbackValue=选择日期, TargetNullValue=选择日期,
                                               StringFormat=yyyy-MM-dd}"/>
-                            <Button x:Name="PART_Button" Grid.Column="1" Focusable="False" Cursor="Hand"
-                                    Margin="0,0,7,0">
+                            <!-- 图标钮保留（DatePicker 模板契约要它，自挂 Click），但
+                                 不吃命中：整框点击由根统一处理，避免"点图标是 toggle、
+                                 点文字是另一套"两套手感 -->
+                            <Button x:Name="PART_Button" Grid.Column="1" Focusable="False"
+                                    IsHitTestVisible="False" Margin="0,0,7,0">
                                 <Button.Template>
                                     <ControlTemplate TargetType="Button">
                                         <Border Background="Transparent">
