@@ -762,7 +762,7 @@
                             ToolTip="打开操作日志 / 控制台悬浮窗（L1+）"/>
                     <!-- 追溯报表（V0.0.97）：客户要求"记录能追溯"，现场查
                          库位↔产品SN↔固化时长；登录即可见（操作员/质检都要能查）。 -->
-                    <Button Style="{StaticResource GhostButton}" Content="追溯"
+                    <Button Tag="{StaticResource Geo.Trace}" Style="{StaticResource GhostButton}" Content="追溯"
                             Command="{Binding OpenTraceReportCommand}" Margin="0,0,6,0"
                             ToolTip="打开固化追溯报表：按时间/库位/SN 查产品固化了多久、为什么没固化够"/>
                     <!-- 设置 ▾：下拉收拢 重新连接/演示开关/用户管理/策略/过账配置/IO测试/点表/主题。
