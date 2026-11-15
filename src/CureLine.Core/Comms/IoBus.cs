@@ -15,6 +15,18 @@
 // 线程契约（与机台客户端一致）：
 //   Start/Stop/WritePoint 可在任意线程调；快照 LatestSnapshot 原子换引用读；
 //   PointChanged/ConnectionChanged/Error 全部后台线程触发，UI 订阅方必须封送。
+//
+// 库原语对位注记（V0.0.106，状态机三期）：
+//   本类的轮询契约"先整拍换快照，再统一发边沿"（V0.0.64 血泪根治）已沉淀为
+//   Kaleidoscope.Flowing.PollingSignalSource 基类（库 V1.10.0，提炼来源即本类）
+//   ——本类**不换骨架**：①停机链（Task Wait(2000)+停机静默阀）是实测踩坑的
+//   防线（Cancel 与在飞 Task.Delay 的竞态、残留线程冒脏 Error 覆盖新总线
+//   文案），库基类停机口（Thread Join 500ms 限时）弱于它且不给子类继续等
+//   的余地；②重连节流/错误去重/块状分帧/写点 RMW 属总线业务；③Mock 总线
+//   是多入口重建模型（WritePoint/演示推进都触发快照重建），不匹配库基类
+//   "单泵独占采集"。契约由本类继续承载（两处顺序契约注释与库类头同源）。
+//   【纪律】今后新增信号源（轮询采集→比对→发布形态）一律继承库基类
+//   PollingSignalSource，勿再手写轮询契约——见库 SignalSource.cs 类头。
 // =========================================================================
 
 using System.Collections.Concurrent;

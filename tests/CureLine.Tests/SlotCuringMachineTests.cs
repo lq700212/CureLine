@@ -1459,4 +1459,76 @@ public class SlotCuringMachineTests
             Assert.Single(raised);
         }
     }
+
+    // ---------- 灯写账本清口（V0.0.106 原语化接入：换总线/断连对齐后强制重写） ----------
+    // 背景：灯写账本换库 DedupEffectSink（同值跳过/失败补写语义不变），并补上
+    // 原实现没有的清账口——耦合器断电重启后灯实际全灭而账本仍记"已写"，
+    // Attach（换总线）与 AlignFromSnapshot（断连恢复/重启对齐）时清账强制
+    // 下轮 Pump 全量补写一轮，稳态去重随后恢复零网络写。
+
+    [Fact(DisplayName = "换总线清账：Attach 后稳态灯被强制重写一轮")]
+    public void Attach_ClearsLampBook_ForcesRewrite()
+    {
+        var (bus, machine, logs) = Make();
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);           // 开计时（黄灯写入账本）
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+
+            bus.Writes.Clear();
+            machine.Pump(_now);                       // 稳态心跳：同值跳过零网络写
+            Assert.DoesNotContain(bus.Writes, w => w.Key == Lamp(IoPointRole.LampYellow, 1, 1));
+
+            var newBus = new ScriptedPointBus();
+            machine.Attach(newBus);                   // 换总线：旧账作废
+            machine.Pump(_now);                       // 清账后心跳：黄灯强制重写
+            Assert.True(Wrote(newBus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true),
+                "换总线后账本已清，下轮 Pump 应对已记账灯全量补写");
+            Assert.True(Wrote(newBus.Writes, Lamp(IoPointRole.LampRed, 1, 1), false));
+
+            newBus.Writes.Clear();
+            machine.Pump(_now);                       // 补写一轮后账本重记：去重恢复零网络写
+            Assert.DoesNotContain(newBus.Writes, w => w.Key == Lamp(IoPointRole.LampYellow, 1, 1));
+        }
+    }
+
+    [Fact(DisplayName = "断连对齐清账：AlignFromSnapshot 后稳态灯被强制重写一轮")]
+    public void AlignFromSnapshot_ClearsLampBook_ForcesRewrite()
+    {
+        var (bus, machine, logs) = Make();
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+
+            bus.Writes.Clear();
+            machine.Pump(_now);
+            Assert.DoesNotContain(bus.Writes, w => w.Key == Lamp(IoPointRole.LampYellow, 1, 1));
+
+            machine.AlignFromSnapshot();              // 断连恢复/重启对齐：清账（耦合器可能断电重启过）
+            machine.Pump(_now);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true),
+                "对齐清账后下轮 Pump 应对已记账灯全量补写");
+
+            bus.Writes.Clear();
+            machine.Pump(_now);                       // 去重恢复
+            Assert.DoesNotContain(bus.Writes, w => w.Key == Lamp(IoPointRole.LampYellow, 1, 1));
+        }
+    }
+
+    [Fact(DisplayName = "换总线后灯写落新总线：旧总线不再收到写")]
+    public void Attach_WritesGoToNewBus()
+    {
+        var (bus, machine, logs) = Make();
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            var newBus = new ScriptedPointBus();
+            bus.Writes.Clear();                       // 只验 Attach 之后旧总线零新增写
+            machine.Attach(newBus);
+            machine.Pump(_now);
+            Assert.True(Wrote(newBus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true));
+            Assert.Empty(bus.Writes);
+        }
+    }
 }

@@ -2,6 +2,41 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.106（2026-11-15，状态机三期：Kaleidoscope.Flowing 供给侧原语回接——政策源/灯写执行器换库 + 灯写账本清口补缺 + 子模块升级 V1.10.0）
+
+- **背景**：本项目三条一线沉淀（IoBus V0.0.64 轮询契约 / EnsureLamp 期望值簿 /
+  7 个 Func provider 增殖）在状态机二期已提炼沉库（`Kaleidoscope.Flowing` 四原语，
+  库 V1.10.0）；本期把库原语接回宿主，消手写实现、补已知缺口。子模块
+  `extern/kaleidoscope` 由 V1.8.9（dce5eaf）升级 V1.10.0（6475bba），MSBuild
+  重编 `bin\Debug\Kaleidoscope.dll`（升级零漂移：升级后先行 641 例全绿验证再动宿主）。
+- **政策源 PolicySource&lt;T&gt;（SlotCuringMachine）**：复位模式/光栅极性/
+  报警总开关/固化策略四个"每拍现取勿缓存"的 provider 收口成库类型——纪律由
+  类型承载（Current 每次现调 provider 绝不缓存；provider 缺位回原缺省口径
+  Auto/BlockedOff/恒开启/null；异常照旧透传）。**构造签名零改动**（参数仍按
+  原 Func 形态注入，内部包装）。带参查询（loadPending/resumeBaseline，
+  Func&lt;r,l,…&gt;）与函数桩（clock/durationText，缺省=活时钟/缺省格式化）
+  形态不对口，留宿主勿硬套（类头注记①）。
+- **灯写执行器 DedupEffectSink&lt;IoPointKey,bool&gt;（SlotCuringMachine）**：
+  手写账本 `_writtenLamps` 换库（同值跳过稳态零网络写/失败不记账下轮 Pump
+  补写，三态语义零改动）；apply 走 `WriteLampThroughBus`（异常记"写灯异常"
+  边沿日志返 false——保住原排障口径）；库失败日志口传 Debug 流，正式日志
+  保持静默（断连期逐拍刷屏违反铁律 4）。锁序红线：`_sync` → 库内部锁单向
+  嵌套绝不反向。
+- **【新行为，缺口补上】灯写账本清口 InvalidateLampBook**：换总线
+  （`Attach`）与断连恢复/重启对齐（`AlignFromSnapshot`）时清账——耦合器
+  断电重启后灯实际全灭而账本仍记"已写"，原实现无清账口，会挂"账上亮着
+  实际灭着"的陈旧窗口；清账后下轮 Pump 对已记账灯全量补写一轮（几十盏
+  量级），稳态去重随后恢复零网络写。新测试 3 例锁死（Attach/对齐清账强制
+  重写+写落新总线），反向验证：删 Attach 清账行→测试抓红→恢复复绿。
+- **IoBus 契约对位（骨架不换）**：轮询契约"先整拍换快照再发边沿"（V0.0.64
+  血泪）即库 `PollingSignalSource` 的提炼来源——总线骨架（Task 停机
+  Wait(2000)/停机静默阀/5s 重连节流/错误 10s 去重/块状分帧/写点 RMW）是
+  现场实证防线且强于库基类停机口（Join 500ms 限时），Mock 是多入口重建
+  模型，均不换骨架；IoBus 类头加对位注记，**纪律：今后新信号源一律继承
+  库基类，勿再手写轮询契约**。
+- **测试**：641 → 644（+3 清账用例），全绿；构建 0 警告 0 错误；模拟态
+  exe 冒烟过（进程存活 + pointtable.json 落盘）。
+
 ## V0.0.105（2026-11-11，追溯报表日期框"点文字区无反应"再修——打开时机从 MouseDown 改 MouseUp）
 
 - **用户实测反馈**：V0.0.101~103 之后，起始/结束日期框点"选择日期"文字区

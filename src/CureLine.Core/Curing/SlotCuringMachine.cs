@@ -84,9 +84,10 @@
 //   所有可变状态收在 _sync 锁内，三个入口（边沿/心跳/查询）并发安全。
 //
 // 自愈：
-//   ① 灯写"期望 vs 已写"比对（_writtenLamps），写失败不记账 → 下轮 Pump
-//      自动补写；稳态下零网络写（去重）。写失败本身不记日志——总线
-//      Error 事件已报通讯问题，这里静默重试防刷屏（铁律 4）。
+//   ① 灯写"期望 vs 已写"比对（库 DedupEffectSink 期望值簿，V0.0.106 原语化
+//      接入——机制本体下沉 Kaleidoscope.Flowing，见下"库原语接入注记"），
+//      写失败不记账 → 下轮 Pump 自动补写；稳态下零网络写（去重）。写失败
+//      本身不记日志——总线 Error 事件已报通讯问题，这里静默重试防刷屏（铁律 4）。
 //   ② 断连恢复后宿主调 AlignFromSnapshot：托盘在架且空闲的仓位重新开
 //      计时。计时状态不持久化（断电前计了多久无从知道，属报价加价点
 //      登记项不脑补）——宁可重计也不放行没固化够的货。
@@ -103,12 +104,37 @@
 //   时长文本可由宿主注入（durationText，如程序①按显示单位把 1440 分钟读成
 //   "24小时"）；不注入时统一"X 分钟"老口径——Core 不背显示单位静态。
 //
+// 库原语接入注记（V0.0.106，状态机三期：本项目血泪沉库后回接，库 V1.10.0）：
+//   ① 政策源 PolicySource<T>：复位模式/光栅极性/报警总开关/固化策略四个
+//     "每拍现取勿缓存"的 provider 收口成库类型——纪律由类型承载（Current
+//     每次现调 provider 绝不缓存；provider 缺位回缺省，异常照旧透传）。
+//     带参查询（_loadPendingProvider/_resumeBaselineProvider，Func<r,l,…>）
+//     与函数桩（_clock/_durationText，缺省=活时钟/缺省格式化）形态不对口，
+//     留宿主勿硬套。
+//   ② 执行器 DedupEffectSink<IoPointKey,bool>：手写账本 _writtenLamps 换库
+//     （同值跳过/失败不记账下轮补写，三态语义零改动）；apply 走
+//     WriteLampThroughBus（异常记边沿日志返 false——保住"写灯异常"排障
+//     口径）；库失败日志口传 Debug 流，正式日志保持静默（断连期防刷屏，
+//     铁律 4）。锁序红线：本类 _sync → 库内部锁单向嵌套，绝不反向。
+//   ③ 【新行为，缺口补上】账本清口 InvalidateLampBook：换总线（Attach）与
+//     断连恢复/重启对齐（AlignFromSnapshot）时清账——耦合器断电重启后灯
+//     实际全灭而账本仍记"已写"，原实现无清账口，会挂"账上亮着实际灭着"
+//     的陈旧窗口；清账后下轮 Pump 对已记账灯全量补写一轮（几十盏量级），
+//     稳态去重随后恢复零网络写。
+//   ④ 信号源 ISignalSource/PollingSignalSource：IoBus 的轮询契约（先整拍
+//     换快照再发边沿，V0.0.64 血泪）即库基类的提炼来源——总线骨架（Task
+//     停机 Wait(2000)/停机静默阀/5s 重连节流/错误 10s 去重）是现场实证
+//     防线且强于库基类停机口（Join 500ms 限时），不换骨架只做契约对位
+//     （见 IoBus 类头注记）；今后新信号源一律继承库基类，勿再手写轮询契约。
+//
 // 怎么改：新增工艺分支（如暂停计时）在 SlotPhase 加状态 + OnPointChanged/
 //   Pump 两处推进逻辑；灯色语义（黄=计时绿=放行）改动要同步
 //   RackSlotViewModel 的展示口径与 CuringPolicy 注释。
 // =========================================================================
 
+using System.Diagnostics;
 using CureLine.Core.Comms;
+using Kaleidoscope.Flowing;
 
 namespace CureLine.Core.Curing;
 
@@ -150,35 +176,44 @@ public sealed class SlotCuringMachine : IDisposable
     private const int FallbackMinutes = 120;
 
     private readonly object _sync = new();
-    private readonly Func<CuringPolicy?> _policyProvider;
-    private readonly Func<DateTimeOffset> _clock;
+    /// <summary>
+    /// 固化策略政策源（库原语 PolicySource，V0.0.106）：构造必给 provider，
+    /// 每次读 Current 现调绝不缓存（策略窗热切换即生效）；provider 返回
+    /// null=没策略（消费点自判兜底）。异常照旧透传（与原手写口径一致）。
+    /// </summary>
+    private readonly PolicySource<CuringPolicy> _policy;
+    private readonly Func<DateTimeOffset> _clock;   // 函数桩（缺省=活时钟），非政策值，不入 PolicySource
     private readonly Action<string> _log;
-    /// <summary>日志时长文本格式化（宿主注入跟随显示单位；null=缺省"X 分钟"口径）。</summary>
+    /// <summary>日志时长文本格式化（宿主注入跟随显示单位；null=缺省"X 分钟"口径）。
+    /// 函数桩形态（缺省=缺省格式化行为），非政策值，不入 PolicySource。</summary>
     private readonly Func<int, string>? _durationText;
     /// <summary>
-    /// 报警复位模式提供者（V0.0.69；null=恒 Auto——Core 独立/测试缺省，
-    /// 程序①现场由激活策略的 GrillResetMode 决定=Manual）。边沿/心跳每拍
-    /// 现取，策略激活/切换后下一拍即生效；provider 须线程安全（后台线程逐拍调）。
+    /// 报警复位模式政策源（库原语，V0.0.106 收口；V0.0.69 起每拍现取）：
+    /// null provider=恒 Auto——Core 独立/测试缺省，程序①现场由激活策略的
+    /// GrillResetMode 决定=Manual；策略激活/切换后下一拍即生效（Current
+    /// 每次现调绝不缓存）；provider 须线程安全纯读（后台线程逐拍调）。
     /// </summary>
-    private readonly Func<GrillAlarmResetMode>? _resetModeProvider;
+    private readonly PolicySource<GrillAlarmResetMode> _resetMode;
     /// <summary>
-    /// 光栅信号极性提供者（V0.0.72；null=恒 BlockedOff（常闭）——Core 独立/
-    /// 测试缺省同口径，程序①现场由激活策略的 GrillPolarity 决定）。边沿/心跳
-    /// 每拍现取；provider 须线程安全（后台线程逐拍调）。
+    /// 光栅信号极性政策源（库原语，V0.0.106 收口；V0.0.72 起每拍现取）：
+    /// null provider=恒 BlockedOff（常闭）——Core 独立/测试缺省同口径，
+    /// 程序①现场由激活策略的 GrillPolarity 决定；provider 须线程安全纯读。
     /// </summary>
-    private readonly Func<GrillSignalPolarity>? _grillPolarityProvider;
+    private readonly PolicySource<GrillSignalPolarity> _grillPolarity;
     /// <summary>
-    /// 报警总开关提供者（V0.0.90；null=恒开启——Core 独立/测试缺省，
-    /// 程序①现场由激活策略的 GrillAlarmEnabled 决定）。边沿/心跳
-    /// 每拍现取；provider 须线程安全（后台线程逐拍调）。
+    /// 报警总开关政策源（库原语，V0.0.106 收口；V0.0.90 起每拍现取）：
+    /// null provider=恒开启——Core 独立/测试缺省，程序①现场由激活策略的
+    /// GrillAlarmEnabled 决定；provider 须线程安全纯读（后台线程逐拍调）。
     /// </summary>
-    private readonly Func<bool>? _grillAlarmEnabledProvider;
+    private readonly PolicySource<bool> _grillAlarmEnabled;
     /// <summary>
     /// 上料未确认提供者（V0.0.97；null=恒不抑制——Core 独立/测试缺省，
     /// 程序①现场由扫码会话的上料确认状态决定）。true=该库位正在上料
     /// （操作员已扫库位码、货还没上完），此期间该库位的光栅报警整条链
     /// 静默（手挡光栅是上料正常动作，报了是误报）。边沿/心跳每拍现取；
     /// provider 须线程安全（后台线程逐拍调）。
+    /// 【带参查询，留宿主】Func&lt;r,l,…&gt; 形态非无参政策值，PolicySource
+    /// 不对口（库原语接入注记①）。
     /// </summary>
     private readonly Func<int, int, bool>? _loadPendingProvider;
     /// <summary>
@@ -190,11 +225,19 @@ public sealed class SlotCuringMachine : IDisposable
     /// 累计固化都 ≥ 计划时长（宁多勿少：固化不足是质量事故）。
     /// 托盘到位那一刻现读（绑了续接件就缩短本盘时长）；后台线程调用，
     /// provider 须线程安全纯读。
+    /// 【带参查询，留宿主】同 _loadPendingProvider（库原语接入注记①）。
     /// </summary>
     private readonly Func<int, int, int>? _resumeBaselineProvider;
     private readonly Dictionary<(int Rack, int Level), SlotRuntime> _slots = new();
-    /// <summary>成功写过的灯态（IoPointKey→值）：去重 + 失败补写的比对基准。</summary>
-    private readonly Dictionary<IoPointKey, bool> _writtenLamps = new();
+    /// <summary>
+    /// 灯写执行器（库原语 DedupEffectSink，V0.0.106 换库）：期望值簿（同值
+    /// 跳过稳态零网络写 / 失败不记账下轮 Pump 补写），机制本体下沉
+    /// Kaleidoscope.Flowing——原手写 Dictionary 账本退役。apply=
+    /// WriteLampThroughBus（异常记边沿日志返 false）；库失败日志口传 Debug
+    /// 流保持正式日志静默（断连期防刷屏，铁律 4）。清账口=InvalidateLampBook
+    /// （Attach/AlignFromSnapshot 调，见类头注记③）。
+    /// </summary>
+    private readonly DedupEffectSink<IoPointKey, bool> _lampSink;
     private IPointTableBus _bus;
     private Timer? _pumpTimer;
 
@@ -266,24 +309,40 @@ public sealed class SlotCuringMachine : IDisposable
         Func<int, int, int>? resumeBaselineProvider = null)
     {
         _bus = bus;
-        _policyProvider = policyProvider;
+        // 四个无参政策值收口库 PolicySource（构造签名不变——provider 仍按原
+        // 形态注入，fallback=原手写缺省口径，见字段注释与类头注记①）。
+        // null!=策略可空语义（provider 返 null=没策略，消费点自判）；provider
+        // 包装层 ! 断言收敛泛型替换后的可空性差异警告（运行时照传 null）。
+        _policy = new PolicySource<CuringPolicy>(() => policyProvider()!, null!);
         _clock = clock ?? (() => DateTimeOffset.Now);
         _log = log ?? (_ => { });
         _durationText = durationText;
-        _resetModeProvider = resetModeProvider;
-        _grillPolarityProvider = grillPolarityProvider;
-        _grillAlarmEnabledProvider = grillAlarmEnabledProvider;
+        _resetMode = new PolicySource<GrillAlarmResetMode>(resetModeProvider, GrillAlarmResetMode.Auto);
+        _grillPolarity = new PolicySource<GrillSignalPolarity>(grillPolarityProvider, GrillSignalPolarity.BlockedOff);
+        _grillAlarmEnabled = new PolicySource<bool>(grillAlarmEnabledProvider, true);
         _loadPendingProvider = loadPendingProvider;
         _resumeBaselineProvider = resumeBaselineProvider;
+        // 灯写执行器换库（V0.0.106）：apply 走 WriteLampThroughBus（异常记
+        // 边沿日志返 false，保住"写灯异常"排障口径）；库失败日志口传 Debug
+        // 流——正式日志保持静默（写失败=总线 Error 事件已报通讯层故障，
+        // 断连期逐拍刷屏违反铁律 4，诊断走 Debug 流与库 FailedCount）。
+        _lampSink = new DedupEffectSink<IoPointKey, bool>(WriteLampThroughBus, m => Debug.WriteLine(m));
         _pumpTimer = new Timer(_ => SafePump(), null,
             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
-    /// <summary>换总线（重连/点表变更后）：流程状态保留，只换读写通道。</summary>
+    /// <summary>
+    /// 换总线（重连/点表变更后）：流程状态保留，只换读写通道。
+    /// 【V0.0.106】换通道时清灯写账本——新总线上灯态未知（耦合器可能换过/
+    /// 断电重启过），旧账"已写"全作废，下轮 Pump 全量补写一轮（见类头注记③）。
+    /// </summary>
     public void Attach(IPointTableBus bus)
     {
         lock (_sync)
+        {
             _bus = bus;
+            InvalidateLampBook();
+        }
     }
 
     public void Dispose()
@@ -498,7 +557,7 @@ public sealed class SlotCuringMachine : IDisposable
     /// </summary>
     public void ApplyPolicyHotChange()
     {
-        var policy = _policyProvider();
+        var policy = _policy.Current;
         if (policy == null)
             return;
         lock (_sync)
@@ -535,10 +594,16 @@ public sealed class SlotCuringMachine : IDisposable
         {
             var snap = _bus.LatestSnapshot;
 
+            // 【V0.0.106】对齐即清灯写账本：断连恢复/重启对齐意味着耦合器可能
+            // 断电重启过（灯实际全灭而账本仍记"已写"）——不清账会挂"账上亮着
+            // 实际灭着"的陈旧窗口。清账后本轮对齐与下轮 Pump 按相位全量补写
+            // （RestoreFromRecord/Pump 各分支的 EnsureLamp 稳态去重随后恢复）。
+            InvalidateLampBook();
+
             // 持久化恢复准备：开关开才读记录（开关关=零文件 IO，行为与不持久化完全一致）。
             // 记录合法性过滤：时长 ≤0 或 Curing 缺起点 → 视为脏数据丢弃走重计。
             Dictionary<(int Rack, int Level), CuringSlotRecord>? saved = null;
-            if (_policyProvider() is { PersistMinutes: true })
+            if (_policy.Current is { PersistMinutes: true })
             {
                 var reasons = new List<string>();
                 saved = CuringStateStore.Load(reasons)?.Slots
@@ -632,33 +697,31 @@ public sealed class SlotCuringMachine : IDisposable
     }
 
     /// <summary>
-    /// 当前报警复位模式（每拍现取 provider，勿缓存）：null provider=恒 Auto
-    /// （Core 独立/测试缺省；程序①现场由激活策略的 GrillResetMode 决定）。
+    /// 当前报警复位模式（库政策源薄壳 V0.0.106——"每拍现取勿缓存"纪律由
+    /// PolicySource 类型承载：Current 每次现调 provider）：null provider=恒
+    /// Auto（Core 独立/测试缺省；程序①现场由激活策略的 GrillResetMode 决定）。
     /// 后台线程（边沿/心跳）逐次调用——provider 必须线程安全纯读（宿主传
     /// "读激活策略"的 lambda，见 MainViewModel.GetActivePolicy）。
     /// </summary>
-    private GrillAlarmResetMode ResetMode() =>
-        _resetModeProvider?.Invoke() ?? GrillAlarmResetMode.Auto;
+    private GrillAlarmResetMode ResetMode() => _resetMode.Current;
 
     /// <summary>
-    /// 当前光栅信号极性（V0.0.72，每拍现取 provider，勿缓存）：null provider=
-    /// 恒 BlockedOff（遮挡=OFF——常闭安全光栅，V0.0.99 用户现场实测拍板为
-    /// 全项目缺省；Core 独立/测试缺省同口径）。程序①现场由激活策略的
-    /// GrillPolarity 决定。
-    /// 后台线程（边沿/心跳）逐次调用——provider 必须线程安全纯读。
+    /// 当前光栅信号极性（V0.0.72；库政策源薄壳 V0.0.106，每拍现取由 Current
+    /// 承载）：null provider=恒 BlockedOff（遮挡=OFF——常闭安全光栅，V0.0.99
+    /// 用户现场实测拍板为全项目缺省；Core 独立/测试缺省同口径）。程序①现场
+    /// 由激活策略的 GrillPolarity 决定。后台线程（边沿/心跳）逐次调用——
+    /// provider 必须线程安全纯读。
     /// </summary>
-    private GrillSignalPolarity Polarity() =>
-        _grillPolarityProvider?.Invoke() ?? GrillSignalPolarity.BlockedOff;
+    private GrillSignalPolarity Polarity() => _grillPolarity.Current;
 
     /// <summary>
-    /// 当前报警总开关（V0.0.90，每拍现取 provider，勿缓存）：null provider=
-    /// 恒开启（Core 独立/测试缺省；程序①现场由激活策略的 GrillAlarmEnabled
-    /// 决定）——false=整条报警链静默（被挡不报、已挂的立即解除），
-    /// 门控判定不受影响。后台线程（边沿/心跳）逐次调用——provider 必须
-    /// 线程安全纯读（宿主传"读激活策略"的 lambda）。
+    /// 当前报警总开关（V0.0.90；库政策源薄壳 V0.0.106，每拍现取由 Current
+    /// 承载）：null provider=恒开启（Core 独立/测试缺省；程序①现场由激活
+    /// 策略的 GrillAlarmEnabled 决定）——false=整条报警链静默（被挡不报、
+    /// 已挂的立即解除），门控判定不受影响。后台线程（边沿/心跳）逐次调用——
+    /// provider 必须线程安全纯读（宿主传"读激活策略"的 lambda）。
     /// </summary>
-    private bool AlarmEnabled() =>
-        _grillAlarmEnabledProvider?.Invoke() ?? true;
+    private bool AlarmEnabled() => _grillAlarmEnabled.Current;
 
     /// <summary>
     /// 该库位是否正在上料（V0.0.97，每拍现取 provider，勿缓存）：true=该库位的
@@ -809,7 +872,7 @@ public sealed class SlotCuringMachine : IDisposable
         // =false）不发，防 MES 重复过账。
         if (realEdge)
             TrayArrived?.Invoke(rack, level);
-        var policy = _policyProvider();
+        var policy = _policy.Current;
         // 本次实际要固化的时长 = 计划时长 − 续接基线（V0.0.99 累计达标口径：
         // 之前已固化 N 分钟的续接件，本盘只需再固化 计划 − N 即累计达标）。
         int planMinutes = policy?.ResolveMinutes(rack, level) ?? FallbackMinutes;
@@ -850,7 +913,7 @@ public sealed class SlotCuringMachine : IDisposable
 
     private void StartCuring(SlotRuntime rt, int rack, int level, int? minutes = null, bool realEdge = true)
     {
-        var policy = _policyProvider();
+        var policy = _policy.Current;
         rt.TotalMinutes = minutes ?? ApplyResumeBaseline(
             policy?.ResolveMinutes(rack, level) ?? FallbackMinutes, rack, level);
         rt.Phase = SlotPhase.Curing;
@@ -926,7 +989,7 @@ public sealed class SlotCuringMachine : IDisposable
     /// </summary>
     private void PersistState()
     {
-        if (_policyProvider() is not { PersistMinutes: true })
+        if (_policy.Current is not { PersistMinutes: true })
             return;
         try
         {
@@ -963,26 +1026,46 @@ public sealed class SlotCuringMachine : IDisposable
         _durationText != null ? _durationText(minutes) : $"{minutes} 分钟";
 
     /// <summary>
-    /// 写灯（去重）：与上次成功写的值相同则跳过（稳态零网络写）；
-    /// 失败不记账 → 下轮 Pump 自动补写。红灯走光栅报警语义（SetGrillAlarm，
-    /// V0.0.63 起：计时中人手伸入亮红、让空复位——不再是"永不写"的预留位）。
+    /// 写灯（去重，库原语薄壳 V0.0.106）：与上次成功写的值相同则跳过（稳态
+    /// 零网络写）；失败不记账 → 下轮 Pump 自动补写——三态语义由库
+    /// DedupEffectSink 承载（_lampSink，见类头注记②）。红灯走光栅报警语义
+    /// （SetGrillAlarm，V0.0.63 起：计时中人手伸入亮红、让空复位——不再是
+    /// "永不写"的预留位）。锁序红线：本方法在 _sync 锁内调（库内部锁单向
+    /// 嵌套，绝不反向）。
     /// </summary>
-    private void EnsureLamp(int rack, int level, IoPointRole role, bool state)
+    private void EnsureLamp(int rack, int level, IoPointRole role, bool state) =>
+        _lampSink.Ensure(new IoPointKey(false, role, rack, level), state);
+
+    /// <summary>
+    /// 灯写真执行口（库 apply 注入）：写当前总线，返回 true=成功（库记账）。
+    /// 异常只兜"总线已释放"等极端竞态（正常失败走 false 不抛）——记边沿
+    /// 日志后返 false，库按失败处理不记账、下轮补写（保住原"写灯异常"
+    /// 排障口径）。_bus 每次现取（Attach 换总线后自动跟随，闭包捕获字段访问）。
+    /// </summary>
+    private bool WriteLampThroughBus(IoPointKey key, bool state)
     {
-        var key = new IoPointKey(false, role, rack, level);
-        if (_writtenLamps.TryGetValue(key, out var written) && written == state)
-            return;
         try
         {
-            if (_bus.WritePoint(key, state))
-                _writtenLamps[key] = state;
-            // 写失败静默：总线 Error 事件已报通讯问题，这里下轮重试即可（铁律 4）
+            return _bus.WritePoint(key, state);
         }
         catch (Exception ex)
         {
-            // 只兜"总线已释放"等极端竞态（正常失败走 false 不抛）——发生即异常路径，记边沿
-            _log($"架{rack}层{level} 写灯异常：{ex.Message}");
+            _log($"架{key.Rack}层{key.Level} 写灯异常：{ex.Message}");
+            return false;
         }
+    }
+
+    /// <summary>
+    /// 清空灯写账本（库 Invalidate 逐键清，下轮 Pump 对已记账灯全量补写一轮）：
+    /// 换总线（Attach）与断连恢复/重启对齐（AlignFromSnapshot）时调——耦合器
+    /// 断电重启后灯实际全灭而账本仍记"已写"，不清账会挂"账上亮着实际灭着"的
+    /// 陈旧窗口（原实现无清账口，V0.0.106 原语化接入补上的缺口，见类头注记③）。
+    /// 补写规模=账本键数（几十盏量级），稳态去重随后恢复零网络写。仅 _sync 锁内调。
+    /// </summary>
+    private void InvalidateLampBook()
+    {
+        foreach (var key in _lampSink.ExpectedSnapshot())
+            _lampSink.Invalidate(key);
     }
 
     /// <summary>
