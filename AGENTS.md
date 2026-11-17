@@ -229,9 +229,10 @@
 
 ## 界面简化标准（2026-11-10 用户拍板：做界面默认执行，不再逐次提醒）
 
-- **全局 skill=`ui-simplify`**（`C:\Users\Administrator\.config\opencode\skills\ui-simplify\SKILL.md`，
-  跨项目通用）：**新建/改动任何配置窗、表单页、设置页前必读并按其执行**；
-  用户说"太复杂/简化/能合并就合并/简单好上手"就是全套走一遍。
+- **全局 skill=`ui-mockup-studio`**（`C:\Users\Administrator\.config\opencode\skills\ui-mockup-studio\SKILL.md`，
+  跨项目通用；界面简化标准见其 `references\simplify-playbook.md`，原 `ui-simplify`
+  已于 2026-11-16 整体并入并删除）：**新建/改动任何配置窗、表单页、设置页前必读并按其执行**；
+  用户说"太复杂/简化/能合并就合并/简单好上手/按钮太多/配置项太多"就是全套走一遍。
 - 核心口诀：**界面只放"要用户做的决定"**——字段键名/API 号/格式约束/现场
   口径进 ToolTip，全局口径（保存即生效等）收顶部一行提示条，说明墙/说明书
   列一律不建；标签 2~5 字纯名词去括号；低频参数收 Expander；互斥方式用

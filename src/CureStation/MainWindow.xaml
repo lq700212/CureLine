@@ -73,51 +73,64 @@
              或 大数字(26)+副文"共 X·已固化 Y%"+进度条 / foot=状态点+层名+托盘；时长文本随
              显示单位走 DurationUnit（V0.0.56 策略窗切时/分主窗同步）；状态底
              Tint*/描边 SlotBorder*/光斑 CardGlow* 与 Kind 触发器同名分流（非空闲卡边加厚
-             1.5），旧 5px 头带与灯点已随设计图退役；投影 Fx.CardShadow（Alarm 切红光圈） -->
+             1.5），旧 5px 头带与灯点已随设计图退役；卡投影挂"垫层"（V0.0.108
+             性能修复：静态底/边带 Effect、动态文本在兄弟内容层——模糊不随文本重算） -->
         <DataTemplate x:Key="SlotCard">
-            <Border CornerRadius="{DynamicResource Fn.CardRadius}" BorderThickness="1" Margin="3">
-                <Border.Style>
-                    <Style TargetType="Border">
-                        <Setter Property="Background" Value="{DynamicResource Brush.TintIdle}"/>
-                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderIdle}"/>
-                        <Setter Property="Padding" Value="0"/>
-                        <!-- 卡投影常态（G2 蓝灰光圈 / G1 黑投影，随主题同名异值） -->
-                        <Setter Property="Effect" Value="{DynamicResource Fx.CardShadow}"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Gate">
-                                <Setter Property="Background" Value="{DynamicResource Brush.TintGate}"/>
-                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderGate}"/>
-                                <!-- 非空闲卡彩描边加厚（设计图：白底+2px 状态色边聚焦） -->
-                                <Setter Property="BorderThickness" Value="1.5"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing">
-                                <Setter Property="Background" Value="{DynamicResource Brush.TintCuring}"/>
-                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderCuring}"/>
-                                <Setter Property="BorderThickness" Value="1.5"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Done">
-                                <Setter Property="Background" Value="{DynamicResource Brush.TintDone}"/>
-                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderDone}"/>
-                                <Setter Property="BorderThickness" Value="1.5"/>
-                            </DataTrigger>
-                            <!-- 红灯占用：浸染 + 红光圈投影 + 厚彩边（HTML alarm 卡换色阴影直译） -->
-                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
-                                <Setter Property="Background" Value="{DynamicResource Brush.TintAlarm}"/>
-                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderAlarm}"/>
-                                <Setter Property="BorderThickness" Value="1.5"/>
-                                <Setter Property="Effect" Value="{DynamicResource Fx.CardShadowAlarm}"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="NotConfigured">
-                                <Setter Property="Background" Value="{DynamicResource Brush.TintNotConfigured}"/>
-                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderNotConfigured}"/>
-                            </DataTrigger>
-                            <!-- 悬停：描边提亮（轻反馈，不加动效） -->
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.CardBorderHover}"/>
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </Border.Style>
+            <!-- 双层结构（V0.0.108 性能修复，高级感保留）：
+                 垫层=静态底/描边 + DropShadowEffect 投影（原视觉像素级保留）；
+                 内容层=文本/胶囊/进度条（500ms 拍的跳动、报警脉冲动画都在这层）。
+                 WPF 对"未失效"的视觉树缓存渲染结果——文本怎么跳都只重绘内容层，
+                 垫层模糊不重算；唯一重算时机=Kind 状态切换（低频，且新旧卡态
+                 交替本来就要重画）。原"Effect 挂整卡"的问题在于把会动的文本
+                 和模糊绑在同一视觉上，每拍强制重算 30 次高斯模糊。 -->
+            <Grid Margin="3" x:Name="SlotCardRoot">
+                <!-- ══ 垫层：底色 + 状态描边 + 卡投影（静态，渲染缓存复用） ══ -->
+                <Border CornerRadius="{DynamicResource Fn.CardRadius}" BorderThickness="1">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Background" Value="{DynamicResource Brush.TintIdle}"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderIdle}"/>
+                            <!-- 卡投影常态（G2 蓝灰光圈 / G1 黑投影，随主题同名异值） -->
+                            <Setter Property="Effect" Value="{DynamicResource Fx.CardShadow}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Gate">
+                                    <Setter Property="Background" Value="{DynamicResource Brush.TintGate}"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderGate}"/>
+                                    <!-- 非空闲卡彩描边加厚（设计图：白底+2px 状态色边聚焦） -->
+                                    <Setter Property="BorderThickness" Value="1.5"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Curing">
+                                    <Setter Property="Background" Value="{DynamicResource Brush.TintCuring}"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderCuring}"/>
+                                    <Setter Property="BorderThickness" Value="1.5"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Done">
+                                    <Setter Property="Background" Value="{DynamicResource Brush.TintDone}"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderDone}"/>
+                                    <Setter Property="BorderThickness" Value="1.5"/>
+                                </DataTrigger>
+                                <!-- 红灯占用：浸染 + 红光圈投影 + 厚彩边（HTML alarm 卡换色阴影直译） -->
+                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="Alarm">
+                                    <Setter Property="Background" Value="{DynamicResource Brush.TintAlarm}"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderAlarm}"/>
+                                    <Setter Property="BorderThickness" Value="1.5"/>
+                                    <Setter Property="Effect" Value="{DynamicResource Fx.CardShadowAlarm}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Kind, FallbackValue=Idle}" Value="NotConfigured">
+                                    <Setter Property="Background" Value="{DynamicResource Brush.TintNotConfigured}"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.SlotBorderNotConfigured}"/>
+                                </DataTrigger>
+                                <!-- 悬停：描边提亮（轻反馈，不加动效）。两层结构后悬停判据
+                                     在根容器（内容层覆盖垫层，鼠标事件先到内容层）——
+                                     ElementName 反向联动垫层描边 -->
+                                <DataTrigger Binding="{Binding IsMouseOver, ElementName=SlotCardRoot}" Value="True">
+                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.CardBorderHover}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                </Border>
+                <!-- ══ 内容层：透明容器，全部动态内容（不含 Effect，零模糊成本） ══ -->
                 <Grid>
                     <!-- ① 光斑（HTML .g1-card::before 径向冷光斑；G2=全透明占位） -->
                     <Border CornerRadius="{DynamicResource Fn.CardRadius}" IsHitTestVisible="False">
@@ -577,7 +590,7 @@
                         </Grid>
                     </Grid>
                 </Grid>
-            </Border>
+            </Grid><!-- /SlotCardRoot（垫层+内容层 双层：外层静态投影/内层动态内容） -->
         </DataTemplate>
 
         <!-- ══════════════ 设置下拉（V0.0.39 顶栏精简） ══════════════ -->

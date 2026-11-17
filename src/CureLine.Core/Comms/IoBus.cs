@@ -88,6 +88,13 @@ public sealed class ModbusPointTableBus : IPointTableBus
     private CancellationTokenSource? _cts;
     private Task? _pollTask;
     private readonly List<string> _lastErrors = new();
+
+    /// <summary>
+    /// 错误去重窗口容量（RaiseError 用）：固定容量、超限挤最旧。
+    /// 设备反复断连时错误文本含 IP/端口/异常描述，此前只增不减=内存泄漏
+    /// （2026-11-17 修复）；窗口大小保持原 10 条去重语义不变。
+    /// </summary>
+    private const int MaxErrorDedupWindow = 10;
     // 停机静默阀：Stop 后残留线程（连接超时兜圈 >StopCore 的等待上限时）仍可能
     // 冒 Error——订阅方是 UI/VM，事件晚到会把新总线的连接文本覆盖成旧总线报错
     // （热切换偶发，实测踩中）。置位后一切出站事件拦截，对象内部状态照常收敛。
@@ -324,10 +331,14 @@ public sealed class ModbusPointTableBus : IPointTableBus
             return; // 停机静默阀（StopCore 置位）：残留线程的报错不再出门
         lock (_lastErrors)
         {
-            // 只记边沿：同文本 10 秒内不重复发
-            if (_lastErrors.TakeLast(10).Contains(msg))
+            // 只记边沿：同文本 10 秒内不重复发（_lastErrors 是固定容量去重窗口，
+            // 超限挤最旧——设备反复断连重连时错误文本含 IP/端口/异常描述，
+            // 无上限累计即内存泄漏，2026-11-17 修复）
+            if (_lastErrors.TakeLast(MaxErrorDedupWindow).Contains(msg))
                 return;
             _lastErrors.Add(msg);
+            while (_lastErrors.Count > MaxErrorDedupWindow)
+                _lastErrors.RemoveAt(0);
         }
         Error?.Invoke(this, msg);
     }
@@ -407,7 +418,10 @@ public sealed class MockPointTableBus : IPointTableBus
     private volatile bool _stopped;
 
     private volatile PointTableSnapshot _snapshot = PointTableSnapshot.Empty;
-    private readonly Dictionary<string, bool> _manualLamps = new();
+    // 人工写灯：键直接用 IoPointKey（2026-11-17 性能修复——原 string 键每拍
+    // RebuildSnapshot 对每个点做 ToString()，几百点 × 4 拍/秒的字符串分配白喂 GC；
+    // record struct 自带值相等语义，字典操作零分配）。
+    private readonly Dictionary<IoPointKey, bool> _manualLamps = new();
 
     /// <summary>
     /// 演示光栅信号极性（V0.0.72，可空）：Mock 内部按"被挡"语义生成信号，
@@ -497,7 +511,7 @@ public sealed class MockPointTableBus : IPointTableBus
         {
             if (!_bindings.ContainsKey(key))
                 return false;
-            _manualLamps[key.ToString()] = state;
+            _manualLamps[key] = state;
             RebuildSnapshot(); // 走统一重建+差异边沿（先快照后边沿，轮询契约见 RebuildSnapshot）
             return true;
         }
@@ -578,7 +592,7 @@ public sealed class MockPointTableBus : IPointTableBus
         {
             bool value;
             if (!key.IsInput)
-                value = _manualLamps.TryGetValue(key.ToString(), out var manual) && manual;
+                value = _manualLamps.TryGetValue(key, out var manual) && manual;
             else
             {
                 int stage = _stageByRack.TryGetValue(b.Rack, out var s) ? s : 0;

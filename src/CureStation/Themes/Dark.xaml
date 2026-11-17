@@ -132,7 +132,9 @@
 
     <!-- ══════════ 霓虹发光 / 卡投影（HTML box-shadow 直译，双主题同名异值） ══════════ -->
     <!-- 灯点 glow 已随设计图退役（V0.0.35：灯点→状态胶囊） -->
-    <!-- 卡投影（HTML .g1-card 0 3px 10px rgba(0,0,0,.35)；alarm 卡换红光圈 0 0 14px rgba(255,23,68,.28)） -->
+    <!-- 卡投影（HTML .g1-card 0 3px 10px rgba(0,0,0,.35)；alarm 卡换红光圈 0 0 14px rgba(255,23,68,.28)）
+         V0.0.108 性能修复：Effect 挂到主窗卡模板的"垫层"（静态底/边）——文本跳动/脉冲动画
+         不再触发模糊重算（垫层渲染缓存复用），原视觉像素级保留 -->
     <DropShadowEffect x:Key="Fx.CardShadow" Color="#000000" BlurRadius="10" ShadowDepth="1" Opacity="0.38"/>
     <DropShadowEffect x:Key="Fx.CardShadowAlarm" Color="#FF1744" BlurRadius="14" ShadowDepth="1" Opacity="0.30"/>
 

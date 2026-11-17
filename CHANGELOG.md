@@ -2,6 +2,43 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.108（2026-11-17，性能修复：主界面卡顿与高内存——卡投影双层拆分/堵总线报错泄漏/工单带 IO 下放/Mock 快照零分配）
+
+- **背景（用户反馈"启动后很卡、内存占用率高"）**：排查两程序全部刷新链路
+  （500ms 拍/总线轮询/日志缓存/事件退订/总线热重建），事件生命周期与集合
+  封顶均规范，**无经典内存泄漏**；卡顿与高内存归因四项，逐项修复。
+  首轮曾"删投影换描边"，用户拍板"高级感必须保留"后改双层拆分方案（见①）。
+- **① 卡投影"垫层/内容"双层拆分（主因修复，高级感像素级保留）**：原卡模板把
+  `DropShadowEffect`（Fx.CardShadow，Alarm 卡 Fx.CardShadowAlarm）挂在**整张卡**
+  上——WPF Effect 是 CPU 软件高斯模糊，Effect 元素内容一变就整卡重算模糊：
+  30 张卡 × 500ms 拍（计时中数字每秒变 2 次）= 每秒 60+ 次全卡模糊，启动即卡、
+  内存被模糊纹理顶高，报警卡 + 永久循环脉冲动画下逐帧重算雪崩。
+  **修复=把"会动的"和"静态的"拆开**：卡模板改为双层 Grid——垫层 Border 只承载
+  底色/描边/Effect（静态，WPF 渲染缓存复用，模糊只在 Kind 状态切换时重算一次）；
+  兄弟内容层 Grid 装全部动态内容（文本/胶囊/进度条/动画，零 Effect），文本怎么跳
+  都只重绘内容层、不碰模糊。视觉与改前**像素级一致**（同一模糊同参数）；悬停
+  描边提亮改挂根容器 `x:Name=SlotCardRoot` 的 `IsMouseOver`（ElementName 联动
+  垫层，内容层盖住垫层故鼠标事件先到内容层）。曾评估"删投影换描边"（已否决——
+  用户拍板高级感必须保留）、"预烘焙 PNG 九宫格贴图"（已否决——烘焙后柔边颗粒
+  感与原高斯不像素级等价）。
+- **② 堵 `ModbusPointTableBus._lastErrors` 无限增长（真泄漏）**：`RaiseError`
+  的去重窗口只 `Add` 不删——设备反复断连重连时错误文本（含 IP/端口/异常描述）
+  无限累计。改为固定容量窗口（`MaxErrorDedupWindow=10`，超限挤最旧），去重
+  语义不变。
+- **③ 工单带磁盘 IO 下放后台（UI 线程禁 IO 纪律）**：`RefreshWorkOrder`
+  原随 500ms 拍在 UI 线程每拍 `File.Exists + GetLastWriteTimeUtc`（每秒 2 次
+  磁盘 IO）。改为 2 秒节流 + 戳检查/读盘全在后台线程（`LoadWorkOrderBandAsync`），
+  结果 `UiInvoke` 回 UI 应用、戳没变零属性通知；工单窗保存走
+  `LoadWorkOrderBandAsync` 绕过节流（保存即见不变）。
+- **④ Mock 演示总线快照重建零字符串分配**：`MockPointTableBus._manualLamps`
+  键由 `string`（`key.ToString()`）改 `IoPointKey`（record struct 值语义）——
+  原每拍 `RebuildSnapshot` 对几百个点逐个 `ToString()`，4 拍/秒的 Gen0 GC
+  压力白喂；演示模式（Simulate=1）长时间挂机的内存锯齿显著收窄。
+- **验证**：`dotnet build` 0 警告 0 错误；`dotnet test` 644/644 全绿；
+  GUI 冒烟（CureStation.exe 冷启动）进程存活、config 自愈落盘正常、
+  主窗 30 卡渲染目检正常——**柔光圈投影完整回归**（与改前像素级一致），
+  悬停描边提亮反馈正常，统计条/库位编码/计划时长完好。
+
 ## V0.0.107（2026-11-16，README 文档同步——架构图补状态机与 kaleidoscope 三身份，代码零改动）
 
 - **README 架构图/要点过期修正（用户目检发现"架构图还是旧的，上面没有状态机"）**：
@@ -481,6 +518,9 @@
   skills\ui-simplify\SKILL.md`，跨项目通用）——信息三层模型（决策字段上
   界面/语境进 ToolTip/全局口径一行提示条）+ 十条手法 + WPF 坑位清单 +
   截图目检五件事；AGENTS 新增「界面简化标准」节指向该 skill。
+  > 注（2026-11-16）：该 skill 已整体并入 **`ui-mockup-studio`**
+  > （`skills\ui-mockup-studio\references\simplify-playbook.md`），`ui-simplify`
+  > 目录已删除；上句保留为当时的历史记录。
 - **文档**：AGENTS 权限门禁语义⑦重写为"改密双通道"、⑨记忆链路恢复、
   扫码枪配置窗⑨段落与关键文件导航表同步；README 改密两通道口径。
 

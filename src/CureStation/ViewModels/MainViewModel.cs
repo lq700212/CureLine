@@ -1936,9 +1936,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         var saved = _dialogs.ShowWorkOrder(_currentRole);
         if (saved)
         {
-            // 工单窗刚落盘——主动重读一次（下部工单带立见新号，不等 500ms 下一拍；
-            // LastWriteTime 戳变了 RefreshWorkOrder 自然重读，这里显式调只是不等待）。
-            RefreshWorkOrder();
+            // 工单窗刚落盘——绕过节流立即重读（下部工单带立见新号；走后台装载链，
+            // UI 线程零磁盘 IO）。
+            LoadWorkOrderBandAsync();
             _dialogs.ShowMessage("工单信息已保存。", "保存成功");
         }
     }
@@ -2112,33 +2112,68 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         return (r.Item1, r.Item2, r.Item3, l.Item1, l.Item2, l.Item3);
     }
 
-    // 工单带磁盘读节流：LastWriteTime 戳 + 首刷标记——同拍戳没变直接跳过读文件。
+    // 工单带磁盘读节流：LastWriteTime 戳 + 首刷标记——戳没变直接跳过读文件。
     private DateTime _workOrderStampUtc = DateTime.MinValue;
     private bool _workOrderLoaded;
 
+    /// <summary>工单带戳检查节流（2026-11-17 性能修复）：原来随 500ms 拍在 UI 线程
+    /// 每拍查一次文件时间戳（File.Exists + GetLastWriteTimeUtc=磁盘 IO，违反
+    /// "UI 线程禁 IO"精神）——改为 2 秒一次后台检查，戳变了才回 UI 重读。
+    /// 工单窗保存走 LoadWorkOrderBandAsync 绕过节流（操作员保存即见）。</summary>
+    private DateTimeOffset _workOrderNextCheckUtc = DateTimeOffset.MinValue;
+
     /// <summary>
-    /// 刷下部工单带：文件"最后写时间戳"变了才 Load（避免 500ms 反复碰盘）；
-    /// 缺文件按空工单兜底（WorkOrderStore 自愈语义）。工单窗保存后也会被
-    /// OpenWorkOrder 主动调一次（不靠 500ms 兜底，操作员保存即见）。
+    /// 刷下部工单带（500ms 拍入口）：按 2 秒节流放后台检查，戳变了才重读；
+    /// 缺文件按空工单兜底（WorkOrderStore 自愈语义）。
     /// </summary>
     private void RefreshWorkOrder()
     {
-        string path = WorkOrderStore.DefaultPath;
-        try
-        {
-            var stamp = File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
-            if (_workOrderLoaded && stamp == _workOrderStampUtc)
-                return;
-            _workOrderStampUtc = stamp;
-        }
-        catch
-        {
-            // 取时间戳失败沿用上次状态（下一拍再试；文件 IO 出错不拖 UI 拍）
+        var now = DateTimeOffset.UtcNow;
+        if (_workOrderLoaded && now < _workOrderNextCheckUtc)
             return;
-        }
-        _workOrderLoaded = true;
+        _workOrderNextCheckUtc = now.AddSeconds(2);
+        LoadWorkOrderBandAsync();
+    }
 
-        var book = WorkOrderStore.Load() ?? WorkOrderStore.BuildDefault();
+    /// <summary>
+    /// 工单带后台装载：戳检查 + 读盘全在后台线程（铁律 2），结果经 UiInvoke
+    /// 回 UI 应用（测试无 UI 上下文时同步执行，语义不变）。
+    /// </summary>
+    private void LoadWorkOrderBandAsync()
+    {
+        string path = WorkOrderStore.DefaultPath;
+        Task.Run(() =>
+        {
+            try
+            {
+                var stamp = File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
+                var book = WorkOrderStore.Load() ?? WorkOrderStore.BuildDefault();
+                return (Stamp: (DateTime?)stamp, Book: (WorkOrderBook?)book);
+            }
+            catch
+            {
+                // 取戳/读盘失败沿用上次状态（下一周期再试；文件 IO 出错不拖流程）
+                return ((DateTime? Stamp, WorkOrderBook? Book)?)null;
+            }
+        }).ContinueWith(t =>
+        {
+            var r = t.Result;
+            if (r == null)
+                return;
+            UiInvoke(() =>
+            {
+                if (_workOrderLoaded && r.Value.Stamp!.Value == _workOrderStampUtc)
+                    return;   // 戳没变：跳过应用（属性通知都不发，绑定链零打扰）
+                _workOrderStampUtc = r.Value.Stamp!.Value;
+                _workOrderLoaded = true;
+                ApplyWorkOrderBand(r.Value.Book!);
+            });
+        });
+    }
+
+    /// <summary>工单簿 → 工单带属性落位（UI 线程；LoadWorkOrderBandAsync 回 UI 后调）。</summary>
+    private void ApplyWorkOrderBand(WorkOrderBook book)
+    {
         var (rcR, qtyR, pctR, rcL, qtyL, pctL) = SummarizeWorkOrder(book);
         WorkOrderRcNoR = rcR;
         WorkOrderQtyR = qtyR;

@@ -124,11 +124,11 @@
 
     <!-- ══════════ 卡投影（HTML box-shadow 直译，双主题同名异值） ══════════ -->
     <!-- 亮点 glow 已随设计图退役（V0.0.35：灯点→状态胶囊，胶囊无 glow） -->
-    <!-- 卡光圈式大投影（HTML .g2-card box-shadow:0 0 16px 3px rgba(170,195,220,.55)；alarm 卡换红光圈） -->
+    <!-- 卡光圈式大投影（HTML .g2-card box-shadow:0 0 16px 3px rgba(170,195,220,.55)；alarm 卡换红光圈）
+         V0.0.108 性能修复：Effect 挂到主窗卡模板的"垫层"（静态底/边）——500ms 拍的文本跳动
+         与报警脉冲动画不再触发模糊重算（垫层渲染结果被 WPF 缓存，内容层随拍重绘） -->
     <DropShadowEffect x:Key="Fx.CardShadow" Color="#AAC3DC" BlurRadius="14" ShadowDepth="0" Opacity="0.5"/>
     <DropShadowEffect x:Key="Fx.CardShadowAlarm" Color="#D32F2F" BlurRadius="14" ShadowDepth="0" Opacity="0.32"/>
-
-    <!-- ══════════ 统计胶囊条（HTML .b-stat/.g2-stat：白底圆 18、细边、字 #52739C、数字 #17334F） ══════════ -->
     <SolidColorBrush x:Key="Brush.StatBg" Color="#FFFFFFFF"/>
     <SolidColorBrush x:Key="Brush.StatBorder" Color="#FFCBD9E6"/>
     <SolidColorBrush x:Key="Brush.StatFg" Color="#FF52739C"/>
