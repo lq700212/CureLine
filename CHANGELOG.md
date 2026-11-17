@@ -2,6 +2,72 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.109（2026-11-18，卡顿根治二期 + UI 控件沉库 kaleidoscope.UI V2.0.0 首建——锁内 IO 出锁/WMI 预热接线/Slots 累积修复/投影位图缓存，显示效果零变化）
+
+- **背景（用户反馈"V0.0.108 后打开还是卡顿，UI 显示效果不要改变"）**：二期排查
+  锁定剩余根因=**状态机大锁内做真实 IO**——`SlotCuringMachine._sync` 是全机大锁，
+  UI 500ms 拍要抢 31 次（GetStatus×30+GetAlarmSlots×1），而 Pump 补写浪潮（开窗/
+  Attach 清账/断连恢复后几十盏灯 × RMW×300ms 超时）与 PersistState 落盘、`_log`
+  落盘全在锁内逐盏打网络/写盘——UI 抢不到锁整段冻结，与"打开后卡一阵"完全吻合。
+  另据 DocShot 启动日志新增的"渲染层级 Tier"行可现场定位软渲染环境（远程桌面/
+  无 GPU 下投影模糊走 CPU）。**全部修复显示效果零变化**；UI 下沉调研同步完成并
+  拍板直接开建子模块 `Kaleidoscope.UI`（跨仓库改动，用户批准）。
+- **① 状态机锁瘦身·延迟 IO（deferLampWrites 高档，核心修复）**：构造加第 11 可选参
+  `deferLampWrites`（缺省 false=同步直写老行为，既有 15 处测试构造零改动；生产
+  MainViewModel 传 true）。true 时灯写 apply 换 `QueueLampWrite`——锁内只入队
+  （pending 字典 latest-wins 覆盖同 key 异值防乱序）并立即返回 true 让库
+  DedupEffectSink 记账，真写延迟到方法尾锁外 `DrainLampWrites()`（Interlocked 防重入）；
+  写失败/异常 → `Invalidate(key)` 清账 → 下一拍 Pump 的 EnsureLamp 账本不匹配重新入队
+  补写——与库"失败不记账下轮补写"完全同构，**库零改动**。挂点=Pump/OnPointChanged/
+  Attach/AlignFromSnapshot/ManualResetGrillAlarm/TerminateCuring/ApplyPolicyHotChange/
+  ApplyAlarmSwitch 各公开方法 lock 块结束后 `FlushDeferredIo()`。补写浪潮时长不变，
+  只是 UI 抢锁不再被挡（类头"锁瘦身·延迟 IO"节 + 新增 5 例 defer 语义用例）。
+- **② 持久化出锁**：`PersistState()` 拆两半——锁内 `RequestPersist()` 只置标志
+  （int+Interlocked，bool 过不了泛型约束），方法尾锁外 `FlushPersist()` 短锁重建
+  全量快照后写盘；latest-wins 幂等（flush 期间又有变化下一轮再写，最终状态一致），
+  断电续算语义不变，写盘次数从"每变化点一次"收敛为"每入口尾一次"。
+- **③ 状态机 log 回调后台投递**：MainViewModel 注入改 `Task.Run(() => LocalLogService.Write(m))`
+  ——锁内只做 Task 投递（微秒级），落盘线程池执行（低频边沿日志无感）。
+- **④ 启动期 WMI 预热接线（两程序同构同改）**：`LicenseHost.Setup()` 提前到启动
+  重活之前 + `Task.Run(Warmup)`（演示态 IsSimulated 跳过——Refresh 短路不走指纹），
+  DB/账号/配置装载与 WMI 指纹采集并行跑，`Refresh()` 前 `warmup.Wait(2000)` 收口
+  ——冷启动 WMI 三查（几百 ms~秒级）被启动重活掩盖，此前 Refresh 首调同步阻塞
+  UI 线程（`LicenseHost.Warmup()` 钩子库早已有但全项目零调用）。
+- **⑤ BuildSlots 累积 bug 修复**：`Slots` 只 Add 不 Clear——点表窗保存后再次
+  BuildSlots 时集合翻倍（60/90…），RefreshSlots 每拍循环量与 GetStatus 次数跟着
+  翻倍（主窗绑 RackGroups 显示不翻倍故此前未察觉）。开头补 `Slots.Clear()`。
+- **⑥ 卡垫层投影位图缓存**：卡模板垫层 Border 加 `CacheMode="BitmapCache"`——
+  投影渲染结果缓存为位图，稳态（500ms 拍只动无 Effect 的内容层）零重算，Kind
+  切换/悬停描边才失效重算一次；缓存的就是原渲染位图，**逐像素零变化**，软渲染
+  环境（Tier 0）收益最大。启动日志补一行"渲染层级 Tier=x"排障口（两程序）。
+- **⑦ UI 控件沉库 kaleidoscope.UI V2.0.0（子模块跨仓库首建，用户批准）**：
+  新工程 `extern/kaleidoscope/Kaleidoscope.UI/`（SDK 风格 net8.0-windows + UseWPF
+  独立版本线）——**ChromeDialogWindow 圆角弹窗基类**（26 窗手抄骨架的提炼：
+  WindowChrome+透明分层+圆角 Border+投影+品牌标题条+✕，子类 XAML 根内容自动进
+  骨架内容槽）+ **ChromeStyles.xaml**（Win 五键+Fx.WinShadow keyed 样式，供手抄窗）
+  + **FreshStyles.xaml**（按钮/输入族 10 键 keyed，隐式样式绝不下沉）+ **缺省键板
+  DefaultLight|Dark 36 语义键**（值取 CureStation 两主题一字未动）+ 通用转换器两件。
+  **宿主接入**：两程序 App.xaml 合并库字典+本地已下沉键删除（CureStation 866→462 /
+  CimGateway 766→344 行；FreshPwdInput Padding 3 vs 10 是程序私有像素契约——
+  CureStation 本地覆盖键保留，隐式族 ComboBoxItem 等按"全局劫持"结论保留宿主）；
+  **灰度迁移 3 窗**（MesPostConfigWindow/ScannerConfigWindow/MesDebugWindow 可缩放
+  变体），其余 23 窗第二波（MesAlarmWindow 定制两行标题条非基类目标形态，保留
+  手抄外壳走库样式键）；**键契约测试** `KaleidoscopeUiContractTests` 3 例（库引用
+  语义键 ⊆ 两程序键板——首跑即逮到程序②键板缺 Fresh.Success 四键并补齐；缺省
+  键板 Light/Dark 全等；库样式键清单锁）。CimGateway 键板补 Success 四键。
+  **DocShot harness 适配**：csproj 加库引用（ProjectReference 不传编译期引用）+
+  两处资源装填手动合并库字典（摘段生成时 MergedDictionaries 节整段移除）+ Dark
+  帧槽识别改精确认宿主键板（库字典 Source 也含 /Themes/，宽匹配会把库样式槽当
+  键板换掉重演半坏视觉）。首轮目检抓到基类 ✕ 停靠缺省 Left 跑到标题条左端
+  （已修 SetDock Right 归位右上）。调研结论沉淀在 Kaleidoscope.UI/README.md
+  （候选清单/技术障碍/三波路线图/net472 多目标评估）。
+- **测试**：635 基线 → **652/652 全绿**（+5 defer 灯写语义、+3 键契约；近版本
+  增量随实测收敛）。GUI 冒烟：程序①真机/演示两模式 + 程序②各起 10s 存活正常，
+  渲染层级 Tier=2 落日志；DocShot 全镜头重拍 ALL PASS + check_config/check_docs
+  ALL PASS，灰度窗与手抄窗逐张目检无回归。
+- **子模块升级记录**：kaleidoscope V1.10.0 →（V2.0.0 UI 工程新增，主库 net472
+  零改动，smoke 173 基线不受影响）。
+
 ## V0.0.108（2026-11-17，性能修复：主界面卡顿与高内存——卡投影双层拆分/堵总线报错泄漏/工单带 IO 下放/Mock 快照零分配）
 
 - **背景（用户反馈"启动后很卡、内存占用率高"）**：排查两程序全部刷新链路

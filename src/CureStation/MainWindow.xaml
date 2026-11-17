@@ -85,7 +85,15 @@
                  和模糊绑在同一视觉上，每拍强制重算 30 次高斯模糊。 -->
             <Grid Margin="3" x:Name="SlotCardRoot">
                 <!-- ══ 垫层：底色 + 状态描边 + 卡投影（静态，渲染缓存复用） ══ -->
-                <Border CornerRadius="{DynamicResource Fn.CardRadius}" BorderThickness="1">
+                <!-- CacheMode=BitmapCache（V0.0.109）：垫层渲染结果（含高斯投影）
+                     缓存为位图，稳态零重算——WPF 的视觉树缓存只对"未失效"子树生效，
+                     而软渲染环境（远程桌面/无 GPU，Tier 0）下 DropShadowEffect 的
+                     模糊是 CPU 逐像素算，30 张卡只要垫层被碰一次就是一轮全量模糊。
+                     缓存的就是原渲染位图，显示逐像素零变化；重算时机不变
+                     （Kind 切换/悬停描边/尺寸变化才失效）。内容层不加缓存——
+                     那层每拍变文本，缓存反而亏。 -->
+                <Border CornerRadius="{DynamicResource Fn.CardRadius}" BorderThickness="1"
+                        CacheMode="BitmapCache">
                     <Border.Style>
                         <Style TargetType="Border">
                             <Setter Property="Background" Value="{DynamicResource Brush.TintIdle}"/>

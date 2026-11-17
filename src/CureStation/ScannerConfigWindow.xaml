@@ -1,29 +1,21 @@
-<Window x:Class="CureStation.ScannerConfigWindow"
+<ui:ChromeDialogWindow x:Class="CureStation.ScannerConfigWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:CureStation.ViewModels"
         xmlns:local="clr-namespace:CureStation"
-        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:ui="clr-namespace:Kaleidoscope.UI.Views;assembly=Kaleidoscope.UI"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:ScannerConfigViewModel, IsDesignTimeCreatable=False}"
         Title="扫码枪配置" Width="560" SizeToContent="Height" MaxHeight="720"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        WindowStyle="None" Background="Transparent" AllowsTransparency="True"
         Foreground="{DynamicResource Brush.Fresh.FgMid}"
         Icon="Assets/app.ico" FontSize="12">
     <Window.Resources>
         <!-- 串口钮反向显示（TCP 钮双向绑定 EditUseTcp——回写链唯一防互踢，见转换器注释） -->
         <local:InverseBoolConverter x:Key="InverseBool"/>
     </Window.Resources>
-    <shell:WindowChrome.WindowChrome>
-        <!-- 无边框自绘（全弹窗统一）；V0.0.93 起定高自适应（SizeToContent=Height），
-             缩放边沿不再需要 -->
-        <shell:WindowChrome CaptionHeight="34" GlassFrameThickness="0"
-                            UseAeroCaptionButtons="False"
-                            ResizeBorderThickness="0"/>
-    </shell:WindowChrome.WindowChrome>
     <!--★★ 扫码枪配置窗（dev 开发者专属，V0.0.77 建 / V0.0.78 双模式化；
          V0.0.93 简化重排——配置项与保存校验口径零变化，只降文字密度）：
          单列。说明性长文（接线步骤/生效口径/现场现状段落）全部撤下，关键口径
@@ -31,20 +23,10 @@
          调试日志）收进折叠 Expander。连接方式改双 Radio（TCP 钮双向绑定，
          串口钮 OneWay 反向显示）。字段标签去键名括号（PortName 等原文进
          ToolTip）。保存即热重启扫码枪，不重启程序。 -->
-    <Grid Margin="14">
-    <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
-            BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
-            Effect="{StaticResource Fx.WinShadow}">
-        <DockPanel>
-            <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
-                <Grid>
-                    <TextBlock Style="{StaticResource WinTitleText}"
-                               Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=扫码枪配置}"/>
-                    <Button Style="{StaticResource WinTitleClose}" Content="✕" HorizontalAlignment="Right"
-                            Click="OnCloseClick" ToolTip="关闭（不保存）"/>
-                </Grid>
-            </Border>
-            <Grid Margin="10">
+    <!-- 圆角弹窗骨架（V0.0.109 沉库）：基类提供 透明分层窗+WindowChrome+圆角
+         Border+Fx.WinShadow+品牌标题条+✕——本窗 XAML 只保留内容区（原手抄骨架
+         删除，视觉与手抄逐像素一致） -->
+    <Grid Margin="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -227,7 +209,4 @@
                             Content="保存配置" Command="{Binding SaveCommand}" Width="160" Height="34"/>
                 </StackPanel>
             </Grid>
-        </DockPanel>
-    </Border>
-    </Grid>
-</Window>
+</ui:ChromeDialogWindow>

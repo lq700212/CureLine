@@ -12,10 +12,14 @@
 
 using System.Windows;
 using CureStation.ViewModels;
+using Kaleidoscope.UI.Views;
 
 namespace CureStation;
 
-public partial class ScannerConfigWindow : Window
+/// <summary>圆角窗骨架（V0.0.109 沉库）：继承 ChromeDialogWindow——标题条/✕
+/// 在基类；本类只留内容区装配与 RequestClose 链（标题条 ✕ 走基类 Close，
+/// 取消钮的 OnCloseClick 保留）。</summary>
+public partial class ScannerConfigWindow : ChromeDialogWindow
 {
     public ScannerConfigWindow()
     {

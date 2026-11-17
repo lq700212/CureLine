@@ -154,6 +154,18 @@ public static class Program
             {
                 Source = new Uri("pack://application:,,,/DocShot;component/Cure.App.Resources.xaml"),
             });
+            // kaleidoscope.UI 库样式（V0.0.109 沉库）：宿主 App.xaml 本地样式已删、
+            // 摘段生成时 MergedDictionaries 节整段移除——WinTitleBar/FreshButton/
+            // Fx.WinShadow 等键全在库字典，StaticResource 找不到会抛（窗建不起），
+            // 这里同运行时 App.xaml 口径手动合并（语义键值仍由下方宿主键板供）。
+            app.Resources.MergedDictionaries.Add(new ResourceDictionary
+            {
+                Source = new Uri("pack://application:,,,/Kaleidoscope.UI;component/Themes/ChromeStyles.xaml"),
+            });
+            app.Resources.MergedDictionaries.Add(new ResourceDictionary
+            {
+                Source = new Uri("pack://application:,,,/Kaleidoscope.UI;component/Themes/FreshStyles.xaml"),
+            });
             // 主题键板：直接取 CureStation 程序集里编译好的主题字典（与
             // ThemeManager 相对 URI 同源可 pack 加载）；DOCSHOT_THEME=Dark/Light，
             // 缺省 Light——与 WriteCureSeedIni 注入 ini 的 Theme 键同源一致
@@ -445,7 +457,9 @@ public static class Program
         for (int i = 0; i < merged.Count; i++)
         {
             var src = merged[i].Source?.OriginalString;
-            if (src != null && src.Contains("/Themes/")) { themeSlot = i; break; }
+            // 精确认宿主键板槽（V0.0.109：库字典 Source 也含 "/Themes/"，宽匹配
+            // 会把库样式槽当键板换掉——半坏视觉重演）
+            if (src != null && src.Contains("/CureStation;component/Themes/")) { themeSlot = i; break; }
         }
         if (merged.Count == 0) merged.Add(darkDict);
         else if (themeSlot < 0) merged[merged.Count - 1] = darkDict; // 兜底：末槽=键板
@@ -525,6 +539,16 @@ public static class Program
             app.Resources.MergedDictionaries.Add(new ResourceDictionary
             {
                 Source = new Uri("pack://application:,,,/DocShot;component/Gw.App.Resources.xaml"),
+            });
+            // kaleidoscope.UI 库样式（V0.0.109 沉库，程序①同款理由——摘段生成时
+            // MergedDictionaries 节整段移除，库样式键须手动合并）
+            app.Resources.MergedDictionaries.Add(new ResourceDictionary
+            {
+                Source = new Uri("pack://application:,,,/Kaleidoscope.UI;component/Themes/ChromeStyles.xaml"),
+            });
+            app.Resources.MergedDictionaries.Add(new ResourceDictionary
+            {
+                Source = new Uri("pack://application:,,,/Kaleidoscope.UI;component/Themes/FreshStyles.xaml"),
             });
             var theme = Environment.GetEnvironmentVariable("DOCSHOT_THEME");
             theme = string.IsNullOrWhiteSpace(theme) ? "Light" : theme.Trim();

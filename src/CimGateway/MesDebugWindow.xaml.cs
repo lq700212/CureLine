@@ -1,14 +1,16 @@
 using CimGateway.ViewModels;
-using System.Windows;
 using CureLine.ViewModels;
+using Kaleidoscope.UI.Views;
 
 namespace CimGateway;
 
 /// <summary>
 /// 调试窗（MVVM 的 View：只设 DataContext）。
 /// 表单/预览/上传全在 MesDebugViewModel。
+/// 圆角窗骨架（V0.0.109 沉库）：继承 ChromeDialogWindow（可缩放变体
+/// Resizeable=True）——标题条/✕ 在基类，本窗只留内容区装配。
 /// </summary>
-public partial class MesDebugWindow : Window
+public partial class MesDebugWindow : ChromeDialogWindow
 {
     public MesDebugViewModel ViewModel { get; }
 
@@ -18,7 +20,4 @@ public partial class MesDebugWindow : Window
         DataContext = ViewModel;
         InitializeComponent();
     }
-
-    /// <summary>标题条关闭钮。</summary>
-    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 }

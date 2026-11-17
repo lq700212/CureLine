@@ -83,6 +83,27 @@
 //   （Timer 调 Pump(固定虚拟时间) 幂等无副作用，不干扰测试确定性）。
 //   所有可变状态收在 _sync 锁内，三个入口（边沿/心跳/查询）并发安全。
 //
+// 锁瘦身·延迟 IO（V0.0.109，构造 deferLampWrites=true 时启用；缺省 false=
+//   同步直写老行为，Core 独立/既有测试零改动）：
+//   【为什么】_sync 是全机大锁，UI 500ms 拍要抢 31 次（GetStatus×30 +
+//   GetAlarmSlots）——库 DedupEffectSink 类头铁律"apply 执行必须在锁外"
+//   曾被宿主外层大锁架空：Pump 补写浪潮（开窗/Attach 清账/断连恢复后
+//   几十盏 × RMW×300ms 超时）全在锁内逐盏打网络，UI 抢不到锁整段冻结
+//   （"打开后卡一阵"的根因）。defer 模式把真实 IO 全部移出 _sync：
+//   ① 灯写：EnsureLamp 的 apply 换 QueueLampWrite——锁内只入队
+//     （pending 字典 latest-wins 覆盖，同 key 只留最新期望值）并立即返回
+//     true 让库记账；方法尾锁外 DrainLampWrites() 逐项真写，写失败/异常
+//     → Invalidate(key) 清账 → 下一拍 Pump 的 EnsureLamp 账本不匹配重新
+//     入队补写——与库"失败不记账下轮补写"完全同构，库零改动。
+//   ② 落盘：PersistState 拆两半——锁内 RequestPersist() 只置标志（微秒），
+//     方法尾锁外 FlushPersist() 短锁重建全量快照后写盘（latest-wins：
+//     flush 期间又有变化就下一轮 flush 再写，最终状态一致，断电续算
+//     语义不变；写盘次数从"每变化点一次"收敛为"每入口尾一次"，只减不增）。
+//   挂点=每个可能 EnsureLamp/RequestPersist 的公开方法 lock 块结束后
+//   FlushDeferredIo()（灯 drain + 落盘 flush 一起收口，Interlocked 防重入：
+//   两线程同时收口时后到者跳过，前者的 batch 循环会把后来入队的项一起
+//   处理完）。同线程串行真写——补写浪潮时长不变，只是不再挡 UI 抢锁。
+//
 // 自愈：
 //   ① 灯写"期望 vs 已写"比对（库 DedupEffectSink 期望值簿，V0.0.106 原语化
 //      接入——机制本体下沉 Kaleidoscope.Flowing，见下"库原语接入注记"），
@@ -241,6 +262,25 @@ public sealed class SlotCuringMachine : IDisposable
     private IPointTableBus _bus;
     private Timer? _pumpTimer;
 
+    // ---------- 锁瘦身·延迟 IO（V0.0.109，见类头"锁瘦身·延迟 IO"节） ----------
+    /// <summary>true=灯写与落盘全部移出 _sync 锁（生产宿主启用）；false=同步直写
+    /// 老行为（Core 独立/既有测试缺省，用例零改动）。</summary>
+    private readonly bool _deferLampWrites;
+    /// <summary>延迟灯写队列闸：只保护字典换批，不含真写（真写在 _sync 外）。</summary>
+    private readonly object _lampQueueLock = new();
+    /// <summary>待写真灯（锁内入队 latest-wins：同 key 只留最新期望值，防乱序）。
+    /// drain 线程整批换走后逐项写——入队与换批都在 _lampQueueLock 内。</summary>
+    private Dictionary<IoPointKey, bool> _lampPending = new();
+    /// <summary>drain 防重入标志（0/1）：并发收口时后到者跳过，前者的循环
+    /// 会把后来入队的项一起处理完。</summary>
+    private int _draining;
+    /// <summary>状态落盘待办标志 0/1（锁内 Interlocked 置位，锁外 flush 取走）
+    /// ——A2：锁内不再直接 File.WriteAllText。int+Interlocked（bool 过不了
+    /// Interlocked 泛型约束）：置位/取走都是原子且带全屏障，跨线程可见无虞。</summary>
+    private int _persistPending;
+    /// <summary>落盘 flush 防重入标志（0/1），与 drain 各自独立。</summary>
+    private int _flushingPersist;
+
     // ---------- 过账挂点（P3.2 后半，宿主接 CuringMesPoster） ----------
     // 三个事件都在 _sync 锁内触发。【红线】处理器禁止同步回调状态机任何公共
     // 方法（_sync 重入死锁）——只做轻量投递（过账服务内部 Task.Run 即返回）。
@@ -298,6 +338,10 @@ public sealed class SlotCuringMachine : IDisposable
     /// resumeBaselineProvider（V0.0.99，可空）=续接基线每拍现取（null=恒 0
     /// =不缩短；程序①现场=扫码会话登记的续接件前段时长，本盘时长 =
     /// 计划 − 基线，累计达标口径）。
+    /// deferLampWrites（V0.0.109，缺省 false）=锁瘦身高档：true=灯写与落盘
+    /// 全部移出 _sync 锁（构造签名见类头"锁瘦身·延迟 IO"）——生产宿主
+    /// 启用（UI 500ms 拍抢锁不再被补写浪潮挡住）；false=同步直写老行为
+    /// （Core 独立/既有测试缺省，用例与灯写时序断言零改动）。
     /// </summary>
     public SlotCuringMachine(IPointTableBus bus, Func<CuringPolicy?> policyProvider,
         Func<DateTimeOffset>? clock = null, Action<string>? log = null,
@@ -306,7 +350,8 @@ public sealed class SlotCuringMachine : IDisposable
         Func<GrillSignalPolarity>? grillPolarityProvider = null,
         Func<bool>? grillAlarmEnabledProvider = null,
         Func<int, int, bool>? loadPendingProvider = null,
-        Func<int, int, int>? resumeBaselineProvider = null)
+        Func<int, int, int>? resumeBaselineProvider = null,
+        bool deferLampWrites = false)
     {
         _bus = bus;
         // 四个无参政策值收口库 PolicySource（构造签名不变——provider 仍按原
@@ -326,7 +371,13 @@ public sealed class SlotCuringMachine : IDisposable
         // 边沿日志返 false，保住"写灯异常"排障口径）；库失败日志口传 Debug
         // 流——正式日志保持静默（写失败=总线 Error 事件已报通讯层故障，
         // 断连期逐拍刷屏违反铁律 4，诊断走 Debug 流与库 FailedCount）。
-        _lampSink = new DedupEffectSink<IoPointKey, bool>(WriteLampThroughBus, m => Debug.WriteLine(m));
+        // V0.0.109 锁瘦身高档（deferLampWrites=true）：apply 换 QueueLampWrite
+        // ——锁内只入队立即记账，真写由方法尾锁外 DrainLampWrites 执行，
+        // 失败 Invalidate 清账下轮补写（语义同构，见类头）。
+        _deferLampWrites = deferLampWrites;
+        _lampSink = new DedupEffectSink<IoPointKey, bool>(
+            _deferLampWrites ? QueueLampWrite : (Func<IoPointKey, bool, bool>)WriteLampThroughBus,
+            m => Debug.WriteLine(m));
         _pumpTimer = new Timer(_ => SafePump(), null,
             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
@@ -343,6 +394,9 @@ public sealed class SlotCuringMachine : IDisposable
             _bus = bus;
             InvalidateLampBook();
         }
+        // defer 档：清账后的全量补写浪潮在锁外逐盏真写（几十盏 × RMW）——
+        // UI 抢锁不再被挡；写失败自动清账由 Pump 兜底补写。
+        FlushDeferredIo();
     }
 
     public void Dispose()
@@ -369,6 +423,8 @@ public sealed class SlotCuringMachine : IDisposable
                 else
                     OnTrayLeft(rt, key.Rack, key.Level);
             }
+            // defer 档：到位/离开边沿的灭灯/亮灯写总线移到锁外（见类头"锁瘦身"）
+            FlushDeferredIo();
         }
         else if (key.Role is IoPointRole.RackLightL or IoPointRole.RackLightR)
         {
@@ -437,6 +493,8 @@ public sealed class SlotCuringMachine : IDisposable
                     SetGrillAlarm(rt, key.Rack, key.Level, on: true);
                 }
             }
+            // defer 档：报警亮灯/复位灯写移到锁外（见类头"锁瘦身"）
+            FlushDeferredIo();
         }
     }
 
@@ -463,7 +521,7 @@ public sealed class SlotCuringMachine : IDisposable
                             _log(alarmWasOn
                                 ? $"架{slot.Rack}层{slot.Level} 固化到点放行（绿灯，共 {MinutesText(rt.TotalMinutes)}，报警随放行解除）"
                                 : $"架{slot.Rack}层{slot.Level} 固化到点放行（绿灯，共 {MinutesText(rt.TotalMinutes)}）");
-                            PersistState(); // 状态变化落盘（开关开时）
+                            RequestPersist(); // 状态变化落盘（开关开时；锁内置标志，锁外 FlushPersist 写盘）
                         }
                         else if (rt.AlarmGrill && !AlarmEnabled())
                         {
@@ -539,6 +597,9 @@ public sealed class SlotCuringMachine : IDisposable
             RefreshMachineBeacon();
             ApplyAlarmSwitch(); // 报警总开关每拍兜底（V0.0.90：关闭态现存报警最迟 1 秒收敛）
         }
+        // defer 档（V0.0.109）：每拍的灯写补写自愈与落盘都在锁外执行——
+        // 补写浪潮（开窗/清账/断连恢复后几十盏 × RMW×300ms）不再挡 UI 抢锁。
+        FlushDeferredIo();
     }
 
     /// <summary>
@@ -577,8 +638,10 @@ public sealed class SlotCuringMachine : IDisposable
                 }
             }
             if (changed)
-                PersistState(); // 延长同步落盘（开关开时），断电恢复按新时长续算
+                RequestPersist(); // 延长落盘（锁内置标志），断电恢复按新时长续算
         }
+        // defer 档：延长后的落盘在锁外写盘（见类头"锁瘦身"）
+        FlushDeferredIo();
     }
 
     /// <summary>
@@ -632,6 +695,8 @@ public sealed class SlotCuringMachine : IDisposable
                 _log($"架{key.Rack}层{key.Level} 重启对齐：托盘在架，重新开始计时");
                 OnTrayArrived(rt, key.Rack, key.Level, realEdge: false);
             }
+            // defer 档：对齐后的全量补写浪潮在锁外逐盏真写（几十盏 × RMW）
+            FlushDeferredIo();
         }
     }
 
@@ -764,17 +829,28 @@ public sealed class SlotCuringMachine : IDisposable
     /// 返回 true=确实复位了；false=该仓位不在报警态（已复位/流程已走/未知
     /// 仓位，本身就是幂等安全——重复点按钮无害）。
     /// 线程：任意线程可调（锁内动作；宿主从后台 Task 调，勿在 UI 线程直调——
-    /// 内部 EnsureLamp 是写灯网络 IO，铁律 2）。
+    /// 内部 EnsureLamp 是写灯网络 IO，铁律 2；defer 高档 V0.0.109 锁内只入队
+    /// 真写移锁外，宿主调用线程口径不变）。
     /// </summary>
     public bool ManualResetGrillAlarm(int rack, int level)
     {
+        bool reset;
         lock (_sync)
         {
             if (!_slots.TryGetValue((rack, level), out var rt) || !rt.AlarmGrill)
-                return false;
-            SetGrillAlarm(rt, rack, level, on: false, manual: true);
-            return true;
+            {
+                reset = false;
+            }
+            else
+            {
+                SetGrillAlarm(rt, rack, level, on: false, manual: true);
+                reset = true;
+            }
         }
+        // defer 档：复位灯写（红灯灭/黄灯复亮/蜂停）在锁外真写，复位链路零锁内网络 IO
+        if (reset)
+            FlushDeferredIo();
+        return reset;
     }
 
     /// <summary>
@@ -797,24 +873,34 @@ public sealed class SlotCuringMachine : IDisposable
     /// </summary>
     public bool TerminateCuring(int rack, int level, out int curedSeconds)
     {
+        bool terminated;
         lock (_sync)
         {
             curedSeconds = 0;
             if (!_slots.TryGetValue((rack, level), out var rt) || rt.Phase != SlotPhase.Curing)
-                return false;
-            if (rt.StartedAt is { } start)
-                curedSeconds = Math.Max(0, (int)(_clock() - start).TotalSeconds);
-            rt.Phase = SlotPhase.Terminated;
-            rt.TerminatedAt = _clock();
-            // 黄灯灭（不再计时）、绿灯不放行；红灯保持（报警未解除）。
-            EnsureLamp(rack, level, IoPointRole.LampYellow, false);
-            EnsureLamp(rack, level, IoPointRole.LampGreen, false);
-            _log($"架{rack}层{level} 人工终止计时（已固化 {MinutesText(curedSeconds / 60)}，" +
-                 $"计划 {MinutesText(rt.TotalMinutes)}），产品不再等到点放行");
-            PersistState(); // 状态变化落盘（开关开时）：断电恢复仍是终止态
-            RefreshMachineBeacon(); // 塔灯同步：不再算"固化中"，回待料黄灯
-            return true;
+            {
+                terminated = false;
+            }
+            else
+            {
+                if (rt.StartedAt is { } start)
+                    curedSeconds = Math.Max(0, (int)(_clock() - start).TotalSeconds);
+                rt.Phase = SlotPhase.Terminated;
+                rt.TerminatedAt = _clock();
+                // 黄灯灭（不再计时）、绿灯不放行；红灯保持（报警未解除）。
+                EnsureLamp(rack, level, IoPointRole.LampYellow, false);
+                EnsureLamp(rack, level, IoPointRole.LampGreen, false);
+                _log($"架{rack}层{level} 人工终止计时（已固化 {MinutesText(curedSeconds / 60)}，" +
+                     $"计划 {MinutesText(rt.TotalMinutes)}），产品不再等到点放行");
+                RequestPersist(); // 状态变化落盘（开关开时）：断电恢复仍是终止态
+                RefreshMachineBeacon(); // 塔灯同步：不再算"固化中"，回待料黄灯
+                terminated = true;
+            }
         }
+        // defer 档：终止灯写与落盘在锁外收口（见类头"锁瘦身"）
+        if (terminated)
+            FlushDeferredIo();
+        return terminated;
     }
 
     /// <summary>
@@ -859,6 +945,8 @@ public sealed class SlotCuringMachine : IDisposable
                     offNote: "报警总开关已关闭");
             }
         }
+        // defer 档：开关关闭的批量解除灯写在锁外真写（Pump 每拍兜底也走这里）
+        FlushDeferredIo();
     }
 
     // ---------- 流转（全部假定已在 _sync 锁内） ----------
@@ -933,7 +1021,7 @@ public sealed class SlotCuringMachine : IDisposable
         // 【上料抑制 V0.0.97】正在上料的库位不报（手挡光栅是上料正常动作）。
         if (!GrillClear(rack, level) && AlarmEnabled() && !LoadPending(rack, level))
             SetGrillAlarm(rt, rack, level, on: true); // 报警总开关关则静默（V0.0.90）
-        PersistState(); // 状态变化落盘（开关开时）
+        RequestPersist(); // 状态变化落盘（开关开时；锁内置标志，锁外 FlushPersist 写盘）
         RefreshMachineBeacon(); // 机台塔灯同步：新仓位开计时，全机聚合即时跟随（黄/红）
     }
 
@@ -974,7 +1062,7 @@ public sealed class SlotCuringMachine : IDisposable
         EnsureLamp(rack, level, IoPointRole.LampGreen, false);
         _log($"架{rack}层{level} {note}，回空闲");
         RefreshMachineBeacon(); // 机台塔灯同步：取件/取走后全机聚合即时跟随（蜂鸣停，回绿或黄）
-        PersistState(); // 状态变化落盘（开关开时）：取件仓位从记录中移除
+        RequestPersist(); // 状态变化落盘（开关开时）：取件仓位从记录中移除
         // 过账出站挂点（唯一调用方 OnPointChanged 恒为真实边沿，无对齐路径）
         TrayLeft?.Invoke(rack, level, leavePhase, curedSeconds);
     }
@@ -982,16 +1070,57 @@ public sealed class SlotCuringMachine : IDisposable
     // ---------- 计时状态持久化（PersistMinutes 开关，断电续算） ----------
 
     /// <summary>
-    /// 持久化进行中仓位（每个状态变化点调用；全量重写 curingstate.json）。
-    /// 开关关 = 零文件 IO，行为与"不持久化"完全一致（缺省口径：宁可重计）。
+    /// 请求落盘（每个状态变化点调用，锁内）——V0.0.109 锁瘦身：只置标志
+    /// 不碰文件（File.WriteAllText 移到 FlushPersist 锁外执行）。开关关时
+    /// 连标志都不置（零文件 IO，行为与"不持久化"完全一致，缺省口径：宁可重计）。
     /// WaitingGate 不落盘——没开计时，重启后对齐自然重走门控。
-    /// 落盘失败只记日志：持久化是加分项不是命脉，下次状态变化再写，绝不影响程控流程。
     /// </summary>
-    private void PersistState()
+    private void RequestPersist()
     {
         if (_policy.Current is not { PersistMinutes: true })
             return;
+        Interlocked.Exchange(ref _persistPending, 1); // 置待办（锁内原子置位）
+    }
+
+    /// <summary>
+    /// 落盘收口（锁外调，挂点在 FlushDeferredIo）：开关开且有待办时重建全量
+    /// 快照并写盘。latest-wins——flush 期间又有状态变化就下一轮再写（全量
+    /// 快照天然幂等，中间态少写一次无害，最终状态一致）；"下次状态变化自动
+    /// 重试"的排障口径保持（写失败不清标志？——写失败标志已被取走，但下次
+    /// 状态变化会重新置位，与原语义等价）。
+    /// </summary>
+    private void FlushPersist()
+    {
+        if (_persistPending == 0)
+            return;
+        if (Interlocked.Exchange(ref _flushingPersist, 1) == 1)
+            return;
         try
+        {
+            while (Interlocked.Exchange(ref _persistPending, 0) == 1)
+            {
+                var book = BuildPersistBook(); // 短锁内重建快照（纯内存，微秒级）
+                try
+                {
+                    CuringStateStore.Save(book); // 真文件 IO 在 _sync 锁外
+                }
+                catch (Exception ex)
+                {
+                    _log($"计时状态落盘失败（下次状态变化自动重试）：{ex.Message}");
+                }
+            }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _flushingPersist, 0);
+        }
+    }
+
+    /// <summary>重建进行中仓位的全量快照（Curing/Done/Terminated 三相位入簿）。
+    /// 仅 FlushPersist 调用——短锁内纯内存遍历，绝不做文件 IO。</summary>
+    private CuringStateBook BuildPersistBook()
+    {
+        lock (_sync)
         {
             var book = new CuringStateBook();
             foreach (var (slot, rt) in _slots)
@@ -1008,12 +1137,79 @@ public sealed class SlotCuringMachine : IDisposable
                     TerminatedAt = rt.TerminatedAt,
                 });
             }
-            CuringStateStore.Save(book);
+            return book;
         }
-        catch (Exception ex)
+    }
+
+    // ---------- 锁瘦身·延迟灯写（V0.0.109，deferLampWrites=true 启用） ----------
+
+    /// <summary>
+    /// 延迟灯写 apply 注入口（替代 WriteLampThroughBus）：锁内只入队（同 key
+    /// latest-wins 覆盖，防乱序）并立即返回 true 让库记账——真写延迟到方法尾
+    /// 锁外 DrainLampWrites；写失败由其 Invalidate 清账，下一拍 Pump 的
+    /// EnsureLamp 账本不匹配重新入队补写——与库"失败不记账下轮补写"完全
+    /// 同构。本方法只在 _sync 锁内被库回调（EnsureLamp 链），绝不做网络 IO。
+    /// </summary>
+    private bool QueueLampWrite(IoPointKey key, bool state)
+    {
+        lock (_lampQueueLock)
         {
-            _log($"计时状态落盘失败（下次状态变化自动重试）：{ex.Message}");
+            _lampPending[key] = state;
         }
+        return true;
+    }
+
+    /// <summary>
+    /// 灯写收口（锁外调）：整批换走待写队列逐项真写。写失败/异常 → Invalidate
+    /// 清账（下轮 Pump 补写）；WriteLampThroughBus 自带 try-catch 兜底与
+    /// "写灯异常"排障日志，口径不变。_bus 现取——总线热切换（Attach）后
+    /// pending 里的项写到新总线（值仍是最新期望态）；若总线上写失败自动
+    /// 清账走补写链，时序无洞。
+    /// 防重入：并发收口时后到者跳过——先到者的 batch 循环会把后来入队的
+    /// 项一起处理完（while 到队列空为止）。
+    /// </summary>
+    private void DrainLampWrites()
+    {
+        if (!_deferLampWrites)
+            return;
+        if (Interlocked.Exchange(ref _draining, 1) == 1)
+            return;
+        try
+        {
+            while (true)
+            {
+                Dictionary<IoPointKey, bool> batch;
+                lock (_lampQueueLock)
+                {
+                    if (_lampPending.Count == 0)
+                        return;
+                    batch = _lampPending;
+                    _lampPending = new Dictionary<IoPointKey, bool>();
+                }
+                foreach (var (key, state) in batch)
+                {
+                    if (!WriteLampThroughBus(key, state))
+                        _lampSink.Invalidate(key); // 清账 → 下一拍 Pump 补写
+                }
+            }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _draining, 0);
+        }
+    }
+
+    /// <summary>
+    /// 延迟 IO 收口（defer 高档的锁外挂点，V0.0.109）：灯写 drain + 状态落盘
+    /// flush 一起收口。挂点=每个可能 EnsureLamp/RequestPersist 的公开方法
+    /// lock 块结束之后（Pump/OnPointChanged/Attach/AlignFromSnapshot/
+    /// ManualResetGrillAlarm/TerminateCuring/ApplyPolicyHotChange/
+    /// ApplyAlarmSwitch）；defer=false 时两者都是零成本快速路径。
+    /// </summary>
+    private void FlushDeferredIo()
+    {
+        DrainLampWrites();
+        FlushPersist();
     }
 
     // ---------- 灯写与辅助 ----------

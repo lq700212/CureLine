@@ -90,6 +90,12 @@
     <SolidColorBrush x:Key="Brush.Fresh.DangerBorder" Color="#C9302C"/>
     <SolidColorBrush x:Key="Brush.Fresh.DangerHover" Color="#C9302C"/>
     <SolidColorBrush x:Key="Brush.Fresh.DangerPressed" Color="#AC2925"/>
+    <!-- 成功按钮四态（V0.0.109 补齐：kaleidoscope.UI 库 FreshStyles 引用语义键，
+         键名契约=宿主必须供得起——本程序当前无绿按钮也补，与程序① Light 同值） -->
+    <SolidColorBrush x:Key="Brush.Fresh.Success" Color="#5CB85C"/>
+    <SolidColorBrush x:Key="Brush.Fresh.SuccessBorder" Color="#449D44"/>
+    <SolidColorBrush x:Key="Brush.Fresh.SuccessHover" Color="#449D44"/>
+    <SolidColorBrush x:Key="Brush.Fresh.SuccessPressed" Color="#398439"/>
     <SolidColorBrush x:Key="Brush.Fresh.InputBg" Color="#FFFFFF"/>
     <!-- 窗体骨架（弹窗 WindowStyle=None 自绘：窗底 / 关闭钮悬停红） -->
     <SolidColorBrush x:Key="Brush.Fresh.WinBg" Color="#F2F7FC"/>

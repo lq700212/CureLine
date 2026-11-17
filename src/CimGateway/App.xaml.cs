@@ -20,6 +20,7 @@
 
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Threading;
 using CimGateway.Themes;
 using CimGateway.ViewModels;
@@ -44,6 +45,16 @@ public partial class App : Application
         AppPaths.BaseDir = AppDomain.CurrentDomain.BaseDirectory;
         // kernel32 写 INI 不会自动建目录（老项目靠现场预置 config/），此处确保。
         Directory.CreateDirectory(AppPaths.ConfigDir);
+        // 【V0.0.109 启动提速】Setup 提前 + 后台预热设备指纹（WMI 三查冷启动
+        // 几百 ms~秒级，此前在 Refresh 首调时同步阻塞 UI 线程）——与配置/DB
+        // 装载并行跑，Refresh 前只等剩余部分。演示态 Refresh 短路不走指纹，
+        // 跳过预热免白查一次 WMI。
+        LicenseHost.Setup();
+        Task warmup = Task.Run(() =>
+        {
+            if (!LicenseHost.IsSimulated)
+                LicenseHost.Warmup();
+        });
         AppConfig.Load();
 
         // 双主题（2026-10-30 UI 对齐程序①）：按 [setting] Theme（Dark/Light，缺省
@@ -60,9 +71,11 @@ public partial class App : Application
         RunModeSettings.PurgeLegacySecrets(AppPaths.ConfigIni);
 
         // ── 软件授权门禁（启动）：演示模式免激活；未授权先弹激活窗，仍未授权则退出 ──
-        // V0.0.62 起真源在 kaleidoscope 子模块（LicenseHost.Setup 注入产品/桥/注册表
-        // 覆盖点——必须在首次 Refresh 之前，否则本产品码被按别家产品拒绝）。
-        LicenseHost.Setup();
+        // V0.0.62 起真源在 kaleidoscope 子模块（LicenseHost.Setup 已在装载前幂等注入）。
+        // 指纹预热收口（上限 2s）：正常时 DB/ini 装载已把 WMI 掩盖，这里基本
+        // 0 等待；WMI 服务异常卡死也不拖门禁（超时放行，Refresh 缓存未命中
+        // 自会同步重查并给出失败原因）。
+        warmup.Wait(2000);
         LicenseHost.Refresh();
         if (!LicenseHost.IsProductionAllowed)
         {
@@ -81,6 +94,9 @@ public partial class App : Application
         var win = new MainWindow();
         MainWindow = win;
         win.Show();
+        // 渲染层级进启动日志（V0.0.109 排障口）：Tier 0=无 GPU 加速（远程桌面/
+        // 虚拟机）——该环境下投影模糊走 CPU 软渲染，"界面卡"先看这行定位环境。
+        LocalLogService.Write($"渲染层级 Tier={RenderCapability.Tier >> 16}（0=无 GPU 加速，软渲染）");
         // 模态弹窗"切后台再切回自动找回"护栏（Core 共享，机制见 ModalForegroundGuard 头注释）
         ModalForegroundGuard.Install(win);
 

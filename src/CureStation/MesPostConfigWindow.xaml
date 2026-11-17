@@ -1,28 +1,23 @@
-<Window x:Class="CureStation.MesPostConfigWindow"
+<ui:ChromeDialogWindow x:Class="CureStation.MesPostConfigWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:CureStation.ViewModels"
-        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:ui="clr-namespace:Kaleidoscope.UI.Views;assembly=Kaleidoscope.UI"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:MesPostConfigViewModel, IsDesignTimeCreatable=False}"
         Title="过账配置" Width="720" SizeToContent="Height" MaxHeight="780"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        WindowStyle="None" Background="Transparent" AllowsTransparency="True"
         Foreground="{DynamicResource Brush.Fresh.FgMid}"
         Icon="Assets/app.ico" FontSize="12">
+    <!-- 圆角弹窗骨架（V0.0.109 沉库）：基类提供 透明分层窗+WindowChrome+圆角
+         Border+Fx.WinShadow+品牌标题条+✕——本窗 XAML 只保留内容区（原手抄骨架
+         删除，视觉与手抄逐像素一致；✕=关窗不保存语义由基类 Close 直达） -->
     <Window.Resources>
         <!-- 双工位专属区块显隐（与 IoTestWindow 同款窗内转换器） -->
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     </Window.Resources>
-    <shell:WindowChrome.WindowChrome>
-        <!-- 无边框自绘（V0.0.27 弹窗统一）；V0.0.93 起定高自适应（SizeToContent=Height
-             + MaxHeight 兜底），缩放边沿不再需要 -->
-        <shell:WindowChrome CaptionHeight="34" GlassFrameThickness="0"
-                            UseAeroCaptionButtons="False"
-                            ResizeBorderThickness="0"/>
-    </shell:WindowChrome.WindowChrome>
     <!--★★ 过账配置窗（P3.2 后半；V0.0.93 简化重排——配置项与保存口径零变化，
          只降文字密度）：W68 终版未定 → 全部配置化，现场"点点鼠标"改完保存即
          生效（主窗热更新过账服务，不重启）。左列=开关与口径（双工位开关——
@@ -33,22 +28,10 @@
          纵排纪律（V0.0.37）：长标签一律"标签一行+控件一行"，勿改回两列式
          （定宽列装不下长标签会截断/溢出重叠）。取色全走 Brush.Fresh.*；
          窗口骨架统一自绘标题条。-->
-    <!-- 圆角弹窗骨架（全弹窗统一）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow 浮层投影，
-         根 Grid Margin=14 给阴影渲染留白 -->
-    <Grid Margin="14">
-    <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
-            BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
-            Effect="{StaticResource Fx.WinShadow}">
-        <DockPanel>
-            <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
-                <Grid>
-                    <TextBlock Style="{StaticResource WinTitleText}"
-                               Text="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}, FallbackValue=过账配置}"/>
-                    <Button Style="{StaticResource WinTitleClose}" Content="✕" HorizontalAlignment="Right"
-                            Click="OnCloseClick" ToolTip="关闭（不保存）"/>
-                </Grid>
-            </Border>
-            <Grid Margin="10">
+    <!-- 圆角弹窗骨架（V0.0.109 沉库）：基类提供 透明分层窗+WindowChrome+圆角
+         Border+Fx.WinShadow+品牌标题条+✕——本窗 XAML 只保留内容区（原手抄骨架
+         删除，视觉与手抄逐像素一致；✕=关窗不保存语义由基类 Close 直达） -->
+    <Grid Margin="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -193,7 +176,4 @@
                             Command="{Binding SaveCommand}" Width="160" Height="34"/>
                 </StackPanel>
             </Grid>
-        </DockPanel>
-    </Border>
-    </Grid>
-</Window>
+</ui:ChromeDialogWindow>

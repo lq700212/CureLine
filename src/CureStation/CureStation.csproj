@@ -25,6 +25,11 @@
     <Reference Include="Kaleidoscope">
       <HintPath>..\..\extern\kaleidoscope\Kaleidoscope\bin\Debug\Kaleidoscope.dll</HintPath>
     </Reference>
+    <!--UI 子模块（net8.0-windows WPF，SDK 风格输出 bin\Debug\net8.0-windows\）：
+        圆角窗骨架/按钮族样式 + 弹窗基类（V0.0.109 下沉接入，语义键与宿主键板同名契约）-->
+    <Reference Include="Kaleidoscope.UI">
+      <HintPath>..\..\extern\kaleidoscope\Kaleidoscope.UI\bin\Debug\net8.0-windows\Kaleidoscope.UI.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>

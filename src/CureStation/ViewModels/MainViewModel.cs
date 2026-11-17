@@ -1432,6 +1432,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             .Where(b => b.Level > 0).Select(b => b.Level).DefaultIfEmpty(SlotLocationCode.Levels).Max());
 
         var all = new Dictionary<(int Rack, int Level), RackSlotViewModel>();
+        // 【V0.0.109 修复】清空重建：BuildSlots 会在点表窗保存后再次调用——
+        // 此前只 Add 不 Clear，Slots 每次翻倍（60/90…），RefreshSlots 每拍
+        // 的 GetStatus 循环量与统计条口径跟着错。主窗绑定的是 RackGroups
+        //（显示不翻倍），Slots 是内部遍历面——累积纯属 bug。
+        Slots.Clear();
         for (int level = 1; level <= levels; level++)
         for (int rack = 1; rack <= racks; rack++)
         {
@@ -1527,7 +1532,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             if (_machine == null)
             {
                 _machine = new SlotCuringMachine(bus, GetActivePolicy,
-                    log: m => LocalLogService.Write(m),
+                    // 状态机 log 回调在 _sync 锁内被调（边沿/心跳/复位链）——锁内
+                    // 只投递后台任务，落盘由 LocalLogService 在线程池执行（V0.0.109
+                    // 锁瘦身配套：低频边沿日志，时间戳在服务内部打，延迟毫秒级无感）。
+                    log: m => Task.Run(() => LocalLogService.Write(m)),
                     // 日志时长文本随显示单位（策略窗切小时 → 日志"开始固化计时 2小时"；
                     // 分钟口径保持"X 分钟"老字样）——LogText 是纯函数，后台线程安全。
                     durationText: DurationUnit.LogText,
@@ -1552,7 +1560,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                     // + 计划 24h → 本次 16h 即放行，累计正好 24h）。
                     // 基线取各续接件的最小值（宁多勿少：固化不足是质量事故）。
                     resumeBaselineProvider: (rack, level) =>
-                        _bindings.GetResumeBaselineMinutes(rack, level));
+                        _bindings.GetResumeBaselineMinutes(rack, level),
+                    // 【锁瘦身高档 V0.0.109】灯写与状态落盘全部移出状态机大锁——
+                    // 补写浪潮（开窗/清账/断连恢复后几十盏 × RMW×300ms 超时）
+                    // 在锁外逐盏真写，UI 500ms 拍抢锁（GetStatus×31）不再被挡
+                    // （"打开后卡一阵"的根治口，见 SlotCuringMachine 类头
+                    // "锁瘦身·延迟 IO"节）。写失败自动清账，下一拍补写，语义同构。
+                    deferLampWrites: true);
                 // 过账挂点（P3.2 后半）：状态机三事件 → 过账服务（只在创建时订阅
                 // 一次——重连 Attach 换通道不重复订阅）。事件在状态机锁内触发，
                 // Poster 方法内部 Task.Run 立即返回，不重入不阻塞。

@@ -15,6 +15,7 @@
 
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Threading;
 using CureStation.Themes;
 using CureStation.ViewModels;
@@ -40,6 +41,21 @@ public partial class App : Application
         Directory.CreateDirectory(AppPaths.ConfigDir);
         Directory.CreateDirectory(AppPaths.LogDir);
 
+        // ── 软件授权门禁（启动）：演示模式免激活；未授权先弹激活窗，仍未授权则退出 ──
+        // V0.0.62 起真源在 kaleidoscope 子模块（LicenseHost.Setup 注入产品/桥/注册表
+        // 覆盖点——必须在首次 Refresh 之前，否则本产品码被按别家产品拒绝）。
+        // 【V0.0.109 启动提速】Setup 提前到启动重活之前——Setup 只是幂等注入
+        // 覆盖点（桥/桥 provider 都是"用时现读"，不依赖后续装载顺序），随后
+        // 立刻后台预热设备指纹（WMI 三查冷启动几百 ms~秒级，此前在 Refresh
+        // 首调时同步阻塞 UI 线程；Warmup 钩子库 V1.x 已有但一直没接线）——
+        // 数据库/账号/配置装载与 WMI 并行跑，Refresh 前只等剩余部分。
+        LicenseHost.Setup();
+        Task warmup = Task.Run(() =>
+        {
+            if (!LicenseHost.IsSimulated)       // 演示态 Refresh 短路不走指纹——白查一次 WMI 没意义
+                LicenseHost.Warmup();
+        });
+
         // 数据库与账号（P3.2）：建表（cure_record/users/app_meta 兜底）+ 播种三级预置账号
         // （空表才播；初始密码只在此一处，上线必须在用户管理窗改掉——包括 dev）。
         new SqliteHelper(AppPaths.DatabaseFile).EnsureDatabase();
@@ -54,10 +70,10 @@ public partial class App : Application
         // 铁律 8：config.sample.ini 同步了该键）。放在授权窗之前：激活窗也用主题键板。
         ThemeManager.ApplyTheme(IniFile.ReadStr(AppPaths.ConfigIni, "setting", "Theme", ThemeManager.DefaultTheme));
 
-        // ── 软件授权门禁（启动）：演示模式免激活；未授权先弹激活窗，仍未授权则退出 ──
-        // V0.0.62 起真源在 kaleidoscope 子模块（LicenseHost.Setup 注入产品/桥/注册表
-        // 覆盖点——必须在首次 Refresh 之前，否则本产品码被按别家产品拒绝）。
-        LicenseHost.Setup();
+        // 指纹预热收口（上限 2s）：正常时 DB/ini 装载的几百 ms 已把 WMI 掩盖，
+        // 这里基本 0 等待即命中缓存；WMI 服务异常卡死也不拖门禁（超时放行，
+        // Refresh 内部缓存未命中自会同步重查并给出失败原因）。
+        warmup.Wait(2000);
         LicenseHost.Refresh();
         if (!LicenseHost.IsProductionAllowed)
         {
@@ -84,6 +100,9 @@ public partial class App : Application
         var win = new MainWindow { DataContext = vm };
         MainWindow = win;
         win.Show();
+        // 渲染层级进启动日志（V0.0.109 排障口）：Tier 0=无 GPU 加速（远程桌面/
+        // 虚拟机）——该环境下投影模糊走 CPU 软渲染，"界面卡"先看这行定位环境。
+        LocalLogService.Write($"渲染层级 Tier={RenderCapability.Tier >> 16}（0=无 GPU 加速，软渲染）");
         // 模态弹窗"切后台再切回自动找回"护栏（Core 共享，机制见 ModalForegroundGuard 头注释）
         ModalForegroundGuard.Install(win);
 

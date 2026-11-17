@@ -38,7 +38,8 @@ public class SlotCuringMachineTests
         Func<GrillSignalPolarity>? polarityProvider = null,
         Func<bool>? alarmEnabledProvider = null,
         Func<int, int, bool>? loadPendingProvider = null,
-        Func<int, int, int>? resumeBaselineProvider = null)
+        Func<int, int, int>? resumeBaselineProvider = null,
+        bool deferLampWrites = false)
     {
         var bus = new ScriptedPointBus();
         var logs = new List<string>();
@@ -50,7 +51,8 @@ public class SlotCuringMachineTests
             grillPolarityProvider: polarityProvider ?? (() => GrillSignalPolarity.BlockedOn),
             grillAlarmEnabledProvider: alarmEnabledProvider,
             loadPendingProvider: loadPendingProvider,
-            resumeBaselineProvider: resumeBaselineProvider);
+            resumeBaselineProvider: resumeBaselineProvider,
+            deferLampWrites: deferLampWrites);
         // 宿主转发边沿（生产由 MainViewModel 做——machine 不直接订阅总线）
         bus.PointChanged += (_, e) => machine.OnPointChanged(e);
         return (bus, machine, logs);
@@ -1528,6 +1530,95 @@ public class SlotCuringMachineTests
             machine.Attach(newBus);
             machine.Pump(_now);
             Assert.True(Wrote(newBus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true));
+            Assert.Empty(bus.Writes);
+        }
+    }
+
+    // ---------- 锁瘦身·延迟灯写（V0.0.109，deferLampWrites=true 生产高档） ----------
+    // 语义契约：defer 模式对外行为与同步直写完全一致（灯照样写、失败照样补），
+    // 差别只在"真写发生在方法尾锁外"——对测试不可见（挂点收口是同步的）。
+    // 本组锁定：①端到端链路 ②写失败清账补写 ③失败后期望已变只补终值
+    // （防旧值乱序覆盖新值）④Attach 清账补写浪潮 ⑤稳态去重零写保持。
+
+    [Fact(DisplayName = "defer 档：到位开计时黄灯经延迟队列写出（对外行为不变）")]
+    public void DeferMode_EdgeWritesLampViaDeferredQueue()
+    {
+        var (bus, machine, logs) = Make(deferLampWrites: true);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);
+            Assert.Equal(SlotPhase.Curing, machine.GetStatus(1, 1)!.Phase);
+            // 边沿尾已同步收口（FlushDeferredIo）——灯写经队列落总线，行为与直写一致
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true));
+        }
+    }
+
+    [Fact(DisplayName = "defer 档：写失败清账，下一拍 Pump 补写成功")]
+    public void DeferMode_WriteFail_ClearedBook_RetriedOnNextPump()
+    {
+        var (bus, machine, logs) = Make(deferLampWrites: true);
+        using (machine)
+        {
+            bus.WriteSucceeds = false;                 // 模拟断连/总线故障
+            bus.SetInput(Tray(1, 1), true);            // 黄灯入队→drain 写失败→Invalidate 清账
+            Assert.False(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true));
+
+            bus.WriteSucceeds = true;                  // 恢复
+            _now = _now.AddSeconds(1);
+            machine.Pump(_now);                        // 账本空 → EnsureLamp 重入队 → 补写成功
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true));
+        }
+    }
+
+    [Fact(DisplayName = "defer 档：写失败后期望已变（取件灭灯），补写只落终值不落旧值")]
+    public void DeferMode_WriteFail_ThenTrayLeft_OnlyFinalValueWritten()
+    {
+        var (bus, machine, logs) = Make(deferLampWrites: true);
+        using (machine)
+        {
+            bus.WriteSucceeds = false;
+            bus.SetInput(Tray(1, 1), true);            // 黄 true 入队，写失败清账
+            bus.SetInput(Tray(1, 1), false);           // 取件：黄 false 入队（latest-wins 覆盖）
+            bus.WriteSucceeds = true;
+            _now = _now.AddSeconds(1);
+            machine.Pump(_now);                        // Idle 补写：黄/绿 false
+            // 关键断言：黄灯的 true（失败旧值）从未落总线——清账后按现值补写，
+            // 防旧值乱序覆盖新值的回归
+            Assert.DoesNotContain(bus.Writes,
+                w => w.Key == Lamp(IoPointRole.LampYellow, 1, 1) && w.State == true);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), false));
+        }
+    }
+
+    [Fact(DisplayName = "defer 档：Attach 清账后的全量补写浪潮经队列落总线")]
+    public void DeferMode_AttachClearBook_FullRewriteViaQueue()
+    {
+        var (bus, machine, logs) = Make(deferLampWrites: true);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);            // 黄灯已写记账
+            bus.Writes.Clear();
+            machine.Attach(bus);                       // 清账（灯态未知，全量补写一轮）
+            machine.Pump(_now);
+            Assert.True(Wrote(bus.Writes, Lamp(IoPointRole.LampYellow, 1, 1), true));
+        }
+    }
+
+    [Fact(DisplayName = "defer 档：稳态去重零网络写保持（账本同值不入队）")]
+    public void DeferMode_SteadyState_DedupStillZeroWrite()
+    {
+        var (bus, machine, logs) = Make(deferLampWrites: true);
+        using (machine)
+        {
+            bus.SetInput(Tray(1, 1), true);            // 开计时，黄灯已写记账
+            _now = _now.AddSeconds(1);
+            machine.Pump(_now);                        // 首轮兜底：红灯补灭首写记账（账本齐）
+            bus.Writes.Clear();
+            for (int i = 0; i < 5; i++)
+            {
+                _now = _now.AddSeconds(1);
+                machine.Pump(_now);                    // 同值 → 库去重短路，不入队不写
+            }
             Assert.Empty(bus.Writes);
         }
     }
