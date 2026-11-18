@@ -24,9 +24,13 @@
       单按钮（知道了），无决策项——决策型走 SlotReloadWindow。
     -->
     <Grid Margin="12">
+        <!-- 双层拆分（V0.0.110）：本层只画背景/描边/投影 + BitmapCache；
+             内容层零 Effect——整窗 Effect 会在每次内容变化时重算高斯模糊（打字/拖选掉帧根因）。 -->
         <Border CornerRadius="10" Background="{DynamicResource Brush.WindowBg}"
                 BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1"
-                Effect="{StaticResource Fx.WinShadow}">
+                Effect="{StaticResource Fx.WinShadow}" CacheMode="BitmapCache" IsHitTestVisible="False"/>
+        <Border CornerRadius="10" Background="{DynamicResource Brush.WindowBg}"
+                BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1">
             <!-- 三行 Grid（标题 Auto / 正文 * / 底栏 Auto）：
                  不用 DockPanel——它的"最后一个子元素填充剩余空间"规则会让
                  正文把底栏按钮挤出可视区（SizeToContent 高度按内容算，

@@ -22,9 +22,13 @@
         路径文本在品牌标题条下；图片区走 CardBg 融底（深浅主题跟随）。
         设计时 DataContext 为空，标题取 FallbackValue 占位（仅预览，运行时走真值）。-->
     <Grid Margin="14">
+        <!-- 双层拆分（V0.0.110）：本层只画背景/描边/投影 + BitmapCache；
+             内容层零 Effect——整窗 Effect 会在每次内容变化时重算高斯模糊（打字/拖选掉帧根因）。 -->
         <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
                 BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
-                Effect="{StaticResource Fx.WinShadow}">
+                Effect="{StaticResource Fx.WinShadow}" CacheMode="BitmapCache" IsHitTestVisible="False"/>
+        <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+                BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1">
             <DockPanel>
                 <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
                     <Grid>

@@ -128,9 +128,13 @@
     <!-- 圆角弹窗骨架（全弹窗统一）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow 浮层投影，
          根 Grid Margin=14 给阴影渲染留白 -->
     <Grid Margin="14">
+    <!-- 双层拆分（V0.0.110）：本层只画背景/描边/投影 + BitmapCache；
+         内容层零 Effect——整窗 Effect 会在每次内容变化时重算高斯模糊（打字/拖选掉帧根因）。 -->
     <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
             BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
-            Effect="{StaticResource Fx.WinShadow}">
+            Effect="{StaticResource Fx.WinShadow}" CacheMode="BitmapCache" IsHitTestVisible="False"/>
+    <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+            BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1">
         <DockPanel>
             <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
                 <Grid>
@@ -614,32 +618,38 @@
                                      回车应用——不需要旁边常驻编辑框）。显隐绑 HasSelection；
                                      定位由 xaml.cs 算选区包围盒（host 坐标系），随缩放/平移重定位；
                                      【清除】删该批覆盖恢复跟随层/全局（设了能删，闭环） -->
-                                <Border x:Name="QuickEdit" Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"
-                                        HorizontalAlignment="Left" VerticalAlignment="Top"
-                                        Background="{DynamicResource Brush.Fresh.CardBg}"
-                                        BorderBrush="{DynamicResource Brush.Fresh.AccentBorder}" BorderThickness="1.5"
-                                        CornerRadius="6" Padding="10,8"
-                                        MouseLeftButtonDown="OnQuickEditMouseDown"
-                                        IsVisibleChanged="OnQuickEditVisibleChanged"
-                                        Effect="{StaticResource Fx.WinShadow}">
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding SelectionSummaryText, FallbackValue=架3-层2 · 当前 2小时}"
-                                                   FontSize="11" Foreground="{DynamicResource Brush.Fresh.FgMid}"/>
-                                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                                            <TextBox x:Name="QuickEditBox" Style="{StaticResource FreshInput}" Width="88"
-                                                     Text="{Binding SelectionMinutesText, UpdateSourceTrigger=PropertyChanged}"
-                                                     KeyDown="OnQuickEditKeyDown"
-                                                     ToolTip="{Binding SelectionInputToolTip, FallbackValue='时长（小时，计时精度为分钟），回车应用'}"/>
-                                            <TextBlock Text="{Binding TimeUnitSuffix, FallbackValue=时}" VerticalAlignment="Center" Margin="6,0,8,0"/>
-                                            <Button Style="{StaticResource FreshPrimaryButton}" Content="应用"
-                                                    Width="56" Command="{Binding ApplySelectionCommand}"
-                                                    Click="OnQuickEditApply"/>
-                                            <Button Style="{StaticResource FreshButton}" Content="清除" Margin="8,0,0,0"
-                                                    Width="56" Command="{Binding ClearSelectionOverrideCommand}"
-                                                    ToolTip="删除该批仓位的单独设置，恢复跟随层/全局"/>
+                                <!-- 双层拆分（V0.0.110）：Grid 承载定位/显隐（code-behind 用 Margin/ActualWidth）；
+                                     垫层画背景/描边/投影 + BitmapCache，内容层零 Effect（拖动浮层不重算模糊）。 -->
+                                <Grid x:Name="QuickEdit" Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}"
+                                      HorizontalAlignment="Left" VerticalAlignment="Top"
+                                      IsVisibleChanged="OnQuickEditVisibleChanged">
+                                    <Border Background="{DynamicResource Brush.Fresh.CardBg}"
+                                            BorderBrush="{DynamicResource Brush.Fresh.AccentBorder}" BorderThickness="1.5"
+                                            CornerRadius="6" Effect="{StaticResource Fx.WinShadow}"
+                                            CacheMode="BitmapCache" IsHitTestVisible="False"/>
+                                    <Border Background="{DynamicResource Brush.Fresh.CardBg}"
+                                            BorderBrush="{DynamicResource Brush.Fresh.AccentBorder}" BorderThickness="1.5"
+                                            CornerRadius="6" Padding="10,8"
+                                            MouseLeftButtonDown="OnQuickEditMouseDown">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding SelectionSummaryText, FallbackValue=架3-层2 · 当前 2小时}"
+                                                       FontSize="11" Foreground="{DynamicResource Brush.Fresh.FgMid}"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                                <TextBox x:Name="QuickEditBox" Style="{StaticResource FreshInput}" Width="88"
+                                                         Text="{Binding SelectionMinutesText, UpdateSourceTrigger=PropertyChanged}"
+                                                         KeyDown="OnQuickEditKeyDown"
+                                                         ToolTip="{Binding SelectionInputToolTip, FallbackValue='时长（小时，计时精度为分钟），回车应用'}"/>
+                                                <TextBlock Text="{Binding TimeUnitSuffix, FallbackValue=时}" VerticalAlignment="Center" Margin="6,0,8,0"/>
+                                                <Button Style="{StaticResource FreshPrimaryButton}" Content="应用"
+                                                        Width="56" Command="{Binding ApplySelectionCommand}"
+                                                        Click="OnQuickEditApply"/>
+                                                <Button Style="{StaticResource FreshButton}" Content="清除" Margin="8,0,0,0"
+                                                        Width="56" Command="{Binding ClearSelectionOverrideCommand}"
+                                                        ToolTip="删除该批仓位的单独设置，恢复跟随层/全局"/>
+                                            </StackPanel>
                                         </StackPanel>
-                                    </StackPanel>
-                                </Border>
+                                    </Border>
+                                </Grid>
                             </Grid>
                         </Border>
                         <!-- 图例与操作说明（画布=主编辑区口径） -->

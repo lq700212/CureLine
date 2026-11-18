@@ -24,9 +24,13 @@
       两个数字（已固化多久、还要固化多久）由 VM 算好摆出来，不让操作员心算。
     -->
     <Grid Margin="12">
+        <!-- 双层拆分（V0.0.110）：本层只画背景/描边/投影 + BitmapCache；
+             内容层零 Effect——整窗 Effect 会在每次内容变化时重算高斯模糊（打字/拖选掉帧根因）。 -->
         <Border CornerRadius="10" Background="{DynamicResource Brush.WindowBg}"
                 BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1"
-                Effect="{StaticResource Fx.WinShadow}">
+                Effect="{StaticResource Fx.WinShadow}" CacheMode="BitmapCache" IsHitTestVisible="False"/>
+        <Border CornerRadius="10" Background="{DynamicResource Brush.WindowBg}"
+                BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1">
             <!-- 三行 Grid（标题 Auto / 正文 * / 底栏 Auto）：
                  不用 DockPanel——"最后一个子元素填充剩余空间"的规则会把正文
                  撑满并把底栏按钮挤出可视区（SizeToContent 高度按内容算）。 -->

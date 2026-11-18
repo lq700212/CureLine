@@ -35,9 +35,13 @@
     <!-- 圆角悬浮窗骨架（与各功能弹窗同族）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow，
          根 Grid Margin=14 给阴影渲染留白；取色走主窗语义键（Brush.*） -->
     <Grid Margin="14">
+    <!-- 双层拆分（V0.0.110）：本层只画背景/描边/投影 + BitmapCache；
+         内容层零 Effect——整窗 Effect 会在每次内容变化时重算高斯模糊（打字/拖选掉帧根因）。 -->
     <Border CornerRadius="10" Background="{DynamicResource Brush.WindowBg}"
             BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1"
-            Effect="{StaticResource Fx.WinShadow}">
+            Effect="{StaticResource Fx.WinShadow}" CacheMode="BitmapCache" IsHitTestVisible="False"/>
+    <Border CornerRadius="10" Background="{DynamicResource Brush.WindowBg}"
+            BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1">
     <DockPanel>
         <!-- 标题条（HTML lfhead 直译：渐变头 + 绿点 + 白字；底边共用顶栏底边键），
              右端关闭钮（IsHitTestVisibleInChrome 已在共享样式内声明）；顶部圆角贴外框 -->

@@ -32,6 +32,14 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // ── 渲染模式应急开关（V0.0.110，2026-11-18）──
+        // 干什么：环境变量 CURELINE_SOFT_RENDER=1 时强制 WPF 软件渲染（Tier 0 等价）。
+        // 为什么：现场显卡驱动异常（花屏/黑块/闪烁/投影发糊）或怀疑 GPU 问题时，
+        //   用它可以一键切纯 CPU 渲染做对照，不改任何配置、不影响正常机器。
+        // 注意：必须在任何 Window 创建之前设置才生效（进程级一次性），故放最前。
+        if (Environment.GetEnvironmentVariable("CURELINE_SOFT_RENDER") == "1")
+            RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+
         // 启动期可能先弹独立的激活窗（还没有主窗）——显式关闭模式防止
         // "激活窗一关应用就自动退出"；主窗建好后再恢复 OnLastWindowClose。
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
@@ -102,7 +110,11 @@ public partial class App : Application
         win.Show();
         // 渲染层级进启动日志（V0.0.109 排障口）：Tier 0=无 GPU 加速（远程桌面/
         // 虚拟机）——该环境下投影模糊走 CPU 软渲染，"界面卡"先看这行定位环境。
-        LocalLogService.Write($"渲染层级 Tier={RenderCapability.Tier >> 16}（0=无 GPU 加速，软渲染）");
+        // V0.0.110 补 RenderMode：软渲染开关（CURELINE_SOFT_RENDER=1）下 Tier 判定
+        // 仍可能报 2（.NET 4 起 Tier 只区分有/无硬件加速），以这行的实际模式为准。
+        LocalLogService.Write(
+            $"渲染层级 Tier={RenderCapability.Tier >> 16}（0=无 GPU 加速，软渲染）; " +
+            $"RenderMode={RenderOptions.ProcessRenderMode}");
         // 模态弹窗"切后台再切回自动找回"护栏（Core 共享，机制见 ModalForegroundGuard 头注释）
         ModalForegroundGuard.Install(win);
 

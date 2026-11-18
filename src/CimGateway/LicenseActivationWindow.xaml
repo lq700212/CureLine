@@ -29,9 +29,13 @@
          标题条半透明白小方块与白盾是品牌渐变条上的叠加色（与 Ghost 键同思路，非主题语义色）。
          设备码固定 Consolas 等宽字体：现场报码/抄码时 0/O、1/I 易混，等宽提高可读性。 -->
     <Grid Margin="14">
+        <!-- 双层拆分（V0.0.110）：本层只画背景/描边/投影 + BitmapCache；
+             内容层零 Effect——整窗 Effect 会在每次内容变化时重算高斯模糊（打字/拖选掉帧根因）。 -->
         <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
                 BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
-                Effect="{StaticResource Fx.WinShadow}">
+                Effect="{StaticResource Fx.WinShadow}" CacheMode="BitmapCache" IsHitTestVisible="False"/>
+        <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+                BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1">
             <DockPanel>
                 <!-- foot 条：适用范围（左）+ 主按钮（右）；分隔线+亮底与弹窗骨架同款 -->
                 <Border DockPanel.Dock="Bottom" CornerRadius="0,0,10,10"

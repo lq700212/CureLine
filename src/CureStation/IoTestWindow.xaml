@@ -73,9 +73,13 @@
     <!-- 圆角弹窗骨架（全弹窗统一）：透明窗 + 外层圆角 Border（10px）+ Fx.WinShadow 浮层投影，
          根 Grid Margin=14 给阴影渲染留白 -->
     <Grid Margin="14">
+    <!-- 双层拆分（V0.0.110）：本层只画背景/描边/投影 + BitmapCache；
+         内容层零 Effect——整窗 Effect 会在每次内容变化时重算高斯模糊（打字/拖选掉帧根因）。 -->
     <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
             BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1"
-            Effect="{StaticResource Fx.WinShadow}">
+            Effect="{StaticResource Fx.WinShadow}" CacheMode="BitmapCache" IsHitTestVisible="False"/>
+    <Border CornerRadius="10" Background="{DynamicResource Brush.Fresh.WinBg}"
+            BorderBrush="{DynamicResource Brush.Fresh.Border}" BorderThickness="1">
         <DockPanel>
             <Border DockPanel.Dock="Top" Style="{StaticResource WinTitleBar}">
                 <Grid>

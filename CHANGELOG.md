@@ -2,6 +2,82 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.110（2026-11-18，卡顿三查：整窗投影双层拆分 20 处 + 登录打字三组实测 + 全维度量化无异常 + 渲染模式应急开关 CURELINE_SOFT_RENDER）
+
+- **背景（用户反馈 V0.0.109 后"还是卡"，并点名两个症状：登录弹窗输入密码明显
+  卡顿、工艺策略页按住左键拖动框选库位块明显不跟手）**：本轮不再猜，改用 Win32
+  `SendMessageTimeout(WM_NULL)` 量化 UI 线程响应（"卡"最直接的数值），配合
+  CPU/内存/句柄/线程采样、真实 `SendInput` 打字与逐像素视觉回归，把开发机
+  可测场景全跑一遍。
+- **实测结论一：开发机 Debug 版（含 V0.0.108/109 修复）空闲态不存在可测卡顿**——
+  ① 冷启动：主窗 1.2s 出现，1.5s 时 30 卡+统计条+顶栏已完整渲染（截图验证）；
+  ② 空闲 40s：UI 响应 min=1/avg=1.9/max=10ms，CPU 0.1%，内存 186MB 稳定；
+  ③ 演示模式 60s：avg=1.2ms/max=12ms，CPU 0.2%；
+  ④ 最大化/还原×4+连续 resize 抖动 30 步：avg 0.6~1.2ms/max=2ms；
+  ⑤ 8 分钟长跑：1ms、CPU 0.15%、句柄 1222~1237 波动（非线性泄漏）、内存 192→200MB；
+  ⑥ CimGateway 8 机台 45s：1.2ms、0.2%、句柄零增长；
+  ⑦ **真软件渲染（RenderMode.SoftwareOnly，等价 Tier 0 远程/无 GPU 环境）：
+  1.1ms、CPU 0.23%**——静态界面在纯 CPU 投影路径上同样不构成瓶颈。
+- **实测结论二：登录窗打字卡与投影无关（三组同口径，30 字符/50ms 间隔，
+  `SendInput` 真键盘 + 线程级 CPU 采样）**：A 组整窗 `DropShadowEffect`
+  =7.8ms/字符、B 组双层拆分=10.4、C 组完全无投影=10.9——**无投影与双层持平，
+  整窗投影反而更低（A 组 idle 基线本身 3.6%，属测量噪音）**。可见打字开销来自
+  WPF 输入/布局/文本管线本身，拆投影既不改善也不恶化；现场主观仍卡时优先查
+  输入传输路径（远程桌面/向日葵视频编码）与输入法，而非界面渲染。
+- **① 拖框选真因锁定 + 机制性修复：20 处整窗投影改双层拆分**——代码路径实测：
+  `CuringPolicyWindow.OnCanvasMouseMove` 只改 `_boxNow` + `RubberBand` 四个属性
+  （`UpdateRubberBand` 纯算术），UI 线程零重活；真正的浪费是**投影挂在整窗内容
+  Border 上**——橡皮筋每变一次尺寸，整窗 1280×760 内容都在 Effect 子树内，WPF
+  必须重建中间表面并重算高斯模糊（RTB 软件光栅化实测：策略窗 29.66ms/次、
+  主窗 55.41ms、登录窗 6.17ms；同一内容无 Effect 仅 2.4~3.7ms；Blur 半径从
+  24 降到 8 几乎无改善=51.55ms，证明代价在"整窗中间表面 + Effect 管线"而非
+  模糊半径）。修复采用与 V0.0.108 主窗卡片投影相同的双层结构：**垫层只画
+  背景/描边/投影 + `CacheMode="BitmapCache"` + `IsHitTestVisible="False"`，
+  内容层零 Effect、同色同尺寸覆盖其上**——内容变化只重绘内容层，垫层直接复用
+  缓存位图，高斯模糊不再参与交互帧。
+  落地 20 处：CimGateway 7 窗（ChangePassword/GatewayConfig/Image/
+  LicenseActivation/Login/MesAlarm/MesLog）+ CureStation 12 窗（AccountManager/
+  CuringPolicy/IoTest/LicenseActivation/Login/Log/PointTable/ScanNotice/
+  SlotReload/TraceReport/WorkOrder/GrillAlarmReset）+ CuringPolicy 窗内点选浮层
+  `QuickEdit`（`x:Name` 移到外层 `Grid` 承载定位/显隐，code-behind 的
+  `Margin/ActualWidth/Visibility` 用法零改动，浮层投影同样从整块模糊变缓存）。
+  **能力边界（诚实登记）**：本机 GPU 路径（Tier 2）下三种结构用
+  `CompositionTarget.Rendering`（UI 线程渲染节拍）与 `DwmFlush`（阻塞到 DWM
+  合成完成）两种口径测出的帧成本中位数**全是 16.66ms（60fps 满帧）**，未能
+  复现用户报告的"明显不跟手"——说明本机 Effect 光栅化成本已低于一个 vblank，
+  双层拆分在此环境下是"消除确定浪费"而非"可测提速"；对软件渲染 / 低端 GPU /
+  远程会话等 Effect 成本上到数十毫秒的环境，收益才是数量级的。现场若仍卡，
+  用下面的软渲染开关做 A/B 对照即可定位是否 GPU 路径。
+- **② 视觉回归：窗口内部像素零差异**——DocShot 重拍 26 张，Pillow 逐像素 diff：
+  `cs-login` 差异 0.73%、`cs-workorder-admin` 0.35%、`cs-alarm-confirm` 0.05%、
+  `cs-policy` 0.01%，**全部落在窗口外圈 20px 投影带，窗口内部（interior）
+  零差异**；`cs-mespost`/`cs-scanner`/`gw-config`/`gw-debug`/`gw-log`/`gw-login`
+  完全 IDENTICAL。登录窗左上角放大 5 倍并排目检不可辨（外圈仅抗锯齿级微差）。
+  内容层保留 Background/BorderBrush/BorderThickness（与垫层同色重画），命中
+  测试、圆角与视觉均与拆分前一致——界面质感（投影）零下降。
+- **③ 渲染模式应急开关（新增排障口，缺省不干预）**：环境变量
+  `CURELINE_SOFT_RENDER=1` → `App.OnStartup` 最前设
+  `RenderOptions.ProcessRenderMode=SoftwareOnly`（必须在任何 Window 创建前，进程级
+  一次性）。用途：现场显卡驱动异常（花屏/黑块/闪烁/投影发糊）或怀疑 GPU 问题时，
+  一键切纯 CPU 渲染做对照，不改配置、不影响正常机器。为什么用环境变量而非 ini：
+  渲染模式在建窗之前就要定，ini 读取顺序不保证；环境变量由启动脚本/快捷方式携带
+  最直接。**注：`DisableHWAcceleration` 注册表法对 .NET 8 WPF 无效（实测 Tier 仍报
+  2），必须走这条代码路径。**
+- **④ 启动日志补 RenderMode**：Tier 行追加实际渲染模式（`RenderMode=Default/
+  SoftwareOnly`）——.NET 4 起 `RenderCapability.Tier` 只区分"有/无硬件加速"，
+  软渲染开关打开时仍可能报 2，以这行为准（现场排障先看这行）。
+- **⑤ 排查副产物（未改代码，登记备查）**：① 开发机 `config/config.ini` 存在
+  `[setting]`/`[MES]` 整份重复两遍（kernel32 只读第一份，属手工遗留脏数据，
+  代码侧 `IniFile` 全走 `WritePrivateProfileString` 不会产生）；② `out/` 旧存量包
+  只有 `CureLine_V0.0.105_20261112`（**不含 V0.0.108/109/110 修复**）——现场若用
+  该包测"还是卡"属版本未更新，本轮已重出 `CureLine_V0.0.110_20261118`（Release，
+  两程序各 32 文件/约 19.7MB，已剔除 pdb 与全部机密/运行态文件）；③ 开发机常驻
+  GameViewer 远程控制 + 向日葵虚拟显示器驱动，远程观看时 WPF 高细节界面在视频
+  编码下主观偏卡，与本机渲染无关；④ **部署包内的子模块 `Kaleidoscope.dll` 仍是
+  Debug 构建**（`Reference` 策略指向其 `bin\Debug`，AGENTS.md 已验证锁定），因此
+  包内仍含 `KX_DEV_LICENSE` 开发自动授权兜底——现场真机须走正常授权激活；若要
+  彻底剔除需给子模块加 Release 多目标（跨仓库改动，待用户拍板）。
+
 ## V0.0.109（2026-11-18，卡顿根治二期 + UI 控件沉库 kaleidoscope.UI V2.0.0 首建——锁内 IO 出锁/WMI 预热接线/Slots 累积修复/投影位图缓存，显示效果零变化）
 
 - **背景（用户反馈"V0.0.108 后打开还是卡顿，UI 显示效果不要改变"）**：二期排查

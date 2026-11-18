@@ -261,3 +261,20 @@ CureLine/
 策略 / 工单数据库），开箱即用；所有配置键见 [`config.sample.ini`](config.sample.ini)
 逐键注释。两程序连接参数、Web 接口地址、扫描周期全部支持界面修改并
 **保存即热生效**，无需重启。
+
+---
+
+## 渲染排障（显卡异常 / 远程会话对照）
+
+界面圆角与窗口投影全部走 WPF 硬件加速。个别现场显卡驱动异常（花屏 / 黑块 /
+闪烁 / 投影发糊），或在远程桌面 / 虚拟显示器下怀疑 GPU 渲染有问题时，可用
+环境变量一键切**纯 CPU 渲染**做对照——不改任何配置、不影响正常机器：
+
+```powershell
+$env:CURELINE_SOFT_RENDER = "1"     # 1=纯 CPU 渲染；不设或 0=正常硬件渲染
+.\CureStation.exe
+```
+
+启动日志的 `Tier=` 行会追加 `RenderMode=Default/SoftwareOnly`，以这行为准
+（`RenderCapability.Tier` 在软渲染下仍可能报 2）。去掉该环境变量即恢复。
+

@@ -251,9 +251,13 @@
       - 导出 CSV 导当前筛选下的全部记录（不分页），后台线程写文件。
     -->
     <Grid Margin="14">
+        <!-- 双层拆分（V0.0.110）：本层只画背景/描边/投影 + BitmapCache；
+             内容层零 Effect——整窗 Effect 会在每次内容变化时重算高斯模糊（打字/拖选掉帧根因）。 -->
         <Border CornerRadius="10" Background="{DynamicResource Brush.WindowBg}"
                 BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1"
-                Effect="{StaticResource Fx.WinShadow}">
+                Effect="{StaticResource Fx.WinShadow}" CacheMode="BitmapCache" IsHitTestVisible="False"/>
+        <Border CornerRadius="10" Background="{DynamicResource Brush.WindowBg}"
+                BorderBrush="{DynamicResource Brush.PanelBorder}" BorderThickness="1">
             <DockPanel>
                 <!-- 标题条 -->
                 <Border DockPanel.Dock="Top" Background="{DynamicResource Brush.LfHeadGrad}"
