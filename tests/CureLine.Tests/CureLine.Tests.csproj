@@ -28,10 +28,11 @@
     <ProjectReference Include="..\..\src\CureStation\CureStation.csproj" />
   </ItemGroup>
 
-  <!--冒烟测试直引子模块（与 Core 同版本，保证测试的即交付的）-->
+  <!--冒烟测试直引子模块（与 Core 同版本，保证测试的即交付的）。
+      $(Configuration) 跟随本工程配置（V0.0.111）：Release 测试跑在子模块 Release 上（开发授权兜底不存在）。-->
   <ItemGroup>
     <Reference Include="Kaleidoscope">
-      <HintPath>..\..\extern\kaleidoscope\Kaleidoscope\bin\Debug\Kaleidoscope.dll</HintPath>
+      <HintPath>..\..\extern\kaleidoscope\Kaleidoscope\bin\$(Configuration)\Kaleidoscope.dll</HintPath>
     </Reference>
     <Reference Include="HslCommunication">
       <HintPath>..\..\extern\kaleidoscope\Kaleidoscope\libs\HslCommunication.dll</HintPath>

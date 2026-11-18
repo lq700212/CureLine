@@ -13,10 +13,16 @@
   </PropertyGroup>
 
   <!--通讯子模块 extern/kaleidoscope（net472）：直接引用其编译输出，不改子模块源码。
-      传递依赖必须显式列出，SDK 风格不会自动复制 netfx 引用链的附属 DLL。-->
+      传递依赖必须显式列出，SDK 风格不会自动复制 netfx 引用链的附属 DLL。
+
+      HintPath 用 $(Configuration) 跟随本工程配置（V0.0.111 发布口径）：
+        · Debug  → 子模块 bin\Debug   （含 LicenseGate 的 #if DEBUG 开发自动授权兜底，仅开发/测试）
+        · Release→ 子模块 bin\Release （#if DEBUG 整段剔除，发布产物绝无 KX_DEV_LICENSE 兜底）
+      发布前置：Release 构建前必须先构建子模块 Release（tools/build.ps1 -Configuration Release 一键）；
+      漏构建时 HintPath 直接找不到文件而编译失败（失败可见，不会静默沿用旧 Debug 产物）。-->
   <ItemGroup>
     <Reference Include="Kaleidoscope">
-      <HintPath>..\..\extern\kaleidoscope\Kaleidoscope\bin\Debug\Kaleidoscope.dll</HintPath>
+      <HintPath>..\..\extern\kaleidoscope\Kaleidoscope\bin\$(Configuration)\Kaleidoscope.dll</HintPath>
     </Reference>
     <Reference Include="HslCommunication">
       <HintPath>..\..\extern\kaleidoscope\Kaleidoscope\libs\HslCommunication.dll</HintPath>

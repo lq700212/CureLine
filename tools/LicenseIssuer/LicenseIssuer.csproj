@@ -24,8 +24,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!--签发工具只在本机用，但同样跟随配置（V0.0.111）：Debug 引子模块 Debug、Release 引子模块 Release。
+        发布前置：Release 构建前先构建子模块 Release（tools/build.ps1 -Configuration Release）。-->
     <Reference Include="Kaleidoscope">
-      <HintPath>..\..\extern\kaleidoscope\Kaleidoscope\bin\Debug\Kaleidoscope.dll</HintPath>
+      <HintPath>..\..\extern\kaleidoscope\Kaleidoscope\bin\$(Configuration)\Kaleidoscope.dll</HintPath>
     </Reference>
   </ItemGroup>
 

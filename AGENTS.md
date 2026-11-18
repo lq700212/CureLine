@@ -45,10 +45,18 @@
   （否则 detached HEAD 提交悬空）→ 改 → commit → push（子模块仓库）→
   回主仓库 `git add extern/kaleidoscope`（更新指针）→ commit → push。
   改完子模块源码必须先用 VS MSBuild 编译通过（`Kaleidoscope.csproj` net472），
-  再跑本项目全量测试（引用的是它的 `bin\Debug` 输出）。
-- **引用策略（已验证，勿轻易改）**：net8 主工程直接 `Reference`
-  其 `bin\Debug\Kaleidoscope.dll` + `libs/` 三个 DLL，`NU1701` 已压制
-  （`SubmoduleSmokeTests` 4 例锁定：加载/构造/授权降级/配置模型）。
+  再跑本项目全量测试。
+- **引用策略（V0.0.111 起按配置跟随，勿改回硬编码）**：net8 主工程直接
+  `Reference` 其 `bin\$(Configuration)\Kaleidoscope.dll` + `libs/` 三个 DLL，
+  `NU1701` 已压制（`SubmoduleSmokeTests` 4 例锁定：加载/构造/授权降级/配置模型）。
+  **为什么必须跟随配置**：子模块 `LicenseGate` 的「开发自动授权兜底」整段在
+  `#if DEBUG` 内——Debug 构建引用 Debug 产物（开发便利），Release 构建引用
+  Release 产物（兜底被编译器整段剔除，发布包绝无 `KX_DEV_LICENSE`）。此前
+  HintPath 硬编码 `bin\Debug`，导致 Release 构建把 Debug DLL 拷进发布包
+  （V0.0.110 发布包实测 `KX_DEV_LICENSE=2`），属发布红线。落点共 6 个 csproj：
+  `CureLine.Core`/`CureStation`/`CimGateway`/`CureLine.Tests`/`DocShot`/`LicenseIssuer`
+  （Kaleidoscope.UI 同款 `bin\$(Configuration)\net8.0-windows\`）。
+  **发布唯一入口**=`tools/build.ps1 -Configuration Release -Pack`（见构建段）。
   若将来引用失效，备选才是按 kaleidoscope AGENTS 迁移方案给它加
   `net8.0-windows` 多目标——那是跨仓库大动作，需用户明确批准。
 
@@ -316,16 +324,25 @@
 ## 构建与验证命令
 
 ```powershell
+# ★ 一键全链（V0.0.111 起推荐；发布唯一入口）：
+#   子模块按配置构建 → Kaleidoscope.UI → 主方案 → 全量测试 →
+#   Release 无兜底断言（KX_DEV_LICENSE 必须为 0）→（-Pack）组装 out 发布包
+powershell -ExecutionPolicy Bypass -File tools\build.ps1                              # Debug 自测
+powershell -ExecutionPolicy Bypass -File tools\build.ps1 -Configuration Release -Pack  # 正式发版
+#   -SkipTests 可跳过测试（仅临时确认能编译）；-Version 可指定包名版本（缺省读 CHANGELOG）
+#   打包强制 Release（Debug 含开发授权兜底，脚本直接拒绝）
+
 # 全量构建（0 警告 0 错误）
 dotnet build CureLine.slnx --nologo
-# 全量测试（635/635 全绿，串行，约 30s；含本地 HttpListener 桩 MES 端到端
+# 全量测试（652/652 全绿，串行，约 30s；含本地 HttpListener 桩 MES 端到端
 #   + 模拟链路 VM 全链路用例：按钮→注入→扫触发→POST 内置桩→回写→观测
 #   + 授权 16 例——其中真私钥激活链 3 例依赖 tools/LicenseIssuer 私钥，
-#   无钥环境自动跳过）
+#   无钥环境自动跳过；Release 配置同样全绿，测试项目随 $(Configuration)
+#   引用子模块同配置产物，Debug-only 兜底设置在 LicenseTests 里用 #if DEBUG 收口）
 dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
 # 厂商签发工具（授权相关改动后同步构建；私钥 LicenseSignKey.dat 不进仓库）
 dotnet build tools/LicenseIssuer/LicenseIssuer.csproj --nologo
-# 子模块改动后（VS MSBuild，net472，原样沿用上游命令）
+# 子模块改动后（VS MSBuild，net472，原样沿用上游命令；配置要与随后主构建一致）
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
   "extern/kaleidoscope/Kaleidoscope/Kaleidoscope.csproj" `
   /p:Configuration=Debug /p:Platform=AnyCPU /t:Build /nologo /v:m
@@ -333,6 +350,8 @@ dotnet build tools/LicenseIssuer/LicenseIssuer.csproj --nologo
 #   （程序①起 CureStation.exe，看 config/pointtable.json 自愈落盘 + 30 张仓位卡）
 # 模拟联调：config.ini [setting] Simulate=1（两程序同名键，无真机跑全流程）——
 #   CimGateway（程序②，exe 同名）直起即模拟 8 机台网关；CureStation 直起即 Mock 总线按仓位流转演示
+# 发布红线自检（包内 Kaleidoscope.dll 必须为 0；>0 = 混进了 Debug 子模块产物）：
+#   PowerShell 读 DLL 字节后按 UTF-16LE 解串搜 KX_DEV_LICENSE（tools/build.ps1 第 6/7 步已内置）
 ```
 
 ## 已知坑（复刻 heritage，改前必读代码注释）
@@ -993,6 +1012,23 @@ AppConfig 静态值的测试类必须挂 TestScope（MesLayerTests 曾因无隔�
   `tools\LicenseIssuer\LicenseSignKey.dat`（缺失自动跳过），注入类语义锁定在
   kaleidoscope 回归探针（152 例）回归；测试不得碰真机注册表测试键之外的宿主
   水位。
+- **发布包子模块配置口径（V0.0.111 起，唯一真源=6 个 csproj 的 HintPath）**：
+  ① 现象（V0.0.110 发布包实测）：宿主全部工程 HintPath 硬编码 `bin\Debug`，
+  于是 `dotnet build -c Release` 也把 Debug 版 `Kaleidoscope.dll` 拷进
+  `bin\Release\net8.0-windows\`——包内该 DLL 二进制实测 `KX_DEV_LICENSE=2`，
+  LicenseGate 的「开发自动授权」兜底随包出厂（"Debug exe 禁止外发"因此形同虚设，
+  因为 Release exe 也带着 Debug 子模块）；② 修复：6 个 csproj
+  （`CureLine.Core`/`CureStation`/`CimGateway`/`CureLine.Tests`/`DocShot`/
+  `LicenseIssuer`）HintPath 一律 `bin\$(Configuration)\Kaleidoscope.dll`，
+  `Kaleidoscope.UI` 同款 `bin\$(Configuration)\net8.0-windows\`；③ 验证方法
+  （脚本已内置）：读 DLL 字节按 UTF-16LE 双奇偶偏移解串搜 `KX_DEV_LICENSE`
+  ——Release 必须 0，Debug 大于 0 属预期；④ 代价与纪律：Release 构建依赖
+  子模块 `bin\Release` 存在且新鲜，**发布一律走
+  `tools/build.ps1 -Configuration Release -Pack`**（子模块按配置先建→UI 库→
+  主方案→测试→无兜底断言→打包），禁止手工拼包；⑤ 测试项目同样跟随配置——
+  `LicenseTests` 里设置 `LicenseGate.EnvKeyDebugLicenseOff` 的两处必须包在
+  `#if DEBUG`（Release 子模块无该常量、无兜底可关），`dotnet test -c Release`
+  652/652 已实测全绿。
 - **模态弹窗"切后台再切回自动找回"护栏（V0.0.88 建，V0.0.92 用户实测加固，
   全在 `Core/Infrastructure/ModalForegroundGuard` 一处）**：① 现象=主界面开着
   ShowDialog 弹窗时把软件切到后台（Win+D 等）再切回，前台落到被模态禁用的

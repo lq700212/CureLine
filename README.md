@@ -101,20 +101,26 @@ git clone https://github.com/lq700212/CureLine.git
 cd CureLine
 git submodule update --init
 
-# 2. 编译子模块（net472，需 VS MSBuild）
-& "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" `
-  "extern/kaleidoscope/Kaleidoscope/Kaleidoscope.csproj" `
-  /p:Configuration=Debug /p:Platform=AnyCPU /t:Build /nologo /v:m
+# 2. 一键构建 + 全量测试（推荐；需已装 VS 的 MSBuild——子模块 net472 老式工程）
+#    顺序固定：子模块按配置构建 → Kaleidoscope.UI → 主方案 → 全量测试
+powershell -ExecutionPolicy Bypass -File tools\build.ps1
 
-# 3. 全量构建 + 测试
-dotnet build CureLine.slnx --nologo
-dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
+# 3. 正式发版（Release + 测试 + "无开发授权兜底"断言 + 打 out 发布包）
+powershell -ExecutionPolicy Bypass -File tools\build.ps1 -Configuration Release -Pack
 
 # 4. 模拟联调（无真机）：把 exe 同目录 config/config.ini 里 [setting] Simulate=1
 #    - CimGateway 直起即模拟 8 机台自动连接，每 7s 自动触发 + 顶栏「模拟触发」
 #      按钮手动注入；MES URL 未配置时内置模拟桩自动应答（全链路自洽演示）
 #    - CureStation 直起即 Mock 总线按仓位流转演示（主窗设置下拉可即时切换）
 ```
+
+> **为什么要按配置分别编译子模块**：宿主对子模块是「引用编译产物」，HintPath 写成
+> `bin\$(Configuration)\Kaleidoscope.dll`。子模块 `LicenseGate` 的「开发自动授权」
+> 兜底整段在 `#if DEBUG` 内——**Release 构建必须引用 Release 子模块产物**，发布包
+> 才不含 `KX_DEV_LICENSE` 兜底。手工构建时务必先按同一配置编子模块
+> （`MSBuild Kaleidoscope.csproj /p:Configuration=Release`），否则 HintPath 找不到
+> 文件直接编译失败（失败可见，不会静默沿用旧 Debug 产物）。`tools/build.ps1`
+> 已把这条链固化，并在 Release 构建后自动断言包内 DLL 无兜底。
 
 ---
 
@@ -180,6 +186,11 @@ dotnet test tests/CureLine.Tests/CureLine.Tests.csproj --nologo
   功能免输激活码；该段逻辑由 `#if DEBUG` 编译——**Release 客户版二进制里
   不存在**，发布必须 Release 编译，Debug exe 不外发。手测真实激活/换码/
   过期流程时设环境变量 `KX_DEV_LICENSE=off`（0/false 同义）关闭注入。
+  **发布包的子模块 DLL 也必须是 Release 产物**：宿主 6 个工程按
+  `$(Configuration)` 引用子模块（Debug→`bin\Debug`、Release→`bin\Release`），
+  发布一律走 `tools/build.ps1 -Configuration Release -Pack`（脚本会断言包内
+  `Kaleidoscope.dll` 不含 `KX_DEV_LICENSE`；V0.0.111 修复前实测该值为 2，
+  即 Release 包混入了 Debug 子模块）。
 - **签发工具**：`tools/LicenseIssuer`（厂商内部，不随客户版分发；编解码
   同引 kaleidoscope `Kaleidoscope.dll` 真源，支持 `--generate`/`--issue
   设备码 P|T 天数` 命令行签发）。私钥 `LicenseSignKey.dat` 已加入
@@ -231,9 +242,10 @@ CureLine/
 │   ├── CureLine.Core/    共享业务：IO 点表 / 固化工艺 / 过账 / 通讯底座 / VM 基建
 │   ├── CureStation/      程序①固化程控（30 仓位主窗 + 6 功能窗 + 双主题）
 │   └── CimGateway/       程序②CIM 整线过账（网关视图 + 配置/调试/日志窗）
-├── tests/CureLine.Tests/ 644 例 xUnit（本地桩 MES / 状态机桩 / Fake 对话框）
+├── tests/CureLine.Tests/ 652 例 xUnit（本地桩 MES / 状态机桩 / Fake 对话框）
 ├── extern/kaleidoscope/  子模块（独立仓库）：Modbus/HSL 通讯 + Flowing 状态机原语 + Security 授权
 ├── docs/                 拆分设计 + 培训手册（md/pdf）+ 配图 docs/images/
+├── tools/build.ps1       一键构建/测试/发版（按配置先建子模块 + 无兜底断言 + 打包）
 ├── tools/DocShot/        文档截图 harness
 ├── tools/LicenseIssuer/  软件授权签发工具（厂商内部，私钥不入库）
 └── config.sample.ini     现场配置样例（含逐键注释）

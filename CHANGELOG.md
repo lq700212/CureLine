@@ -2,6 +2,48 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.111（2026-11-18，发布口径修复：宿主 6 工程按配置引用子模块——Release 构建彻底剔除开发授权兜底 + tools/build.ps1 一键发版）
+
+- **问题（V0.0.110 发布包二进制实测）**：宿主所有工程对子模块的 HintPath 都
+  硬编码 `bin\Debug\Kaleidoscope.dll`，因此 `dotnet build -c Release` 也把
+  **Debug 版子模块 DLL** 拷进 `bin\Release\net8.0-windows\`——发布包内该 DLL
+  按 UTF-16LE 扫描实测 `KX_DEV_LICENSE=2`，即 `LicenseGate` 的「开发自动授权」
+  兜底（整段在 `#if DEBUG` 内）随 Release 包出厂。"Debug exe 禁止外发"这条
+  红线因此被绕过：Release exe 本身没问题，但它携带的通讯/授权 DLL 是 Debug 产物。
+- **根因**：子模块 csproj 本身早已支持 Release 配置（`Release|AnyCPU` 只定义
+  `TRACE`，`#if DEBUG` 段整段剔除，实测 Release DLL 该指纹=0），真正的锁死点
+  只是宿主 HintPath 写死了配置，无需改子模块源码（跨仓库改动为零）。
+- **修复（6 个 csproj 全落点）**：`CureLine.Core`/`CureStation`/`CimGateway`/
+  `CureLine.Tests`/`tools/DocShot`/`tools/LicenseIssuer` 的 Kaleidoscope 引用
+  一律改为 `bin\$(Configuration)\Kaleidoscope.dll`；`Kaleidoscope.UI` 同款
+  `bin\$(Configuration)\net8.0-windows\Kaleidoscope.UI.dll`。效果：Debug 构建
+  仍引 Debug 子模块（开发便利、兜底可用），Release 构建引 Release 子模块
+  （兜底被编译器剔除）。
+- **测试配套**：`LicenseTests` 里设置 `LicenseGate.EnvKeyDebugLicenseOff`
+  的两处包进 `#if DEBUG`——该常量本身在子模块 `#if DEBUG` 段内，Release 下
+  不存在；Release 子模块也无兜底可关，语义天然等价。
+- **新增 `tools/build.ps1`（发布唯一入口）**：固定七步——探测 VS MSBuild →
+  按配置构建子模块主库 → Kaleidoscope.UI → 主方案 `CureLine.slnx` → 全量测试
+  → **发布红线断言**（UTF-16LE 扫 `KX_DEV_LICENSE`，Release 必须 0，Debug
+  >0 属预期）→（`-Pack`）按白名单组装 `out/CureLine_V<版本>_<日期>/` 并二次
+  断言包内 DLL + 保密自检（拒绝 hsl.dat/私钥/授权状态/运行态 config.ini）。
+  打包强制 `-Configuration Release`；版本号缺省从本 CHANGELOG 最新标题解析。
+  用法：`tools\build.ps1`（Debug 自测）/ `tools\build.ps1 -Configuration Release -Pack`
+  （正式发版）。
+- **实测**：
+  - 修复前基线：`src\*\bin\Release\net8.0-windows\Kaleidoscope.dll` = **2**；
+    V0.0.110 发布包两程序内该 DLL 同为 **2**。
+  - 修复后：子模块 `bin\Release` DLL、`CureStation`/`CimGateway` 的
+    `bin\Release\net8.0-windows\Kaleidoscope.dll` 全部 **0**；
+    Debug 产物仍为 2（预期，开发兜底）。
+  - `dotnet test` **Debug 652/652、Release 652/652** 双双全绿；
+    `dotnet build` 两配置均 0 警告 0 错误（子模块 MSBuild 的 MSB3270/CS0168
+    为子模块既有警告，不属主解决方案）。
+- **代价与纪律（写入 AGENTS.md）**：Release 构建从此依赖子模块 `bin\Release`
+  存在且新鲜（过期会比源码旧）。**发布一律走 `tools/build.ps1 -Configuration
+  Release -Pack`，禁止手工拼包**；漏编子模块时 HintPath 直接找不到文件而编译
+  失败——失败可见，不会静默沿用旧 Debug 产物。
+
 ## V0.0.110（2026-11-18，卡顿三查：整窗投影双层拆分 20 处 + 登录打字三组实测 + 全维度量化无异常 + 渲染模式应急开关 CURELINE_SOFT_RENDER）
 
 - **背景（用户反馈 V0.0.109 后"还是卡"，并点名两个症状：登录弹窗输入密码明显

@@ -36,9 +36,10 @@
     <ProjectReference Include="..\..\src\CureLine.Core\CureLine.Core.csproj" />
     <!--UI 子模块（V0.0.109 沉库）：灰度窗基类 ChromeDialogWindow 的编译期解析
         ——ProjectReference 只传递运行时复制，编译期引用必须显式声明（与
-        Kaleidoscope 主库在两主工程的 bin Reference 同理由）-->
+        Kaleidoscope 主库在两主工程的 bin Reference 同理由）。
+        $(Configuration) 跟随本工程配置（V0.0.111），与两主工程同口径。-->
     <Reference Include="Kaleidoscope.UI">
-      <HintPath>..\..\extern\kaleidoscope\Kaleidoscope.UI\bin\Debug\net8.0-windows\Kaleidoscope.UI.dll</HintPath>
+      <HintPath>..\..\extern\kaleidoscope\Kaleidoscope.UI\bin\$(Configuration)\net8.0-windows\Kaleidoscope.UI.dll</HintPath>
     </Reference>
   </ItemGroup>
 

@@ -10,8 +10,10 @@
 //   · 状态文件笔沙箱：LicenseGate.StateIniPathOverride → %TEMP% 随笔目录；
 //   · 注册表水位沙箱：LicenseGate.RegRootOverride → HKCU\Software\CureLine\
 //     TestLicenseWaterMark（用后删键，不碰真机水位）；
-//   · 开发兜底关闭：env LicenseGate.EnvKeyDebugLicenseOff="0"（仅 Debug 库存在，
-//     与子模块回归探针同款——保真"无记录=NotActivated"等真实态断言）；
+//   · 开发兜底关闭：env LicenseGate.EnvKeyDebugLicenseOff="0"——该常量本身在子模块
+//     #if DEBUG 段内，故本工程用 #if DEBUG 包住这两处设置；Release 引用 Release
+//     子模块、无兜底可关，语义天然等价（V0.0.111 起测试随 $(Configuration) 引用，
+//     Release 下 652 例同样全绿）；保真"无记录=NotActivated"等真实态断言；
 //   · 演示桥直注：LicenseBridges.IsMockLicensedProvider 按用例覆盖并还原。
 //   依赖注入类语义（试用到期/时钟回拨/换码成功链/产品隔离激活链——需要假时钟
 //   与厂商私钥签真码）不在此测：真源逻辑锁在 kaleidoscope 的回归探针批
@@ -48,7 +50,12 @@ public class LicenseTests : IDisposable
         _signer = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
         // —— 沙箱三件：状态文件 / 注册表水位键 / 关闭 Debug 开发兜底（真实态断言）——
+#if DEBUG
+        // Debug 版子模块的 LicenseGate 带"开发自动授权"兜底（该逻辑整段在 #if DEBUG 内），
+        // 要断言真实授权状态必须先把它关掉；Release 版子模块该段已被编译器整段剔除，
+        // 无兜底可关，故本行只在 Debug 下编译（V0.0.111 起测试也跟随 $(Configuration)）。
         Environment.SetEnvironmentVariable(LicenseGate.EnvKeyDebugLicenseOff, "0");
+#endif
         LicenseGate.StateIniPathOverride = Path.Combine(_tmp, "LicenseState.ini");
         LicenseGate.RegRootOverride = TestRegRoot;
 
@@ -64,7 +71,9 @@ public class LicenseTests : IDisposable
         LicenseBridges.IsMockLicensedProvider = _prevMockProvider;
         LicenseGate.RegRootOverride = HostRegRoot;
         LicenseGate.StateIniPathOverride = null;   // 还原子模块缺省 exe\MainSetting 口径
+#if DEBUG
         Environment.SetEnvironmentVariable(LicenseGate.EnvKeyDebugLicenseOff, null);
+#endif
         CleanupTestRegistryKey();
         try { Directory.Delete(_tmp, true); } catch { }
     }
