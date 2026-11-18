@@ -2,6 +2,29 @@
 
 > VB 老项目复刻融合版，两程序拆分演进中。版本规则：关键行为变化即记一笔。
 
+## V0.0.112（2026-11-19，kaleidoscope.UI V2.1.0 融合配套：两程序四主题补 Shell 族契约段 + 契约测试收编 ShellStyles + 子模块指针 V2.1.0 + 文档截图重拍）
+
+- **背景**：子模块 kaleidoscope.UI 升 **V2.1.0**（弹窗基类融合：`ChromeDialogWindow`
+  吸收 HJVision `SunnyDialog`/`ChromeDialog` 全部能力；`TitleBar`/`ShellStyles`/
+  `FormField` 等控件自 HJVision-WPF 迁入去 Sunny 化；net472 多目标；新增
+  `Kaleidoscope.UI.WinForms` V1.0.0 双栈骨架）。宿主侧本版本只做键契约配套，
+  业务行为零改动。
+- **两程序四主题补「Shell 族契约段」**：`CureStation`/`CimGateway` 的
+  Light/Dark 四份主题字典各追加 Kx 族控件样式（库 `ShellStyles.xaml`：
+  KxPrimaryButton 六档/勾选/输入件/表格件/菜单件/FormField 等）引用的语义键
+  （`Brush.Shell.*` 全家 + `Fx.ShellPrimaryGlow`/`Fx.ShellMenuShadow` 影效 +
+  `Fn.ShellRadius`/`Fn.ShellTitleFontWeight` 四件非刷键）。宿主当前不消费
+  Kx 控件，本段为键契约测试兜底——值与库缺省键板同源自洽；键名勿改（库
+  DynamicResource 引用点与本段同步）。
+- **契约测试收编 ShellStyles**：`KaleidoscopeUiContractTests` 库样式清单在
+  ChromeStyles/FreshStyles 基础上加入 `ShellStyles.xaml`——新增 `expectedShell`
+  49 键清单锁死 + 键数全等断言同款；库引用键排除注释补 `Fx.ShellMenuShadow`
+  影效键与 `Fn.ShellRadius` 等宿主供值键说明。
+- **子模块指针 → V2.1.0（9b80463）**。
+- **文档截图重拍**：DocShot 16 张（cs-* 10 张 + gw-* 6 张）随 V2.1.0 弹窗
+  视觉微调重拍对齐。
+- **验证**：`dotnet test` **652/652 全绿**（含新收编的 ShellStyles 键集用例）。
+
 ## V0.0.111（2026-11-18，发布口径修复：宿主 6 工程按配置引用子模块——Release 构建彻底剔除开发授权兜底 + tools/build.ps1 一键发版）
 
 - **问题（V0.0.110 发布包二进制实测）**：宿主所有工程对子模块的 HintPath 都

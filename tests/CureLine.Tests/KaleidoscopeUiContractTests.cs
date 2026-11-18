@@ -62,10 +62,11 @@ public class KaleidoscopeUiContractTests
         Assert.True(Directory.Exists(libDir), "kaleidoscope.UI Themes 目录不存在——子模块未拉取？");
 
         var libRefs = new HashSet<string>();
-        foreach (var f in new[] { "ChromeStyles.xaml", "FreshStyles.xaml" })
+        foreach (var f in new[] { "ChromeStyles.xaml", "FreshStyles.xaml", "ShellStyles.xaml" })
             libRefs.UnionWith(DynRefsOf(Path.Combine(libDir, f)));
-        // 库样式内部引用的库自身资源键（Fx.WinShadow/WinTitleBar 族/样式 BasedOn）
-        // 不是语义键——排除后剩下的全是宿主必须供值的语义键
+        // 库样式内部引用的库自身资源键（Fx.WinShadow/Fx.ShellMenuShadow 影效键、
+        // WinTitleBar 族/样式 BasedOn）不是语义键——排除后剩下的全是宿主必须供值的
+        // 语义键（含 Fn.ShellRadius 等 CornerRadius 键——宿主键板必须提供）
         libRefs.RemoveWhere(k => k.StartsWith("Fx.") || k.StartsWith("Win"));
 
         var csLight = KeysOf(ThemeFilePathOf("CureStation", "Light.xaml"));
@@ -106,6 +107,7 @@ public class KaleidoscopeUiContractTests
         string libDir = Path.Combine(RepoRoot(), "extern", "kaleidoscope", "Kaleidoscope.UI", "Themes");
         var chrome = KeysOf(Path.Combine(libDir, "ChromeStyles.xaml"));
         var fresh = KeysOf(Path.Combine(libDir, "FreshStyles.xaml"));
+        var shell = KeysOf(Path.Combine(libDir, "ShellStyles.xaml"));
 
         var expectedChrome = new[]
         {
@@ -117,12 +119,33 @@ public class KaleidoscopeUiContractTests
             "FreshDangerButton", "FreshSuccessButton", "FreshInput", "FreshPwdInput",
             "FreshCombo", "FreshComboItem",
         };
+        var expectedShell = new[]
+        {
+            "CapsuleRadiusConverter",
+            "KxPrimaryButton", "KxOkButton", "KxSecondaryButton", "KxDangerButton",
+            "KxWarnButton", "KxSuccessButton",
+            "StatusChip", "StatusChipText",
+            "KxTitleCloseButton", "KxTitleMinButton", "KxTitleMaxButton",
+            "KxTextBox", "KxPasswordBox", "KxDatePicker", "KxComboBox", "KxSwitch",
+            "BrandTabControl", "BrandTabItem",
+            "BrandGridHeader", "BrandGridCell", "BrandGridRow",
+            "WinContextMenu", "WinMenuItem", "WinMenuItemSub", "WinMenuSeparator",
+            "KxCheckBox", "KxRadioButton", "KxGridCheckBox", "KxGroupBoxImplicit",
+            "ChromeDialogRootBorder", "ChromeDialogHeadBorder",
+            "FormLabel118", "FormLabel86", "RequiredMark", "HintText", "HintWarnText", "SectionTitle",
+            "KpiCard", "KpiLabel", "KpiValue", "KpiSub", "StatusDotPulse",
+            "KxDialogButtonImplicit", "KxDialogComboImplicit", "KxDialogTextBoxImplicit",
+            "KxDialogPasswordImplicit", "KxDialogGridImplicit", "KxDialogListImplicit",
+        };
         foreach (var k in expectedChrome)
             Assert.True(chrome.Contains(k), $"ChromeStyles 缺键 {k}——改名/删键须同步本测试与全宿主");
         foreach (var k in expectedFresh)
             Assert.True(fresh.Contains(k), $"FreshStyles 缺键 {k}——改名/删键须同步本测试与全宿主");
+        foreach (var k in expectedShell)
+            Assert.True(shell.Contains(k), $"ShellStyles 缺键 {k}——改名/删键须同步本测试与全宿主");
         Assert.Equal(expectedChrome.Length, chrome.Count);
         Assert.Equal(expectedFresh.Length, fresh.Count);
+        Assert.Equal(expectedShell.Length, shell.Count);
     }
 
     private static string ThemeFilePathOf(string program, string fileName) =>
